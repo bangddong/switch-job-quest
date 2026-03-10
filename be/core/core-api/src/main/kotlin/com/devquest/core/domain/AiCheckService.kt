@@ -1,0 +1,114 @@
+package com.devquest.core.domain
+
+import com.devquest.core.domain.model.QuestProgress
+import com.devquest.core.domain.port.*
+import com.devquest.core.domain.model.evaluation.*
+import com.devquest.core.enums.QuestStatus
+import com.devquest.core.support.error.CoreException
+import com.devquest.core.support.error.ErrorType
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDateTime
+
+@Service
+class AiCheckService(
+    private val essayEvaluator: EssayEvaluatorPort,
+    private val blogEvaluator: BlogEvaluatorPort,
+    private val systemDesignEvaluator: SystemDesignEvaluatorPort,
+    private val interviewEvaluator: InterviewEvaluatorPort,
+    private val jdAnalysisEvaluator: JdAnalysisEvaluatorPort,
+    private val resumeEvaluator: ResumeEvaluatorPort,
+    private val companyFitEvaluator: CompanyFitEvaluatorPort,
+    private val personalityEvaluator: PersonalityEvaluatorPort,
+    private val progressPort: QuestProgressPort
+) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    @Value("\${devquest.ai.pass-score:70}")
+    private val passScore: Int = 70
+
+    @Transactional
+    fun checkCareerEssay(
+        userId: String, dissatisfactions: List<String>, goals: List<String>, fiveYearVision: String
+    ): EssayCheckResult {
+        val result = essayEvaluator.evaluate(dissatisfactions, goals, fiveYearVision)
+        saveProgress(userId, "1-2", 1, result.score, result.passed, if (result.passed) (200 * result.score / 100) else 0)
+        return result
+    }
+
+    @Transactional
+    fun checkTechBlog(userId: String, questId: String, techTopic: String, title: String, content: String): AiEvaluationResult {
+        val result = blogEvaluator.evaluate(techTopic, title, content)
+        val earnedXp = if (result.passed) (600 * result.xpMultiplier).toInt() else 0
+        saveProgress(userId, questId, 2, result.score, result.passed, earnedXp)
+        return result
+    }
+
+    @Transactional
+    fun checkSystemDesign(
+        userId: String, questId: String, problemStatement: String, architectureDescription: String, considerations: List<String>
+    ): AiEvaluationResult {
+        val result = systemDesignEvaluator.evaluate(problemStatement, architectureDescription, considerations)
+        saveProgress(userId, questId, 2, result.score, result.passed, if (result.passed) (500 * result.xpMultiplier).toInt() else 0)
+        return result
+    }
+
+    @Transactional
+    fun checkMockInterview(userId: String, questId: String, category: String, question: String, answer: String, questionId: String): InterviewEvaluationResult {
+        val result = interviewEvaluator.evaluate(category, question, answer, questionId)
+        saveProgress(userId, questId, 2, result.score, result.passed, if (result.passed) 800 else 0)
+        return result
+    }
+
+    fun generateInterviewQuestions(categories: List<String>, count: Int): List<Map<String, String>> {
+        return interviewEvaluator.generateQuestions(categories, count)
+    }
+
+    @Transactional
+    fun analyzeJd(userId: String, companyName: String, jobDescription: String, userSkills: List<String>, userExperiences: List<String>): JdAnalysisResult {
+        val result = jdAnalysisEvaluator.analyze(companyName, jobDescription, userSkills, userExperiences)
+        saveProgress(userId, "3-2", 3, result.overallMatchScore, true, 350)
+        return result
+    }
+
+    @Transactional
+    fun checkResume(userId: String, targetCompany: String, targetJd: String, resumeContent: String): ResumeCheckResult {
+        val result = resumeEvaluator.evaluate(targetCompany, targetJd, resumeContent)
+        val passed = result.overallScore >= passScore
+        saveProgress(userId, "4-1", 4, result.overallScore, passed, if (passed) 500 else 0)
+        return result
+    }
+
+    @Transactional
+    fun analyzeCompanyFit(userId: String, preferences: Map<String, String>, companies: List<CompanyInfo>): List<CompanyFitResult> {
+        val result = companyFitEvaluator.analyze(preferences, companies)
+        saveProgress(userId, "1-BOSS", 1, result.maxOfOrNull { it.fitScore } ?: 0, true, 500)
+        return result
+    }
+
+    @Transactional
+    fun checkPersonalityInterview(userId: String, question: String, answer: String): AiEvaluationResult {
+        val result = personalityEvaluator.evaluate(question, answer)
+        saveProgress(userId, "5-1", 5, result.score, result.passed, if (result.passed) (400 * result.xpMultiplier).toInt() else 0)
+        return result
+    }
+
+    private fun saveProgress(userId: String, questId: String, actId: Int, score: Int, passed: Boolean, xp: Int) {
+        val existing = progressPort.findByUserIdAndQuestId(userId, questId)
+        val progress = QuestProgress(
+            id = existing?.id,
+            userId = userId,
+            questId = questId,
+            actId = actId,
+            status = if (passed) QuestStatus.COMPLETED else QuestStatus.AI_FAILED,
+            aiScore = score,
+            earnedXp = xp,
+            completedAt = if (passed) LocalDateTime.now() else null,
+            updatedAt = LocalDateTime.now()
+        )
+        progressPort.save(progress)
+        log.info("Quest progress saved: userId=$userId, questId=$questId, score=$score, passed=$passed, xp=$xp")
+    }
+}
