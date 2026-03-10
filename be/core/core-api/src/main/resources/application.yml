@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: devquest
+
+  profiles:
+    active: local
+
+  config:
+    import:
+      - classpath:db-core.yml
+      - classpath:client-ai.yml
+      - classpath:logging.yml
+      - classpath:monitoring.yml
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.devquest: DEBUG
+
+devquest:
+  ai:
+    pass-score: 70
+    max-retry: 3
+    interview-questions: 10
+  cors:
+    allowed-origins: http://localhost:5173
