@@ -1,0 +1,36 @@
+# === Java / Kotlin / Gradle ===
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+
+# === IDE ===
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+
+# === Node / Frontend ===
+node_modules/
+dist/
+*.local
+.env
+.env.*
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Misc ===
+*.zip
+*.tar.gz
+out/
