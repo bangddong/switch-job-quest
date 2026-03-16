@@ -30,6 +30,13 @@ dist/
 Thumbs.db
 desktop.ini
 
+# === Claude Code ===
+.claude/
+
+# === Root npm (dev tool only) ===
+/package.json
+/package-lock.json
+
 # === Misc ===
 *.zip
 *.tar.gz
