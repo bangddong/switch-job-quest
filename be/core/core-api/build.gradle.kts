@@ -17,5 +17,6 @@ dependencies {
     testImplementation(project(":tests:api-docs"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-jackson")
     implementation("org.springframework.boot:spring-boot-starter-validation")
 }

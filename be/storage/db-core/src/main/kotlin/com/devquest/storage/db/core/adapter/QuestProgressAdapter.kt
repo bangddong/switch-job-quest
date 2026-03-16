@@ -20,8 +20,9 @@ class QuestProgressAdapter(
     }
 
     override fun save(progress: QuestProgress): QuestProgress {
-        val entity = if (progress.id != null) {
-            repository.findById(progress.id).orElse(null)?.apply {
+        val progressId = progress.id
+        val entity = if (progressId != null) {
+            repository.findById(progressId).orElse(null)?.apply {
                 status = progress.status
                 aiScore = progress.aiScore
                 earnedXp = progress.earnedXp
