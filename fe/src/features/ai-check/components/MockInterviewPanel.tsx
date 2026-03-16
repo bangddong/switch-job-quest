@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { InterviewEvaluationResult } from '@/types/api.types'
 import { useUserId } from '@/hooks/useUserId'
-import { ScoreRing } from '@/components/ui/ScoreRing'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { FALLBACK_QUESTIONS } from '../constants/fallbackQuestions'
 import { submitMockInterview } from '../api/aiCheckApi'

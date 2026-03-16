@@ -37,6 +37,9 @@ desktop.ini
 /package.json
 /package-lock.json
 
+# === TypeScript ===
+fe/tsconfig.tsbuildinfo
+
 # === Misc ===
 *.zip
 *.tar.gz
