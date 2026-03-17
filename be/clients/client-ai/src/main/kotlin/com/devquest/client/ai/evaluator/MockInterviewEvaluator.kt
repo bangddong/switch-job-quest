@@ -2,7 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.core.domain.model.evaluation.InterviewEvaluationResult
 import com.devquest.core.domain.port.InterviewEvaluatorPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
@@ -10,9 +10,10 @@ import org.springframework.stereotype.Component
 
 @Component
 class MockInterviewEvaluator(
-    private val chatClient: ChatClient,
-    private val objectMapper: ObjectMapper
+    private val chatClient: ChatClient
 ) : InterviewEvaluatorPort {
+
+    private val objectMapper = jacksonObjectMapper()
 
     private val log = LoggerFactory.getLogger(javaClass)
 

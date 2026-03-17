@@ -3,7 +3,7 @@ package com.devquest.client.ai.evaluator
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.port.CompanyFitEvaluatorPort
 import com.devquest.core.domain.port.CompanyInfo
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
@@ -11,9 +11,10 @@ import org.springframework.stereotype.Component
 
 @Component
 class CompanyFitEvaluator(
-    private val chatClient: ChatClient,
-    private val objectMapper: ObjectMapper
+    private val chatClient: ChatClient
 ) : CompanyFitEvaluatorPort {
+
+    private val objectMapper = jacksonObjectMapper()
 
     private val log = LoggerFactory.getLogger(javaClass)
 
