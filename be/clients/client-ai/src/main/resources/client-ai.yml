@@ -1,9 +1,3 @@
-spring:
+devquest:
   ai:
-    anthropic:
-      api-key: ${ANTHROPIC_API_KEY:your-api-key-here}
-      chat:
-        options:
-          model: claude-sonnet-4-5
-          max-tokens: 2000
-          temperature: 0.3
+    provider: ${AI_PROVIDER:anthropic}  # anthropic | openai | google
