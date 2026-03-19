@@ -27,7 +27,7 @@ AI(Claude)가 에세이, 이력서, 면접 등을 평가하고, 퀘스트 클리
 | Kotlin | 2.1.0 |
 | Java | 21 |
 | Spring Boot | 4.0.3 |
-| Spring AI (Anthropic) | 1.1.2 |
+| Spring AI (Anthropic) | 2.0.0-M3 |
 | Gradle | 9.0.0 |
 | H2 Database | (in-memory) |
 
@@ -100,7 +100,7 @@ Controller → Service → Port (interface) ← Adapter (implementation)
 |--------|------|--------|-----|---------|
 | 1-1: 기술 스택 자가 진단 | 📚 STUDY | ★☆☆☆☆ | 150 | - |
 | 1-2: 이직 동기 에세이 | ✍️ WRITE | ★☆☆☆☆ | 200 | ✅ |
-| 1-BOSS: 개발자 클래스 판별 | ⚔️ BOSS | ★★☆☆☆ | 500 | - |
+| 1-BOSS: 개발자 클래스 판별 | ⚔️ BOSS | ★★☆☆☆ | 500 | ✅ |
 
 ### ACT II: 스킬 강화 ⚔️
 
@@ -246,18 +246,31 @@ GET /api/v1/progress/{userId}
 | POST | `/api/v1/ai-check/mock-interview` | 2-BOSS: 면접 답변 평가 |
 | POST | `/api/v1/ai-check/jd-analysis` | 3-2: JD 역분석 |
 | POST | `/api/v1/ai-check/resume` | 4-1: 이력서 검토 |
-| POST | `/api/v1/ai-check/company-fit` | 4-BOSS: 기업 적합도 |
+| POST | `/api/v1/ai-check/company-fit` | 1-BOSS: 개발자 클래스 판별 |
 | POST | `/api/v1/ai-check/personality-interview` | 5-1: 인성 면접 |
 
 ### 공통 응답 형식
 
+성공:
 ```json
 {
-  "success": true,
   "result": "SUCCESS",
   "data": { ... }
 }
 ```
+
+실패:
+```json
+{
+  "result": "ERROR",
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "잘못된 요청입니다"
+  }
+}
+```
+
+에러 코드: `INVALID_REQUEST` | `AI_EVALUATION_FAILED` | `QUEST_NOT_FOUND` | `DEFAULT`
 
 ### AI 평가 결과 형식
 
@@ -285,7 +298,7 @@ GET /api/v1/progress/{userId}
 | id | BIGINT (PK) | 자동 증가 |
 | user_id | VARCHAR | 사용자 ID |
 | quest_id | VARCHAR | 퀘스트 ID (예: "1-2") |
-| act_id | VARCHAR | Act ID (예: "act1") |
+| act_id | INT | Act 번호 (1~5) |
 | status | ENUM | NOT_STARTED, IN_PROGRESS, COMPLETED, AI_FAILED |
 | ai_score | INT | AI 평가 점수 (0~100) |
 | earned_xp | INT | 획득 XP |
@@ -320,7 +333,14 @@ export ANTHROPIC_API_KEY=your-api-key-here
 ```
 
 서버가 `http://localhost:8080`에서 시작됩니다.
-H2 콘솔: `http://localhost:8080/h2-console`
+
+로컬 개발 시 H2 콘솔, SQL 로깅 등을 활성화하려면 local 프로파일로 실행합니다.
+
+```bash
+./gradlew :core:core-api:bootRun --args='--spring.profiles.active=local'
+```
+
+> **참고**: Spring Boot 4.0에서 H2 콘솔 자동 등록(`H2ConsoleAutoConfiguration`)이 제거되어 현재 H2 콘솔은 비활성 상태입니다.
 
 ### Frontend 실행
 
@@ -343,6 +363,38 @@ cd be && ./gradlew build
 # FE
 cd fe && npm run build    # dist/ 에 빌드 결과물 생성
 ```
+
+---
+
+## 테스트
+
+토스 테스트 전략(가치 중심, 파레토 법칙)을 적용하였습니다.
+
+```bash
+cd be
+./gradlew test                  # 전체 테스트 실행
+./gradlew test jacocoTestReport # 커버리지 리포트 포함
+```
+
+### 커버리지 현황
+
+| 모듈 | 라인 커버리지 | 비고 |
+|------|--------------|------|
+| `core-api` | 83.7% | 서비스, 컨트롤러, 예외처리 |
+| `db-core` | 86.7% | 어댑터 |
+| `client-ai` | 9.4% | AI 호출 비용으로 의도적 제외 |
+
+### 테스트 구성
+
+| 분류 | 테스트 파일 | 테스트 수 |
+|------|------------|----------|
+| 도메인 정책 | `AiCheckServiceTest` | 14 |
+| 도메인 정책 | `ProgressServiceTest` | 5 |
+| 유스케이스 | `AiCheckControllerTest` | 22 |
+| 유스케이스 | `ProgressControllerTest` | 2 |
+| 예외처리 | `ApiControllerAdviceTest` | 5 |
+| 어댑터 | `QuestProgressAdapterTest` | 5 |
+| AI 평가기 | `CareerEssayEvaluatorTest` | 2 |
 
 ---
 
