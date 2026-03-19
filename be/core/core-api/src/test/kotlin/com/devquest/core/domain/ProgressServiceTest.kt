@@ -1,5 +1,6 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.model.ProgressResult
 import com.devquest.core.domain.model.QuestProgress
 import com.devquest.core.domain.port.QuestProgressPort
 import com.devquest.core.enums.QuestStatus
@@ -30,7 +31,7 @@ class ProgressServiceTest {
 
         val result = service.getProgress("user-1")
 
-        assertThat(result["totalXp"]).isEqualTo(1060)
+        assertThat(result.totalXp).isEqualTo(1060)
     }
 
     @Test
@@ -42,7 +43,7 @@ class ProgressServiceTest {
         val result = service.getProgress("user-1")
 
         // level = 1500 / 500 + 1 = 4
-        assertThat(result["level"]).isEqualTo(4)
+        assertThat(result.level).isEqualTo(4)
     }
 
     @Test
@@ -56,10 +57,8 @@ class ProgressServiceTest {
 
         val result = service.getProgress("user-1")
 
-        @Suppress("UNCHECKED_CAST")
-        val completedQuests = result["completedQuests"] as List<String>
-        assertThat(completedQuests).containsExactlyInAnyOrder("1-2", "2-1")
-        assertThat(completedQuests).doesNotContain("2-2", "3-1")
+        assertThat(result.completedQuests).containsExactlyInAnyOrder("1-2", "2-1")
+        assertThat(result.completedQuests).doesNotContain("2-2", "3-1")
     }
 
     @Test
@@ -68,11 +67,10 @@ class ProgressServiceTest {
 
         val result = service.getProgress("new-user")
 
-        assertThat(result["totalXp"]).isEqualTo(0)
-        assertThat(result["level"]).isEqualTo(1)
-        @Suppress("UNCHECKED_CAST")
-        assertThat(result["completedQuests"] as List<*>).isEmpty()
-        assertThat(result["userId"]).isEqualTo("new-user")
+        assertThat(result.totalXp).isEqualTo(0)
+        assertThat(result.level).isEqualTo(1)
+        assertThat(result.completedQuests).isEmpty()
+        assertThat(result.userId).isEqualTo("new-user")
     }
 
     @Test
@@ -83,11 +81,10 @@ class ProgressServiceTest {
 
         val result = service.getProgress("user-1")
 
-        @Suppress("UNCHECKED_CAST")
-        val details = result["questDetails"] as Map<String, Map<String, Any>>
-        assertThat(details["1-2"]!!["status"]).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(details["1-2"]!!["score"]).isEqualTo(80)
-        assertThat(details["1-2"]!!["xp"]).isEqualTo(160)
+        val detail = result.questDetails["1-2"]!!
+        assertThat(detail.status).isEqualTo(QuestStatus.COMPLETED)
+        assertThat(detail.score).isEqualTo(80)
+        assertThat(detail.xp).isEqualTo(160)
     }
 
     private fun progress(

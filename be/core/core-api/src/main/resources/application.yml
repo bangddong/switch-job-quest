@@ -9,7 +9,7 @@ spring:
     import:
       - classpath:db-core.yml
       - classpath:client-ai.yml
-      - optional:classpath:client-ai-${devquest.ai.provider:anthropic}.yml
+      - classpath:client-ai-anthropic.yml
       - classpath:logging.yml
       - classpath:monitoring.yml
 
