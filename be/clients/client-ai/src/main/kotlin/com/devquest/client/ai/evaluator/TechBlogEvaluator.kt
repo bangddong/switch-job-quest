@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.port.BlogEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -37,6 +38,6 @@ class TechBlogEvaluator(
             .user(prompt)
             .call()
             .entity(AiEvaluationResult::class.java)
-            ?: throw RuntimeException("AI 블로그 평가 실패")
+            ?: throw AiEvaluationException("AI 블로그 평가 실패")
     }
 }

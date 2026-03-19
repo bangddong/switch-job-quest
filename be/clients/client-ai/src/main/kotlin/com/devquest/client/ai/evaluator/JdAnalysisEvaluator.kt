@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.JdAnalysisResult
 import com.devquest.core.domain.port.JdAnalysisEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -35,6 +36,6 @@ class JdAnalysisEvaluator(
             .user(prompt)
             .call()
             .entity(JdAnalysisResult::class.java)
-            ?: throw RuntimeException("JD 분석 실패")
+            ?: throw AiEvaluationException("JD 분석 실패")
     }
 }

@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.port.CompanyFitEvaluatorPort
 import com.devquest.core.domain.port.CompanyInfo
@@ -48,7 +49,7 @@ class CompanyFitEvaluator(
             objectMapper.readValue<List<CompanyFitResult>>(response)
         } catch (e: Exception) {
             log.error("회사 핏 분석 파싱 실패: ${e.message}")
-            throw RuntimeException("회사 핏 분석 응답 파싱 실패", e)
+            throw AiEvaluationException("회사 핏 분석 응답 파싱 실패", e)
         }
     }
 }

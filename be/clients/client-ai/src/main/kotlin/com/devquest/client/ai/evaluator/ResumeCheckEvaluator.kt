@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.ResumeCheckResult
 import com.devquest.core.domain.port.ResumeEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -37,6 +38,6 @@ class ResumeCheckEvaluator(
             .user(prompt)
             .call()
             .entity(ResumeCheckResult::class.java)
-            ?: throw RuntimeException("이력서 평가 실패")
+            ?: throw AiEvaluationException("이력서 평가 실패")
     }
 }

@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.port.SystemDesignEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -35,6 +36,6 @@ class SystemDesignEvaluator(
             .user(prompt)
             .call()
             .entity(AiEvaluationResult::class.java)
-            ?: throw RuntimeException("시스템 설계 평가 실패")
+            ?: throw AiEvaluationException("시스템 설계 평가 실패")
     }
 }

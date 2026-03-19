@@ -14,7 +14,14 @@ export async function callAiCheck<T>(
   })
 
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`)
+    let errorMessage = `HTTP ${res.status}`
+    try {
+      const errorJson: ApiResponse<unknown> = await res.json()
+      if (errorJson.message) errorMessage = errorJson.message
+    } catch {
+      // response body not parseable, use default
+    }
+    throw new Error(errorMessage)
   }
 
   const json: ApiResponse<T> = await res.json()

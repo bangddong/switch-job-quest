@@ -13,6 +13,10 @@ spring:
       - classpath:logging.yml
       - classpath:monitoring.yml
 
+  h2:
+    console:
+      enabled: false
+
   threads:
     virtual:
       enabled: true

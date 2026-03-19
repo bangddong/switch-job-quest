@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.InterviewEvaluationResult
 import com.devquest.core.domain.port.InterviewEvaluatorPort
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -43,7 +44,7 @@ class MockInterviewEvaluator(
             .user(prompt)
             .call()
             .entity(InterviewEvaluationResult::class.java)
-            ?: throw RuntimeException("면접 평가 실패")
+            ?: throw AiEvaluationException("면접 평가 실패")
     }
 
     override fun generateQuestions(categories: List<String>, count: Int): List<Map<String, String>> {

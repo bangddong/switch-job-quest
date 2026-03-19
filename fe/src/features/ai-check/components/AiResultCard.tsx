@@ -1,8 +1,7 @@
 import type { AiEvaluationResult } from '@/types/api.types'
 import { ScoreRing } from '@/components/ui/ScoreRing'
 import { GradeTag } from '@/components/ui/GradeTag'
-
-const PASS_THRESHOLD = 70
+import { PASS_THRESHOLD } from '@/constants/scoring'
 
 function getGrade(score: number): string {
   if (score >= 90) return 'S'

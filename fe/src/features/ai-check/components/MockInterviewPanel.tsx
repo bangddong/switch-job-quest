@@ -1,12 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { InterviewEvaluationResult } from '@/types/api.types'
 import { useUserId } from '@/hooks/useUserId'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { FALLBACK_QUESTIONS } from '../constants/fallbackQuestions'
 import { submitMockInterview } from '../api/aiCheckApi'
 import { InterviewResultCard } from './InterviewResultCard'
-
-const PASS_SCORE = 70
+import { PASS_THRESHOLD as PASS_SCORE } from '@/constants/scoring'
 
 interface MockInterviewPanelProps {
   onComplete: (score: number) => void
@@ -21,6 +20,14 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
   const [loading, setLoading] = useState(false)
   const [lastResult, setLastResult] = useState<InterviewEvaluationResult | null>(null)
   const [done, setDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
 
   const q = questions[idx]
   const totalScore = results.length
@@ -30,6 +37,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
   const handleSubmit = async () => {
     if (!q || !answer.trim()) return
     setLoading(true)
+    setError(null)
     try {
       const result = await submitMockInterview(
         { questId: '2-BOSS', questionId: q.id, question: q.question, answer, category: q.category },
@@ -44,14 +52,14 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
         setDone(true)
         onComplete(avg)
       } else {
-        setTimeout(() => {
+        timerRef.current = setTimeout(() => {
           setIdx((i) => i + 1)
           setAnswer('')
           setLastResult(null)
         }, 2000)
       }
-    } catch {
-      // silently handle error as in original
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 평가 중 오류가 발생했습니다. 다시 시도해주세요.')
     } finally {
       setLoading(false)
     }
@@ -118,7 +126,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <ProgressBar value={(idx / questions.length) * 100} color="#4ECDC4" height={4} />
+        <ProgressBar value={((idx + 1) / questions.length) * 100} color="#4ECDC4" height={4} />
       </div>
 
       <div
@@ -135,6 +143,22 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
         </div>
         <p style={{ fontSize: 14, color: '#F1F5F9', margin: 0, lineHeight: 1.7 }}>{q.question}</p>
       </div>
+
+      {error && (
+        <div
+          style={{
+            background: 'rgba(239,68,68,0.1)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            marginBottom: 10,
+            fontSize: 13,
+            color: '#EF4444',
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       {lastResult && <InterviewResultCard result={lastResult} />}
       {!lastResult && (

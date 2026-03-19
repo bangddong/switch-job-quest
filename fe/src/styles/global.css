@@ -24,3 +24,40 @@ body {
     transform: translateY(0);
   }
 }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes bossP {
+  0%, 100% { transform: scale(1); text-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+  50% { transform: scale(1.05); text-shadow: 0 0 16px rgba(239, 68, 68, 0.6); }
+}
+
+.hov-act {
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+.hov-act:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(78, 205, 196, 0.15);
+}
+
+.hov-q {
+  transition: transform 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+.hov-q:hover {
+  transform: translateY(-2px);
+  border-color: rgba(78, 205, 196, 0.4);
+}
+
+.hov-btn {
+  transition: transform 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+}
+.hov-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(78, 205, 196, 0.2);
+}

@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.EssayCheckResult
 import com.devquest.core.domain.port.EssayEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -43,6 +44,6 @@ class CareerEssayEvaluator(
             .user(prompt)
             .call()
             .entity(EssayCheckResult::class.java)
-            ?: throw RuntimeException("AI 평가 응답 파싱 실패")
+            ?: throw AiEvaluationException("AI 평가 응답 파싱 실패")
     }
 }

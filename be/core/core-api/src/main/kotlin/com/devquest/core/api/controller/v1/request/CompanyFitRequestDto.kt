@@ -1,5 +1,8 @@
 package com.devquest.core.api.controller.v1.request
 
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
+
 data class CompanyInfoDto(
     val name: String = "",
     val culture: String = "",
@@ -9,7 +12,7 @@ data class CompanyInfoDto(
 )
 
 data class CompanyFitRequestDto(
-    val userId: String = "",
-    val preferences: Map<String, String> = emptyMap(),
-    val companies: List<CompanyInfoDto> = emptyList()
+    @field:NotBlank val userId: String = "",
+    @field:Size(min = 1) val preferences: Map<String, String> = emptyMap(),
+    @field:Size(min = 1) val companies: List<CompanyInfoDto> = emptyList()
 )

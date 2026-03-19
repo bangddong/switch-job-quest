@@ -84,7 +84,9 @@ class AiCheckService(
     @Transactional
     fun analyzeCompanyFit(userId: String, preferences: Map<String, String>, companies: List<CompanyInfo>): List<CompanyFitResult> {
         val result = companyFitEvaluator.analyze(preferences, companies)
-        saveProgress(userId, "1-BOSS", 1, result.maxOfOrNull { it.fitScore } ?: 0, true, 500)
+        val maxScore = result.maxOfOrNull { it.fitScore } ?: 0
+        val passed = result.isNotEmpty() && maxScore >= passScore
+        saveProgress(userId, "1-BOSS", 1, maxScore, passed, if (passed) 500 else 0)
         return result
     }
 

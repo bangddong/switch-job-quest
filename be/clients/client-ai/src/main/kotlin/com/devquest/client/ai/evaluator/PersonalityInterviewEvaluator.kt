@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.port.PersonalityEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -33,6 +34,6 @@ class PersonalityInterviewEvaluator(
             .user(prompt)
             .call()
             .entity(AiEvaluationResult::class.java)
-            ?: throw RuntimeException("인성 면접 평가 실패")
+            ?: throw AiEvaluationException("인성 면접 평가 실패")
     }
 }
