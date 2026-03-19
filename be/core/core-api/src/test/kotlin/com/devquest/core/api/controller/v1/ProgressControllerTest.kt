@@ -2,6 +2,7 @@ package com.devquest.core.api.controller.v1
 
 import com.devquest.core.api.controller.ApiControllerAdvice
 import com.devquest.core.domain.ProgressService
+import com.devquest.core.domain.model.ProgressResult
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -31,12 +32,12 @@ class ProgressControllerTest {
     @Test
     fun `getProgress - 정상 요청이면 200과 SUCCESS 반환`() {
         whenever(progressService.getProgress("user-1")).thenReturn(
-            mapOf(
-                "userId" to "user-1",
-                "totalXp" to 1500,
-                "completedQuests" to listOf("1-2", "2-1"),
-                "level" to 4,
-                "questDetails" to emptyMap<String, Any>()
+            ProgressResult(
+                userId = "user-1",
+                totalXp = 1500,
+                level = 4,
+                completedQuests = listOf("1-2", "2-1"),
+                questDetails = emptyMap()
             )
         )
 
@@ -53,12 +54,12 @@ class ProgressControllerTest {
     @Test
     fun `getProgress - 진행 내역 없는 유저도 200과 빈 결과 반환`() {
         whenever(progressService.getProgress("unknown")).thenReturn(
-            mapOf(
-                "userId" to "unknown",
-                "totalXp" to 0,
-                "completedQuests" to emptyList<String>(),
-                "level" to 1,
-                "questDetails" to emptyMap<String, Any>()
+            ProgressResult(
+                userId = "unknown",
+                totalXp = 0,
+                level = 1,
+                completedQuests = emptyList(),
+                questDetails = emptyMap()
             )
         )
 
