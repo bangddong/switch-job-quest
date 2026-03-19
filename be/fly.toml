@@ -3,6 +3,13 @@ primary_region = 'nrt'
 
 [build]
 
+[env]
+  SPRING_PROFILES_ACTIVE = "prod"
+  CORS_ALLOWED_ORIGINS = "https://quest.dhbang.co.kr"
+
+# 민감 정보는 fly secrets set 으로 주입:
+#   fly secrets set ANTHROPIC_API_KEY=sk-...
+
 [http_service]
   internal_port = 8080
   force_https = true

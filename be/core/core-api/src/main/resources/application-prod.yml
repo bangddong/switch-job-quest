@@ -1,3 +1,13 @@
 logging:
   level:
     com.devquest: INFO
+
+spring:
+  h2:
+    console:
+      enabled: false
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
