@@ -2,8 +2,6 @@ name: BE CI
 
 on:
   pull_request:
-    paths:
-      - 'be/**'
 
 concurrency:
   group: be-ci-${{ github.ref }}

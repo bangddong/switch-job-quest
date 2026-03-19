@@ -2,8 +2,6 @@ name: FE CI
 
 on:
   pull_request:
-    paths:
-      - 'fe/**'
 
 concurrency:
   group: fe-ci-${{ github.ref }}
