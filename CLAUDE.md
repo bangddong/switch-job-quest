@@ -11,6 +11,7 @@
 | FE 코드 작성/수정 | `fe/CLAUDE.md` (자동 로드) |
 | 커밋 / PR / 브랜치 | `.claude/docs/git-strategy.md` |
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
+| 사용자 직접 실행 필요한 작업 | `.claude/TASKS.md` ← 파일이 존재하면 미완료 작업 있음 |
 
 ## 커밋 컨벤션
 
