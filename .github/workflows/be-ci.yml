@@ -1,0 +1,43 @@
+name: BE CI
+
+on:
+  pull_request:
+    paths:
+      - 'be/**'
+
+concurrency:
+  group: be-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: be
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('be/**/*.gradle.kts', 'be/gradle.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build & Test
+        run: ./gradlew :core:core-api:bootJar test --no-daemon
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: be/core/core-api/build/reports/tests/

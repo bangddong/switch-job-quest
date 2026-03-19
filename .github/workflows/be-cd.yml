@@ -1,0 +1,44 @@
+name: BE CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'be/**'
+
+concurrency:
+  group: be-cd
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: be
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('be/**/*.gradle.kts', 'be/gradle.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Test
+        run: ./gradlew test --no-daemon
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
