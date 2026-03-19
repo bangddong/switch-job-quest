@@ -1,3 +1,0 @@
-devquest:
-  ai:
-    provider: ${AI_PROVIDER:anthropic}  # anthropic | openai | google
