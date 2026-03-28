@@ -13,7 +13,7 @@ interface QuestDetailProps {
   showForm: boolean
   onShowForm: () => void
   onAiResult: (result: AiEvaluationResult) => void
-  onComplete: (questId: string, xp: number) => void
+  onComplete: (questId: string, xp: number, actId: number) => void
   onMockInterviewComplete: (score: number) => void
 }
 
@@ -187,7 +187,7 @@ export function QuestDetail({
         {!quest.aiCheck && !done && (
           <button
             className="hov-btn"
-            onClick={() => onComplete(quest.id, quest.xp)}
+            onClick={() => onComplete(quest.id, quest.xp, act.id)}
             style={{
               width: '100%',
               padding: '12px',

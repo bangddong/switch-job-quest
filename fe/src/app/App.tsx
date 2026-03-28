@@ -1,17 +1,39 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
 import type { AiEvaluationResult } from '@/types/api.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail } from '@/features/quest-detail'
+import { useUserId } from '@/hooks/useUserId'
+import { fetchProgress, completeQuest } from '@/lib/apiClient'
 
 type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest }
 
 export function App() {
+  const userId = useUserId()
   const [view, setView] = useState<View>({ kind: 'map' })
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
   const [aiScores, setAiScores] = useState<Record<string, number>>({})
   const [aiResult, setAiResult] = useState<AiEvaluationResult | null>(null)
   const [showForm, setShowForm] = useState(false)
+
+  useEffect(() => {
+    fetchProgress(userId)
+      .then((progress) => {
+        const completedMap: Record<string, boolean> = {}
+        const scoresMap: Record<string, number> = {}
+        progress.completedQuests.forEach((id) => {
+          completedMap[id] = true
+        })
+        Object.entries(progress.questDetails).forEach(([id, detail]) => {
+          if (detail.score > 0) scoresMap[id] = detail.score
+        })
+        setCompleted(completedMap)
+        setAiScores(scoresMap)
+      })
+      .catch(() => {
+        // 서버 미응답 시 로컬 상태로 계속 진행
+      })
+  }, [userId])
 
   const getActProgress = useCallback(
     (act: Act) => {
@@ -30,8 +52,11 @@ export function App() {
     }
   }
 
-  const handleComplete = (questId: string, _xp: number) => {
+  const handleComplete = (questId: string, xp: number, actId: number) => {
     setCompleted((prev) => ({ ...prev, [questId]: true }))
+    completeQuest(userId, questId, actId, xp).catch(() => {
+      // 저장 실패해도 로컬 상태는 유지
+    })
   }
 
   const handleAiResult = (result: AiEvaluationResult) => {

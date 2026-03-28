@@ -10,6 +10,9 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.kotlin.any
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 @ExtendWith(MockitoExtension::class)
@@ -85,6 +88,26 @@ class ProgressServiceTest {
         assertThat(detail.status).isEqualTo(QuestStatus.COMPLETED)
         assertThat(detail.score).isEqualTo(80)
         assertThat(detail.xp).isEqualTo(160)
+    }
+
+    @Test
+    fun `completeQuest - 미완료 퀘스트는 COMPLETED로 저장한다`() {
+        whenever(progressPort.findByUserIdAndQuestId("user-1", "1-1")).thenReturn(null)
+
+        service.completeQuest("user-1", "1-1", 1, 100)
+
+        verify(progressPort).save(any())
+    }
+
+    @Test
+    fun `completeQuest - 이미 완료된 퀘스트는 저장하지 않는다`() {
+        whenever(progressPort.findByUserIdAndQuestId("user-1", "1-1")).thenReturn(
+            progress("1-1", QuestStatus.COMPLETED, earnedXp = 100)
+        )
+
+        service.completeQuest("user-1", "1-1", 1, 100)
+
+        verify(progressPort, never()).save(any())
     }
 
     private fun progress(

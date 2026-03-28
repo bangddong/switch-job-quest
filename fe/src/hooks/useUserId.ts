@@ -9,11 +9,11 @@ function generateUserId(): string {
 export function useUserId(): string {
   return useMemo(() => {
     try {
-      const stored = sessionStorage.getItem(STORAGE_KEY)
+      const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) return stored
 
       const id = generateUserId()
-      sessionStorage.setItem(STORAGE_KEY, id)
+      localStorage.setItem(STORAGE_KEY, id)
       return id
     } catch {
       return 'user-demo'
