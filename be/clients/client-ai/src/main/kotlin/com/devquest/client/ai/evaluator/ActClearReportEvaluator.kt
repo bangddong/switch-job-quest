@@ -13,7 +13,7 @@ class ActClearReportEvaluator(
 
     override fun generate(actId: Int, actTitle: String, questScores: Map<String, Int>): ActClearReportResult {
         val scoresText = questScores.entries.joinToString("\n") { (questId, score) ->
-            "- $questId: $score점"
+            "- $questId: ${score}점"
         }
         val avgScore = if (questScores.isEmpty()) 0 else questScores.values.average().toInt()
 
