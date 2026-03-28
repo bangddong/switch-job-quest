@@ -1,8 +1,8 @@
 package com.devquest.core.domain
 
 import com.devquest.core.domain.model.QuestProgress
-import com.devquest.core.domain.port.*
 import com.devquest.core.domain.model.evaluation.*
+import com.devquest.core.domain.port.*
 import com.devquest.core.enums.QuestStatus
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
@@ -22,6 +22,7 @@ class AiCheckService(
     private val resumeEvaluator: ResumeEvaluatorPort,
     private val companyFitEvaluator: CompanyFitEvaluatorPort,
     private val personalityEvaluator: PersonalityEvaluatorPort,
+    private val actClearReportPort: ActClearReportPort,
     private val progressPort: QuestProgressPort
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -95,6 +96,13 @@ class AiCheckService(
         val result = personalityEvaluator.evaluate(question, answer)
         saveProgress(userId, "5-1", 5, result.score, result.passed, if (result.passed) (400 * result.xpMultiplier).toInt() else 0)
         return result
+    }
+
+    fun generateActClearReport(userId: String, actId: Int, actTitle: String): ActClearReportResult {
+        val questScores = progressPort.findAllByUserId(userId)
+            .filter { it.actId == actId && it.aiScore > 0 }
+            .associate { it.questId to it.aiScore }
+        return actClearReportPort.generate(actId, actTitle, questScores)
     }
 
     private fun saveProgress(userId: String, questId: String, actId: Int, score: Int, passed: Boolean, xp: Int) {

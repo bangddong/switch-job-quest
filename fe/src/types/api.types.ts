@@ -19,6 +19,17 @@ export interface ProgressResult {
   questDetails: Record<string, QuestDetail>
 }
 
+export interface ActClearReportResult {
+  actId: number
+  actTitle: string
+  overallScore: number
+  grade: string
+  developerClass: string
+  achievements: string[]
+  nextActHint: string
+  encouragement: string
+}
+
 export interface AiEvaluationResult {
   score: number
   overallScore?: number

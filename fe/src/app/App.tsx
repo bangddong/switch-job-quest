@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult } from '@/types/api.types'
+import type { AiEvaluationResult, ActClearReportResult } from '@/types/api.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail } from '@/features/quest-detail'
+import { ActClearReportCard } from '@/features/ai-check'
 import { useUserId } from '@/hooks/useUserId'
-import { fetchProgress, completeQuest } from '@/lib/apiClient'
+import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
 
-type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest }
+type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult }
 
 export function App() {
   const userId = useUserId()
@@ -52,28 +53,39 @@ export function App() {
     }
   }
 
-  const handleComplete = (questId: string, xp: number, actId: number) => {
+  const triggerActClearReport = (act: Act) => {
+    fetchActClearReport(userId, act.id, `${act.title} ${act.subtitle}`)
+      .then((report) => setView({ kind: 'act-clear', act, report }))
+      .catch(() => setView({ kind: 'map' }))
+  }
+
+  const isBossQuest = (questId: string) => questId.endsWith('-BOSS')
+
+  const handleComplete = (questId: string, xp: number, actId: number, act: Act) => {
     setCompleted((prev) => ({ ...prev, [questId]: true }))
-    completeQuest(userId, questId, actId, xp).catch(() => {
-      // 저장 실패해도 로컬 상태는 유지
-    })
+    completeQuest(userId, questId, actId, xp).catch(() => {})
+    if (isBossQuest(questId)) triggerActClearReport(act)
   }
 
   const handleAiResult = (result: AiEvaluationResult) => {
     setAiResult(result)
     if (view.kind === 'detail') {
       if (result.passed) {
-        setCompleted((prev) => ({ ...prev, [view.quest.id]: true }))
-        setAiScores((prev) => ({ ...prev, [view.quest.id]: result.score }))
+        const { quest, act } = view
+        setCompleted((prev) => ({ ...prev, [quest.id]: true }))
+        setAiScores((prev) => ({ ...prev, [quest.id]: result.score }))
+        if (isBossQuest(quest.id)) triggerActClearReport(act)
       }
     }
   }
 
   const handleMockInterviewComplete = (score: number) => {
     if (view.kind === 'detail') {
+      const { quest, act } = view
       if (score >= 70) {
-        setCompleted((prev) => ({ ...prev, [view.quest.id]: true }))
-        setAiScores((prev) => ({ ...prev, [view.quest.id]: score }))
+        setCompleted((prev) => ({ ...prev, [quest.id]: true }))
+        setAiScores((prev) => ({ ...prev, [quest.id]: score }))
+        if (isBossQuest(quest.id)) triggerActClearReport(act)
       }
     }
   }
@@ -89,7 +101,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {view.kind === 'detail' && (
+      {(view.kind === 'detail' || view.kind === 'act-clear') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -106,13 +118,15 @@ export function App() {
         </button>
       )}
 
-      {view.kind === 'map' ? (
+      {view.kind === 'map' && (
         <QuestMap
           onSelectAct={handleSelectAct}
           completed={completed}
           getActProgress={getActProgress}
         />
-      ) : (
+      )}
+
+      {view.kind === 'detail' && (
         <QuestDetail
           quest={view.quest}
           act={view.act}
@@ -124,6 +138,14 @@ export function App() {
           onAiResult={handleAiResult}
           onComplete={handleComplete}
           onMockInterviewComplete={handleMockInterviewComplete}
+        />
+      )}
+
+      {view.kind === 'act-clear' && (
+        <ActClearReportCard
+          report={view.report}
+          actColor={view.act.color}
+          onContinue={() => setView({ kind: 'map' })}
         />
       )}
     </div>

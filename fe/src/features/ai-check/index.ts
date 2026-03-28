@@ -1,3 +1,4 @@
+export { ActClearReportCard } from './components/ActClearReportCard'
 export { AiCheckForm } from './components/AiCheckForm'
 export { AiResultCard } from './components/AiResultCard'
 export { InterviewResultCard } from './components/InterviewResultCard'

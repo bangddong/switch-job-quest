@@ -130,4 +130,15 @@ class AiCheckController(
             throw CoreException(ErrorType.AI_EVALUATION_FAILED)
         }
     }
+
+    @PostMapping("/act-clear-report")
+    fun generateActClearReport(@Valid @RequestBody request: ActClearReportRequestDto): ApiResponse<*> {
+        return try {
+            val result = aiCheckService.generateActClearReport(request.userId, request.actId, request.actTitle)
+            ApiResponse.success(result)
+        } catch (e: Exception) {
+            log.error("Act clear report generation failed", e)
+            throw CoreException(ErrorType.AI_EVALUATION_FAILED)
+        }
+    }
 }
