@@ -1,16 +1,20 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
 import type { AiEvaluationResult, ActClearReportResult } from '@/types/api.types'
+import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail } from '@/features/quest-detail'
 import { ActClearReportCard } from '@/features/ai-check'
+import { CharacterCreate } from '@/features/character'
 import { useUserId } from '@/hooks/useUserId'
+import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
 
 type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult }
 
 export function App() {
   const userId = useUserId()
+  const { character, setCharacter } = useCharacter()
   const [view, setView] = useState<View>({ kind: 'map' })
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
   const [aiScores, setAiScores] = useState<Record<string, number>>({})
@@ -43,6 +47,11 @@ export function App() {
     },
     [completed],
   )
+
+  const handleCharacterComplete = (c: Character) => {
+    setCharacter(c)
+    setView({ kind: 'map' })
+  }
 
   const handleSelectAct = (act: Act) => {
     if (act.quests.length > 0) {
@@ -90,6 +99,23 @@ export function App() {
     }
   }
 
+  if (character === null) {
+    return (
+      <div
+        style={{
+          maxWidth: 480,
+          margin: '0 auto',
+          padding: '0 20px',
+          minHeight: '100vh',
+          fontFamily: "'Courier New', monospace",
+          color: '#F8FAFC',
+        }}
+      >
+        <CharacterCreate onComplete={handleCharacterComplete} />
+      </div>
+    )
+  }
+
   return (
     <div
       style={{
@@ -123,6 +149,7 @@ export function App() {
           onSelectAct={handleSelectAct}
           completed={completed}
           getActProgress={getActProgress}
+          character={character}
         />
       )}
 
