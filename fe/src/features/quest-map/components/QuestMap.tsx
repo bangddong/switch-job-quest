@@ -1,4 +1,5 @@
 import type { Act } from '@/types/quest.types'
+import type { Character } from '@/types/character.types'
 import { ACTS, ACT_UNLOCK_THRESHOLD } from '../constants/questData'
 import { ActCard } from './ActCard'
 import { StatsPanel } from './StatsPanel'
@@ -7,22 +8,23 @@ interface QuestMapProps {
   onSelectAct: (act: Act) => void
   completed: Record<string, boolean>
   getActProgress: (act: Act) => number
+  character: Character
 }
 
-export function QuestMap({ onSelectAct, completed, getActProgress }: QuestMapProps) {
+export function QuestMap({ onSelectAct, completed, getActProgress, character }: QuestMapProps) {
   const completedCount = Object.keys(completed).length
 
   return (
     <div style={{ animation: 'slideIn 0.4s ease' }}>
       <div style={{ textAlign: 'center', padding: '40px 0 24px' }}>
         <div style={{ fontSize: 10, letterSpacing: 6, color: '#1E293B', marginBottom: 5 }}>
-          5YR BACKEND DEVELOPER
+          {character.years} {character.role.toUpperCase()}
         </div>
         <h1 style={{ fontSize: 30, fontWeight: 'bold', margin: 0, letterSpacing: 2, color: '#F8FAFC' }}>
-          이직 퀘스트
+          {character.nickname}
         </h1>
         <p style={{ color: '#334155', fontSize: 12, marginTop: 8 }}>
-          Spring AI 기반 퀘스트 검사 · 퀘스트 완료로 이직 성공
+          이직 퀘스트 · Spring AI 검사 기반
         </p>
       </div>
 
