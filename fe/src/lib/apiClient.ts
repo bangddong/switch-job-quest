@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult } from '@/types/api.types'
 
 const API_BASE = '/api/v1'
 
@@ -22,6 +22,22 @@ export async function completeQuest(
     body: JSON.stringify({ userId, questId, actId, earnedXp }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
+export async function fetchActClearReport(
+  userId: string,
+  actId: number,
+  actTitle: string,
+): Promise<ActClearReportResult> {
+  const res = await fetch(`${API_BASE}/ai-check/act-clear-report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, actId, actTitle }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<ActClearReportResult> = await res.json()
+  if (!json.success || json.data == null) throw new Error('ACT 클리어 리포트 생성 실패')
+  return json.data
 }
 
 export async function callAiCheck<T>(
