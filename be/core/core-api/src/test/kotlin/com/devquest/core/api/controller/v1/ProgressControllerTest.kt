@@ -8,9 +8,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 @ExtendWith(MockitoExtension::class)
@@ -70,5 +73,28 @@ class ProgressControllerTest {
                 jsonPath("$.data.totalXp") { value(0) }
                 jsonPath("$.data.level") { value(1) }
             }
+    }
+
+    @Test
+    fun `completeQuest - 정상 요청이면 200과 SUCCESS 반환`() {
+        mockMvc.post("/api/v1/progress/complete") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"userId":"user-1","questId":"1-1","actId":1,"earnedXp":100}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.result") { value("SUCCESS") }
+        }
+
+        verify(progressService).completeQuest("user-1", "1-1", 1, 100)
+    }
+
+    @Test
+    fun `completeQuest - userId 누락이면 400 반환`() {
+        mockMvc.post("/api/v1/progress/complete") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"userId":"","questId":"1-1","actId":1,"earnedXp":100}"""
+        }.andExpect {
+            status { isBadRequest() }
+        }
     }
 }

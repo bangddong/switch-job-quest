@@ -5,6 +5,20 @@ export interface ApiResponse<T> {
   message: string | null
 }
 
+export interface QuestDetail {
+  status: string
+  score: number
+  xp: number
+}
+
+export interface ProgressResult {
+  userId: string
+  totalXp: number
+  level: number
+  completedQuests: string[]
+  questDetails: Record<string, QuestDetail>
+}
+
 export interface AiEvaluationResult {
   score: number
   overallScore?: number
