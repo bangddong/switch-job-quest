@@ -17,6 +17,16 @@ class AiCheckController(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    @PostMapping("/skill-assessment")
+    fun checkSkillAssessment(@Valid @RequestBody request: SkillAssessmentRequestDto): ApiResponse<*> {
+        return try {
+            ApiResponse.success(aiCheckService.checkSkillAssessment(request.userId, request.skills, request.targetRole))
+        } catch (e: Exception) {
+            log.error("Skill assessment failed", e)
+            throw CoreException(ErrorType.AI_EVALUATION_FAILED)
+        }
+    }
+
     @PostMapping("/career-essay")
     fun checkCareerEssay(@Valid @RequestBody request: CareerEssayRequestDto): ApiResponse<*> {
         return try {

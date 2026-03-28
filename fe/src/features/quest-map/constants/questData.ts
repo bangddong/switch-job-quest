@@ -14,9 +14,9 @@ export const ACTS: Act[] = [
   {
     id: 1, title: 'ACT I', subtitle: '캐릭터 생성', color: '#4ECDC4', icon: '⚗️',
     quests: [
-      { id: '1-1', type: 'STUDY', title: '기술 스택 자가 진단', xp: 150, aiCheck: false, tag: '📋 진단', difficulty: 1,
-        desc: '현재 기술을 레벨별로 분류하고 시장 JD와 갭 분석',
-        tasks: ['보유 기술 상/중/하 자가 평가', 'JD 5개 분석 후 갭 파악', '3개월 내 보완 기술 2가지 선정'] },
+      { id: '1-1', type: 'STUDY', title: '기술 스택 자가 진단', xp: 150, aiCheck: true, tag: '🤖 AI진단', difficulty: 1,
+        desc: 'AI가 보유 기술을 분석해 목표 포지션 대비 강점·갭·학습 우선순위를 진단한다',
+        tasks: ['보유 기술 스택 입력 (기술명:레벨 형식)', '목표 포지션 입력', 'AI 진단 결과 수령 → 갭 기술 확인'] },
       { id: '1-2', type: 'WRITE', title: '이직 동기 에세이', xp: 200, aiCheck: true, tag: '✍️ AI검사', difficulty: 1,
         desc: 'AI가 이직 동기의 명확성·논리성·진정성을 4개 기준으로 평가한다',
         tasks: ['현 직장 불만족 사항 3가지', '이직 후 목표 3가지', '5년 후 비전 200자 → AI 제출'] },

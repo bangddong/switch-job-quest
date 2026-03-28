@@ -25,6 +25,7 @@ class AiCheckServiceTest {
     @Mock lateinit var resumeEvaluator: ResumeEvaluatorPort
     @Mock lateinit var companyFitEvaluator: CompanyFitEvaluatorPort
     @Mock lateinit var personalityEvaluator: PersonalityEvaluatorPort
+    @Mock lateinit var skillAssessmentPort: SkillAssessmentPort
     @Mock lateinit var actClearReportPort: ActClearReportPort
     @Mock lateinit var progressPort: QuestProgressPort
 
@@ -35,7 +36,7 @@ class AiCheckServiceTest {
         service = AiCheckService(
             essayEvaluator, blogEvaluator, systemDesignEvaluator, interviewEvaluator,
             jdAnalysisEvaluator, resumeEvaluator, companyFitEvaluator, personalityEvaluator,
-            actClearReportPort, progressPort
+            skillAssessmentPort, actClearReportPort, progressPort
         )
         // progressPort.save 기본 응답 (저장 시 반환값 필요)
         whenever(progressPort.save(any())).thenAnswer { it.arguments[0] }

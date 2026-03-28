@@ -22,6 +22,7 @@ class AiCheckService(
     private val resumeEvaluator: ResumeEvaluatorPort,
     private val companyFitEvaluator: CompanyFitEvaluatorPort,
     private val personalityEvaluator: PersonalityEvaluatorPort,
+    private val skillAssessmentPort: SkillAssessmentPort,
     private val actClearReportPort: ActClearReportPort,
     private val progressPort: QuestProgressPort
 ) {
@@ -29,6 +30,13 @@ class AiCheckService(
 
     @Value("\${devquest.ai.pass-score:70}")
     private val passScore: Int = 70
+
+    @Transactional
+    fun checkSkillAssessment(userId: String, skills: List<String>, targetRole: String): SkillAssessmentResult {
+        val result = skillAssessmentPort.evaluate(skills, targetRole)
+        saveProgress(userId, "1-1", 1, result.score, true, 150)
+        return result
+    }
 
     @Transactional
     fun checkCareerEssay(
