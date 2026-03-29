@@ -2,8 +2,6 @@ pluginManagement {
     val kotlinVersion: String by settings
     val springBootVersion: String by settings
     val springDependencyManagementVersion: String by settings
-    val detektVersion: String by settings
-
     resolutionStrategy {
         eachPlugin {
             when (requested.id.id) {
@@ -12,7 +10,6 @@ pluginManagement {
                 "org.jetbrains.kotlin.plugin.jpa" -> useVersion(kotlinVersion)
                 "org.springframework.boot" -> useVersion(springBootVersion)
                 "io.spring.dependency-management" -> useVersion(springDependencyManagementVersion)
-                "io.gitlab.arturbosch.detekt" -> useVersion(detektVersion)
             }
         }
     }

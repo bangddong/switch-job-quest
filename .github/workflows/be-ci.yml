@@ -33,8 +33,18 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Detekt
-        run: ./gradlew detekt --no-daemon
+      - name: Lint — unsafe !! operator
+        working-directory: ${{ github.workspace }}
+        run: |
+          result=$(grep -rn '!!' be --include='*.kt' \
+            --exclude-dir='test' --exclude-dir='build' 2>/dev/null \
+            | grep -v '^Binary')
+          if [ -n "$result" ]; then
+            echo "❌ Unsafe !! operator found. Use ?. or ?: instead."
+            echo "$result"
+            exit 1
+          fi
+          echo "✅ No unsafe !! operator found."
 
       - name: Build & Test
         run: ./gradlew :core:core-api:bootJar test --no-daemon

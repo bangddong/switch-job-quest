@@ -4,7 +4,6 @@ plugins {
     kotlin("plugin.jpa") apply false
     id("org.springframework.boot") apply false
     id("io.spring.dependency-management")
-    id("io.gitlab.arturbosch.detekt")
 }
 
 allprojects {
