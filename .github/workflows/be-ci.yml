@@ -38,7 +38,7 @@ jobs:
         run: |
           result=$(grep -rn '!!' be --include='*.kt' \
             --exclude-dir='test' --exclude-dir='build' 2>/dev/null \
-            | grep -v '^Binary')
+            | grep -v '^Binary' || true)
           if [ -n "$result" ]; then
             echo "❌ Unsafe !! operator found. Use ?. or ?: instead."
             echo "$result"
