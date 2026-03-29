@@ -38,7 +38,11 @@ jobs:
         run: |
           result=$(grep -rn '!!' be --include='*.kt' \
             --exclude-dir='test' --exclude-dir='build' 2>/dev/null \
-            | grep -v '^Binary' || true)
+            | grep -v '^Binary') || exit_code=$?
+          if [ "${exit_code:-0}" -gt 1 ]; then
+            echo "❌ grep command failed unexpectedly (exit code: ${exit_code})"
+            exit "${exit_code}"
+          fi
           if [ -n "$result" ]; then
             echo "❌ Unsafe !! operator found. Use ?. or ?: instead."
             echo "$result"
