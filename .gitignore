@@ -34,6 +34,8 @@ desktop.ini
 # === Claude Code (settings only — skills are tracked) ===
 .claude/settings.local.json
 .claude/settings.json
+.claude/agents/
+.claude/launch.json
 
 # === Root npm (dev tool only) ===
 /package.json
