@@ -12,6 +12,7 @@
 | 커밋 / PR / 브랜치 | `.claude/docs/git-strategy.md` |
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
 | 사용자 직접 실행 필요한 작업 | `.claude/TASKS.md` ← 파일이 존재하면 미완료 작업 있음 |
+| 현재 작업 상태 / PR / 최근 결정 | `.claude/CONTEXT.md` ← 새 대화 시작 시 **먼저 읽기** |
 
 ## 커밋 컨벤션
 
