@@ -6,11 +6,12 @@ import { QuestMap } from '@/features/quest-map'
 import { QuestDetail } from '@/features/quest-detail'
 import { ActClearReportCard } from '@/features/ai-check'
 import { CharacterCreate } from '@/features/character'
+import { InterviewCoach } from '@/features/interview-coach'
 import { useUserId } from '@/hooks/useUserId'
 import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
 
-type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult }
+type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult } | { kind: 'interview-coach' }
 
 export function App() {
   const userId = useUserId()
@@ -127,7 +128,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {(view.kind === 'detail' || view.kind === 'act-clear') && (
+      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -147,6 +148,7 @@ export function App() {
       {view.kind === 'map' && (
         <QuestMap
           onSelectAct={handleSelectAct}
+          onOpenCoach={() => setView({ kind: 'interview-coach' })}
           completed={completed}
           getActProgress={getActProgress}
           character={character}
@@ -174,6 +176,10 @@ export function App() {
           actColor={view.act.color}
           onContinue={() => setView({ kind: 'map' })}
         />
+      )}
+
+      {view.kind === 'interview-coach' && (
+        <InterviewCoach userId={userId} />
       )}
     </div>
   )

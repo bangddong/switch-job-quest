@@ -6,12 +6,13 @@ import { StatsPanel } from './StatsPanel'
 
 interface QuestMapProps {
   onSelectAct: (act: Act) => void
+  onOpenCoach: () => void
   completed: Record<string, boolean>
   getActProgress: (act: Act) => number
   character: Character
 }
 
-export function QuestMap({ onSelectAct, completed, getActProgress, character }: QuestMapProps) {
+export function QuestMap({ onSelectAct, onOpenCoach, completed, getActProgress, character }: QuestMapProps) {
   const completedCount = Object.keys(completed).length
 
   return (
@@ -63,6 +64,30 @@ export function QuestMap({ onSelectAct, completed, getActProgress, character }: 
           )
         })}
       </div>
+
+      <button
+        onClick={onOpenCoach}
+        style={{
+          width: '100%',
+          marginTop: 12,
+          background: 'rgba(167,139,250,0.08)',
+          border: '1px solid rgba(167,139,250,0.25)',
+          borderRadius: 10,
+          padding: '14px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          cursor: 'pointer',
+          fontFamily: "'Courier New', monospace",
+        }}
+      >
+        <span style={{ fontSize: 22 }}>🎯</span>
+        <div style={{ textAlign: 'left' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#A78BFA', margin: 0 }}>전담 면접 코치</p>
+          <p style={{ fontSize: 11, color: '#475569', margin: '2px 0 0' }}>JD 분석부터 종합 평가까지</p>
+        </div>
+        <span style={{ marginLeft: 'auto', color: '#475569', fontSize: 16 }}>→</span>
+      </button>
 
       <StatsPanel completedCount={completedCount} />
     </div>
