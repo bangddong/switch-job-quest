@@ -5,7 +5,7 @@ export const AI_FORMS: AiFormsMap = {
     label: '기술 스택 AI 진단',
     endpoint: 'skill-assessment',
     fields: [
-      { key: 'skills', label: '보유 기술 스택 (기술명:레벨 형식, 최대 10개)', type: 'list', count: 5, placeholder: '예: Java:상, Spring Boot:상, Kubernetes:중' },
+      { key: 'skills', label: '보유 기술 스택 (기술명:경력기간 형식, 최대 10개)', type: 'list', count: 5, placeholder: '예: Java:5년, Spring Boot:3년, Kubernetes:6개월' },
       { key: 'targetRole', label: '목표 포지션', type: 'text', placeholder: '예: 시니어 백엔드 개발자' },
     ],
     transform: (v) => v,
