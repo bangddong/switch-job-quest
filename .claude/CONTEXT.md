@@ -7,26 +7,44 @@
 
 | 브랜치 | 상태 | 설명 |
 |--------|------|------|
-| `main` | 최신 origin과 동기화됨 | 로컬은 리셋 완료 |
-| `refactor/skill-level-to-career-duration` | **작업 중** | PR #12 오픈 |
+| `main` | 최신 (PR #12 머지됨) | 기술스택 레벨 → 경력기간 변경 반영 |
+| `feat/interview-coach-be` | **PR #13 오픈** | BE 면접 코치 API |
+| `feat/interview-coach-fe` | **PR #14 오픈** | FE 면접 코치 UI |
 
 ## 열린 PR
 
 | PR | 브랜치 | 상태 | 내용 |
 |----|--------|------|------|
-| [#12](https://github.com/bangddong/switch-job-quest/pull/12) | `refactor/skill-level-to-career-duration` | 오픈, CI 통과 | 기술 스택 레벨 입력 방식 `상/중/하` → `경력기간(예: Java:5년)` 변경 |
+| [#13](https://github.com/bangddong/switch-job-quest/pull/13) | `feat/interview-coach-be` | 오픈, CI 대기 중 | 면접 코치 API 3개 (start/answer/report) |
+| [#14](https://github.com/bangddong/switch-job-quest/pull/14) | `feat/interview-coach-fe` | 오픈, CI 대기 중 | 면접 코치 4단계 코칭 UI |
 
 ## 최근 결정 사항
 
-- **기술 스택 자가 진단(1-1) 입력 형식 변경**: `상/중/하`가 주관적이어서 `기술명:경력기간` 형식으로 교체
-  - FE: `formConfig.ts` 레이블/플레이스홀더 수정
-  - BE: `SkillAssessmentEvaluator.kt` 프롬프트에 형식 설명 추가 + 진단 기준 문구 수정
-  - 테스트: `SkillAssessmentEvaluatorTest` 신규 추가 (코파일럿 리뷰 대응)
+### 멀티 에이전트 패턴 도입 (2026-03-31)
+- Claude가 기획자/오케스트레이터 역할 담당
+- BE/FE 각각 독립 에이전트(isolation: worktree)로 병렬 작업
+- 에이전트 권한 문제 → `~/.claude/settings.json`에 permissions 추가로 해결
+- 에이전트 완료 후 기획자(Claude)가 코드 리뷰 → 보완 지시 또는 직접 수정 후 PR
+
+### 면접 코치 기능 (2026-03-31)
+- **컨셉**: 전담 코치가 처음부터 끝까지 함께하는 1:1 코칭 세션
+- **흐름**: JD 입력 → JD 분석 → 질문별 Q&A + 즉시 피드백 → 종합 리포트
+- **BE**: Stateless API (클라이언트가 히스토리 전달), `InterviewCoachPort` Port & Adapter 패턴
+- **FE**: `features/interview-coach/` 신규 feature, CoachBubble 말풍선 UI
 
 ## 다음 작업
 
-- [ ] PR #12 머지 (CI 통과 확인 후)
-- [ ] 머지 후 Vercel 자동 배포 확인
+- [ ] PR #13 (BE) 머지 — CI 통과 확인 후, BE 먼저
+- [ ] PR #14 (FE) 머지 — BE 머지 후
+- [ ] Vercel 자동 배포 확인
+- [ ] 이후 방향: 4-BOSS 퀘스트 구현 또는 추가 기능 논의
+
+## 멀티 에이전트 운영 노하우
+
+- `settings.json` permissions 설정 필수 (Bash, Write, Edit, Read, Glob, Grep)
+- 에이전트는 `isolation: "worktree"` + `run_in_background: true` 조합으로 실행
+- 에이전트 완료 후 반드시 기획자(Claude)가 핵심 파일 직접 읽고 리뷰
+- 리뷰 후 보완 있으면 SendMessage로 이전 에이전트 컨텍스트 이어서 지시 가능
 
 ## 환경 메모
 
