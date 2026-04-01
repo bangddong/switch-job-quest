@@ -204,7 +204,7 @@ export function App() {
       )}
 
       {view.kind === 'growth' && (
-        <GrowthDashboard userId={userId} onBack={() => setView({ kind: 'map' })} />
+        <GrowthDashboard userId={userId} />
       )}
     </div>
   )

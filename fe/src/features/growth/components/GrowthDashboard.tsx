@@ -7,7 +7,6 @@ import { QuestHistoryList } from './QuestHistoryList'
 
 interface GrowthDashboardProps {
   userId: string
-  onBack: () => void
 }
 
 interface BestScoreEntry {
@@ -31,7 +30,7 @@ function totalEarnedXp(history: QuestHistoryItem[]): number {
   return history.reduce((sum, item) => sum + item.earnedXp, 0)
 }
 
-export function GrowthDashboard({ userId, onBack: _onBack }: GrowthDashboardProps) {
+export function GrowthDashboard({ userId }: GrowthDashboardProps) {
   const [history, setHistory] = useState<QuestHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
