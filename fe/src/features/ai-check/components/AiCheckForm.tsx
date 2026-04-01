@@ -3,6 +3,7 @@ import type { AiEvaluationResult } from '@/types/api.types'
 import { useUserId } from '@/hooks/useUserId'
 import { AI_FORMS } from '../constants/formConfig'
 import { submitAiCheck } from '../api/aiCheckApi'
+import { TechStackInput } from './TechStackInput'
 
 interface AiCheckFormProps {
   questId: string
@@ -97,6 +98,13 @@ export function AiCheckForm({ questId, onResult }: AiCheckFormProps) {
                 </div>
               ))}
             </div>
+          )}
+          {f.type === 'tag-search' && (
+            <TechStackInput
+              value={(values[f.key] as string[] | undefined) ?? []}
+              onChange={(val) => set(f.key, val)}
+              placeholder={f.placeholder}
+            />
           )}
         </div>
       ))}

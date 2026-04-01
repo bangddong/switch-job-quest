@@ -1,4 +1,4 @@
-export type FieldType = 'text' | 'textarea' | 'list'
+export type FieldType = 'text' | 'textarea' | 'list' | 'tag-search'
 
 export interface FormFieldConfig {
   key: string
