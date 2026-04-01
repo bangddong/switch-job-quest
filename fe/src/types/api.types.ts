@@ -45,6 +45,17 @@ export interface AiEvaluationResult {
   suggestedFocus?: string[]
 }
 
+export interface QuestHistoryItem {
+  id: number
+  questId: string
+  actId: number
+  score: number
+  grade: string
+  passed: boolean
+  earnedXp: number
+  createdAt: string
+}
+
 export interface InterviewEvaluationResult {
   score: number
   passed: boolean
