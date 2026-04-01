@@ -1,5 +1,6 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.model.QuestHistory
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
 import com.devquest.core.enums.QuestStatus
@@ -28,6 +29,7 @@ class AiCheckServiceTest {
     @Mock lateinit var skillAssessmentPort: SkillAssessmentPort
     @Mock lateinit var actClearReportPort: ActClearReportPort
     @Mock lateinit var progressPort: QuestProgressPort
+    @Mock lateinit var historyPort: QuestHistoryPort
 
     private lateinit var service: AiCheckService
 
@@ -36,10 +38,12 @@ class AiCheckServiceTest {
         service = AiCheckService(
             essayEvaluator, blogEvaluator, systemDesignEvaluator, interviewEvaluator,
             jdAnalysisEvaluator, resumeEvaluator, companyFitEvaluator, personalityEvaluator,
-            skillAssessmentPort, actClearReportPort, progressPort
+            skillAssessmentPort, actClearReportPort, progressPort, historyPort
         )
         // progressPort.save 기본 응답 (저장 시 반환값 필요)
         whenever(progressPort.save(any())).thenAnswer { it.arguments[0] }
+        // historyPort.save 기본 응답
+        whenever(historyPort.save(any())).thenAnswer { it.arguments[0] }
     }
 
     // ===== analyzeCompanyFit 테스트 =====

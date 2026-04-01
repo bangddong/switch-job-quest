@@ -16,6 +16,8 @@ main                    ← 프로덕션 (자동 배포)
 - **main 직접 push 금지**
 - PR은 CI(빌드 + 테스트) 통과 후에만 머지
 - WIP 커밋은 feature 브랜치에서만, main 히스토리는 의미 있는 커밋만
+- **브랜치는 항상 최신 main 기반으로 생성** (`git checkout -b feat/xxx origin/main`)
+- **PR 전 rebase 필수** — main이 앞서 있으면 `git rebase origin/main` 후 push
 
 ## 브랜치 네이밍
 

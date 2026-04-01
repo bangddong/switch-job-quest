@@ -1,5 +1,6 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.model.QuestHistory
 import com.devquest.core.domain.model.QuestProgress
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
@@ -24,7 +25,8 @@ class AiCheckService(
     private val personalityEvaluator: PersonalityEvaluatorPort,
     private val skillAssessmentPort: SkillAssessmentPort,
     private val actClearReportPort: ActClearReportPort,
-    private val progressPort: QuestProgressPort
+    private val progressPort: QuestProgressPort,
+    private val historyPort: QuestHistoryPort
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -127,6 +129,28 @@ class AiCheckService(
             updatedAt = LocalDateTime.now()
         )
         progressPort.save(progress)
+        saveHistory(userId, questId, actId, score, passed, xp)
         log.info("Quest progress saved: userId=$userId, questId=$questId, score=$score, passed=$passed, xp=$xp")
+    }
+
+    private fun saveHistory(userId: String, questId: String, actId: Int, score: Int, passed: Boolean, xp: Int) {
+        val grade = when {
+            score >= 90 -> "S"
+            score >= 80 -> "A"
+            score >= 70 -> "B"
+            score >= 60 -> "C"
+            else -> "D"
+        }
+        val history = QuestHistory(
+            userId = userId,
+            questId = questId,
+            actId = actId,
+            score = score,
+            grade = grade,
+            passed = passed,
+            earnedXp = xp
+        )
+        historyPort.save(history)
+        log.info("Quest history saved: userId=$userId, questId=$questId, score=$score, grade=$grade, passed=$passed")
     }
 }

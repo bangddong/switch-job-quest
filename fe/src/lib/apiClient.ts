@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem } from '@/types/api.types'
 
 const API_BASE = '/api/v1'
 
@@ -37,6 +37,22 @@ export async function fetchActClearReport(
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<ActClearReportResult> = await res.json()
   if (!json.success || json.data == null) throw new Error('ACT 클리어 리포트 생성 실패')
+  return json.data
+}
+
+export async function fetchHistory(userId: string): Promise<QuestHistoryItem[]> {
+  const res = await fetch(`${API_BASE}/progress/history?userId=${encodeURIComponent(userId)}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<QuestHistoryItem[]> = await res.json()
+  if (!json.success || json.data == null) throw new Error('히스토리 조회 실패')
+  return json.data
+}
+
+export async function fetchQuestHistory(userId: string, questId: string): Promise<QuestHistoryItem[]> {
+  const res = await fetch(`${API_BASE}/progress/history/${encodeURIComponent(questId)}?userId=${encodeURIComponent(userId)}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<QuestHistoryItem[]> = await res.json()
+  if (!json.success || json.data == null) throw new Error('퀘스트 히스토리 조회 실패')
   return json.data
 }
 

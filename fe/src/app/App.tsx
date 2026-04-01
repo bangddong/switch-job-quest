@@ -7,11 +7,12 @@ import { QuestDetail } from '@/features/quest-detail'
 import { ActClearReportCard } from '@/features/ai-check'
 import { CharacterCreate } from '@/features/character'
 import { InterviewCoach } from '@/features/interview-coach'
+import { GrowthDashboard } from '@/features/growth'
 import { useUserId } from '@/hooks/useUserId'
 import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
 
-type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult } | { kind: 'interview-coach' }
+type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult } | { kind: 'interview-coach' } | { kind: 'growth' }
 
 export function App() {
   const userId = useUserId()
@@ -128,7 +129,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach') && (
+      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -146,13 +147,33 @@ export function App() {
       )}
 
       {view.kind === 'map' && (
-        <QuestMap
-          onSelectAct={handleSelectAct}
-          onOpenCoach={() => setView({ kind: 'interview-coach' })}
-          completed={completed}
-          getActProgress={getActProgress}
-          character={character}
-        />
+        <>
+          <QuestMap
+            onSelectAct={handleSelectAct}
+            onOpenCoach={() => setView({ kind: 'interview-coach' })}
+            completed={completed}
+            getActProgress={getActProgress}
+            character={character}
+          />
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <button
+              onClick={() => setView({ kind: 'growth' })}
+              style={{
+                background: 'rgba(78,205,196,0.1)',
+                border: '1px solid rgba(78,205,196,0.3)',
+                color: '#4ECDC4',
+                cursor: 'pointer',
+                fontSize: 13,
+                padding: '10px 20px',
+                borderRadius: 8,
+                fontFamily: "'Courier New', monospace",
+                width: '100%',
+              }}
+            >
+              📈 성장 기록
+            </button>
+          </div>
+        </>
       )}
 
       {view.kind === 'detail' && (
@@ -180,6 +201,10 @@ export function App() {
 
       {view.kind === 'interview-coach' && (
         <InterviewCoach userId={userId} />
+      )}
+
+      {view.kind === 'growth' && (
+        <GrowthDashboard userId={userId} />
       )}
     </div>
   )
