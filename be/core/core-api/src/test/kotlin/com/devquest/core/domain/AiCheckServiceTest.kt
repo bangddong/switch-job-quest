@@ -30,6 +30,7 @@ class AiCheckServiceTest {
     @Mock lateinit var actClearReportPort: ActClearReportPort
     @Mock lateinit var progressPort: QuestProgressPort
     @Mock lateinit var historyPort: QuestHistoryPort
+    @Mock lateinit var bossPackageEvaluator: BossPackageEvaluatorPort
 
     private lateinit var service: AiCheckService
 
@@ -38,7 +39,7 @@ class AiCheckServiceTest {
         service = AiCheckService(
             essayEvaluator, blogEvaluator, systemDesignEvaluator, interviewEvaluator,
             jdAnalysisEvaluator, resumeEvaluator, companyFitEvaluator, personalityEvaluator,
-            skillAssessmentPort, actClearReportPort, progressPort, historyPort
+            skillAssessmentPort, actClearReportPort, progressPort, historyPort, bossPackageEvaluator
         )
         // progressPort.save 기본 응답 (저장 시 반환값 필요)
         whenever(progressPort.save(any())).thenAnswer { it.arguments[0] }
@@ -243,6 +244,33 @@ class AiCheckServiceTest {
         assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
         assertThat(captor.firstValue.earnedXp).isEqualTo(350)
         assertThat(captor.firstValue.questId).isEqualTo("3-2")
+    }
+
+    // ===== checkBossPackage 테스트 =====
+
+    @Test
+    fun `checkBossPackage - 70점 이상이면 COMPLETED로 저장한다`() {
+        val mockResult = BossPackageResult(
+            overallScore = 80,
+            resumeImpactScore = 16,
+            githubConsistencyScore = 16,
+            technicalDepthScore = 16,
+            positionFitScore = 16,
+            differentiationScore = 16,
+            strengths = listOf("강점1", "강점2"),
+            improvements = listOf("개선사항1"),
+            overallFeedback = "우수한 지원 패키지입니다."
+        )
+        whenever(bossPackageEvaluator.evaluate(any(), any(), any(), any())).thenReturn(mockResult)
+
+        service.checkBossPackage("user-1", "이력서 내용", "https://github.com/user", "", "시니어 백엔드")
+
+        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
+        verify(progressPort).save(captor.capture())
+        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
+        assertThat(captor.firstValue.earnedXp).isEqualTo(700)
+        assertThat(captor.firstValue.aiScore).isEqualTo(80)
+        assertThat(captor.firstValue.questId).isEqualTo("4-BOSS")
     }
 
     // ===== checkPersonalityInterview 테스트 =====
