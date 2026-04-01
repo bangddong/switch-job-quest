@@ -2,6 +2,7 @@ package com.devquest.core.domain
 
 import com.devquest.core.domain.model.ProgressResult
 import com.devquest.core.domain.model.QuestProgress
+import com.devquest.core.domain.port.QuestHistoryPort
 import com.devquest.core.domain.port.QuestProgressPort
 import com.devquest.core.enums.QuestStatus
 import org.assertj.core.api.Assertions.assertThat
@@ -20,6 +21,9 @@ class ProgressServiceTest {
 
     @Mock
     private lateinit var progressPort: QuestProgressPort
+
+    @Mock
+    private lateinit var historyPort: QuestHistoryPort
 
     @InjectMocks
     private lateinit var service: ProgressService
