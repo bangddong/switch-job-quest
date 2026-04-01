@@ -56,6 +56,18 @@ export interface QuestHistoryItem {
   createdAt: string
 }
 
+export interface BossPackageResult {
+  overallScore: number
+  resumeImpactScore: number
+  githubConsistencyScore: number
+  technicalDepthScore: number
+  positionFitScore: number
+  differentiationScore: number
+  strengths: string[]
+  improvements: string[]
+  overallFeedback: string
+}
+
 export interface InterviewEvaluationResult {
   score: number
   passed: boolean

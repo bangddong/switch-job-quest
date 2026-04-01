@@ -1,7 +1,7 @@
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
-import { AiCheckForm, AiResultCard, MockInterviewPanel } from '@/features/ai-check'
+import { AiCheckForm, AiResultCard, BossPackageResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
 
 interface QuestDetailProps {
@@ -9,10 +9,10 @@ interface QuestDetailProps {
   act: Act
   completed: Record<string, boolean>
   aiScores: Record<string, number>
-  aiResult: AiEvaluationResult | null
+  aiResult: AiEvaluationResult | BossPackageResult | null
   showForm: boolean
   onShowForm: () => void
-  onAiResult: (result: AiEvaluationResult) => void
+  onAiResult: (result: AiEvaluationResult | BossPackageResult) => void
   onComplete: (questId: string, xp: number, actId: number, act: Act) => void
   onMockInterviewComplete: (score: number) => void
 }
@@ -181,7 +181,11 @@ export function QuestDetail({
         )}
 
         {/* AI Result */}
-        {aiResult && !isMock && <AiResultCard result={aiResult} />}
+        {aiResult && !isMock && (
+          quest.id === '4-BOSS'
+            ? <BossPackageResultCard result={aiResult as BossPackageResult} />
+            : <AiResultCard result={aiResult as AiEvaluationResult} />
+        )}
 
         {/* Manual complete */}
         {!quest.aiCheck && !done && (
