@@ -61,6 +61,17 @@ export const AI_FORMS: AiFormsMap = {
     ],
     transform: (v) => v,
   },
+  '4-BOSS': {
+    label: '지원 패키지 최종 점검',
+    endpoint: 'boss-package',
+    fields: [
+      { key: 'resumeContent', label: '최종 이력서', type: 'textarea', placeholder: '이력서 전문을 붙여넣어 주세요...', rows: 8 },
+      { key: 'githubUrl', label: 'GitHub 프로필 URL', type: 'text', placeholder: 'https://github.com/username' },
+      { key: 'blogUrl', label: '기술 블로그 URL (선택)', type: 'text', placeholder: 'https://your-blog.com' },
+      { key: 'targetPosition', label: '목표 포지션', type: 'text', placeholder: '예: 시니어 백엔드 개발자' },
+    ],
+    transform: (v) => v,
+  },
   '5-1': {
     label: '인성 면접 연습',
     endpoint: 'personality-interview',

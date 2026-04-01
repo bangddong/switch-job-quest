@@ -141,6 +141,19 @@ class AiCheckController(
         }
     }
 
+    @PostMapping("/boss-package")
+    fun checkBossPackage(@Valid @RequestBody request: BossPackageRequestDto): ApiResponse<*> {
+        return try {
+            val result = aiCheckService.checkBossPackage(
+                request.userId, request.resumeContent, request.githubUrl, request.blogUrl, request.targetPosition
+            )
+            ApiResponse.success(result)
+        } catch (e: Exception) {
+            log.error("Boss package check failed", e)
+            throw CoreException(ErrorType.AI_EVALUATION_FAILED)
+        }
+    }
+
     @PostMapping("/act-clear-report")
     fun generateActClearReport(@Valid @RequestBody request: ActClearReportRequestDto): ApiResponse<*> {
         return try {

@@ -26,7 +26,8 @@ class AiCheckService(
     private val skillAssessmentPort: SkillAssessmentPort,
     private val actClearReportPort: ActClearReportPort,
     private val progressPort: QuestProgressPort,
-    private val historyPort: QuestHistoryPort
+    private val historyPort: QuestHistoryPort,
+    private val bossPackageEvaluator: BossPackageEvaluatorPort
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -105,6 +106,14 @@ class AiCheckService(
     fun checkPersonalityInterview(userId: String, question: String, answer: String): AiEvaluationResult {
         val result = personalityEvaluator.evaluate(question, answer)
         saveProgress(userId, "5-1", 5, result.score, result.passed, if (result.passed) (400 * result.xpMultiplier).toInt() else 0)
+        return result
+    }
+
+    @Transactional
+    fun checkBossPackage(userId: String, resumeContent: String, githubUrl: String, blogUrl: String, targetPosition: String): BossPackageResult {
+        val result = bossPackageEvaluator.evaluate(resumeContent, githubUrl, blogUrl, targetPosition)
+        val passed = result.overallScore >= passScore
+        saveProgress(userId, "4-BOSS", 4, result.overallScore, passed, if (passed) 700 else 0)
         return result
     }
 

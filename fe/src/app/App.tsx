@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, ActClearReportResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, ActClearReportResult } from '@/types/api.types'
 import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail } from '@/features/quest-detail'
@@ -20,7 +20,7 @@ export function App() {
   const [view, setView] = useState<View>({ kind: 'map' })
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
   const [aiScores, setAiScores] = useState<Record<string, number>>({})
-  const [aiResult, setAiResult] = useState<AiEvaluationResult | null>(null)
+  const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | null>(null)
   const [showForm, setShowForm] = useState(false)
 
   useEffect(() => {
@@ -78,13 +78,20 @@ export function App() {
     if (isBossQuest(questId)) triggerActClearReport(act)
   }
 
-  const handleAiResult = (result: AiEvaluationResult) => {
+  const handleAiResult = (result: AiEvaluationResult | BossPackageResult) => {
     setAiResult(result)
     if (view.kind === 'detail') {
-      if (result.passed) {
-        const { quest, act } = view
+      const { quest, act } = view
+      const isBoss = quest.id === '4-BOSS'
+      const score = isBoss
+        ? (result as BossPackageResult).overallScore
+        : (result as AiEvaluationResult).score
+      const passed = isBoss
+        ? (result as BossPackageResult).overallScore >= 70
+        : (result as AiEvaluationResult).passed
+      if (passed) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
-        setAiScores((prev) => ({ ...prev, [quest.id]: result.score }))
+        setAiScores((prev) => ({ ...prev, [quest.id]: score }))
         if (isBossQuest(quest.id)) triggerActClearReport(act)
       }
     }

@@ -7,18 +7,28 @@
 
 | 브랜치 | 상태 | 설명 |
 |--------|------|------|
-| `main` | 최신 (PR #12 머지됨) | 기술스택 레벨 → 경력기간 변경 반영 |
-| `feat/interview-coach-be` | **PR #13 오픈** | BE 면접 코치 API |
-| `feat/interview-coach-fe` | **PR #14 오픈** | FE 면접 코치 UI |
+| `main` | PR #16 머지됨 | 퀘스트 히스토리 + 성장 대시보드 완료 |
+| `feat/4-boss-fe` | 작업 중 (PR #17 오픈) | 4-BOSS 지원 패키지 평가 (BE+FE) |
 
 ## 열린 PR
 
 | PR | 브랜치 | 상태 | 내용 |
 |----|--------|------|------|
-| [#13](https://github.com/bangddong/switch-job-quest/pull/13) | `feat/interview-coach-be` | 오픈, CI 대기 중 | 면접 코치 API 3개 (start/answer/report) |
-| [#14](https://github.com/bangddong/switch-job-quest/pull/14) | `feat/interview-coach-fe` | 오픈, CI 대기 중 | 면접 코치 4단계 코칭 UI |
+| [#17](https://github.com/bangddong/switch-job-quest/pull/17) | `feat/4-boss-fe` | 오픈 | 4-BOSS 지원 패키지 종합 AI 평가 (BE+FE) |
 
 ## 최근 결정 사항
+
+### 4-BOSS 지원 패키지 평가 (2026-04-02)
+- **BE**: `POST /api/v1/ai-check/boss-package` — 이력서+GitHub+블로그+목표포지션 종합 평가
+- **BE**: 5개 항목(이력서 임팩트/GitHub 일관성/기술 전문성/포지션 핏/차별화) 각 20점, 70점 이상 통과 시 700 XP
+- **FE**: `BossPackageResultCard` — 5개 점수 바 + 강점/개선사항/종합피드백 표시
+- **충돌 이슈**: 에이전트가 main worktree에서 `feat/4-boss-fe`로 체크아웃 → Claude가 직접 리베이스 해결
+
+### 퀘스트 히스토리 & 성장 대시보드 (2026-04-01)
+- **BE**: `quest_history` 테이블에 AI 평가 시도마다 기록 저장 (Port & Adapter 패턴)
+- **BE**: `GET /api/v1/progress/history`, `GET /api/v1/progress/history/{questId}` 추가
+- **FE**: `features/growth/` 신설 — ScoreTimeline(꺾은선), 퀘스트별 최고점(바 차트), 최근 시도 목록
+- **FE**: 퀘스트 맵 하단 "📈 성장 기록" 버튼으로 진입
 
 ### 멀티 에이전트 패턴 도입 (2026-03-31)
 - Claude가 기획자/오케스트레이터 역할 담당
@@ -34,17 +44,17 @@
 
 ## 다음 작업
 
-- [ ] PR #13 (BE) 머지 — CI 통과 확인 후, BE 먼저
-- [ ] PR #14 (FE) 머지 — BE 머지 후
+- [ ] PR #17 CI 확인 후 머지
 - [ ] Vercel 자동 배포 확인
-- [ ] 이후 방향: 4-BOSS 퀘스트 구현 또는 추가 기능 논의
+- [ ] 이후 방향: ACT V (5-BOSS) 구현 또는 UI 개선 논의
 
 ## 멀티 에이전트 운영 노하우
 
 - `settings.json` permissions 설정 필수 (Bash, Write, Edit, Read, Glob, Grep)
 - 에이전트는 `isolation: "worktree"` + `run_in_background: true` 조합으로 실행
+- **에이전트가 main worktree에서 브랜치 체크아웃하는 문제 발생** → 완료 후 `git branch --show-current` 확인 필수
 - 에이전트 완료 후 반드시 기획자(Claude)가 핵심 파일 직접 읽고 리뷰
-- 리뷰 후 보완 있으면 SendMessage로 이전 에이전트 컨텍스트 이어서 지시 가능
+- 리베이스 충돌 발생 시 Claude가 직접 처리
 
 ## 환경 메모
 
