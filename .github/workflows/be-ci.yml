@@ -9,6 +9,7 @@ concurrency:
 
 jobs:
   test:
+    name: BE CI / test
     runs-on: ubuntu-latest
     defaults:
       run:
