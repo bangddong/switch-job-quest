@@ -11,6 +11,7 @@ import { GrowthDashboard } from '@/features/growth'
 import { useUserId } from '@/hooks/useUserId'
 import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
+import { ACTS } from '@/features/quest-map/constants/questData'
 
 type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult } | { kind: 'interview-coach' } | { kind: 'growth' }
 
@@ -93,6 +94,18 @@ export function App() {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
         setAiScores((prev) => ({ ...prev, [quest.id]: score }))
         if (isBossQuest(quest.id)) triggerActClearReport(act)
+      }
+    }
+  }
+
+  const handleNextQuest = (questId: string) => {
+    for (const act of ACTS) {
+      const quest = act.quests.find((q) => q.id === questId)
+      if (quest) {
+        setAiResult(null)
+        setShowForm(false)
+        setView({ kind: 'detail', act, quest })
+        return
       }
     }
   }
@@ -195,6 +208,7 @@ export function App() {
           onAiResult={handleAiResult}
           onComplete={handleComplete}
           onMockInterviewComplete={handleMockInterviewComplete}
+          onNextQuest={handleNextQuest}
         />
       )}
 
