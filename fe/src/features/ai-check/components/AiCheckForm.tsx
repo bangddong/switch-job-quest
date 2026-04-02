@@ -8,12 +8,14 @@ import { TechStackInput } from './TechStackInput'
 interface AiCheckFormProps {
   questId: string
   onResult: (result: AiEvaluationResult | BossPackageResult) => void
+  initialValues?: Record<string, unknown>
+  onSubmit?: (values: Record<string, unknown>) => void
 }
 
-export function AiCheckForm({ questId, onResult }: AiCheckFormProps) {
+export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCheckFormProps) {
   const userId = useUserId()
   const cfg = AI_FORMS[questId]
-  const [values, setValues] = useState<Record<string, unknown>>({})
+  const [values, setValues] = useState<Record<string, unknown>>(initialValues ?? {})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,6 +35,7 @@ export function AiCheckForm({ questId, onResult }: AiCheckFormProps) {
     setLoading(true)
     setError('')
     try {
+      onSubmit?.(values)
       const body = cfg.transform(values)
       const result =
         questId === '4-BOSS'

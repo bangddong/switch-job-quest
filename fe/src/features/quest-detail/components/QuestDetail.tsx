@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
 import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
+import { QUEST_NEXT } from '../constants/questConnections'
+import { NextQuestCard } from './NextQuestCard'
+import { RetryCoachCard } from './RetryCoachCard'
 
 interface QuestDetailProps {
   quest: Quest
@@ -15,6 +19,26 @@ interface QuestDetailProps {
   onAiResult: (result: AiEvaluationResult | BossPackageResult) => void
   onComplete: (questId: string, xp: number, actId: number, act: Act) => void
   onMockInterviewComplete: (score: number) => void
+  onNextQuest?: (questId: string) => void
+}
+
+function extractImprovements(aiResult: AiEvaluationResult | BossPackageResult): string[] {
+  if ('improvements' in aiResult && Array.isArray(aiResult.improvements)) {
+    return (aiResult.improvements as Array<string | { suggestion?: string; issue?: string }>)
+      .map((item) => {
+        if (typeof item === 'string') return item
+        return item.suggestion ?? item.issue ?? JSON.stringify(item)
+      })
+      .filter(Boolean)
+  }
+  return []
+}
+
+function isPassed(questId: string, aiResult: AiEvaluationResult | BossPackageResult): boolean {
+  if (questId === '4-BOSS') {
+    return (aiResult as BossPackageResult).overallScore >= 70
+  }
+  return (aiResult as AiEvaluationResult).passed === true
 }
 
 export function QuestDetail({
@@ -28,11 +52,24 @@ export function QuestDetail({
   onAiResult,
   onComplete,
   onMockInterviewComplete,
+  onNextQuest,
 }: QuestDetailProps) {
   const qc = QUEST_TYPE_CONFIG[quest.type]
   const done = !!completed[quest.id]
   const isMock = quest.id === '2-BOSS'
   const hasForm = quest.id in AI_FORMS
+  const [lastSubmittedValues, setLastSubmittedValues] = useState<Record<string, unknown>>({})
+  const [retryInitialValues, setRetryInitialValues] = useState<Record<string, unknown> | undefined>(undefined)
+
+  const passed = aiResult ? isPassed(quest.id, aiResult) : false
+  const failed = aiResult !== null && !passed
+  const improvements = aiResult ? extractImprovements(aiResult) : []
+  const nextQuestInfo = QUEST_NEXT[quest.id]
+
+  const handleRetry = () => {
+    setRetryInitialValues(lastSubmittedValues)
+    onShowForm()
+  }
 
   return (
     <div style={{ animation: 'slideIn 0.4s ease' }}>
@@ -174,7 +211,12 @@ export function QuestDetail({
                   🤖 AI 검사 시작하기
                 </button>
               ) : (
-                <AiCheckForm questId={quest.id} onResult={onAiResult} />
+                <AiCheckForm
+                  questId={quest.id}
+                  onResult={onAiResult}
+                  initialValues={retryInitialValues}
+                  onSubmit={(vals) => setLastSubmittedValues(vals)}
+                />
               )
             ) : null}
           </div>
@@ -185,6 +227,22 @@ export function QuestDetail({
           quest.id === '4-BOSS'
             ? <BossPackageResultCard result={aiResult as BossPackageResult} />
             : <AiResultCard result={aiResult as AiEvaluationResult} />
+        )}
+
+        {/* Feature E: Next quest card after passing */}
+        {aiResult && !isMock && passed && nextQuestInfo && onNextQuest && (
+          <NextQuestCard
+            message={nextQuestInfo.message}
+            onStart={() => onNextQuest(nextQuestInfo.questId)}
+          />
+        )}
+
+        {/* Feature F: Retry coach after failing */}
+        {aiResult && !isMock && failed && !showForm && (
+          <RetryCoachCard
+            improvements={improvements}
+            onRetry={handleRetry}
+          />
         )}
 
         {/* Manual complete */}
