@@ -1,18 +1,20 @@
-import type { Act } from '@/types/quest.types'
+import type { Act, Quest } from '@/types/quest.types'
 import type { Character } from '@/types/character.types'
 import { ACTS, ACT_UNLOCK_THRESHOLD } from '../constants/questData'
 import { ActCard } from './ActCard'
 import { StatsPanel } from './StatsPanel'
+import { TodayMissionBanner } from './TodayMissionBanner'
 
 interface QuestMapProps {
   onSelectAct: (act: Act) => void
+  onSelectQuest: (act: Act, quest: Quest) => void
   onOpenCoach: () => void
   completed: Record<string, boolean>
   getActProgress: (act: Act) => number
   character: Character
 }
 
-export function QuestMap({ onSelectAct, onOpenCoach, completed, getActProgress, character }: QuestMapProps) {
+export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character }: QuestMapProps) {
   const completedCount = Object.keys(completed).length
 
   return (
@@ -46,6 +48,8 @@ export function QuestMap({ onSelectAct, onOpenCoach, completed, getActProgress, 
         <span style={{ color: '#475569' }}>Spring Boot 4.x + Spring AI 연동 필요</span>
         <span style={{ color: '#1E293B', marginLeft: 'auto' }}>localhost:8080</span>
       </div>
+
+      <TodayMissionBanner completed={completed} onStart={onSelectQuest} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {ACTS.map((act, i) => {
