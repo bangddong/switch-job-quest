@@ -7,6 +7,8 @@ export interface FormFieldConfig {
   count?: number
   placeholder: string
   rows?: number
+  tips?: string[]       // NEW: writing tips
+  example?: string      // NEW: example answer
 }
 
 export interface AiFormConfig {

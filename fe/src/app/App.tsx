@@ -26,6 +26,7 @@ export function App() {
   const { character, setCharacter } = useCharacter()
   const [view, setView] = useState<View>({ kind: 'map' })
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
+  const [lastCompletedAt, setLastCompletedAt] = useState<string | null>(null)
   const [aiScores, setAiScores] = useState<Record<string, number>>({})
   const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -43,6 +44,7 @@ export function App() {
         })
         setCompleted(completedMap)
         setAiScores(scoresMap)
+        if (progress.lastCompletedAt) setLastCompletedAt(progress.lastCompletedAt)
       })
       .catch(() => {
         // 서버 미응답 시 로컬 상태로 계속 진행
@@ -194,6 +196,7 @@ export function App() {
             completed={completed}
             getActProgress={getActProgress}
             character={character}
+            lastCompletedAt={lastCompletedAt}
           />
           <div style={{ marginTop: 16, textAlign: 'center' }}>
             <button

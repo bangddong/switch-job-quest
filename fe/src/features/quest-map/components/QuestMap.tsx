@@ -4,6 +4,7 @@ import { ACTS, ACT_UNLOCK_THRESHOLD } from '../constants/questData'
 import { ActCard } from './ActCard'
 import { StatsPanel } from './StatsPanel'
 import { TodayMissionBanner } from './TodayMissionBanner'
+import { ReturnBanner } from './ReturnBanner'
 
 interface QuestMapProps {
   onSelectAct: (act: Act) => void
@@ -12,9 +13,10 @@ interface QuestMapProps {
   completed: Record<string, boolean>
   getActProgress: (act: Act) => number
   character: Character
+  lastCompletedAt?: string | null
 }
 
-export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character }: QuestMapProps) {
+export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character, lastCompletedAt }: QuestMapProps) {
   const completedCount = Object.keys(completed).length
 
   return (
@@ -49,6 +51,16 @@ export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, g
         <span style={{ color: '#1E293B', marginLeft: 'auto' }}>localhost:8080</span>
       </div>
 
+      {lastCompletedAt && (() => {
+        const days = Math.floor((Date.now() - new Date(lastCompletedAt).getTime()) / (1000 * 60 * 60 * 24))
+        return days >= 1 ? (
+          <ReturnBanner
+            lastCompletedAt={lastCompletedAt}
+            completed={completed}
+            onResume={onSelectQuest}
+          />
+        ) : null
+      })()}
       <TodayMissionBanner completed={completed} onStart={onSelectQuest} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
