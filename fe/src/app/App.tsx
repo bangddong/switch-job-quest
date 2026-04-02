@@ -3,7 +3,7 @@ import type { Act, Quest } from '@/types/quest.types'
 import type { AiEvaluationResult, BossPackageResult, ActClearReportResult } from '@/types/api.types'
 import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
-import { QuestDetail } from '@/features/quest-detail'
+import { QuestDetail, QuestBriefingView } from '@/features/quest-detail'
 import { ActClearReportCard } from '@/features/ai-check'
 import { CharacterCreate } from '@/features/character'
 import { InterviewCoach } from '@/features/interview-coach'
@@ -13,7 +13,13 @@ import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
 import { ACTS } from '@/features/quest-map/constants/questData'
 
-type View = { kind: 'map' } | { kind: 'detail'; act: Act; quest: Quest } | { kind: 'act-clear'; act: Act; report: ActClearReportResult } | { kind: 'interview-coach' } | { kind: 'growth' }
+type View =
+  | { kind: 'map' }
+  | { kind: 'briefing'; act: Act; quest: Quest }
+  | { kind: 'detail'; act: Act; quest: Quest }
+  | { kind: 'act-clear'; act: Act; report: ActClearReportResult }
+  | { kind: 'interview-coach' }
+  | { kind: 'growth' }
 
 export function App() {
   const userId = useUserId()
@@ -58,10 +64,22 @@ export function App() {
 
   const handleSelectAct = (act: Act) => {
     if (act.quests.length > 0) {
-      const quest = act.quests[0]!
+      const quest = act.quests.find((q) => !completed[q.id]) ?? act.quests[act.quests.length - 1]!
       setAiResult(null)
       setShowForm(false)
-      setView({ kind: 'detail', act, quest })
+      setView({ kind: 'briefing', act, quest })
+    }
+  }
+
+  const handleSelectQuest = (act: Act, quest: Quest) => {
+    setAiResult(null)
+    setShowForm(false)
+    setView({ kind: 'briefing', act, quest })
+  }
+
+  const handleBriefingStart = () => {
+    if (view.kind === 'briefing') {
+      setView({ kind: 'detail', act: view.act, quest: view.quest })
     }
   }
 
@@ -150,7 +168,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth') && (
+      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -171,6 +189,7 @@ export function App() {
         <>
           <QuestMap
             onSelectAct={handleSelectAct}
+            onSelectQuest={handleSelectQuest}
             onOpenCoach={() => setView({ kind: 'interview-coach' })}
             completed={completed}
             getActProgress={getActProgress}
@@ -195,6 +214,14 @@ export function App() {
             </button>
           </div>
         </>
+      )}
+
+      {view.kind === 'briefing' && (
+        <QuestBriefingView
+          quest={view.quest}
+          act={view.act}
+          onStart={handleBriefingStart}
+        />
       )}
 
       {view.kind === 'detail' && (
