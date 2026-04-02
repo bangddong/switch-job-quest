@@ -81,6 +81,7 @@ export function App() {
 
   const handleAiResult = (result: AiEvaluationResult | BossPackageResult) => {
     setAiResult(result)
+    setShowForm(false)
     if (view.kind === 'detail') {
       const { quest, act } = view
       const isBoss = quest.id === '4-BOSS'
