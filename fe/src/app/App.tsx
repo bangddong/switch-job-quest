@@ -5,7 +5,7 @@ import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail, QuestBriefingView } from '@/features/quest-detail'
 import { ActClearReportCard } from '@/features/ai-check'
-import { CharacterCreate } from '@/features/character'
+import { CharacterCreate, OnboardingIntro } from '@/features/character'
 import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
 import { useUserId } from '@/hooks/useUserId'
@@ -30,6 +30,7 @@ export function App() {
   const [aiScores, setAiScores] = useState<Record<string, number>>({})
   const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [showIntro, setShowIntro] = useState(true)
 
   useEffect(() => {
     fetchProgress(userId)
@@ -144,17 +145,11 @@ export function App() {
 
   if (character === null) {
     return (
-      <div
-        style={{
-          maxWidth: 480,
-          margin: '0 auto',
-          padding: '0 20px',
-          minHeight: '100vh',
-          fontFamily: "'Courier New', monospace",
-          color: '#F8FAFC',
-        }}
-      >
-        <CharacterCreate onComplete={handleCharacterComplete} />
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px', minHeight: '100vh', fontFamily: "'Courier New', monospace", color: '#F8FAFC' }}>
+        {showIntro
+          ? <OnboardingIntro onComplete={() => setShowIntro(false)} />
+          : <CharacterCreate onComplete={handleCharacterComplete} />
+        }
       </div>
     )
   }

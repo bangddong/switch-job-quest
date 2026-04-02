@@ -9,6 +9,7 @@ concurrency:
 
 jobs:
   build:
+    name: FE CI / build
     runs-on: ubuntu-latest
     defaults:
       run:
