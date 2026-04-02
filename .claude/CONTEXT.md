@@ -7,22 +7,30 @@
 
 | 브랜치 | 상태 | 설명 |
 |--------|------|------|
-| `main` | PR #16 머지됨 | 퀘스트 히스토리 + 성장 대시보드 완료 |
-| `feat/4-boss-fe` | 작업 중 (PR #17 오픈) | 4-BOSS 지원 패키지 평가 (BE+FE) |
+| `main` | PR #18 머지됨 | UX Sprint 1 (E+F) 완료 |
+| `feat/ux-sprint2` | 작업 중 (PR #19 오픈) | UX 포기 방지 Sprint 2 (B+C) |
 
 ## 열린 PR
 
 | PR | 브랜치 | 상태 | 내용 |
 |----|--------|------|------|
-| [#17](https://github.com/bangddong/switch-job-quest/pull/17) | `feat/4-boss-fe` | 오픈 | 4-BOSS 지원 패키지 종합 AI 평가 (BE+FE) |
+| [#19](https://github.com/bangddong/switch-job-quest/pull/19) | `feat/ux-sprint2` | 오픈 | 오늘의 미션 배너 + 퀘스트 브리핑 화면 |
 
 ## 최근 결정 사항
 
+### UX 포기 방지 시스템 Sprint 2 (2026-04-02)
+- **B. TodayMissionBanner**: QuestMap 상단 다음 추천 퀘스트 배너 (QUEST_NEXT 연결 그래프 활용)
+- **C. QuestBriefingView**: 퀘스트 진입 전 브리핑 화면 (XP/소요시간/AI검사/태스크 미리보기)
+- `briefing` View kind 추가 → ActCard 클릭 + 배너 CTA 모두 브리핑 거쳐 QuestDetail 진입
+
+### UX 포기 방지 시스템 Sprint 1 (2026-04-02)
+- **기획**: 6개 포기 지점 분석 → 7개 기능(A-G) → 4개 스프린트 로드맵 (`.claude/docs/ux-retention-plan.md`)
+- **E. NextQuestCard**: AI 통과 시 다음 퀘스트 연결 카드 표시
+- **F. RetryCoachCard**: AI 실패 시 개선 포인트 + "이전 답변 불러오기" 버튼
+
 ### 4-BOSS 지원 패키지 평가 (2026-04-02)
 - **BE**: `POST /api/v1/ai-check/boss-package` — 이력서+GitHub+블로그+목표포지션 종합 평가
-- **BE**: 5개 항목(이력서 임팩트/GitHub 일관성/기술 전문성/포지션 핏/차별화) 각 20점, 70점 이상 통과 시 700 XP
 - **FE**: `BossPackageResultCard` — 5개 점수 바 + 강점/개선사항/종합피드백 표시
-- **충돌 이슈**: 에이전트가 main worktree에서 `feat/4-boss-fe`로 체크아웃 → Claude가 직접 리베이스 해결
 
 ### 퀘스트 히스토리 & 성장 대시보드 (2026-04-01)
 - **BE**: `quest_history` 테이블에 AI 평가 시도마다 기록 저장 (Port & Adapter 패턴)
@@ -44,9 +52,9 @@
 
 ## 다음 작업
 
-- [ ] PR #17 CI 확인 후 머지
-- [ ] Vercel 자동 배포 확인
-- [ ] 이후 방향: ACT V (5-BOSS) 구현 또는 UI 개선 논의
+- [ ] PR #19 CI 확인 후 머지
+- [ ] Sprint 3 (추후): D (필드별 작성 가이드) + G (복귀 배너, BE 필요)
+- [ ] Sprint 4 (추후): A (온보딩 스토리텔링)
 
 ## 멀티 에이전트 운영 노하우
 
