@@ -7,7 +7,8 @@ data class ProgressResult(
     val totalXp: Int,
     val level: Int,
     val completedQuests: List<String>,
-    val questDetails: Map<String, QuestDetail>
+    val questDetails: Map<String, QuestDetail>,
+    val lastCompletedAt: java.time.LocalDateTime? = null
 ) {
     data class QuestDetail(
         val status: QuestStatus,

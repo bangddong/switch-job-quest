@@ -45,6 +45,7 @@ class ProgressService(
         val progresses = progressPort.findAllByUserId(userId)
         val completed = progresses.filter { it.status == QuestStatus.COMPLETED }
         val totalXp = completed.sumOf { it.earnedXp }
+        val lastCompletedAt = completed.mapNotNull { it.completedAt }.maxOrNull()
 
         return ProgressResult(
             userId = userId,
@@ -57,7 +58,8 @@ class ProgressService(
                     score = it.aiScore,
                     xp = it.earnedXp
                 )
-            }
+            },
+            lastCompletedAt = lastCompletedAt
         )
     }
 }
