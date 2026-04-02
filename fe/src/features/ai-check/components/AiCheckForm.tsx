@@ -18,6 +18,7 @@ export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCh
   const [values, setValues] = useState<Record<string, unknown>>(initialValues ?? {})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [activeHint, setActiveHint] = useState<string | null>(null)
 
   if (!cfg) return null
 
@@ -70,9 +71,61 @@ export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCh
       </div>
       {cfg.fields.map((f) => (
         <div key={f.key} style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12, color: '#64748B', display: 'block', marginBottom: 6 }}>
-            {f.label}
-          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <label style={{ fontSize: 12, color: '#64748B' }}>{f.label}</label>
+            {(f.tips || f.example) && (
+              <button
+                type="button"
+                onClick={() => setActiveHint(activeHint === f.key ? null : f.key)}
+                style={{
+                  background: activeHint === f.key ? 'rgba(78,205,196,0.15)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${activeHint === f.key ? 'rgba(78,205,196,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                  borderRadius: '50%',
+                  width: 18,
+                  height: 18,
+                  fontSize: 10,
+                  color: activeHint === f.key ? '#4ECDC4' : '#475569',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontFamily: "'Courier New', monospace",
+                  padding: 0,
+                  flexShrink: 0,
+                }}
+              >
+                ?
+              </button>
+            )}
+          </div>
+          {activeHint === f.key && (f.tips || f.example) && (
+            <div style={{
+              background: 'rgba(78,205,196,0.04)',
+              border: '1px solid rgba(78,205,196,0.2)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              marginBottom: 8,
+              animation: 'slideIn 0.2s ease',
+            }}>
+              {f.tips && f.tips.length > 0 && (
+                <div style={{ marginBottom: f.example ? 8 : 0 }}>
+                  <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 2, marginBottom: 6 }}>💡 작성 팁</div>
+                  {f.tips.map((tip, ti) => (
+                    <div key={ti} style={{ fontSize: 12, color: '#64748B', marginBottom: 3, display: 'flex', gap: 6 }}>
+                      <span style={{ color: '#4ECDC4', flexShrink: 0 }}>·</span>
+                      <span>{tip}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {f.example && (
+                <div>
+                  <div style={{ fontSize: 10, color: '#A78BFA', letterSpacing: 2, marginBottom: 6 }}>✏️ 예시 답변</div>
+                  <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.6, fontStyle: 'italic' }}>{f.example}</div>
+                </div>
+              )}
+            </div>
+          )}
           {f.type === 'text' && (
             <input
               value={(values[f.key] as string) ?? ''}

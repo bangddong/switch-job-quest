@@ -17,6 +17,7 @@ export interface ProgressResult {
   level: number
   completedQuests: string[]
   questDetails: Record<string, QuestDetail>
+  lastCompletedAt?: string   // NEW — ISO datetime string, e.g. "2026-04-02T10:00:00"
 }
 
 export interface ActClearReportResult {
