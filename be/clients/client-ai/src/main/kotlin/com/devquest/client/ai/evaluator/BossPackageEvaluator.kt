@@ -33,9 +33,12 @@ class BossPackageEvaluator(
             4. 포지션 핏 (목표 포지션과의 정합성): /20점
             5. 차별화 포인트 (경쟁자 대비 강점): /20점
 
+            passed 기준: overallScore >= 70이면 true
+
             반드시 다음 JSON 형식으로만 응답하세요:
             {
                 "overallScore": 75,
+                "passed": true,
                 "resumeImpactScore": 16,
                 "githubConsistencyScore": 15,
                 "technicalDepthScore": 14,
