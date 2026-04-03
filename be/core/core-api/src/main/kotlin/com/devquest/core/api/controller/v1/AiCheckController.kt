@@ -154,6 +154,17 @@ class AiCheckController(
         }
     }
 
+    @PostMapping("/journey-report")
+    fun generateJourneyReport(@Valid @RequestBody request: JourneyReportRequestDto): ApiResponse<*> {
+        return try {
+            val result = aiCheckService.generateJourneyReport(request.userId, request.companyName, request.targetPosition)
+            ApiResponse.success(result)
+        } catch (e: Exception) {
+            log.error("Journey report generation failed", e)
+            throw CoreException(ErrorType.AI_EVALUATION_FAILED)
+        }
+    }
+
     @PostMapping("/act-clear-report")
     fun generateActClearReport(@Valid @RequestBody request: ActClearReportRequestDto): ApiResponse<*> {
         return try {

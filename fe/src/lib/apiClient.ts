@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult } from '@/types/api.types'
 
 const API_BASE = '/api/v1'
 
@@ -53,6 +53,22 @@ export async function fetchQuestHistory(userId: string, questId: string): Promis
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<QuestHistoryItem[]> = await res.json()
   if (!json.success || json.data == null) throw new Error('퀘스트 히스토리 조회 실패')
+  return json.data
+}
+
+export async function fetchJourneyReport(
+  userId: string,
+  companyName: string,
+  targetPosition: string,
+): Promise<JourneyReportResult> {
+  const res = await fetch(`${API_BASE}/ai-check/journey-report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, companyName, targetPosition }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<JourneyReportResult> = await res.json()
+  if (!json.success || json.data == null) throw new Error('여정 리포트 생성 실패')
   return json.data
 }
 

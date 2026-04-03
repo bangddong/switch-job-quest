@@ -7,8 +7,10 @@ import { AI_FORMS } from '@/features/ai-check'
 import { QUEST_NEXT } from '../constants/questConnections'
 import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
+import { FinalBossView } from './FinalBossView'
 
 interface QuestDetailProps {
+  userId: string
   quest: Quest
   act: Act
   completed: Record<string, boolean>
@@ -42,6 +44,7 @@ function isPassed(questId: string, aiResult: AiEvaluationResult | BossPackageRes
 }
 
 export function QuestDetail({
+  userId,
   quest,
   act,
   completed,
@@ -56,6 +59,7 @@ export function QuestDetail({
 }: QuestDetailProps) {
   const qc = QUEST_TYPE_CONFIG[quest.type]
   const done = !!completed[quest.id]
+  const isFinalBoss = quest.id === '5-BOSS'
   const isMock = quest.id === '2-BOSS'
   const hasForm = quest.id in AI_FORMS
   const [lastSubmittedValues, setLastSubmittedValues] = useState<Record<string, unknown>>({})
@@ -69,6 +73,17 @@ export function QuestDetail({
   const handleRetry = () => {
     setRetryInitialValues(lastSubmittedValues)
     onShowForm()
+  }
+
+  if (isFinalBoss && !done) {
+    return (
+      <div style={{ animation: 'slideIn 0.4s ease' }}>
+        <FinalBossView
+          userId={userId}
+          onComplete={(xp) => onComplete(quest.id, xp, act.id, act)}
+        />
+      </div>
+    )
   }
 
   return (

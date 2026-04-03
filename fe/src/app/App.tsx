@@ -224,6 +224,7 @@ export function App() {
 
       {view.kind === 'detail' && (
         <QuestDetail
+          userId={userId}
           quest={view.quest}
           act={view.act}
           completed={completed}
