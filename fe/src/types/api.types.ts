@@ -59,6 +59,7 @@ export interface QuestHistoryItem {
 
 export interface BossPackageResult {
   overallScore: number
+  passed: boolean
   resumeImpactScore: number
   githubConsistencyScore: number
   technicalDepthScore: number

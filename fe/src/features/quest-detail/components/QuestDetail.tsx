@@ -36,10 +36,7 @@ function extractImprovements(aiResult: AiEvaluationResult | BossPackageResult): 
   return []
 }
 
-function isPassed(questId: string, aiResult: AiEvaluationResult | BossPackageResult): boolean {
-  if (questId === '4-BOSS') {
-    return (aiResult as BossPackageResult).overallScore >= 70
-  }
+function isPassed(aiResult: AiEvaluationResult | BossPackageResult): boolean {
   return (aiResult as AiEvaluationResult).passed === true
 }
 
@@ -65,7 +62,7 @@ export function QuestDetail({
   const [lastSubmittedValues, setLastSubmittedValues] = useState<Record<string, unknown>>({})
   const [retryInitialValues, setRetryInitialValues] = useState<Record<string, unknown> | undefined>(undefined)
 
-  const passed = aiResult ? isPassed(quest.id, aiResult) : false
+  const passed = aiResult ? isPassed(aiResult) : false
   const failed = aiResult !== null && !passed
   const improvements = aiResult ? extractImprovements(aiResult) : []
   const nextQuestInfo = QUEST_NEXT[quest.id]

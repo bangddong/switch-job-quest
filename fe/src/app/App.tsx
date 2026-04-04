@@ -109,9 +109,7 @@ export function App() {
       const score = isBoss
         ? (result as BossPackageResult).overallScore
         : (result as AiEvaluationResult).score
-      const passed = isBoss
-        ? (result as BossPackageResult).overallScore >= 70
-        : (result as AiEvaluationResult).passed
+      const passed = (result as AiEvaluationResult | BossPackageResult).passed
       if (passed) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
         setAiScores((prev) => ({ ...prev, [quest.id]: score }))

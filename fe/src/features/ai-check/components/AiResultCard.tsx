@@ -172,7 +172,7 @@ const SCORE_ITEMS: Array<{ key: keyof BossPackageResult; label: string; color: s
 ]
 
 export function BossPackageResultCard({ result }: BossPackageResultCardProps) {
-  const passed = result.overallScore >= 70
+  const passed = result.passed ?? result.overallScore >= 70
   const grade = getGrade(result.overallScore)
 
   return (

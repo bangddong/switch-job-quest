@@ -2,6 +2,7 @@ package com.devquest.core.domain.model.evaluation
 
 data class BossPackageResult(
     val overallScore: Int = 0,
+    val passed: Boolean = false,
     val resumeImpactScore: Int = 0,
     val githubConsistencyScore: Int = 0,
     val technicalDepthScore: Int = 0,
