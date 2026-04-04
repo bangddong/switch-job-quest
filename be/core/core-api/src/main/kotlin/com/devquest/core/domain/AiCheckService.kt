@@ -1,5 +1,6 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.event.QuestEvaluatedEvent
 import com.devquest.core.domain.model.QuestHistory
 import com.devquest.core.domain.model.QuestProgress
 import com.devquest.core.domain.model.evaluation.*
@@ -9,6 +10,7 @@ import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -29,6 +31,7 @@ class AiCheckService(
     private val historyPort: QuestHistoryPort,
     private val bossPackageEvaluator: BossPackageEvaluatorPort,
     private val journeyReportPort: JourneyReportPort,
+    private val publisher: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -150,7 +153,6 @@ class AiCheckService(
         )
         progressPort.save(progress)
         saveHistory(userId, questId, actId, score, passed, xp)
-        log.info("Quest progress saved: userId=$userId, questId=$questId, score=$score, passed=$passed, xp=$xp")
     }
 
     private fun saveHistory(userId: String, questId: String, actId: Int, score: Int, passed: Boolean, xp: Int) {
@@ -171,6 +173,16 @@ class AiCheckService(
             earnedXp = xp
         )
         historyPort.save(history)
-        log.info("Quest history saved: userId=$userId, questId=$questId, score=$score, grade=$grade, passed=$passed")
+        publisher.publishEvent(
+            QuestEvaluatedEvent(
+                userId = userId,
+                questId = questId,
+                actId = actId,
+                score = score,
+                grade = grade,
+                passed = passed,
+                earnedXp = xp,
+            )
+        )
     }
 }
