@@ -8,11 +8,12 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 
 @Component
 class CompanyFitEvaluator(
-    private val chatClient: ChatClient
+    @Qualifier("bossChatClient") private val chatClient: ChatClient
 ) : CompanyFitEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()

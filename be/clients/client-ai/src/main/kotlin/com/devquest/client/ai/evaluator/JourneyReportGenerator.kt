@@ -4,11 +4,12 @@ import com.devquest.core.domain.model.evaluation.JourneyReportResult
 import com.devquest.core.domain.port.JourneyReportPort
 import com.devquest.core.domain.support.AiEvaluationException
 import org.springframework.ai.chat.client.ChatClient
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 
 @Component
 class JourneyReportGenerator(
-    private val chatClient: ChatClient
+    @Qualifier("bossChatClient") private val chatClient: ChatClient
 ) : JourneyReportPort {
 
     override fun generate(
