@@ -27,7 +27,8 @@ class AiCheckService(
     private val actClearReportPort: ActClearReportPort,
     private val progressPort: QuestProgressPort,
     private val historyPort: QuestHistoryPort,
-    private val bossPackageEvaluator: BossPackageEvaluatorPort
+    private val bossPackageEvaluator: BossPackageEvaluatorPort,
+    private val journeyReportPort: JourneyReportPort,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -115,6 +116,16 @@ class AiCheckService(
         val passed = result.overallScore >= passScore
         saveProgress(userId, "4-BOSS", 4, result.overallScore, passed, if (passed) 700 else 0)
         return result
+    }
+
+    fun generateJourneyReport(userId: String, companyName: String, targetPosition: String): JourneyReportResult {
+        val allProgress = progressPort.findAllByUserId(userId)
+        val questScores = allProgress
+            .filter { it.aiScore > 0 }
+            .associate { it.questId to it.aiScore }
+        val totalXp = allProgress.sumOf { it.earnedXp }
+        val completedQuestCount = allProgress.count { it.status == QuestStatus.COMPLETED }
+        return journeyReportPort.generate(companyName, targetPosition, questScores, totalXp, completedQuestCount)
     }
 
     fun generateActClearReport(userId: String, actId: Int, actTitle: String): ActClearReportResult {

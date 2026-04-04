@@ -69,6 +69,17 @@ export interface BossPackageResult {
   overallFeedback: string
 }
 
+export interface JourneyReportResult {
+  companyName: string
+  targetPosition: string
+  totalXp: number
+  completedQuestCount: number
+  narrative: string
+  lowestQuestId: string
+  highestQuestId: string
+  finalMessage: string
+}
+
 export interface InterviewEvaluationResult {
   score: number
   passed: boolean

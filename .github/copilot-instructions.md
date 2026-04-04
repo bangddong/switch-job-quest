@@ -1,5 +1,7 @@
 # GitHub Copilot Instructions — Switch Job Quest (DevQuest)
 
+**언어 규칙: 모든 리뷰 코멘트, 제안, 피드백은 반드시 한국어로 작성한다.**
+
 이직 준비 RPG 앱. 모노레포: `be/` (Kotlin + Spring Boot) + `fe/` (React 19 + TypeScript + Vite)
 퀘스트별 AI 평가(Anthropic API)를 핵심 기능으로 사용한다.
 

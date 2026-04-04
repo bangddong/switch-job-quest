@@ -7,16 +7,26 @@
 
 | 브랜치 | 상태 | 설명 |
 |--------|------|------|
-| `main` | PR #20 머지됨 | Sprint 1~3 모두 완료 |
-| `feat/ux-sprint4` | 작업 중 (PR #21 오픈) | UX 포기 방지 Sprint 4 (A: 온보딩) |
+| `main` | PR #21 머지됨 | UX 포기 방지 Sprint 1~4 모두 완료 |
 
 ## 열린 PR
 
-| PR | 브랜치 | 상태 | 내용 |
-|----|--------|------|------|
-| [#21](https://github.com/bangddong/switch-job-quest/pull/21) | `feat/ux-sprint4` | 오픈 | 온보딩 스토리텔링 5슬라이드 인트로 |
+| PR | 브랜치 | 설명 |
+|----|--------|------|
+| #22 | `feat/act-v-final-boss` | ACT V 5-BOSS 취뽀 달성 화면 + 퀘스트 연결 정리 |
 
 ## 최근 결정 사항
+
+### CI check name 수정 (2026-04-02)
+- **원인**: job에 `name:` 없으면 check run = `"build"`, branch protection은 `"FE CI / build"` 요구 → 불일치
+- **수정**: `fe-ci.yml`에 `name: FE CI / build`, `be-ci.yml`에 `name: BE CI / test` 추가
+- **효과**: PR #21부터 `--admin` 없이 정상 머지 가능
+
+### ACT V 5-BOSS 취뽀 달성 화면 (2026-04-03)
+- **BE**: `POST /api/v1/ai-check/journey-report` — 전체 여정 AI 감성 회고 내러티브 생성
+- **FE**: `FinalBossView` — 합격 신고 입력 → 취뽀 타이틀/통계/AI 내러티브/마지막 한 마디
+- **FE**: `questConnections.ts` — ACT I~V 전 퀘스트 연결 완성 (10개 추가)
+- **공통**: GitHub Copilot 리뷰 코멘트 한국어 지시 추가
 
 ### UX 포기 방지 시스템 — 전체 완료 (2026-04-02)
 - **Sprint 1** (PR #18): E (다음 퀘스트 연결 카드) + F (재도전 코치 + 이전 답변 불러오기)
@@ -45,8 +55,8 @@
 
 ## 다음 작업
 
-- [ ] PR #21 CI 확인 후 머지 (온보딩 인트로)
-- [ ] ACT V 구현: 5-1 (인성면접 연습), 5-BOSS
+- [ ] PR #22 머지 후 5-2 수동 완료 UI 추가 검토
+- [ ] ACT V 전체 검증 (5-1 AI 폼 → 5-2 수동 → 5-BOSS)
 
 ## 멀티 에이전트 운영 노하우
 
