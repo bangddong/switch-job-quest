@@ -6,7 +6,7 @@ object QuestXpPolicy {
         "1-1"    to 150,
         "1-2"    to 200,
         "2-1"    to 600,
-        "2-2"    to 600,
+        "2-2"    to 800,   // 모의면접 — 고정
         "2-3"    to 500,
         "2-BOSS" to 800,
         "3-1"    to 500,
@@ -24,7 +24,7 @@ object QuestXpPolicy {
         val base = baseXp[questId] ?: return 0
         return when (questId) {
             "1-2" -> base * score / 100                          // score 비례
-            "2-1", "2-2", "2-3", "3-1", "5-1" -> (base * xpMultiplier).toInt()  // multiplier 적용
+            "2-1", "2-3", "3-1", "5-1" -> (base * xpMultiplier).toInt()         // multiplier 적용
             else -> base                                          // 고정
         }
     }
