@@ -4,6 +4,7 @@ import com.devquest.core.domain.model.QuestHistory
 import com.devquest.core.domain.model.QuestProgress
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
+import com.devquest.core.domain.QuestXpPolicy
 import com.devquest.core.enums.QuestStatus
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
@@ -38,7 +39,7 @@ class AiCheckService(
     @Transactional
     fun checkSkillAssessment(userId: String, skills: List<String>, targetRole: String): SkillAssessmentResult {
         val result = skillAssessmentPort.evaluate(skills, targetRole)
-        saveProgress(userId, "1-1", 1, result.score, true, 150)
+        saveProgress(userId, "1-1", 1, result.score, true, QuestXpPolicy.calculate("1-1", true))
         return result
     }
 
@@ -47,15 +48,14 @@ class AiCheckService(
         userId: String, dissatisfactions: List<String>, goals: List<String>, fiveYearVision: String
     ): EssayCheckResult {
         val result = essayEvaluator.evaluate(dissatisfactions, goals, fiveYearVision)
-        saveProgress(userId, "1-2", 1, result.score, result.passed, if (result.passed) (200 * result.score / 100) else 0)
+        saveProgress(userId, "1-2", 1, result.score, result.passed, QuestXpPolicy.calculate("1-2", result.passed, score = result.score))
         return result
     }
 
     @Transactional
     fun checkTechBlog(userId: String, questId: String, techTopic: String, title: String, content: String): AiEvaluationResult {
         val result = blogEvaluator.evaluate(techTopic, title, content)
-        val earnedXp = if (result.passed) (600 * result.xpMultiplier).toInt() else 0
-        saveProgress(userId, questId, 2, result.score, result.passed, earnedXp)
+        saveProgress(userId, questId, 2, result.score, result.passed, QuestXpPolicy.calculate(questId, result.passed, xpMultiplier = result.xpMultiplier))
         return result
     }
 
@@ -64,14 +64,14 @@ class AiCheckService(
         userId: String, questId: String, problemStatement: String, architectureDescription: String, considerations: List<String>
     ): AiEvaluationResult {
         val result = systemDesignEvaluator.evaluate(problemStatement, architectureDescription, considerations)
-        saveProgress(userId, questId, 2, result.score, result.passed, if (result.passed) (500 * result.xpMultiplier).toInt() else 0)
+        saveProgress(userId, questId, 2, result.score, result.passed, QuestXpPolicy.calculate(questId, result.passed, xpMultiplier = result.xpMultiplier))
         return result
     }
 
     @Transactional
     fun checkMockInterview(userId: String, questId: String, category: String, question: String, answer: String, questionId: String): InterviewEvaluationResult {
         val result = interviewEvaluator.evaluate(category, question, answer, questionId)
-        saveProgress(userId, questId, 2, result.score, result.passed, if (result.passed) 800 else 0)
+        saveProgress(userId, questId, 2, result.score, result.passed, QuestXpPolicy.calculate(questId, result.passed))
         return result
     }
 
@@ -82,7 +82,7 @@ class AiCheckService(
     @Transactional
     fun analyzeJd(userId: String, companyName: String, jobDescription: String, userSkills: List<String>, userExperiences: List<String>): JdAnalysisResult {
         val result = jdAnalysisEvaluator.analyze(companyName, jobDescription, userSkills, userExperiences)
-        saveProgress(userId, "3-2", 3, result.overallMatchScore, true, 350)
+        saveProgress(userId, "3-2", 3, result.overallMatchScore, true, QuestXpPolicy.calculate("3-2", true))
         return result
     }
 
@@ -90,7 +90,7 @@ class AiCheckService(
     fun checkResume(userId: String, targetCompany: String, targetJd: String, resumeContent: String): ResumeCheckResult {
         val result = resumeEvaluator.evaluate(targetCompany, targetJd, resumeContent)
         val passed = result.overallScore >= passScore
-        saveProgress(userId, "4-1", 4, result.overallScore, passed, if (passed) 500 else 0)
+        saveProgress(userId, "4-1", 4, result.overallScore, passed, QuestXpPolicy.calculate("4-1", passed))
         return result
     }
 
@@ -99,14 +99,14 @@ class AiCheckService(
         val result = companyFitEvaluator.analyze(preferences, companies)
         val maxScore = result.maxOfOrNull { it.fitScore } ?: 0
         val passed = result.isNotEmpty() && maxScore >= passScore
-        saveProgress(userId, "1-BOSS", 1, maxScore, passed, if (passed) 500 else 0)
+        saveProgress(userId, "1-BOSS", 1, maxScore, passed, QuestXpPolicy.calculate("1-BOSS", passed))
         return result
     }
 
     @Transactional
     fun checkPersonalityInterview(userId: String, question: String, answer: String): AiEvaluationResult {
         val result = personalityEvaluator.evaluate(question, answer)
-        saveProgress(userId, "5-1", 5, result.score, result.passed, if (result.passed) (400 * result.xpMultiplier).toInt() else 0)
+        saveProgress(userId, "5-1", 5, result.score, result.passed, QuestXpPolicy.calculate("5-1", result.passed, xpMultiplier = result.xpMultiplier))
         return result
     }
 
@@ -114,7 +114,7 @@ class AiCheckService(
     fun checkBossPackage(userId: String, resumeContent: String, githubUrl: String, blogUrl: String, targetPosition: String): BossPackageResult {
         val result = bossPackageEvaluator.evaluate(resumeContent, githubUrl, blogUrl, targetPosition)
         val passed = result.overallScore >= passScore
-        saveProgress(userId, "4-BOSS", 4, result.overallScore, passed, if (passed) 700 else 0)
+        saveProgress(userId, "4-BOSS", 4, result.overallScore, passed, QuestXpPolicy.calculate("4-BOSS", passed))
         return result
     }
 
