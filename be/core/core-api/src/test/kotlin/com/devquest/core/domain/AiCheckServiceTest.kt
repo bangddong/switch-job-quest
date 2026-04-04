@@ -8,6 +8,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
@@ -33,19 +34,12 @@ class AiCheckServiceTest {
     @Mock lateinit var bossPackageEvaluator: BossPackageEvaluatorPort
     @Mock lateinit var journeyReportPort: JourneyReportPort
 
+    @InjectMocks
     private lateinit var service: AiCheckService
 
     @BeforeEach
     fun setUp() {
-        service = AiCheckService(
-            essayEvaluator, blogEvaluator, systemDesignEvaluator, interviewEvaluator,
-            jdAnalysisEvaluator, resumeEvaluator, companyFitEvaluator, personalityEvaluator,
-            skillAssessmentPort, actClearReportPort, progressPort, historyPort, bossPackageEvaluator,
-            journeyReportPort
-        )
-        // progressPort.save 기본 응답 (저장 시 반환값 필요)
         whenever(progressPort.save(any())).thenAnswer { it.arguments[0] }
-        // historyPort.save 기본 응답
         whenever(historyPort.save(any())).thenAnswer { it.arguments[0] }
     }
 
