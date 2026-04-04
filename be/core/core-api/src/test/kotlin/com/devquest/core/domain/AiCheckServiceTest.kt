@@ -15,6 +15,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.context.ApplicationEventPublisher
 
 @ExtendWith(MockitoExtension::class)
 class AiCheckServiceTest {
@@ -33,6 +34,7 @@ class AiCheckServiceTest {
     @Mock lateinit var historyPort: QuestHistoryPort
     @Mock lateinit var bossPackageEvaluator: BossPackageEvaluatorPort
     @Mock lateinit var journeyReportPort: JourneyReportPort
+    @Mock lateinit var publisher: ApplicationEventPublisher
 
     @InjectMocks
     private lateinit var service: AiCheckService
