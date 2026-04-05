@@ -10,7 +10,6 @@ import { RetryCoachCard } from './RetryCoachCard'
 import { FinalBossView } from './FinalBossView'
 
 interface QuestDetailProps {
-  userId: string
   quest: Quest
   act: Act
   completed: Record<string, boolean>
@@ -41,7 +40,6 @@ function isPassed(aiResult: AiEvaluationResult | BossPackageResult): boolean {
 }
 
 export function QuestDetail({
-  userId,
   quest,
   act,
   completed,
@@ -76,7 +74,6 @@ export function QuestDetail({
     return (
       <div style={{ animation: 'slideIn 0.4s ease' }}>
         <FinalBossView
-          userId={userId}
           onComplete={(xp) => onComplete(quest.id, xp, act.id, act)}
         />
       </div>
