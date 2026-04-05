@@ -7,64 +7,72 @@
 
 | 브랜치 | 상태 | 설명 |
 |--------|------|------|
-| `main` | PR #21 머지됨 | UX 포기 방지 Sprint 1~4 모두 완료 |
+| `main` | 최신 | 인증/정책 분리 + GitHub OAuth 인증 전체 완료 (2026-04-06 정리) |
 
 ## 열린 PR
 
-| PR | 브랜치 | 설명 |
-|----|--------|------|
-| #22 | `feat/act-v-final-boss` | ACT V 5-BOSS 취뽀 달성 화면 + 퀘스트 연결 정리 |
+없음
+
+## 완료된 인증/정책 분리 시리즈 (2026-04-05)
+
+| Sprint | PR | 내용 | 상태 |
+|--------|-----|------|------|
+| BE Auth | #28 | GitHub OAuth + JWT 인증 (JwtProvider, SecurityConfig) | ✅ 머지 |
+| BE 1 | #29 | userId DTO 제거 + @AuthenticationPrincipal + try-catch 정리 | ✅ 머지 |
+| BE 2 | #30 | PassCriteriaPolicy + GradePolicy 추출 | ✅ 머지 |
+| FE | #31 | GitHub OAuth 로그인 + useAuth + apiClient 리팩토링 | ✅ 머지 |
+
+## 완료된 횡단 관심사 리팩토링 시리즈 (2026-04-04)
+
+| Sprint | PR | 내용 | 상태 |
+|--------|-----|------|------|
+| 1 | #23 | 4-BOSS 합격 기준 이중 판단 제거 | ✅ 머지 |
+| 2 | #24 | XP 정책 중앙화 (QuestXpPolicy) | ✅ 머지 |
+| 3+4 | #25 | AI 모델 라우팅 + 감사 로그 이벤트화 | ✅ 머지 |
 
 ## 최근 결정 사항
 
-### CI check name 수정 (2026-04-02)
-- **원인**: job에 `name:` 없으면 check run = `"build"`, branch protection은 `"FE CI / build"` 요구 → 불일치
-- **수정**: `fe-ci.yml`에 `name: FE CI / build`, `be-ci.yml`에 `name: BE CI / test` 추가
-- **효과**: PR #21부터 `--admin` 없이 정상 머지 가능
+### 인증/정책 분리 완료 (2026-04-05)
+- **BE Auth**: `JwtProvider`, `JwtAuthFilter`, `SecurityConfig` — stateless JWT, GitHub OAuth `/api/v1/auth/github`
+- **BE Sprint 1**: 16개 DTO에서 userId 제거, `@AuthenticationPrincipal`로 SecurityContext 추출, Controller try-catch 제거
+- **BE Sprint 2**: `PassCriteriaPolicy.evaluate()`, `GradePolicy.from()` — passScore/grade 판단 중앙화, `@Value passScore` 제거
+- **FE**: `useAuth.ts` + `LoginPage` + `AuthCallback` — JWT localStorage, GitHub OAuth flow 완성
+
+### Controller 테스트 패턴 (2026-04-05)
+`standaloneSetup` + `@AuthenticationPrincipal` 조합 시 반드시:
+```kotlin
+.setCustomArgumentResolvers(AuthenticationPrincipalArgumentResolver())
+// + @BeforeEach에 SecurityContextHolder.getContext().authentication 설정
+// + @AfterEach에 SecurityContextHolder.clearContext()
+```
+
+### 횡단 관심사 리팩토링 완료 (2026-04-04)
+- **Sprint 2**: `QuestXpPolicy` object 추출 — questId별 baseXp 매핑 + 계산 로직 중앙화
+- **Sprint 3**: `bossChatClient` 빈 추가 — BOSS Evaluator 4개에 claude-sonnet-4-5 라우팅 (`@Qualifier`)
+- **Sprint 4**: `QuestEvaluatedEvent` 도메인 이벤트 + `QuestAuditEventListener` — 감사 로그 분리
 
 ### ACT V 5-BOSS 취뽀 달성 화면 (2026-04-03)
 - **BE**: `POST /api/v1/ai-check/journey-report` — 전체 여정 AI 감성 회고 내러티브 생성
 - **FE**: `FinalBossView` — 합격 신고 입력 → 취뽀 타이틀/통계/AI 내러티브/마지막 한 마디
-- **FE**: `questConnections.ts` — ACT I~V 전 퀘스트 연결 완성 (10개 추가)
-- **공통**: GitHub Copilot 리뷰 코멘트 한국어 지시 추가
 
 ### UX 포기 방지 시스템 — 전체 완료 (2026-04-02)
 - **Sprint 1** (PR #18): E (다음 퀘스트 연결 카드) + F (재도전 코치 + 이전 답변 불러오기)
 - **Sprint 2** (PR #19): B (오늘의 미션 배너) + C (퀘스트 브리핑 화면)
 - **Sprint 3** (PR #20): D (필드별 작성 가이드 `?` 버튼) + G (복귀 배너, BE lastCompletedAt)
 - **Sprint 4** (PR #21): A (온보딩 스토리텔링 5슬라이드 인트로)
-- 기획 문서: `.claude/docs/ux-retention-plan.md`
-
-### 4-BOSS 지원 패키지 평가 (2026-04-02)
-- **BE**: `POST /api/v1/ai-check/boss-package` — 이력서+GitHub+블로그+목표포지션 종합 평가
-- **FE**: `BossPackageResultCard` — 5개 점수 바 + 강점/개선사항/종합피드백 표시
-
-### 퀘스트 히스토리 & 성장 대시보드 (2026-04-01)
-- **BE**: `quest_history` 테이블에 AI 평가 시도마다 기록 저장 (Port & Adapter 패턴)
-- **FE**: `features/growth/` — ScoreTimeline, 퀘스트별 최고점 바 차트, 최근 시도 목록
-
-### 멀티 에이전트 패턴 도입 (2026-03-31)
-- Claude가 기획자/오케스트레이터 역할 담당
-- BE/FE 각각 독립 에이전트(isolation: worktree)로 병렬 작업
-- 에이전트 완료 후 기획자(Claude)가 코드 리뷰 → 보완 지시 또는 직접 수정 후 PR
-
-### 면접 코치 기능 (2026-03-31)
-- **컨셉**: 전담 코치가 처음부터 끝까지 함께하는 1:1 코칭 세션
-- **BE**: Stateless API, `InterviewCoachPort` Port & Adapter 패턴
-- **FE**: `features/interview-coach/` 신규 feature, CoachBubble 말풍선 UI
 
 ## 다음 작업
 
-- [ ] PR #22 머지 후 5-2 수동 완료 UI 추가 검토
-- [ ] ACT V 전체 검증 (5-1 AI 폼 → 5-2 수동 → 5-BOSS)
+- [ ] 다음 기능 기획
 
 ## 멀티 에이전트 운영 노하우
 
 - `settings.json` permissions 설정 필수 (Bash, Write, Edit, Read, Glob, Grep)
 - 에이전트는 `isolation: "worktree"` + `run_in_background: true` 조합으로 실행
-- **에이전트가 main worktree에서 브랜치 체크아웃하는 문제 발생** → 완료 후 `git branch --show-current` 확인 필수
+- **에이전트 PR 리뷰 시 `diff --git` 파일 목록 먼저 확인 → 지시 범위 초과 파일 있으면 즉시 처리**
 - 에이전트 완료 후 반드시 기획자(Claude)가 핵심 파일 직접 읽고 리뷰
 - 리베이스 충돌 발생 시 Claude가 직접 처리
+- **병렬 에이전트 작업 범위가 겹치면 충돌 or 중복 PR 발생** → 에이전트 지시문에 "이 파일만 건드릴 것" 명시
 
 ## 환경 메모
 
