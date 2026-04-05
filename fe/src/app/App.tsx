@@ -8,7 +8,9 @@ import { ActClearReportCard } from '@/features/ai-check'
 import { CharacterCreate, OnboardingIntro } from '@/features/character'
 import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
-import { useUserId } from '@/hooks/useUserId'
+import { useAuth } from '@/hooks/useAuth'
+import { LoginPage } from '@/features/auth/components/LoginPage'
+import { AuthCallback } from '@/features/auth/components/AuthCallback'
 import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
 import { ACTS } from '@/features/quest-map/constants/questData'
@@ -22,7 +24,7 @@ type View =
   | { kind: 'growth' }
 
 export function App() {
-  const userId = useUserId()
+  const { isLoggedIn } = useAuth()
   const { character, setCharacter } = useCharacter()
   const [view, setView] = useState<View>({ kind: 'map' })
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
@@ -33,7 +35,8 @@ export function App() {
   const [showIntro, setShowIntro] = useState(true)
 
   useEffect(() => {
-    fetchProgress(userId)
+    if (!isLoggedIn) return
+    fetchProgress()
       .then((progress) => {
         const completedMap: Record<string, boolean> = {}
         const scoresMap: Record<string, number> = {}
@@ -50,7 +53,7 @@ export function App() {
       .catch(() => {
         // 서버 미응답 시 로컬 상태로 계속 진행
       })
-  }, [userId])
+  }, [isLoggedIn])
 
   const getActProgress = useCallback(
     (act: Act) => {
@@ -59,6 +62,16 @@ export function App() {
     },
     [completed],
   )
+
+  // OAuth callback route
+  if (window.location.pathname === '/auth/callback') {
+    return <AuthCallback />
+  }
+
+  // Unauthenticated
+  if (!isLoggedIn) {
+    return <LoginPage />
+  }
 
   const handleCharacterComplete = (c: Character) => {
     setCharacter(c)
@@ -87,7 +100,7 @@ export function App() {
   }
 
   const triggerActClearReport = (act: Act) => {
-    fetchActClearReport(userId, act.id, `${act.title} ${act.subtitle}`)
+    fetchActClearReport(act.id, `${act.title} ${act.subtitle}`)
       .then((report) => setView({ kind: 'act-clear', act, report }))
       .catch(() => setView({ kind: 'map' }))
   }
@@ -96,7 +109,7 @@ export function App() {
 
   const handleComplete = (questId: string, xp: number, actId: number, act: Act) => {
     setCompleted((prev) => ({ ...prev, [questId]: true }))
-    completeQuest(userId, questId, actId, xp).catch(() => {})
+    completeQuest(questId, actId, xp).catch(() => {})
     if (isBossQuest(questId)) triggerActClearReport(act)
   }
 
@@ -222,7 +235,6 @@ export function App() {
 
       {view.kind === 'detail' && (
         <QuestDetail
-          userId={userId}
           quest={view.quest}
           act={view.act}
           completed={completed}
@@ -246,11 +258,11 @@ export function App() {
       )}
 
       {view.kind === 'interview-coach' && (
-        <InterviewCoach userId={userId} />
+        <InterviewCoach />
       )}
 
       {view.kind === 'growth' && (
-        <GrowthDashboard userId={userId} />
+        <GrowthDashboard />
       )}
     </div>
   )

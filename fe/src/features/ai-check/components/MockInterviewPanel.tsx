@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import type { InterviewEvaluationResult } from '@/types/api.types'
-import { useUserId } from '@/hooks/useUserId'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { FALLBACK_QUESTIONS } from '../constants/fallbackQuestions'
 import { submitMockInterview } from '../api/aiCheckApi'
@@ -12,7 +11,6 @@ interface MockInterviewPanelProps {
 }
 
 export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
-  const userId = useUserId()
   const [questions] = useState(FALLBACK_QUESTIONS)
   const [idx, setIdx] = useState(0)
   const [answer, setAnswer] = useState('')
@@ -41,7 +39,6 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
     try {
       const result = await submitMockInterview(
         { questId: '2-BOSS', questionId: q.id, question: q.question, answer, category: q.category },
-        userId,
       )
       const newResults = [...results, result]
       setResults(newResults)

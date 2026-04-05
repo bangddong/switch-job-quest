@@ -6,11 +6,7 @@ import { CoachAnalysis } from './CoachAnalysis'
 import { CoachQASession } from './CoachQASession'
 import { CoachReport } from './CoachReport'
 
-interface InterviewCoachProps {
-  userId: string
-}
-
-export function InterviewCoach({ userId }: InterviewCoachProps) {
+export function InterviewCoach() {
   const [step, setStep] = useState<CoachStep>('onboarding')
   const [loading, setLoading] = useState(false)
   const [targetRole, setTargetRole] = useState('')
@@ -24,7 +20,7 @@ export function InterviewCoach({ userId }: InterviewCoachProps) {
     setStep('analyzing')
     setTargetRole(role)
     try {
-      const result = await startCoachSession(userId, jdText, role)
+      const result = await startCoachSession(jdText, role)
       setSession(result)
       setStep('analysis')
     } catch (e) {
@@ -41,14 +37,14 @@ export function InterviewCoach({ userId }: InterviewCoachProps) {
     index: number,
     total: number,
   ): Promise<CoachAnswerResult> => {
-    return submitCoachAnswer(userId, question, answer, index, total)
+    return submitCoachAnswer(question, answer, index, total)
   }
 
   const handleQAComplete = async (history: CoachAnswerHistory[]) => {
     if (!session) return
     setStep('reporting')
     try {
-      const result = await generateCoachReport(userId, targetRole, session.jdSummary, history)
+      const result = await generateCoachReport(targetRole, session.jdSummary, history)
       setReport(result)
       setStep('report')
     } catch (e) {
@@ -107,7 +103,6 @@ export function InterviewCoach({ userId }: InterviewCoachProps) {
       {step === 'qa' && session && (
         <CoachQASession
           questions={session.questions}
-          userId={userId}
           onSubmitAnswer={handleSubmitAnswer}
           onComplete={handleQAComplete}
         />

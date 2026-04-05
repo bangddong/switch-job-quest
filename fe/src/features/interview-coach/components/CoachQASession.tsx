@@ -4,7 +4,6 @@ import { CoachBubble } from './CoachBubble'
 
 interface CoachQASessionProps {
   questions: CoachQuestion[]
-  userId: string
   onSubmitAnswer: (question: string, answer: string, index: number, total: number) => Promise<CoachAnswerResult>
   onComplete: (history: CoachAnswerHistory[]) => void
 }

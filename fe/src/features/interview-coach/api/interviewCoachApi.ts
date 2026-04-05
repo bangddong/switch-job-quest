@@ -1,12 +1,21 @@
 import type { ApiResponse } from '@/types/api.types'
 import type { CoachSessionResult, CoachAnswerResult, CoachAnswerHistory, CoachReportResult } from '../types/coach.types'
+import { getToken } from '@/hooks/useAuth'
 
 const API_BASE = '/api/v1/coach'
+
+function authHeaders(): HeadersInit {
+  const token = getToken()
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
 
 async function callCoach<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(body),
   })
   if (!res.ok) {
@@ -23,22 +32,19 @@ async function callCoach<T>(path: string, body: Record<string, unknown>): Promis
 }
 
 export async function startCoachSession(
-  userId: string,
   jdText: string,
   targetRole: string,
 ): Promise<CoachSessionResult> {
-  return callCoach<CoachSessionResult>('/session/start', { userId, jdText, targetRole })
+  return callCoach<CoachSessionResult>('/session/start', { jdText, targetRole })
 }
 
 export async function submitCoachAnswer(
-  userId: string,
   question: string,
   answer: string,
   questionIndex: number,
   totalQuestions: number,
 ): Promise<CoachAnswerResult> {
   return callCoach<CoachAnswerResult>('/session/answer', {
-    userId,
     question,
     answer,
     questionIndex,
@@ -47,10 +53,9 @@ export async function submitCoachAnswer(
 }
 
 export async function generateCoachReport(
-  userId: string,
   targetRole: string,
   jdSummary: string,
   answers: CoachAnswerHistory[],
 ): Promise<CoachReportResult> {
-  return callCoach<CoachReportResult>('/session/report', { userId, targetRole, jdSummary, answers })
+  return callCoach<CoachReportResult>('/session/report', { targetRole, jdSummary, answers })
 }

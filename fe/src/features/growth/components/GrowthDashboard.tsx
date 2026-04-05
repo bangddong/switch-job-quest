@@ -5,10 +5,6 @@ import { fetchHistory } from '@/lib/apiClient'
 import { ScoreTimeline } from './ScoreTimeline'
 import { QuestHistoryList } from './QuestHistoryList'
 
-interface GrowthDashboardProps {
-  userId: string
-}
-
 interface BestScoreEntry {
   questId: string
   score: number
@@ -30,14 +26,14 @@ function totalEarnedXp(history: QuestHistoryItem[]): number {
   return history.reduce((sum, item) => sum + item.earnedXp, 0)
 }
 
-export function GrowthDashboard({ userId }: GrowthDashboardProps) {
+export function GrowthDashboard() {
   const [history, setHistory] = useState<QuestHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
-    fetchHistory(userId)
+    fetchHistory()
       .then((data) => {
         setHistory(data)
         setError(null)
@@ -47,7 +43,7 @@ export function GrowthDashboard({ userId }: GrowthDashboardProps) {
         setError(null) // silent fallback per spec
       })
       .finally(() => setLoading(false))
-  }, [userId])
+  }, [])
 
   const bestScores = buildBestScores(history)
   const xpTotal = totalEarnedXp(history)

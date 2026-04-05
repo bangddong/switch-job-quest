@@ -118,11 +118,10 @@ function NarrativeCard({ report }: NarrativeCardProps) {
 }
 
 interface FinalBossViewProps {
-  userId: string
   onComplete: (xp: number) => void
 }
 
-export function FinalBossView({ userId, onComplete }: FinalBossViewProps) {
+export function FinalBossView({ onComplete }: FinalBossViewProps) {
   const [companyName, setCompanyName] = useState('')
   const [targetPosition, setTargetPosition] = useState('')
   const [loading, setLoading] = useState(false)
@@ -134,7 +133,7 @@ export function FinalBossView({ userId, onComplete }: FinalBossViewProps) {
     setLoading(true)
     setError(null)
     try {
-      const result = await fetchJourneyReport(userId, companyName.trim(), targetPosition.trim())
+      const result = await fetchJourneyReport(companyName.trim(), targetPosition.trim())
       setReport(result)
       onComplete(2000)
     } catch {

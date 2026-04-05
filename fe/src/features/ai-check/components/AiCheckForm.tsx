@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
-import { useUserId } from '@/hooks/useUserId'
 import { AI_FORMS } from '../constants/formConfig'
 import { submitAiCheck, submitBossPackage } from '../api/aiCheckApi'
 import { TechStackInput } from './TechStackInput'
@@ -13,7 +12,6 @@ interface AiCheckFormProps {
 }
 
 export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCheckFormProps) {
-  const userId = useUserId()
   const cfg = AI_FORMS[questId]
   const [values, setValues] = useState<Record<string, unknown>>(initialValues ?? {})
   const [loading, setLoading] = useState(false)
@@ -40,8 +38,8 @@ export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCh
       const body = cfg.transform(values)
       const result =
         questId === '4-BOSS'
-          ? await submitBossPackage(body, userId)
-          : await submitAiCheck(cfg.endpoint, body, userId)
+          ? await submitBossPackage(body)
+          : await submitAiCheck(cfg.endpoint, body)
       onResult(result)
     } catch (e) {
       setError('서버 연결 오류: ' + (e instanceof Error ? e.message : String(e)))

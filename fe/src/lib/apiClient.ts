@@ -1,9 +1,20 @@
 import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult } from '@/types/api.types'
+import { getToken } from '@/hooks/useAuth'
 
 const API_BASE = '/api/v1'
 
-export async function fetchProgress(userId: string): Promise<ProgressResult> {
-  const res = await fetch(`${API_BASE}/progress/${userId}`)
+function authHeaders(): HeadersInit {
+  const token = getToken()
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
+export async function fetchProgress(): Promise<ProgressResult> {
+  const res = await fetch(`${API_BASE}/progress`, {
+    headers: authHeaders(),
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<ProgressResult> = await res.json()
   if (!json.success || json.data == null) throw new Error('진행 상황 조회 실패')
@@ -11,28 +22,26 @@ export async function fetchProgress(userId: string): Promise<ProgressResult> {
 }
 
 export async function completeQuest(
-  userId: string,
   questId: string,
   actId: number,
   earnedXp: number,
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/progress/complete`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, questId, actId, earnedXp }),
+    headers: authHeaders(),
+    body: JSON.stringify({ questId, actId, earnedXp }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
 export async function fetchActClearReport(
-  userId: string,
   actId: number,
   actTitle: string,
 ): Promise<ActClearReportResult> {
   const res = await fetch(`${API_BASE}/ai-check/act-clear-report`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, actId, actTitle }),
+    headers: authHeaders(),
+    body: JSON.stringify({ actId, actTitle }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<ActClearReportResult> = await res.json()
@@ -40,16 +49,20 @@ export async function fetchActClearReport(
   return json.data
 }
 
-export async function fetchHistory(userId: string): Promise<QuestHistoryItem[]> {
-  const res = await fetch(`${API_BASE}/progress/history?userId=${encodeURIComponent(userId)}`)
+export async function fetchHistory(): Promise<QuestHistoryItem[]> {
+  const res = await fetch(`${API_BASE}/progress/history`, {
+    headers: authHeaders(),
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<QuestHistoryItem[]> = await res.json()
   if (!json.success || json.data == null) throw new Error('히스토리 조회 실패')
   return json.data
 }
 
-export async function fetchQuestHistory(userId: string, questId: string): Promise<QuestHistoryItem[]> {
-  const res = await fetch(`${API_BASE}/progress/history/${encodeURIComponent(questId)}?userId=${encodeURIComponent(userId)}`)
+export async function fetchQuestHistory(questId: string): Promise<QuestHistoryItem[]> {
+  const res = await fetch(`${API_BASE}/progress/history/${encodeURIComponent(questId)}`, {
+    headers: authHeaders(),
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<QuestHistoryItem[]> = await res.json()
   if (!json.success || json.data == null) throw new Error('퀘스트 히스토리 조회 실패')
@@ -57,14 +70,13 @@ export async function fetchQuestHistory(userId: string, questId: string): Promis
 }
 
 export async function fetchJourneyReport(
-  userId: string,
   companyName: string,
   targetPosition: string,
 ): Promise<JourneyReportResult> {
   const res = await fetch(`${API_BASE}/ai-check/journey-report`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, companyName, targetPosition }),
+    headers: authHeaders(),
+    body: JSON.stringify({ companyName, targetPosition }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<JourneyReportResult> = await res.json()
@@ -75,12 +87,11 @@ export async function fetchJourneyReport(
 export async function callAiCheck<T>(
   endpoint: string,
   body: Record<string, unknown>,
-  userId: string,
 ): Promise<T> {
   const res = await fetch(`${API_BASE}/ai-check/${endpoint}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, userId }),
+    headers: authHeaders(),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {
