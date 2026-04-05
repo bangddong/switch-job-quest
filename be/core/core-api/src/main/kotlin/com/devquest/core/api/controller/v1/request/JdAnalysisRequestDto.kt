@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 
 data class JdAnalysisRequestDto(
-    @field:NotBlank val userId: String = "",
     @field:NotBlank val companyName: String = "",
     @field:NotBlank val jobDescription: String = "",
     @field:Size(min = 1) val userSkills: List<String> = emptyList(),
