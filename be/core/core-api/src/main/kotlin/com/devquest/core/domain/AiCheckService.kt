@@ -5,11 +5,12 @@ import com.devquest.core.domain.model.QuestHistory
 import com.devquest.core.domain.model.QuestProgress
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
+import com.devquest.core.domain.GradePolicy
+import com.devquest.core.domain.PassCriteriaPolicy
 import com.devquest.core.domain.QuestXpPolicy
 import com.devquest.core.enums.QuestStatus
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -33,9 +34,6 @@ class AiCheckService(
     private val journeyReportPort: JourneyReportPort,
     private val publisher: ApplicationEventPublisher,
 ) {
-    @Value("\${devquest.ai.pass-score:70}")
-    private val passScore: Int = 70
-
     @Transactional
     fun checkSkillAssessment(userId: String, skills: List<String>, targetRole: String): SkillAssessmentResult {
         val result = skillAssessmentPort.evaluate(skills, targetRole)
@@ -89,7 +87,7 @@ class AiCheckService(
     @Transactional
     fun checkResume(userId: String, targetCompany: String, targetJd: String, resumeContent: String): ResumeCheckResult {
         val result = resumeEvaluator.evaluate(targetCompany, targetJd, resumeContent)
-        val passed = result.overallScore >= passScore
+        val passed = PassCriteriaPolicy.evaluate(result.overallScore)
         saveProgress(userId, "4-1", 4, result.overallScore, passed, QuestXpPolicy.calculate("4-1", passed))
         return result
     }
@@ -98,7 +96,7 @@ class AiCheckService(
     fun analyzeCompanyFit(userId: String, preferences: Map<String, String>, companies: List<CompanyInfo>): List<CompanyFitResult> {
         val result = companyFitEvaluator.analyze(preferences, companies)
         val maxScore = result.maxOfOrNull { it.fitScore } ?: 0
-        val passed = result.isNotEmpty() && maxScore >= passScore
+        val passed = PassCriteriaPolicy.evaluateMax(result.map { it.fitScore })
         saveProgress(userId, "1-BOSS", 1, maxScore, passed, QuestXpPolicy.calculate("1-BOSS", passed))
         return result
     }
@@ -113,7 +111,7 @@ class AiCheckService(
     @Transactional
     fun checkBossPackage(userId: String, resumeContent: String, githubUrl: String, blogUrl: String, targetPosition: String): BossPackageResult {
         val result = bossPackageEvaluator.evaluate(resumeContent, githubUrl, blogUrl, targetPosition)
-        val passed = result.overallScore >= passScore
+        val passed = PassCriteriaPolicy.evaluate(result.overallScore)
         saveProgress(userId, "4-BOSS", 4, result.overallScore, passed, QuestXpPolicy.calculate("4-BOSS", passed))
         return result
     }
@@ -153,13 +151,7 @@ class AiCheckService(
     }
 
     private fun saveHistory(userId: String, questId: String, actId: Int, score: Int, passed: Boolean, xp: Int) {
-        val grade = when {
-            score >= 90 -> "S"
-            score >= 80 -> "A"
-            score >= 70 -> "B"
-            score >= 60 -> "C"
-            else -> "D"
-        }
+        val grade = GradePolicy.from(score)
         val history = QuestHistory(
             userId = userId,
             questId = questId,
