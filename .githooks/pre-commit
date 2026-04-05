@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# pre-commit: 시크릿 하드코딩 방지 스크립트
+# .githooks/pre-commit
+#
+# 설치: git config core.hooksPath .githooks
+# (프로젝트 루트의 Makefile 또는 README 참고)
+
+set -euo pipefail
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+FAILED=0
+
+err() {
+  echo -e "${RED}[BLOCKED]${RESET} $*" >&2
+  FAILED=1
+}
+
+warn() {
+  echo -e "${YELLOW}[WARN]${RESET} $*" >&2
+}
+
+# ─────────────────────────────────────────────
+# 1. application-local.yml / application-secret.yml 커밋 차단
+# ─────────────────────────────────────────────
+STAGED_SECRET_YML=$(git diff --cached --name-only | grep -E "application-(local|secret)\.yml$" || true)
+if [[ -n "$STAGED_SECRET_YML" ]]; then
+  err "로컬 시크릿 파일이 스테이징되어 있습니다:"
+  echo "$STAGED_SECRET_YML" | while read -r f; do echo "  - $f"; done
+  echo -e "  ${YELLOW}→ 이 파일은 .gitignore에 등록되어야 합니다. git rm --cached <file> 로 제거하세요.${RESET}" >&2
+fi
+
+# ─────────────────────────────────────────────
+# 2. application.yml의 시크릿 fallback 값 탐지
+#    패턴: ${VAR:값} 형태에서 VAR이 시크릿 키워드인 경우
+# ─────────────────────────────────────────────
+# 변수명 어디든 시크릿 키워드가 포함된 경우 탐지
+# 주의: 단일 인용부호로 정의해야 \$ 가 ERE 리터럴 $ 로 전달됨 (이중 인용부호 시 줄끝 앵커로 해석됨)
+SECRET_FALLBACK_PATTERN='\$\{[^}]*(SECRET|PASSWORD|TOKEN|CREDENTIAL)[^}]*:[^}]{3,}\}'
+
+STAGED_APP_YMLS=$(git diff --cached --name-only | grep -E "application\.yml$" || true)
+if [[ -n "$STAGED_APP_YMLS" ]]; then
+  while IFS= read -r file; do
+    # 스테이징된 내용 기준으로 검사
+    # 패턴: ${...SECRET...:값} — 변수명에 시크릿 키워드 포함 + fallback 값 존재
+    MATCHES=$(git diff --cached -- "$file" | grep "^+" | grep -v "^+++" \
+      | grep -iE "$SECRET_FALLBACK_PATTERN" || true)
+    if [[ -n "$MATCHES" ]]; then
+      err "application.yml에 시크릿 fallback 값이 감지됐습니다: $file"
+      echo "$MATCHES" | while read -r line; do echo "  $line"; done
+      echo -e "  ${YELLOW}→ fallback 값 제거: \${GITHUB_CLIENT_SECRET:실제값} → \${GITHUB_CLIENT_SECRET}${RESET}" >&2
+    fi
+  done <<< "$STAGED_APP_YMLS"
+fi
+
+# ─────────────────────────────────────────────
+# 3. .env 파일 커밋 차단 (.env.example 제외)
+# ─────────────────────────────────────────────
+STAGED_ENV=$(git diff --cached --name-only | grep -E "^(fe/)?\.env(\..+)?$" | grep -v "\.example$" || true)
+if [[ -n "$STAGED_ENV" ]]; then
+  err ".env 파일이 스테이징되어 있습니다:"
+  echo "$STAGED_ENV" | while read -r f; do echo "  - $f"; done
+  echo -e "  ${YELLOW}→ git rm --cached <file> 로 제거하세요.${RESET}" >&2
+fi
+
+# ─────────────────────────────────────────────
+# 4. TS/JS 파일에서 시크릿처럼 보이는 패턴 경고
+#    (완전 차단은 false positive가 많으므로 경고만)
+# ─────────────────────────────────────────────
+STAGED_TS=$(git diff --cached --name-only | grep -E "\.(ts|tsx|js|jsx)$" | grep -v "node_modules" || true)
+if [[ -n "$STAGED_TS" ]]; then
+  while IFS= read -r file; do
+    # GitHub OAuth secret 패턴 (40자 hex)
+    MATCHES=$(git diff --cached -- "$file" | grep "^+" | grep -v "^+++" \
+      | grep -E "'[0-9a-f]{40}'" || true)
+    if [[ -n "$MATCHES" ]]; then
+      warn "TS 파일에 40자 hex 문자열이 있습니다 (GitHub secret 패턴): $file"
+      echo "$MATCHES" | while read -r line; do echo "  $line"; done
+      echo -e "  ${YELLOW}→ import.meta.env.VITE_* 또는 process.env.* 사용을 권장합니다.${RESET}" >&2
+    fi
+  done <<< "$STAGED_TS"
+fi
+
+# ─────────────────────────────────────────────
+# 결과
+# ─────────────────────────────────────────────
+if [[ "$FAILED" -eq 1 ]]; then
+  echo "" >&2
+  echo -e "${RED}${BOLD}커밋이 차단됐습니다.${RESET} 위 문제를 수정한 후 다시 커밋하세요." >&2
+  echo -e "${YELLOW}긴급하게 우회가 필요한 경우: git commit --no-verify (남용 금지)${RESET}" >&2
+  exit 1
+fi
+
+echo -e "${GREEN}[OK]${RESET} 시크릿 검사 통과"
+exit 0
