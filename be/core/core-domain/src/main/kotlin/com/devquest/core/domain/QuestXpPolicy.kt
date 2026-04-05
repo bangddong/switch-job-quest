@@ -21,7 +21,9 @@ object QuestXpPolicy {
 
     fun calculate(questId: String, passed: Boolean, score: Int = 0, xpMultiplier: Double = 1.0): Int {
         if (!passed) return 0
-        val base = baseXp[questId] ?: return 0
+        val base = requireNotNull(baseXp[questId]) {
+            "Unknown questId for XP policy: $questId"
+        }
         return when (questId) {
             "1-2" -> base * score / 100                          // score 비례
             "2-1", "2-3", "3-1", "5-1" -> (base * xpMultiplier).toInt()         // multiplier 적용
