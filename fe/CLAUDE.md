@@ -8,6 +8,12 @@
 - **데이터 흐름**: App.tsx에서 props drilling + callback lifting
 - **Props 인터페이스**: `interface [Name]Props { ... }`
 
+## 환경변수 규칙 (보안)
+
+- 모든 설정값은 `import.meta.env.VITE_*` 사용 — 코드에 직접 하드코딩 금지
+- 로컬 값은 `.env.local`에 작성 (git 무시됨) — `.env.example`에 키 이름과 설명만 추가
+- `.env.local`은 커밋 금지, `.env.example`만 커밋
+
 ## API 패턴
 
 - `lib/apiClient.ts`: `callAiCheck<T>(endpoint, body, userId)` — fetch + `ApiResponse<T>` 파싱

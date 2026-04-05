@@ -1,3 +1,9 @@
+# === BE Secrets (절대 커밋 금지) ===
+# application.yml의 ${VAR} fallback에 시크릿 넣지 말 것
+# 로컬 시크릿은 application-local.yml에만 작성
+**/application-local.yml
+**/application-secret.yml
+
 # === Java / Kotlin / Gradle ===
 .gradle/
 build/

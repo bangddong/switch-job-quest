@@ -61,8 +61,28 @@
 - **Sprint 3** (PR #20): D (필드별 작성 가이드 `?` 버튼) + G (복귀 배너, BE lastCompletedAt)
 - **Sprint 4** (PR #21): A (온보딩 스토리텔링 5슬라이드 인트로)
 
+## 보안 조치 완료 (2026-04-06)
+
+### 원인
+- `application.yml`의 `${VAR:default}` fallback에 GitHub OAuth secret, JWT secret이 하드코딩됨 (PR #28 이후)
+- `application-local.yml`이 존재했지만 시크릿 분리 없이 `application.yml`에 직접 작성
+- `.gitignore`에 BE profile yml 제외 규칙 없었음
+
+### 조치 내용
+- `application.yml` fallback 시크릿 제거 → `${GITHUB_CLIENT_SECRET}` 형태로 변경
+- `application-local.yml` git untrack + 로컬 시크릿 이동
+- `.gitignore`에 `**/application-local.yml`, `**/application-secret.yml` 추가
+- `fe/src/hooks/useAuth.ts` clientId → `import.meta.env.VITE_GITHUB_CLIENT_ID`
+- `fe/.env.local` 생성, `.env.example` 업데이트
+- BE/FE `CLAUDE.md`에 시크릿 관리 규칙 추가
+
+### ⚠️ 사용자 필수 조치
+- GitHub OAuth App secret **즉시 regenerate** 필요 (이미 public repo에 노출됨)
+- regenerate 후 `application-local.yml`의 `REPLACE_WITH_NEW_SECRET_AFTER_REGENERATE` 값 교체
+
 ## 다음 작업
 
+- [ ] GitHub OAuth secret regenerate (사용자 직접 수행)
 - [ ] 다음 기능 기획
 
 ## 멀티 에이전트 운영 노하우

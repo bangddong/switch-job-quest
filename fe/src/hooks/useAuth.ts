@@ -17,7 +17,7 @@ export function useAuth() {
   const isLoggedIn = token !== null
 
   const loginWithGithub = () => {
-    const clientId = 'Iv23li4rMCxm07zyBBmN'
+    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID
     const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`)
     window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user`
   }
