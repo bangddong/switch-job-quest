@@ -92,6 +92,7 @@ class AiCheckServiceTest {
         assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
         assertThat(captor.firstValue.earnedXp).isEqualTo(500)
         assertThat(captor.firstValue.aiScore).isEqualTo(70)
+        verify(publisher).publishEvent(any<com.devquest.core.domain.event.QuestEvaluatedEvent>())
     }
 
     @Test
@@ -126,6 +127,7 @@ class AiCheckServiceTest {
         assertThat(captor.firstValue.earnedXp).isEqualTo(500)
         assertThat(captor.firstValue.aiScore).isEqualTo(85)
         assertThat(captor.firstValue.questId).isEqualTo("4-1")
+        verify(publisher).publishEvent(any<com.devquest.core.domain.event.QuestEvaluatedEvent>())
     }
 
     @Test
