@@ -85,17 +85,10 @@
 - [ ] GitHub OAuth secret regenerate (사용자 직접 수행)
 - [ ] 다음 기능 기획
 
-## 멀티 에이전트 운영 노하우
+## 참조 문서
 
-- `settings.json` permissions 설정 필수 (Bash, Write, Edit, Read, Glob, Grep)
-- 에이전트는 `isolation: "worktree"` + `run_in_background: true` 조합으로 실행
-- **에이전트 PR 리뷰 시 `diff --git` 파일 목록 먼저 확인 → 지시 범위 초과 파일 있으면 즉시 처리**
-- 에이전트 완료 후 반드시 기획자(Claude)가 핵심 파일 직접 읽고 리뷰
-- 리베이스 충돌 발생 시 Claude가 직접 처리
-- **병렬 에이전트 작업 범위가 겹치면 충돌 or 중복 PR 발생** → 에이전트 지시문에 "이 파일만 건드릴 것" 명시
-
-## 환경 메모
-
-- FE Vercel 프로젝트: `fe/.vercel/project.json` (`switch-job-quest`, `team_G2dvpYbZ8iZ0gU18lvcId6zn`)
-- BE는 Vercel 미연결 (별도 배포)
-- FE 배포: `fe/` 디렉토리 기준으로 `vercel --prod` 실행
+| 주제 | 문서 |
+|------|------|
+| 멀티 에이전트 운영 | `.claude/docs/agent-workflow.md` |
+| 배포 / 환경변수 | `.claude/docs/deployment.md` |
+| 커밋 / PR / 브랜치 | `.claude/docs/git-strategy.md` |
