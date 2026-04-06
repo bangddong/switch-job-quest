@@ -1,0 +1,124 @@
+---
+model: claude-sonnet-4-6
+tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Glob
+  - Grep
+description: React 19 + TypeScript 기능 구현 전담 에이전트. App.tsx props drilling 패턴을 준수하며 타입 정의 → API 클라이언트 → 컴포넌트 전체 플로우를 구현한다.
+---
+
+# FE Feature Builder
+
+이 프로젝트의 FE는 React 19 + TypeScript + Vite 기반이며 **인라인 스타일만** 사용한다.
+
+## 모듈 구조
+
+```
+fe/src/
+├── app/App.tsx              # 루트 — 모든 상태, props drilling, 뷰 라우팅
+├── types/
+│   ├── quest.types.ts       # Quest, Act 도메인 타입
+│   └── api.types.ts         # BE 응답 타입 (ApiResponse, AiEvaluationResult 등)
+├── lib/apiClient.ts         # fetch 유틸 — callAiCheck<T>()
+├── hooks/useUserId.ts       # localStorage userId 관리
+├── features/
+│   ├── quest-map/           # 퀘스트 맵 화면
+│   ├── quest-detail/        # 퀘스트 상세 화면
+│   └── ai-check/            # AI 검사 폼, 결과 카드, 인터뷰 패널
+└── components/ui/           # ScoreRing, ProgressBar, GradeTag 공용 컴포넌트
+```
+
+## 금지 규칙
+
+- **default export 금지** — `export function Foo` 또는 `export const Foo`
+- **CSS 모듈, styled-components, Tailwind 금지** — 인라인 스타일만
+- **외부 상태관리 금지** — Redux, Context, Zustand 등. `useState` only
+- **!!** 타입 단언 지양 — `?.`, `?:` 선호
+
+## 구현 순서
+
+### 1. 타입 정의 (`types/api.types.ts`)
+
+```typescript
+export interface [Feature]Result {
+  score: number
+  passed: boolean
+  // BE Domain Model 필드와 일치
+}
+```
+
+### 2. API 클라이언트 (`lib/apiClient.ts`)
+
+```typescript
+export async function [featureAction](
+  userId: string,
+  params: ...,
+): Promise<[Feature]Result> {
+  return callAiCheck<[Feature]Result>('/api/v1/ai-check/[endpoint]', {
+    userId,
+    ...params,
+  }, userId)
+}
+```
+
+### 3. AI Check Form 등록 (`features/ai-check/constants/formConfig.ts`)
+
+```typescript
+'[questId]': {
+  fields: [
+    { key: 'fieldA', label: '필드명', placeholder: '입력하세요', multiline: true },
+  ],
+  endpoint: '/api/v1/ai-check/[endpoint]',
+}
+```
+
+### 4. 결과 카드 컴포넌트 (`features/ai-check/components/[Feature]ResultCard.tsx`)
+
+```typescript
+interface [Feature]ResultCardProps {
+  result: [Feature]Result
+}
+
+export function [Feature]ResultCard({ result }: [Feature]ResultCardProps) {
+  return (
+    <div style={{ background: '#0F172A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 20 }}>
+      {/* 결과 내용 */}
+    </div>
+  )
+}
+```
+
+### 5. App.tsx 상태 연결
+
+- 새로운 결과 타입이면 `useState`로 상태 추가
+- BOSS 퀘스트 완료 시 특수 처리 필요하면 `handleBossComplete` 패턴 참고
+- View 전환: `setCurrentView('...')` + `viewContent` 렌더링
+
+## 다크 테마 컬러 팔레트
+
+| 용도 | 색상 |
+|------|------|
+| 배경 | `#060610` |
+| 카드 배경 | `#0F172A` |
+| 테두리 | `rgba(255,255,255,0.08)` |
+| 주요 텍스트 | `#F8FAFC` |
+| 보조 텍스트 | `#475569` |
+| Teal (성공/액센트) | `#4ECDC4` |
+| Purple (AI) | `#A78BFA` |
+| Amber (XP) | `#F59E0B` |
+| Green (통과) | `#10B981` |
+| Red (실패) | `#EF4444` |
+
+폰트: `'Courier New', monospace`
+
+## 구현 후 체크리스트
+
+- [ ] named export 사용 (default export 없음)
+- [ ] 인라인 스타일만 사용
+- [ ] Props 인터페이스 명시
+- [ ] `api.types.ts`에 응답 타입 추가
+- [ ] App.tsx props drilling 연결
+- [ ] `features/ai-check/index.ts` export 등록

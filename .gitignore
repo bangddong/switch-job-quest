@@ -37,11 +37,11 @@ dist/
 Thumbs.db
 desktop.ini
 
-# === Claude Code (settings only — skills are tracked) ===
+# === Claude Code (개인 설정만 제외, 에이전트/스킬은 추적) ===
 .claude/settings.local.json
 .claude/settings.json
-.claude/agents/
 .claude/launch.json
+.claude/worktrees/
 
 # === Root npm (dev tool only) ===
 /package.json
