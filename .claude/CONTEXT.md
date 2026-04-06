@@ -89,12 +89,13 @@
 
 ### ⚠️ 사용자 필수 조치
 - GitHub OAuth App secret **즉시 regenerate** 필요 (이미 public repo에 노출됨)
-- regenerate 후 `application-local.yml`의 `REPLACE_WITH_NEW_SECRET_AFTER_REGENERATE` 값 교체
+- regenerate 후 `application-local.yml` + Fly.io secrets + GitHub Secrets 값 교체
 
 ## 다음 작업
 
-- [ ] GitHub OAuth secret regenerate (사용자 직접 수행)
-- [ ] 다음 기능 기획
+- [ ] GitHub OAuth secret regenerate 후 Fly.io + GitHub Secrets 값 교체 (사용자 직접)
+- [ ] `gh secret set ANTHROPIC_API_KEY` — Copilot 리뷰 평가기 활성화 (사용자 직접)
+- [ ] 다음 기능 기획 (대시보드/통계, UX 개선, 테스트 커버리지 중 선택)
 
 ## 참조 문서
 
