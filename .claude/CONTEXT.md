@@ -61,6 +61,17 @@
 - **Sprint 3** (PR #20): D (필드별 작성 가이드 `?` 버튼) + G (복귀 배너, BE lastCompletedAt)
 - **Sprint 4** (PR #21): A (온보딩 스토리텔링 5슬라이드 인트로)
 
+## Feature Dev Team 하네스 구축 완료 (2026-04-06)
+
+### 구성
+- `.claude/agents/` — be-developer, fe-developer, qa-reviewer (Team 모드), be-feature-builder, fe-feature-builder, logic-reviewer, convention-reviewer, test-writer (Sub-agent 모드)
+- `.claude/skills/feature-dev/SKILL.md` — TeamCreate 오케스트레이터 스킬
+
+### 제약 사항 (테스트로 확인)
+- `.claude/agents/` 파일은 `subagent_type`으로 직접 참조 불가
+- 팀 에이전트 스폰 시 `subagent_type: "general-purpose"` + `prompt`에 에이전트 역할 내용 포함 필요
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` → `~/.claude/settings.json` env에 설정 완료
+
 ## 보안 조치 완료 (2026-04-06)
 
 ### 원인
