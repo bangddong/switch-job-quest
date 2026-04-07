@@ -43,13 +43,24 @@ jobs:
             );
 
             const copilotReviewIds = new Set(copilotReviews.map(r => r.id));
-            const unresolvedComments = allComments.filter(c =>
+
+            // Copilot 최상위 코멘트 (답글 아닌 것)
+            const copilotTopComments = allComments.filter(c =>
               copilotReviewIds.has(c.pull_request_review_id) && !c.in_reply_to_id
             );
 
+            // 답글이 달린 코멘트 ID 수집 (수용/거부 무관하게 답글 존재 = 처리됨)
+            const repliedIds = new Set(
+              allComments
+                .filter(c => c.in_reply_to_id)
+                .map(c => c.in_reply_to_id)
+            );
+
+            const unresolvedComments = copilotTopComments.filter(c => !repliedIds.has(c.id));
+
             // 3. 판정
             if (unresolvedComments.length === 0) {
-              core.notice(`Copilot 리뷰 ${copilotReviews.length}건 — 모두 처리됨. 통과`);
+              core.notice(`Copilot 리뷰 ${copilotTopComments.length}건 — 모두 처리됨 (수용/거부 무관). 통과`);
               return;
             }
 
@@ -58,5 +69,5 @@ jobs:
               .join('\n');
 
             core.setFailed(
-              `Copilot 리뷰 미처리 코멘트 ${unresolvedComments.length}건\n\n${summary}\n\n각 코멘트에 답글을 달거나 resolve 후 머지하세요.`
+              `Copilot 리뷰 미처리 코멘트 ${unresolvedComments.length}건\n\n${summary}\n\n수용/거부 무관하게 답글을 달면 통과됩니다.`
             );
