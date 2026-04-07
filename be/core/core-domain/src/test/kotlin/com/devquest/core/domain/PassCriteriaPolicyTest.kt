@@ -39,4 +39,16 @@ class PassCriteriaPolicyTest {
     fun `evaluateMax - 최대값이 70 미만이면 false`() {
         assertThat(PassCriteriaPolicy.evaluateMax(listOf(50, 60, 65))).isFalse()
     }
+
+    @Test
+    fun `evaluateMax - 커스텀 passScore 적용`() {
+        assertThat(PassCriteriaPolicy.evaluateMax(listOf(50, 80, 60), passScore = 80)).isTrue()
+        assertThat(PassCriteriaPolicy.evaluateMax(listOf(50, 79, 60), passScore = 80)).isFalse()
+    }
+
+    @Test
+    fun `evaluateMax - 단일 요소 리스트`() {
+        assertThat(PassCriteriaPolicy.evaluateMax(listOf(70))).isTrue()
+        assertThat(PassCriteriaPolicy.evaluateMax(listOf(69))).isFalse()
+    }
 }
