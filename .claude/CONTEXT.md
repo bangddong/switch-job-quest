@@ -61,6 +61,26 @@
 - **Sprint 3** (PR #20): D (필드별 작성 가이드 `?` 버튼) + G (복귀 배너, BE lastCompletedAt)
 - **Sprint 4** (PR #21): A (온보딩 스토리텔링 5슬라이드 인트로)
 
+## 아키텍처 강화 (2026-04-07)
+
+### AI 신뢰성
+- `AiCallExecutor` 신규 — `devquest.ai.max-retry: 3` 실제 연결, null/예외 시 자동 재시도, 3회 실패 시 `AiEvaluationException`
+- 13개 Evaluator 전체 적용
+
+### AI 프롬프트 분리
+- `client-ai/src/main/resources/prompts/*.st` — 16개 Spring AI `PromptTemplate` 파일로 코드와 분리
+- `InterviewCoachEvaluator` 3개, `MockInterviewEvaluator` 2개로 메서드별 분리
+
+### Policy 단위 테스트 보강
+- GradePolicy: 2 → 11개 (전 구간 `@ParameterizedTest`)
+- PassCriteriaPolicy: 6 → 8개 (`evaluateMax` 커스텀 passScore 추가)
+- QuestXpPolicy: 7 → 24개 (multiplier 그룹, 고정 XP 전체, 경계값)
+
+### CI/CD 강화 (2026-04-07)
+- `copilot-review-evaluator.yml` → `Copilot Review Gate`로 교체 (API 키 불필요)
+- Copilot 인라인 코멘트에 답글 없으면 머지 블록 (수용/거부 무관, 답글만 있으면 통과)
+- `Copilot Review Gate / check-copilot-review` → main 브랜치 required check 등록
+
 ## Feature Dev Team 하네스 구축 완료 (2026-04-06)
 
 ### 구성
@@ -94,8 +114,7 @@
 ## 다음 작업
 
 - [ ] GitHub OAuth secret regenerate 후 Fly.io + GitHub Secrets 값 교체 (사용자 직접)
-- [ ] `gh secret set ANTHROPIC_API_KEY` — Copilot 리뷰 평가기 활성화 (사용자 직접)
-- [ ] 다음 기능 기획 (대시보드/통계, UX 개선, 테스트 커버리지 중 선택)
+- [ ] 다음 기능 기획 (대시보드/통계, UX 개선, GitHub Actions Node.js 24 대응 등)
 
 ## 참조 문서
 
