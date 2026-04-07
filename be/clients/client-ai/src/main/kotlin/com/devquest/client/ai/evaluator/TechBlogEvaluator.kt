@@ -1,6 +1,6 @@
 package com.devquest.client.ai.evaluator
 
-import com.devquest.core.domain.support.AiEvaluationException
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.port.BlogEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class TechBlogEvaluator(
-    private val chatClient: ChatClient
+    private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : BlogEvaluatorPort {
 
     override fun evaluate(techTopic: String, title: String, content: String): AiEvaluationResult {
@@ -34,10 +35,8 @@ class TechBlogEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(AiEvaluationResult::class.java)
-            ?: throw AiEvaluationException("AI 블로그 평가 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(AiEvaluationResult::class.java)
+        }
     }
 }

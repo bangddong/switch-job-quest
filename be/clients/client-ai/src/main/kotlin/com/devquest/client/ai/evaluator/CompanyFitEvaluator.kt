@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.port.CompanyFitEvaluatorPort
@@ -13,7 +14,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class CompanyFitEvaluator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient
+    @Qualifier("bossChatClient") private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : CompanyFitEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()
@@ -41,10 +43,9 @@ class CompanyFitEvaluator(
             [{"companyName": "...", "fitScore": 85, "fitGrade": "A", "cultureFit": 22, "techFit": 23, "growthFit": 20, "lifestyleFit": 20, "pros": ["..."], "cons": ["..."], "recommendation": "..."}]
         """.trimIndent()
 
-        val response = chatClient.prompt()
-            .user(prompt)
-            .call()
-            .content() ?: "[]"
+        val response = aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().content()
+        }
 
         return try {
             objectMapper.readValue<List<CompanyFitResult>>(response)

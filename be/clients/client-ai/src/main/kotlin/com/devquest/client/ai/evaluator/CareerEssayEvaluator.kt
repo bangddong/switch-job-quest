@@ -1,6 +1,6 @@
 package com.devquest.client.ai.evaluator
 
-import com.devquest.core.domain.support.AiEvaluationException
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.EssayCheckResult
 import com.devquest.core.domain.port.EssayEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class CareerEssayEvaluator(
-    private val chatClient: ChatClient
+    private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : EssayEvaluatorPort {
 
     override fun evaluate(dissatisfactions: List<String>, goals: List<String>, fiveYearVision: String): EssayCheckResult {
@@ -40,10 +41,8 @@ class CareerEssayEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(EssayCheckResult::class.java)
-            ?: throw AiEvaluationException("AI 평가 응답 파싱 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(EssayCheckResult::class.java)
+        }
     }
 }

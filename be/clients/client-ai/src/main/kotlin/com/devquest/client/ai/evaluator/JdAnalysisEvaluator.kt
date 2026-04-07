@@ -1,6 +1,6 @@
 package com.devquest.client.ai.evaluator
 
-import com.devquest.core.domain.support.AiEvaluationException
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.JdAnalysisResult
 import com.devquest.core.domain.port.JdAnalysisEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class JdAnalysisEvaluator(
-    private val chatClient: ChatClient
+    private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : JdAnalysisEvaluatorPort {
 
     override fun analyze(companyName: String, jobDescription: String, userSkills: List<String>, userExperiences: List<String>): JdAnalysisResult {
@@ -32,10 +33,8 @@ class JdAnalysisEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(JdAnalysisResult::class.java)
-            ?: throw AiEvaluationException("JD 분석 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(JdAnalysisResult::class.java)
+        }
     }
 }

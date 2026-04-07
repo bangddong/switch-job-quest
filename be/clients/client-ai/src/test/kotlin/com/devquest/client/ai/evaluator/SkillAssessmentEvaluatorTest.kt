@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.SkillAssessmentResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
@@ -18,7 +19,8 @@ import org.mockito.kotlin.whenever
 class SkillAssessmentEvaluatorTest {
 
     private val chatClient: org.springframework.ai.chat.client.ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val evaluator = SkillAssessmentEvaluator(chatClient)
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val evaluator = SkillAssessmentEvaluator(chatClient, aiCallExecutor)
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException 발생`() {
@@ -33,7 +35,7 @@ class SkillAssessmentEvaluatorTest {
             )
         }
             .isInstanceOf(AiEvaluationException::class.java)
-            .hasMessageContaining("기술 스택 진단 실패")
+            .hasMessageContaining("최종 실패")
     }
 
     @Test

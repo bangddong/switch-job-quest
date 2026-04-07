@@ -1,15 +1,16 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.JourneyReportResult
 import com.devquest.core.domain.port.JourneyReportPort
-import com.devquest.core.domain.support.AiEvaluationException
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 
 @Component
 class JourneyReportGenerator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient
+    @Qualifier("bossChatClient") private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : JourneyReportPort {
 
     override fun generate(
@@ -61,10 +62,8 @@ class JourneyReportGenerator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(JourneyReportResult::class.java)
-            ?: throw AiEvaluationException("취뽀 회고 리포트 생성 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(JourneyReportResult::class.java)
+        }
     }
 }

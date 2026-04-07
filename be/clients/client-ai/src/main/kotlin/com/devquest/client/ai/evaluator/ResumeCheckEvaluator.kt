@@ -1,6 +1,6 @@
 package com.devquest.client.ai.evaluator
 
-import com.devquest.core.domain.support.AiEvaluationException
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.ResumeCheckResult
 import com.devquest.core.domain.port.ResumeEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class ResumeCheckEvaluator(
-    private val chatClient: ChatClient
+    private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : ResumeEvaluatorPort {
 
     override fun evaluate(targetCompany: String, targetJd: String, resumeContent: String): ResumeCheckResult {
@@ -34,10 +35,8 @@ class ResumeCheckEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(ResumeCheckResult::class.java)
-            ?: throw AiEvaluationException("이력서 평가 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(ResumeCheckResult::class.java)
+        }
     }
 }

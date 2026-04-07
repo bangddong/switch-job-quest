@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.CoachAnswerHistory
 import com.devquest.core.domain.model.evaluation.CoachAnswerResult
 import com.devquest.core.domain.model.evaluation.CoachReportResult
@@ -22,7 +23,8 @@ import org.mockito.kotlin.whenever
 class InterviewCoachEvaluatorTest {
 
     private val chatClient: org.springframework.ai.chat.client.ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val evaluator = InterviewCoachEvaluator(chatClient)
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val evaluator = InterviewCoachEvaluator(chatClient, aiCallExecutor)
 
     // ── startSession ──────────────────────────────────────────────────────────
 
@@ -36,7 +38,7 @@ class InterviewCoachEvaluatorTest {
             evaluator.startSession(jdText = "백엔드 개발자 모집합니다.", targetRole = "시니어 백엔드 개발자")
         }
             .isInstanceOf(AiEvaluationException::class.java)
-            .hasMessageContaining("면접 세션 시작 실패")
+            .hasMessageContaining("최종 실패")
     }
 
     @Test
@@ -98,7 +100,7 @@ class InterviewCoachEvaluatorTest {
             )
         }
             .isInstanceOf(AiEvaluationException::class.java)
-            .hasMessageContaining("답변 평가 실패")
+            .hasMessageContaining("최종 실패")
     }
 
     @Test
@@ -160,7 +162,7 @@ class InterviewCoachEvaluatorTest {
             )
         }
             .isInstanceOf(AiEvaluationException::class.java)
-            .hasMessageContaining("종합 리포트 생성 실패")
+            .hasMessageContaining("최종 실패")
     }
 
     @Test

@@ -1,14 +1,15 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.SkillAssessmentResult
 import com.devquest.core.domain.port.SkillAssessmentPort
-import com.devquest.core.domain.support.AiEvaluationException
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.stereotype.Component
 
 @Component
 class SkillAssessmentEvaluator(
-    private val chatClient: ChatClient
+    private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : SkillAssessmentPort {
 
     override fun evaluate(skills: List<String>, targetRole: String): SkillAssessmentResult {
@@ -49,10 +50,8 @@ class SkillAssessmentEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(SkillAssessmentResult::class.java)
-            ?: throw AiEvaluationException("기술 스택 진단 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(SkillAssessmentResult::class.java)
+        }
     }
 }

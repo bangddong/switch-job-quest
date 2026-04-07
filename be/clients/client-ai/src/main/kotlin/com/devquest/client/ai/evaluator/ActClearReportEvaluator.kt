@@ -1,14 +1,15 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.ActClearReportResult
 import com.devquest.core.domain.port.ActClearReportPort
-import com.devquest.core.domain.support.AiEvaluationException
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.stereotype.Component
 
 @Component
 class ActClearReportEvaluator(
-    private val chatClient: ChatClient
+    private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : ActClearReportPort {
 
     override fun generate(actId: Int, actTitle: String, questScores: Map<String, Int>): ActClearReportResult {
@@ -44,10 +45,8 @@ class ActClearReportEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(ActClearReportResult::class.java)
-            ?: throw AiEvaluationException("ACT 클리어 리포트 생성 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(ActClearReportResult::class.java)
+        }
     }
 }

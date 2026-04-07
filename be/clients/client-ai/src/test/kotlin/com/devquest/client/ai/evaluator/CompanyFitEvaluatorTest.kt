@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.port.CompanyInfo
 import com.devquest.core.domain.support.AiEvaluationException
@@ -18,7 +19,8 @@ import org.springframework.ai.chat.client.ChatClient
 class CompanyFitEvaluatorTest {
 
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val evaluator = CompanyFitEvaluator(chatClient)
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val evaluator = CompanyFitEvaluator(chatClient, aiCallExecutor)
 
     private val preferences = mapOf("문화" to "수평적", "기술스택" to "Kotlin")
     private val companies = listOf(
@@ -39,12 +41,12 @@ class CompanyFitEvaluatorTest {
     }
 
     @Test
-    fun `AI가 null을 반환하면 빈 배열로 처리된다`() {
+    fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
         whenever(chatClient.prompt().user(any<String>()).call().content()).thenReturn(null)
 
-        val result = evaluator.analyze(preferences, companies)
-
-        assertThat(result).isEmpty()
+        assertThatThrownBy { evaluator.analyze(preferences, companies) }
+            .isInstanceOf(AiEvaluationException::class.java)
+            .hasMessageContaining("최종 실패")
     }
 
     @Test

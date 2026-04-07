@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.InterviewEvaluationResult
 import com.devquest.core.domain.port.InterviewEvaluatorPort
@@ -12,7 +13,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class MockInterviewEvaluator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient
+    @Qualifier("bossChatClient") private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : InterviewEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()
@@ -41,11 +43,9 @@ class MockInterviewEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(InterviewEvaluationResult::class.java)
-            ?: throw AiEvaluationException("면접 평가 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(InterviewEvaluationResult::class.java)
+        }
     }
 
     override fun generateQuestions(categories: List<String>, count: Int): List<Map<String, String>> {

@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.EssayCheckResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
@@ -18,7 +19,8 @@ class CareerEssayEvaluatorTest {
 
     // ChatClient의 fluent API 체인 전체를 deep stub으로 목킹
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val evaluator = CareerEssayEvaluator(chatClient)
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val evaluator = CareerEssayEvaluator(chatClient, aiCallExecutor)
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException 발생`() {
@@ -34,7 +36,7 @@ class CareerEssayEvaluatorTest {
             )
         }
             .isInstanceOf(AiEvaluationException::class.java)
-            .hasMessageContaining("파싱 실패")
+            .hasMessageContaining("최종 실패")
     }
 
     @Test

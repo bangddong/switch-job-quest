@@ -1,5 +1,6 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
@@ -17,7 +18,8 @@ import org.springframework.ai.chat.client.ChatClient
 class SystemDesignEvaluatorTest {
 
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val evaluator = SystemDesignEvaluator(chatClient)
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val evaluator = SystemDesignEvaluator(chatClient, aiCallExecutor)
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
@@ -32,7 +34,7 @@ class SystemDesignEvaluatorTest {
             )
         }
             .isInstanceOf(AiEvaluationException::class.java)
-            .hasMessageContaining("시스템 설계 평가 실패")
+            .hasMessageContaining("최종 실패")
     }
 
     @Test

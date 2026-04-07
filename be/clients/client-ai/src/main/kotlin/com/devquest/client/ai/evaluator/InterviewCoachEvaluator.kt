@@ -1,17 +1,18 @@
 package com.devquest.client.ai.evaluator
 
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.CoachAnswerHistory
 import com.devquest.core.domain.model.evaluation.CoachAnswerResult
 import com.devquest.core.domain.model.evaluation.CoachReportResult
 import com.devquest.core.domain.model.evaluation.CoachSessionResult
 import com.devquest.core.domain.port.InterviewCoachPort
-import com.devquest.core.domain.support.AiEvaluationException
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.stereotype.Component
 
 @Component
 class InterviewCoachEvaluator(
-    private val chatClient: ChatClient
+    private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : InterviewCoachPort {
 
     override fun startSession(jdText: String, targetRole: String): CoachSessionResult {
@@ -45,11 +46,9 @@ class InterviewCoachEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(CoachSessionResult::class.java)
-            ?: throw AiEvaluationException("면접 세션 시작 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(CoachSessionResult::class.java)
+        }
     }
 
     override fun evaluateAnswer(question: String, answer: String, questionIndex: Int, totalQuestions: Int): CoachAnswerResult {
@@ -84,11 +83,9 @@ class InterviewCoachEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(CoachAnswerResult::class.java)
-            ?: throw AiEvaluationException("답변 평가 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(CoachAnswerResult::class.java)
+        }
     }
 
     override fun generateReport(targetRole: String, jdSummary: String, answers: List<CoachAnswerHistory>): CoachReportResult {
@@ -137,10 +134,8 @@ class InterviewCoachEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(CoachReportResult::class.java)
-            ?: throw AiEvaluationException("종합 리포트 생성 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(CoachReportResult::class.java)
+        }
     }
 }

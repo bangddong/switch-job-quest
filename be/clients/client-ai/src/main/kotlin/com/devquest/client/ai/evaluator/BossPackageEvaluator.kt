@@ -1,6 +1,6 @@
 package com.devquest.client.ai.evaluator
 
-import com.devquest.core.domain.support.AiEvaluationException
+import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.core.domain.model.evaluation.BossPackageResult
 import com.devquest.core.domain.port.BossPackageEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -9,7 +9,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class BossPackageEvaluator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient
+    @Qualifier("bossChatClient") private val chatClient: ChatClient,
+    private val aiCallExecutor: AiCallExecutor
 ) : BossPackageEvaluatorPort {
 
     override fun evaluate(
@@ -51,10 +52,8 @@ class BossPackageEvaluator(
             }
         """.trimIndent()
 
-        return chatClient.prompt()
-            .user(prompt)
-            .call()
-            .entity(BossPackageResult::class.java)
-            ?: throw AiEvaluationException("지원 패키지 평가 실패")
+        return aiCallExecutor.execute {
+            chatClient.prompt().user(prompt).call().entity(BossPackageResult::class.java)
+        }
     }
 }
