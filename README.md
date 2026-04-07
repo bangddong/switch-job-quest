@@ -11,6 +11,7 @@ AI(Claude)가 에세이, 이력서, 면접 등을 평가하고, 퀘스트 클리
 - [프로젝트 구조](#프로젝트-구조)
 - [퀘스트 시스템](#퀘스트-시스템)
 - [AI 평가 시스템](#ai-평가-시스템)
+- [인증](#인증)
 - [API 명세](#api-명세)
 - [데이터베이스](#데이터베이스)
 - [실행 방법](#실행-방법)
@@ -48,10 +49,10 @@ switch-job-quest/
 ├── be/                                 # Backend (Kotlin / Spring Boot)
 │   ├── core/
 │   │   ├── core-enum/                  #   QuestStatus 열거형
-│   │   ├── core-domain/                #   도메인 모델, Port 인터페이스, 평가 타입
-│   │   └── core-api/                   #   REST 컨트롤러, 서비스, DTO (bootJar)
+│   │   ├── core-domain/                #   도메인 모델, Port 인터페이스, 정책 (PassCriteriaPolicy, GradePolicy, QuestXpPolicy)
+│   │   └── core-api/                   #   REST 컨트롤러, 서비스, DTO, JWT 인증 (bootJar)
 │   ├── clients/
-│   │   └── client-ai/                  #   Spring AI 기반 평가기 구현 (Adapter)
+│   │   └── client-ai/                  #   Spring AI 기반 평가기 구현 (Adapter), 프롬프트 템플릿
 │   ├── storage/
 │   │   └── db-core/                    #   JPA 엔티티, 리포지토리, DB 설정
 │   ├── support/
@@ -62,16 +63,19 @@ switch-job-quest/
 │
 └── fe/                                 # Frontend (React / TypeScript)
     └── src/
-        ├── app/                        #   App.tsx (루트 컴포넌트)
+        ├── app/                        #   App.tsx (루트 컴포넌트, 상태 관리)
         ├── features/
+        │   ├── auth/                   #   GitHub OAuth 로그인, JWT 콜백
         │   ├── quest-map/              #   퀘스트 맵, Act 카드, 통계 패널
         │   ├── quest-detail/           #   퀘스트 상세, Act 뷰
-        │   └── ai-check/              #   AI 평가 폼, 결과 카드, 모의면접
+        │   ├── ai-check/               #   AI 평가 폼, 결과 카드, 모의면접
+        │   ├── interview-coach/        #   인터뷰 코치 세션
+        │   ├── growth/                 #   성장 대시보드, 히스토리
+        │   └── character/             #   캐릭터 생성, 온보딩
         ├── components/ui/              #   GradeTag, ProgressBar, ScoreRing
         ├── types/                      #   Quest, API 타입 정의
-        ├── hooks/                      #   useUserId
-        ├── lib/                        #   apiClient (HTTP)
-        └── styles/                     #   global.css (다크 테마)
+        ├── hooks/                      #   useAuth (JWT 관리)
+        └── lib/                        #   apiClient (HTTP + JWT 자동 포함)
 ```
 
 ### 아키텍처
@@ -86,6 +90,7 @@ Controller → Service → Port (interface) ← Adapter (implementation)
 
 - **Port**: `core-domain`에 정의된 인터페이스 (예: `EssayEvaluatorPort`)
 - **Adapter**: `client-ai`의 AI 평가기, `db-core`의 JPA 리포지토리
+- **정책**: `PassCriteriaPolicy`, `GradePolicy`, `QuestXpPolicy` — 도메인 정책 중앙화
 
 ---
 
@@ -142,19 +147,22 @@ Controller → Service → Port (interface) ← Adapter (implementation)
 
 ## AI 평가 시스템
 
-Claude Sonnet 4.5를 사용하여 제출물을 평가합니다.
-**통과 기준: 70점 이상** | 최대 재시도: 3회
+- **일반 퀘스트**: Claude Haiku 4.5 (속도 최적화)
+- **BOSS 퀘스트**: Claude Sonnet 4.5 (품질 최적화, `@Qualifier("bossChatClient")`)
+- **통과 기준**: 70점 이상
+- **재시도**: 최대 3회 (null 응답 또는 파싱 실패 시 자동 재시도, `AiCallExecutor`)
+- **프롬프트**: `client-ai/src/main/resources/prompts/*.st` — Spring AI `PromptTemplate`으로 코드와 분리
 
 ### 평가 항목별 채점 기준
 
 #### 이직 동기 에세이 (Quest 1-2)
 
-| 기준 | 배점 | 설명 |
-|------|------|------|
-| 명확성 (Clarity) | 30점 | 구체적인 불만 사항과 목표 |
-| 논리성 (Logic) | 30점 | 현재 → 이직 → 미래의 자연스러운 흐름 |
-| 동기 진정성 (Motivation) | 20점 | 진정한 성장 욕구 |
-| 성장 방향 (Growth Vision) | 20점 | 현실적이고 구체적인 5년 비전 |
+| 기준 | 배점 |
+|------|------|
+| 명확성 (Clarity) | 30점 |
+| 논리성 (Logic) | 30점 |
+| 동기 진정성 (Motivation) | 20점 |
+| 성장 방향 (Growth Vision) | 20점 |
 
 #### 기술 블로그 (Quest 2-2)
 
@@ -217,9 +225,28 @@ Claude Sonnet 4.5를 사용하여 제출물을 평가합니다.
 
 ---
 
+## 인증
+
+GitHub OAuth 2.0 + Stateless JWT 방식을 사용합니다.
+
+```
+FE → GitHub OAuth → code 획득
+  → POST /api/v1/auth/github { code }
+  → BE: code → GitHub access_token → GitHub user info → JWT 발급
+  → FE: JWT를 localStorage에 저장
+  → 이후 모든 API 요청에 Authorization: Bearer {JWT} 헤더 포함
+```
+
+- JWT는 서버에 저장되지 않습니다 (stateless)
+- 만료 기간: 기본 30일 (`JWT_EXPIRATION_MS`)
+
+---
+
 ## API 명세
 
 **Base URL**: `http://localhost:8080`
+
+> 인증이 필요한 엔드포인트는 `Authorization: Bearer {JWT}` 헤더가 필요합니다.
 
 ### Health Check
 
@@ -228,26 +255,46 @@ GET /health
 → { success: true, result: "SUCCESS", data: "DevQuest API is running" }
 ```
 
-### 퀘스트 진행도
+### 인증
 
-```
-GET /api/v1/progress/{userId}
-→ QuestProgress[]
-```
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| POST | `/api/v1/auth/github` | GitHub OAuth code → JWT 발급 |
 
-### AI 평가
+### 퀘스트 진행도 🔒
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/v1/progress` | 전체 퀘스트 진행도 조회 |
+| POST | `/api/v1/progress/complete` | 퀘스트 수동 완료 처리 |
+| GET | `/api/v1/progress/history` | 전체 평가 이력 조회 |
+| GET | `/api/v1/progress/history/{questId}` | 퀘스트별 이력 조회 |
+
+### AI 평가 🔒
 
 | Method | Endpoint | 퀘스트 |
 |--------|----------|--------|
 | POST | `/api/v1/ai-check/career-essay` | 1-2: 이직 동기 에세이 |
+| POST | `/api/v1/ai-check/company-fit` | 1-BOSS: 개발자 클래스 판별 |
 | POST | `/api/v1/ai-check/tech-blog` | 2-2: 기술 블로그 |
 | POST | `/api/v1/ai-check/system-design` | 2-3: 시스템 설계 |
 | GET | `/api/v1/ai-check/mock-interview/questions` | 2-BOSS: 면접 문제 생성 |
 | POST | `/api/v1/ai-check/mock-interview` | 2-BOSS: 면접 답변 평가 |
 | POST | `/api/v1/ai-check/jd-analysis` | 3-2: JD 역분석 |
 | POST | `/api/v1/ai-check/resume` | 4-1: 이력서 검토 |
-| POST | `/api/v1/ai-check/company-fit` | 1-BOSS: 개발자 클래스 판별 |
+| POST | `/api/v1/ai-check/skill-assessment` | 1-1: 기술 스택 자가 진단 |
 | POST | `/api/v1/ai-check/personality-interview` | 5-1: 인성 면접 |
+| POST | `/api/v1/ai-check/boss-package` | 4-BOSS: 지원 패키지 완성 |
+| POST | `/api/v1/ai-check/act-clear-report` | Act 클리어 보고서 |
+| POST | `/api/v1/ai-check/journey-report` | 5-BOSS: 전체 여정 회고 |
+
+### 인터뷰 코치 🔒
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| POST | `/api/v1/interview-coach/session/start` | 코치 세션 시작 |
+| POST | `/api/v1/interview-coach/session/answer` | 답변 제출 |
+| POST | `/api/v1/interview-coach/session/report` | 세션 리포트 생성 |
 
 ### 공통 응답 형식
 
@@ -264,28 +311,13 @@ GET /api/v1/progress/{userId}
 {
   "result": "ERROR",
   "error": {
-    "code": "INVALID_REQUEST",
-    "message": "잘못된 요청입니다"
+    "code": "AI_EVALUATION_FAILED",
+    "message": "AI 평가에 실패했습니다"
   }
 }
 ```
 
 에러 코드: `INVALID_REQUEST` | `AI_EVALUATION_FAILED` | `QUEST_NOT_FOUND` | `DEFAULT`
-
-### AI 평가 결과 형식
-
-```json
-{
-  "score": 82,
-  "passed": true,
-  "grade": "A",
-  "summary": "전체 평가 요약",
-  "strengths": ["강점 1", "강점 2"],
-  "improvements": ["개선점 1", "개선점 2"],
-  "detailedFeedback": "상세 피드백",
-  "retryAllowed": true
-}
-```
 
 ---
 
@@ -296,16 +328,29 @@ GET /api/v1/progress/{userId}
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | id | BIGINT (PK) | 자동 증가 |
-| user_id | VARCHAR | 사용자 ID |
+| user_id | VARCHAR | 사용자 ID (github-{githubId}) |
 | quest_id | VARCHAR | 퀘스트 ID (예: "1-2") |
 | act_id | INT | Act 번호 (1~5) |
 | status | ENUM | NOT_STARTED, IN_PROGRESS, COMPLETED, AI_FAILED |
 | ai_score | INT | AI 평가 점수 (0~100) |
 | earned_xp | INT | 획득 XP |
-| ai_evaluation_json | TEXT | AI 평가 전체 응답 (JSON) |
 | completed_at | DATETIME | 완료 시각 |
 | created_at | DATETIME | 생성 시각 (자동) |
 | updated_at | DATETIME | 수정 시각 (자동) |
+
+### quest_history 테이블
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGINT (PK) | 자동 증가 |
+| user_id | VARCHAR | 사용자 ID |
+| quest_id | VARCHAR | 퀘스트 ID |
+| act_id | INT | Act 번호 |
+| score | INT | 평가 점수 |
+| grade | VARCHAR | 등급 (S/A/B/C/D) |
+| passed | BOOLEAN | 통과 여부 |
+| earned_xp | INT | 획득 XP |
+| created_at | DATETIME | 평가 시각 |
 
 > 현재 H2 인메모리 DB 사용 (서버 재시작 시 초기화)
 
@@ -318,41 +363,48 @@ GET /api/v1/progress/{userId}
 - **JDK 21** (Gradle toolchain이 자동 감지)
 - **Node.js 18+**
 - **Anthropic API Key**
+- **GitHub OAuth App** (Client ID / Secret)
 
 ### Backend 실행
 
+`be/core/core-api/src/main/resources/application-local.yml` 파일 생성:
+
+```yaml
+devquest:
+  auth:
+    github-client-id: your-github-client-id
+    github-client-secret: your-github-client-secret
+    jwt-secret: your-jwt-secret-at-least-256-bits-long
+
+spring:
+  ai:
+    anthropic:
+      api-key: your-anthropic-api-key
+```
+
 ```bash
 cd be
-
-# API 키 설정
-export ANTHROPIC_API_KEY=your-api-key-here
-
-# 빌드 & 실행
-./gradlew build
-./gradlew :core:core-api:bootRun
+./gradlew :core:core-api:bootRun --args='--spring.profiles.active=local'
 ```
 
 서버가 `http://localhost:8080`에서 시작됩니다.
 
-로컬 개발 시 H2 콘솔, SQL 로깅 등을 활성화하려면 local 프로파일로 실행합니다.
-
-```bash
-./gradlew :core:core-api:bootRun --args='--spring.profiles.active=local'
-```
-
-> **참고**: Spring Boot 4.0에서 H2 콘솔 자동 등록(`H2ConsoleAutoConfiguration`)이 제거되어 현재 H2 콘솔은 비활성 상태입니다.
-
 ### Frontend 실행
+
+`fe/.env.local` 파일 생성:
+
+```env
+VITE_GITHUB_CLIENT_ID=your-github-client-id
+VITE_API_BASE_URL=http://localhost:8080
+```
 
 ```bash
 cd fe
-
 npm install
 npm run dev
 ```
 
 개발 서버가 `http://localhost:5173`에서 시작됩니다.
-Vite 프록시가 `/api` 요청을 백엔드(`localhost:8080`)로 전달합니다.
 
 ### 빌드
 
@@ -368,21 +420,11 @@ cd fe && npm run build    # dist/ 에 빌드 결과물 생성
 
 ## 테스트
 
-토스 테스트 전략(가치 중심, 파레토 법칙)을 적용하였습니다.
-
 ```bash
 cd be
 ./gradlew test                  # 전체 테스트 실행
 ./gradlew test jacocoTestReport # 커버리지 리포트 포함
 ```
-
-### 커버리지 현황
-
-| 모듈 | 라인 커버리지 | 비고 |
-|------|--------------|------|
-| `core-api` | 83.7% | 서비스, 컨트롤러, 예외처리 |
-| `db-core` | 86.7% | 어댑터 |
-| `client-ai` | 9.4% | AI 호출 비용으로 의도적 제외 |
 
 ### 테스트 구성
 
@@ -394,7 +436,7 @@ cd be
 | 유스케이스 | `ProgressControllerTest` | 2 |
 | 예외처리 | `ApiControllerAdviceTest` | 5 |
 | 어댑터 | `QuestProgressAdapterTest` | 5 |
-| AI 평가기 | `CareerEssayEvaluatorTest` | 2 |
+| AI 평가기 | 10개 Evaluator 테스트 | 29 |
 
 ---
 
@@ -406,20 +448,27 @@ cd be
 |-----|--------|------|
 | `server.port` | 8080 | 서버 포트 |
 | `devquest.ai.pass-score` | 70 | AI 평가 통과 점수 |
-| `devquest.ai.max-retry` | 3 | 최대 재시도 횟수 |
+| `devquest.ai.max-retry` | 3 | AI 호출 최대 재시도 횟수 |
 | `devquest.ai.interview-questions` | 10 | 모의 면접 문항 수 |
 | `devquest.cors.allowed-origins` | http://localhost:5173 | CORS 허용 오리진 |
 
-### AI 설정 (`client-ai.yml`)
+### AI 모델 설정
 
-| 키 | 기본값 |
-|-----|--------|
-| `spring.ai.anthropic.chat.options.model` | claude-sonnet-4-5 |
-| `spring.ai.anthropic.chat.options.max-tokens` | 2000 |
-| `spring.ai.anthropic.chat.options.temperature` | 0.3 |
+| 키 | 기본값 | 용도 |
+|-----|--------|------|
+| `spring.ai.anthropic.chat.options.model` | claude-haiku-4-5-20251001 | 일반 퀘스트 |
+| `devquest.ai.boss-model` | claude-sonnet-4-5 | BOSS 퀘스트 |
+| `spring.ai.anthropic.chat.options.max-tokens` | 2000 | 일반 최대 토큰 |
+| `devquest.ai.boss-max-tokens` | 4000 | BOSS 최대 토큰 |
 
 ### 환경변수
 
 | 변수 | 필수 | 설명 |
 |------|------|------|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API 키 |
+| `ANTHROPIC_API_KEY` | ✅ | Anthropic API 키 |
+| `GITHUB_CLIENT_ID` | ✅ | GitHub OAuth App Client ID |
+| `GITHUB_CLIENT_SECRET` | ✅ | GitHub OAuth App Client Secret |
+| `JWT_SECRET` | ✅ | JWT 서명 키 (256비트 이상) |
+| `JWT_EXPIRATION_MS` | - | JWT 만료 시간 (기본: 30일) |
+| `CORS_ALLOWED_ORIGINS` | - | CORS 허용 오리진 (기본: localhost:5173) |
+| `VITE_GITHUB_CLIENT_ID` | ✅ (FE) | FE GitHub OAuth Client ID |
