@@ -1,143 +1,62 @@
-name: Copilot Review Evaluator
+name: Copilot Review Gate
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, dismissed]
 
 jobs:
-  evaluate:
-    # copilot 리뷰에만 반응
-    if: github.event.review.user.login == 'copilot-pull-request-reviewer[bot]'
+  check-copilot-review:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
-      contents: read
+      pull-requests: read
+      statuses: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Collect review data
-        id: collect
+      - name: Check for unresolved Copilot review comments
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber  = context.payload.pull_request.number;
-            const reviewId  = context.payload.review.id;
-            const reviewUrl = context.payload.review.html_url;
-            const reviewBody = context.payload.review.body ?? '';
+            const prNumber = context.payload.pull_request?.number
+              ?? context.payload.review?.pull_request_url?.split('/').pop();
 
-            // PR diff 수집 (최대 8000자)
-            const diffResp = await github.request(
-              'GET /repos/{owner}/{repo}/pulls/{pull_number}',
-              {
-                owner: context.repo.owner,
-                repo:  context.repo.repo,
-                pull_number: prNumber,
-                headers: { accept: 'application/vnd.github.v3.diff' },
-              }
+            // 1. Copilot이 리뷰를 달았는지 확인
+            const reviews = await github.paginate(
+              github.rest.pulls.listReviews,
+              { owner: context.repo.owner, repo: context.repo.repo, pull_number: Number(prNumber) }
             );
-            const diff = String(diffResp.data).slice(0, 8000);
 
-            // 이번 리뷰의 인라인 코멘트만 수집
-            const allComments = await github.paginate(
-              github.rest.pulls.listReviewComments,
-              { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber }
+            const copilotReviews = reviews.filter(
+              r => r.user.login === 'copilot-pull-request-reviewer[bot]'
             );
-            const inlineComments = allComments
-              .filter(c => c.pull_request_review_id === reviewId)
-              .map(c => `[${c.path}:${c.line ?? c.original_line ?? '?'}]\n${c.body}`)
-              .join('\n\n');
 
-            if (!reviewBody && !inlineComments) {
-              core.setOutput('skip', 'true');
+            if (copilotReviews.length === 0) {
+              core.notice('Copilot 리뷰 없음 — 통과');
               return;
             }
 
-            core.setOutput('skip',           'false');
-            core.setOutput('pr_number',      String(prNumber));
-            core.setOutput('review_id',      String(reviewId));
-            core.setOutput('review_url',     reviewUrl);
-            core.setOutput('diff',           diff);
-            core.setOutput('review_body',    reviewBody);
-            core.setOutput('inline_comments', inlineComments);
+            // 2. 미해결 인라인 코멘트 수집
+            const allComments = await github.paginate(
+              github.rest.pulls.listReviewComments,
+              { owner: context.repo.owner, repo: context.repo.repo, pull_number: Number(prNumber) }
+            );
 
-      - name: Call Claude API
-        id: claude
-        if: steps.collect.outputs.skip != 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DIFF: ${{ steps.collect.outputs.diff }}
-          REVIEW_BODY: ${{ steps.collect.outputs.review_body }}
-          INLINE_COMMENTS: ${{ steps.collect.outputs.inline_comments }}
-        run: |
-          PROMPT="당신은 시니어 개발자입니다. GitHub Copilot이 PR에 남긴 코드 리뷰를 검토하고, 각 지적 사항의 타당성을 평가해 주세요.
+            const copilotReviewIds = new Set(copilotReviews.map(r => r.id));
+            const unresolvedComments = allComments.filter(c =>
+              copilotReviewIds.has(c.pull_request_review_id) && !c.in_reply_to_id
+            );
 
-          ## PR Diff (일부)
-          \`\`\`diff
-          ${DIFF}
-          \`\`\`
+            // 3. 판정
+            if (unresolvedComments.length === 0) {
+              core.notice(`Copilot 리뷰 ${copilotReviews.length}건 — 모두 처리됨. 통과`);
+              return;
+            }
 
-          ## Copilot 전체 리뷰 요약
-          ${REVIEW_BODY:-'(없음)'}
+            const summary = unresolvedComments
+              .map(c => `- \`${c.path}:${c.line ?? c.original_line ?? '?'}\` — ${c.body.slice(0, 100)}`)
+              .join('\n');
 
-          ## Copilot 인라인 코멘트
-          ${INLINE_COMMENTS:-'(없음)'}
-
-          ---
-
-          각 코멘트에 대해 다음 형식으로 평가해 주세요:
-          - **ACCEPT** — 타당함, 반영 필요
-          - **PARTIAL** — 일부 타당, 맥락에 따라 판단 필요
-          - **REJECT** — 타당하지 않음, 이유 설명
-
-          평가 시 주의사항:
-          - Copilot 제안을 맹목적으로 수용하지 마세요.
-          - 프로젝트 컨텍스트(포트폴리오, Kotlin + Spring Boot, React 19 + TypeScript)를 고려하세요.
-          - 과도한 추상화, 불필요한 방어 코드, 스펙 외 기능 제안은 REJECT 해도 됩니다.
-          - 보안·런타임 오류·아키텍처 위반은 ACCEPT로 처리하세요.
-
-          응답은 한국어로 작성하고, 마지막에 **종합 의견** (1~2문장)을 추가하세요."
-
-          PAYLOAD=$(jq -n \
-            --arg model  "claude-sonnet-4-6" \
-            --arg prompt "$PROMPT" \
-            '{model: $model, max_tokens: 2048, messages: [{role: "user", content: $prompt}]}')
-
-          RESPONSE=$(curl -s \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "$PAYLOAD" \
-            https://api.anthropic.com/v1/messages)
-
-          EVALUATION=$(echo "$RESPONSE" | jq -r '.content[0].text // "평가 실패: " + (.error.message // "unknown")')
-
-          # 멀티라인 output 처리
-          {
-            echo "evaluation<<EOF_EVAL"
-            echo "$EVALUATION"
-            echo "EOF_EVAL"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Post evaluation comment
-        if: steps.collect.outputs.skip != 'true'
-        uses: actions/github-script@v7
-        env:
-          EVALUATION: ${{ steps.claude.outputs.evaluation }}
-        with:
-          script: |
-            const body = [
-              '## 🤖 Copilot 리뷰 타당성 평가 (by Claude)',
-              '',
-              process.env.EVALUATION,
-              '',
-              '---',
-              `*Copilot 리뷰 ID: ${{ steps.collect.outputs.review_id }} | [원본 리뷰](${{ steps.collect.outputs.review_url }})*`,
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner:        context.repo.owner,
-              repo:         context.repo.repo,
-              issue_number: Number('${{ steps.collect.outputs.pr_number }}'),
-              body,
-            });
+            core.setFailed(
+              `Copilot 리뷰 미처리 코멘트 ${unresolvedComments.length}건\n\n${summary}\n\n각 코멘트에 답글을 달거나 resolve 후 머지하세요.`
+            );
