@@ -8,7 +8,9 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
+import org.springframework.ai.chat.prompt.PromptTemplate
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.core.io.ClassPathResource
 import org.springframework.stereotype.Component
 
 @Component
@@ -21,27 +23,17 @@ class MockInterviewEvaluator(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    private val evaluateTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview.st"))
+    private val questionsTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-questions.st"))
+
     override fun evaluate(category: String, question: String, answer: String, questionId: String): InterviewEvaluationResult {
-        val prompt = """
-            다음 기술 면접 답변을 채점해주세요.
-
-            ## 카테고리: $category
-            ## 질문: $question
-            ## 후보자 답변
-            $answer
-
-            ## 채점 기준
-            - 기술적 정확성: /40점 - 깊이와 응용력: /30점 - 실무 경험 연결: /20점 - 커뮤니케이션: /10점
-
-            반드시 다음 JSON 형식으로만 응답하세요:
-            {
-                "questionId": "$questionId", "question": "$question",
-                "userAnswer": "${answer.take(100)}...", "score": 72, "passed": true,
-                "technicalAccuracy": 30, "depthAndApplication": 22,
-                "practicalExperience": 12, "communicationClarity": 8,
-                "correctAnswer": "...", "keyPointsMissed": ["..."], "improvements": "..."
-            }
-        """.trimIndent()
+        val prompt = evaluateTemplate.render(mapOf(
+            "category" to category,
+            "question" to question,
+            "answer" to answer,
+            "questionId" to questionId,
+            "answerPreview" to answer.take(100),
+        ))
 
         return aiCallExecutor.execute {
             chatClient.prompt().user(prompt).call().entity(InterviewEvaluationResult::class.java)
@@ -49,13 +41,10 @@ class MockInterviewEvaluator(
     }
 
     override fun generateQuestions(categories: List<String>, count: Int): List<Map<String, String>> {
-        val prompt = """
-            다음 카테고리에서 백엔드 5년차 개발자 면접 질문 ${count}개를 선별해주세요.
-            카테고리: ${categories.joinToString(", ")}
-
-            반드시 다음 JSON 배열 형식으로만 응답하세요:
-            [{"id": "q1", "category": "DB", "question": "...", "difficulty": "MEDIUM"}]
-        """.trimIndent()
+        val prompt = questionsTemplate.render(mapOf(
+            "categories" to categories.joinToString(", "),
+            "count" to count,
+        ))
 
         val response = chatClient.prompt()
             .user(prompt)
