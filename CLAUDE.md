@@ -41,17 +41,15 @@
 ```
 .claude/
 ├── agents/
-│   ├── be-feature-builder.md ← Sub-agent (BE 구현)
-│   ├── fe-feature-builder.md ← Sub-agent (FE 구현)
-│   ├── qa-reviewer.md        ← Sub-agent (통합 리뷰)
-│   ├── logic-reviewer.md     ← Sub-agent (BE 로직 단독 리뷰)
-│   ├── convention-reviewer.md← Sub-agent (컨벤션 체크)
-│   ├── test-writer.md        ← Sub-agent (테스트 작성)
-│   ├── be-developer.md       ← 미사용 (Team 패턴 레거시)
-│   └── fe-developer.md       ← 미사용 (Team 패턴 레거시)
+│   ├── be-feature-builder.md ← Sub-agent (BE 구현, be/ 전용)
+│   ├── fe-feature-builder.md ← Sub-agent (FE 구현, fe/ 전용)
+│   ├── qa-reviewer.md        ← Sub-agent (통합 리뷰, 읽기 전용)
+│   ├── logic-reviewer.md     ← Sub-agent (BE 로직 단독 리뷰, 읽기 전용)
+│   ├── convention-reviewer.md← Sub-agent (컨벤션 체크, 읽기 전용)
+│   └── test-writer.md        ← Sub-agent (테스트 작성, test/ 전용)
 └── skills/
     └── feature-dev/
-        └── SKILL.md
+        └── SKILL.md          ← 오케스트레이터 (지시만, 코드 작성 금지)
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 사유 |
