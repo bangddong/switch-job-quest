@@ -5,6 +5,8 @@ on:
     types: [opened, synchronize, reopened]
   pull_request_review:
     types: [submitted, dismissed]
+  pull_request_review_comment:
+    types: [created]
 
 jobs:
   check-copilot-review:
@@ -19,7 +21,8 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.pull_request?.number
-              ?? context.payload.review?.pull_request_url?.split('/').pop();
+              ?? context.payload.review?.pull_request_url?.split('/').pop()
+              ?? context.payload.comment?.pull_request_url?.split('/').pop();
 
             // 1. Copilot이 리뷰를 달았는지 확인
             const reviews = await github.paginate(
@@ -32,7 +35,7 @@ jobs:
             );
 
             if (copilotReviews.length === 0) {
-              core.notice('Copilot 리뷰 없음 — 통과');
+              core.setFailed('Copilot 리뷰 대기 중 — 리뷰가 달리면 자동으로 재평가됩니다.');
               return;
             }
 
