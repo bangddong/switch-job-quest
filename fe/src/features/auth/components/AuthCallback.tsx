@@ -13,7 +13,7 @@ export function AuthCallback() {
     })
       .then((res) => res.json())
       .then((json) => {
-        if (json.success && json.data?.token) {
+        if (json.result === 'SUCCESS' && json.data?.token) {
           setToken(json.data.token)
           window.location.href = '/'
         }
