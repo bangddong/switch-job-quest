@@ -6,7 +6,7 @@ on:
 
 jobs:
   respond-to-copilot:
-    if: github.event.review.user.login == 'copilot-pull-request-reviewer[bot]'
+    if: contains(github.event.review.user.login, 'copilot-pull-request-reviewer')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
