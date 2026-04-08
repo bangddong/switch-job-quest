@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": ".claude/scripts/log-event.sh SubagentStart" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": ".claude/scripts/log-event.sh SubagentStop" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": ".claude/scripts/log-event.sh PreToolUse main" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node .claude/monitor/generate-report.js" }
+        ]
+      }
+    ]
+  }
+}

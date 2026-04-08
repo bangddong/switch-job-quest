@@ -39,7 +39,6 @@ desktop.ini
 
 # === Claude Code (개인 설정만 제외, 에이전트/스킬은 추적) ===
 .claude/settings.local.json
-.claude/settings.json
 .claude/launch.json
 .claude/worktrees/
 
@@ -54,4 +53,5 @@ fe/tsconfig.tsbuildinfo
 *.zip
 *.tar.gz
 out/
-.claude/logs/
+.claude/logs/activity.jsonl
+# daily 리포트는 선택적으로 커밋 가능 (.claude/logs/daily/*.md)
