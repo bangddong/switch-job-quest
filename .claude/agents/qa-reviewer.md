@@ -4,7 +4,6 @@ tools:
   - Read
   - Glob
   - Grep
-  - Bash
 description: 코드 리뷰 + QA 통합 전담 sub-agent. 오케스트레이터로부터 리뷰 대상을 전달받아 코드를 읽기만 하며 아키텍처, 보안, BE↔FE 계약 정합성, 잠재 버그를 검토한다. 코드를 직접 수정하지 않고 보고서를 반환한다.
 ---
 
