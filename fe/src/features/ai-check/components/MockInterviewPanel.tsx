@@ -4,7 +4,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { FALLBACK_QUESTIONS } from '../constants/fallbackQuestions'
 import { submitMockInterview } from '../api/aiCheckApi'
 import { InterviewResultCard } from './InterviewResultCard'
-import { PASS_THRESHOLD as PASS_SCORE } from '@/constants/scoring'
+import { PASS_THRESHOLD } from '@/utils/gradeUtils'
 
 interface MockInterviewPanelProps {
   onComplete: (score: number) => void
@@ -63,7 +63,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
   }
 
   if (done) {
-    const passed = totalScore >= PASS_SCORE
+    const passed = totalScore >= PASS_THRESHOLD
     return (
       <div style={{ textAlign: 'center', padding: '28px 0' }}>
         <div style={{ fontSize: 44, marginBottom: 12 }}>{passed ? '🏆' : '📚'}</div>
@@ -99,7 +99,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
                 style={{
                   fontSize: 13,
                   fontWeight: 'bold',
-                  color: r.score >= PASS_SCORE ? '#10B981' : '#EF4444',
+                  color: r.score >= PASS_THRESHOLD ? '#10B981' : '#EF4444',
                 }}
               >
                 {r.score}점

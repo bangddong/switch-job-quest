@@ -1,10 +1,4 @@
-const GRADE_COLORS: Record<string, string> = {
-  S: '#F59E0B',
-  A: '#10B981',
-  B: '#4ECDC4',
-  C: '#A78BFA',
-  D: '#EF4444',
-}
+import { GRADE_COLORS } from '../../utils/gradeUtils'
 
 interface GradeTagProps {
   grade: string
