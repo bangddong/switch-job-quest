@@ -3,6 +3,7 @@ import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
 import { AI_FORMS } from '../constants/formConfig'
 import { submitAiCheck, submitBossPackage } from '../api/aiCheckApi'
 import { TechStackInput } from './TechStackInput'
+import { inputStyle } from '../../../constants/styles'
 
 interface AiCheckFormProps {
   questId: string
@@ -46,20 +47,6 @@ export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCh
     } finally {
       setLoading(false)
     }
-  }
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    background: '#0A0E1A',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: 8,
-    padding: '9px 13px',
-    color: '#F1F5F9',
-    fontSize: 13,
-    outline: 'none',
-    boxSizing: 'border-box',
-    fontFamily: "'Courier New', monospace",
-    lineHeight: 1.6,
   }
 
   return (

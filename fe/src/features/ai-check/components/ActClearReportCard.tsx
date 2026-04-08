@@ -1,8 +1,5 @@
 import type { ActClearReportResult } from '@/types/api.types'
-
-const GRADE_COLOR: Record<string, string> = {
-  S: '#F59E0B', A: '#10B981', B: '#60A5FA', C: '#A78BFA', D: '#EF4444',
-}
+import { GRADE_COLORS } from '../../../utils/gradeUtils'
 
 interface ActClearReportCardProps {
   report: ActClearReportResult
@@ -11,7 +8,7 @@ interface ActClearReportCardProps {
 }
 
 export function ActClearReportCard({ report, actColor, onContinue }: ActClearReportCardProps) {
-  const gradeColor = GRADE_COLOR[report.grade] ?? '#475569'
+  const gradeColor = GRADE_COLORS[report.grade] ?? '#475569'
 
   return (
     <div
