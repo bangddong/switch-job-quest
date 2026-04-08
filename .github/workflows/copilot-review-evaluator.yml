@@ -3,9 +3,14 @@ name: Copilot Review Gate
 on:
   pull_request_review:
     types: [submitted, dismissed]
+  pull_request_review_comment:
+    types: [created]
 
 jobs:
   check-copilot-review:
+    if: |
+      (github.event_name == 'pull_request_review' && contains(github.event.review.user.login, 'copilot-pull-request-reviewer')) ||
+      github.event_name == 'pull_request_review_comment'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -17,7 +22,8 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.pull_request?.number
-              ?? context.payload.review?.pull_request_url?.split('/').pop();
+              ?? context.payload.review?.pull_request_url?.split('/').pop()
+              ?? context.payload.comment?.pull_request_url?.split('/').pop();
 
             // 1. Copilot이 리뷰를 달았는지 확인
             const reviews = await github.paginate(
