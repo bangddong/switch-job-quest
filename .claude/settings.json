@@ -16,6 +16,14 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": ".claude/scripts/assert-not-main.sh" },
+          { "type": "command", "command": ".claude/scripts/log-event.sh PreToolUse main" }
+        ]
+      },
+      {
+        "matcher": ".*",
         "hooks": [
           { "type": "command", "command": ".claude/scripts/log-event.sh PreToolUse main" }
         ]

@@ -33,9 +33,24 @@
 
 **실행 규칙:**
 - 새 기능/퀘스트 구현 요청 시 `feature-dev` 스킬을 통해 sub-agent 순차 처리
-- 단순 질문, 설정 변경, 단일 파일 수정은 직접 처리
+- 단순 질문, 읽기 전용 탐색은 직접 처리 가능
+- **파일 수정이 수반되는 모든 작업은 반드시 feature 브랜치에서 진행** (main 직접 수정 금지)
 - qa-reviewer는 구현 의도를 전달받지 않음 — 코드만 보고 독립적으로 판단
 - 모든 에이전트는 `model: "sonnet"` 사용
+
+**브랜치 규칙 (오케스트레이터 포함 모든 작업):**
+```
+# 작업 시작 전 반드시
+git fetch origin main
+git checkout -b <type>/<name> origin/main
+```
+- `feat/` : 새 기능
+- `fix/`  : 버그 수정
+- `chore/`: 설정·인프라·툴링 (`.claude/`, `.github/`, 빌드 등)
+- `docs/` : 문서만 변경
+- `refactor/`: 리팩토링
+
+main 브랜치에서 Write/Edit 시도 시 → PreToolUse hook이 차단하고 브랜치 생성을 요구함
 
 **디렉토리 구조:**
 ```
@@ -49,6 +64,7 @@
 │   ├── convention-reviewer.md← Sub-agent (컨벤션 체크, permissionMode: plan)
 │   └── test-writer.md        ← Sub-agent (테스트 작성, test/ 전용)
 ├── scripts/
+│   ├── assert-not-main.sh    ← 메인 Claude: main 브랜치 Write/Edit 차단
 │   ├── assert-be-path.sh     ← be-feature-builder: fe/ 쓰기 차단 스크립트
 │   └── assert-fe-path.sh     ← fe-feature-builder: be/ 쓰기 차단 스크립트
 └── skills/
