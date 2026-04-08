@@ -1,0 +1,118 @@
+name: Claude Review Responder
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  respond-to-copilot:
+    if: github.event.review.user.login == 'copilot-pull-request-reviewer[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Claude가 Copilot 리뷰 코멘트에 자동 답글
+        uses: actions/github-script@v7
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          script: |
+            const reviewId = context.payload.review.id;
+            const prNumber = Number(context.payload.review.pull_request_url.split('/').pop());
+
+            // PR 제목 가져오기
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            // 전체 인라인 코멘트 수집
+            const allComments = await github.paginate(
+              github.rest.pulls.listReviewComments,
+              { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber }
+            );
+
+            // 이 리뷰의 최상위 Copilot 코멘트만 (답글 제외)
+            const copilotComments = allComments.filter(c =>
+              c.pull_request_review_id === reviewId && !c.in_reply_to_id
+            );
+
+            // 이미 답글 달린 코멘트 제외
+            const repliedIds = new Set(
+              allComments.filter(c => c.in_reply_to_id).map(c => c.in_reply_to_id)
+            );
+            const unreplied = copilotComments.filter(c => !repliedIds.has(c.id));
+
+            if (unreplied.length === 0) {
+              core.notice('모든 Copilot 코멘트에 이미 답글이 달려 있습니다.');
+              return;
+            }
+
+            core.notice(`${unreplied.length}개 코멘트에 Claude 답글 작성 시작`);
+
+            for (const comment of unreplied) {
+              const prompt = `당신은 Spring Boot(Kotlin) + React(TypeScript) 풀스택 프로젝트의 코드 리뷰 보조자입니다.
+
+GitHub Copilot이 PR에 인라인 리뷰 코멘트를 달았습니다.
+이 코멘트의 타당성을 판단하고 수용 또는 거부를 결정해 주세요.
+
+**PR 제목:** ${pr.title}
+**파일:** ${comment.path}
+**코드 컨텍스트 (diff):**
+\`\`\`diff
+${comment.diff_hunk}
+\`\`\`
+
+**Copilot 코멘트:**
+${comment.body}
+
+---
+다음 형식으로 한국어로 답변해 주세요. 격식 없이 자연스럽게 말하듯 작성해 주세요.
+
+수용인 경우:
+"이건 (이유)로 타당해. 그러니 수정하는 걸 권장해."
+
+거부인 경우:
+"이건 (이유)로 타당하지 않아. 수정하지 않아도 돼."
+
+이유는 1~2문장으로 간결하게. 앞뒤 장식 없이 위 문장 형식만 출력해.`;
+
+              try {
+                const res = await fetch('https://api.anthropic.com/v1/messages', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01',
+                  },
+                  body: JSON.stringify({
+                    model: 'claude-haiku-4-5-20251001',
+                    max_tokens: 300,
+                    messages: [{ role: 'user', content: prompt }],
+                  }),
+                });
+
+                if (!res.ok) {
+                  const err = await res.text();
+                  core.warning(`Claude API 오류 (comment ${comment.id}): ${err}`);
+                  continue;
+                }
+
+                const data = await res.json();
+                const reply = data.content[0].text.trim();
+
+                await github.rest.pulls.createReplyForReviewComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  comment_id: comment.id,
+                  body: `🤖 **Claude 자동 평가**\n\n${reply}`,
+                });
+
+                core.notice(`답글 완료: comment ${comment.id}`);
+              } catch (e) {
+                core.warning(`코멘트 ${comment.id} 처리 실패: ${e.message}`);
+              }
+            }
