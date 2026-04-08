@@ -8,6 +8,12 @@ tools:
   - Glob
   - Grep
 description: Kotlin 단위 테스트 작성 전담 에이전트. Mockito + JUnit5 기반으로 Service 및 Evaluator 테스트를 기존 패턴과 일관되게 작성한다.
+hooks:
+  PostToolUse:
+    - matcher: ".*"
+      hooks:
+        - type: command
+          command: ".claude/scripts/log-event.sh PostToolUse test-writer"
 ---
 
 # Test Writer

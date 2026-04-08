@@ -54,3 +54,4 @@ fe/tsconfig.tsbuildinfo
 *.zip
 *.tar.gz
 out/
+.claude/logs/

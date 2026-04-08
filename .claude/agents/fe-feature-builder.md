@@ -14,6 +14,11 @@ hooks:
       hooks:
         - type: command
           command: ".claude/scripts/assert-fe-path.sh"
+  PostToolUse:
+    - matcher: ".*"
+      hooks:
+        - type: command
+          command: ".claude/scripts/log-event.sh PostToolUse fe-feature-builder"
 ---
 
 # FE Feature Builder

@@ -5,6 +5,12 @@ tools:
   - Glob
 permissionMode: plan
 description: 커밋 컨벤션 및 코드 스타일 빠른 체크 에이전트. 코드를 읽기만 하며 컨벤션 위반 여부를 빠르게 보고한다.
+hooks:
+  PostToolUse:
+    - matcher: ".*"
+      hooks:
+        - type: command
+          command: ".claude/scripts/log-event.sh PostToolUse convention-reviewer"
 ---
 
 # Convention Reviewer

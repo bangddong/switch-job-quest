@@ -14,6 +14,11 @@ hooks:
       hooks:
         - type: command
           command: ".claude/scripts/assert-be-path.sh"
+  PostToolUse:
+    - matcher: ".*"
+      hooks:
+        - type: command
+          command: ".claude/scripts/log-event.sh PostToolUse be-feature-builder"
 ---
 
 # BE Feature Builder
