@@ -4,6 +4,7 @@ tools:
   - Read
   - Glob
   - Grep
+permissionMode: plan
 description: 아키텍처 및 비즈니스 로직 리뷰 전담 에이전트. 코드를 읽기만 하며 Port & Adapter 패턴 준수, 의존 방향, XP/점수 계산 로직의 정확성을 검토한다.
 ---
 

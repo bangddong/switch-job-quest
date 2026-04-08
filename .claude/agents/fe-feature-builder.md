@@ -8,6 +8,12 @@ tools:
   - Glob
   - Grep
 description: React 19 + TypeScript 기능 구현 전담 에이전트. App.tsx props drilling 패턴을 준수하며 타입 정의 → API 클라이언트 → 컴포넌트 전체 플로우를 구현한다.
+hooks:
+  PreToolUse:
+    - matcher: "Write|Edit"
+      hooks:
+        - type: command
+          command: ".claude/scripts/assert-fe-path.sh"
 ---
 
 # FE Feature Builder

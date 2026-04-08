@@ -41,15 +41,23 @@
 ```
 .claude/
 ├── agents/
-│   ├── be-feature-builder.md ← Sub-agent (BE 구현, be/ 전용)
-│   ├── fe-feature-builder.md ← Sub-agent (FE 구현, fe/ 전용)
-│   ├── qa-reviewer.md        ← Sub-agent (통합 리뷰, 읽기 전용)
-│   ├── logic-reviewer.md     ← Sub-agent (BE 로직 단독 리뷰, 읽기 전용)
-│   ├── convention-reviewer.md← Sub-agent (컨벤션 체크, 읽기 전용)
+│   ├── orchestrator.md       ← Agent 모드 오케스트레이터 (claude --agent orchestrator)
+│   ├── be-feature-builder.md ← Sub-agent (BE 구현, be/ 전용, fe/ 쓰기 차단)
+│   ├── fe-feature-builder.md ← Sub-agent (FE 구현, fe/ 전용, be/ 쓰기 차단)
+│   ├── qa-reviewer.md        ← Sub-agent (통합 리뷰, permissionMode: plan)
+│   ├── logic-reviewer.md     ← Sub-agent (BE 로직 리뷰, permissionMode: plan)
+│   ├── convention-reviewer.md← Sub-agent (컨벤션 체크, permissionMode: plan)
 │   └── test-writer.md        ← Sub-agent (테스트 작성, test/ 전용)
+├── scripts/
+│   ├── assert-be-path.sh     ← be-feature-builder: fe/ 쓰기 차단 스크립트
+│   └── assert-fe-path.sh     ← fe-feature-builder: be/ 쓰기 차단 스크립트
 └── skills/
     └── feature-dev/
-        └── SKILL.md          ← 오케스트레이터 (지시만, 코드 작성 금지)
+        └── SKILL.md          ← 스킬 기반 오케스트레이터 (일반 세션용)
+
+**Agent() 스폰 제한 (강한 격리가 필요할 때):**
+`claude --agent orchestrator` 로 세션 시작 시 허용된 6개 sub-agent만 스폰 가능.
+일반 세션에서 feature-dev 스킬 사용 시에는 적용되지 않음.
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 사유 |

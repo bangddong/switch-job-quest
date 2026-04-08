@@ -8,6 +8,12 @@ tools:
   - Glob
   - Grep
 description: Kotlin/Spring Boot 기능 구현 전담 에이전트. Port & Adapter 패턴을 준수하며 Domain Model → Port → AI/DB Adapter → Service → Controller 전체 플로우를 구현한다.
+hooks:
+  PreToolUse:
+    - matcher: "Write|Edit"
+      hooks:
+        - type: command
+          command: ".claude/scripts/assert-be-path.sh"
 ---
 
 # BE Feature Builder
