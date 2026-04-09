@@ -1,15 +1,7 @@
 import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
 import { ScoreRing } from '@/components/ui/ScoreRing'
 import { GradeTag } from '@/components/ui/GradeTag'
-import { PASS_THRESHOLD } from '@/constants/scoring'
-
-function getGrade(score: number): string {
-  if (score >= 90) return 'S'
-  if (score >= 80) return 'A'
-  if (score >= 70) return 'B'
-  if (score >= 60) return 'C'
-  return 'D'
-}
+import { getGrade, PASS_THRESHOLD } from '../../../utils/gradeUtils'
 
 interface AiResultCardProps {
   result: AiEvaluationResult
@@ -172,7 +164,7 @@ const SCORE_ITEMS: Array<{ key: keyof BossPackageResult; label: string; color: s
 ]
 
 export function BossPackageResultCard({ result }: BossPackageResultCardProps) {
-  const passed = result.passed ?? result.overallScore >= 70
+  const passed = result.passed ?? result.overallScore >= PASS_THRESHOLD
   const grade = getGrade(result.overallScore)
 
   return (

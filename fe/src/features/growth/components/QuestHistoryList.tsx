@@ -1,15 +1,8 @@
 import type { QuestHistoryItem } from '@/types/api.types'
+import { GRADE_COLORS } from '../../../utils/gradeUtils'
 
 interface QuestHistoryListProps {
   history: QuestHistoryItem[]
-}
-
-const gradeColor: Record<string, string> = {
-  S: '#F59E0B',
-  A: '#10B981',
-  B: '#4ECDC4',
-  C: '#60A5FA',
-  D: '#EF4444',
 }
 
 function formatDate(iso: string): string {
@@ -61,7 +54,7 @@ export function QuestHistoryList({ history }: QuestHistoryListProps) {
           </span>
           <span
             style={{
-              color: gradeColor[item.grade] ?? '#475569',
+              color: GRADE_COLORS[item.grade] ?? '#475569',
               fontWeight: 'bold',
               fontSize: 14,
               minWidth: 16,
