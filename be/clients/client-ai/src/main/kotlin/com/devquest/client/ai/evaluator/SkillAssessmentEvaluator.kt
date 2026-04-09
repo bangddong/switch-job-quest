@@ -1,6 +1,7 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.BaseAiEvaluator
 import com.devquest.core.domain.model.evaluation.SkillAssessmentResult
 import com.devquest.core.domain.port.SkillAssessmentPort
 import org.springframework.ai.chat.client.ChatClient
@@ -10,9 +11,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class SkillAssessmentEvaluator(
-    private val chatClient: ChatClient,
-    private val aiCallExecutor: AiCallExecutor
-) : SkillAssessmentPort {
+    chatClient: ChatClient,
+    aiCallExecutor: AiCallExecutor
+) : BaseAiEvaluator(chatClient, aiCallExecutor), SkillAssessmentPort {
 
     private val template = PromptTemplate(ClassPathResource("prompts/skill-assessment.st"))
 

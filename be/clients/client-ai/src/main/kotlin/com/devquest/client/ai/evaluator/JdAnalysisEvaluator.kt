@@ -1,6 +1,7 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.BaseAiEvaluator
 import com.devquest.core.domain.model.evaluation.JdAnalysisResult
 import com.devquest.core.domain.port.JdAnalysisEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -10,9 +11,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class JdAnalysisEvaluator(
-    private val chatClient: ChatClient,
-    private val aiCallExecutor: AiCallExecutor
-) : JdAnalysisEvaluatorPort {
+    chatClient: ChatClient,
+    aiCallExecutor: AiCallExecutor
+) : BaseAiEvaluator(chatClient, aiCallExecutor), JdAnalysisEvaluatorPort {
 
     private val template = PromptTemplate(ClassPathResource("prompts/jd-analysis.st"))
 

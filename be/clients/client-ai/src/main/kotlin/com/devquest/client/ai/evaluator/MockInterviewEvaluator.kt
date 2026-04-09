@@ -1,6 +1,7 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.BaseAiEvaluator
 import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.InterviewEvaluationResult
 import com.devquest.core.domain.port.InterviewEvaluatorPort
@@ -15,9 +16,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class MockInterviewEvaluator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient,
-    private val aiCallExecutor: AiCallExecutor
-) : InterviewEvaluatorPort {
+    @Qualifier("bossChatClient") chatClient: ChatClient,
+    aiCallExecutor: AiCallExecutor
+) : BaseAiEvaluator(chatClient, aiCallExecutor), InterviewEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()
 
