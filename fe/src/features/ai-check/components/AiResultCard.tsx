@@ -1,7 +1,7 @@
 import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
-import { ScoreRing } from '@/components/ui/ScoreRing'
-import { GradeTag } from '@/components/ui/GradeTag'
 import { getGrade, PASS_THRESHOLD } from '../../../utils/gradeUtils'
+import { ResultHeader } from './ResultHeader'
+import { ResultSection } from './ResultSection'
 
 interface AiResultCardProps {
   result: AiEvaluationResult
@@ -23,63 +23,32 @@ export function AiResultCard({ result }: AiResultCardProps) {
         animation: 'slideIn 0.5s ease',
       }}
     >
-      <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', marginBottom: 18 }}>
-        <ScoreRing score={score} />
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <GradeTag grade={grade} />
-            <span
-              style={{ fontSize: 13, color: passed ? '#10B981' : '#EF4444', fontWeight: 'bold' }}
-            >
-              {passed ? '✓ 통과 — 퀘스트 완료!' : '✗ 미통과 — 재시도 가능'}
-            </span>
-          </div>
-          {result.summary && (
-            <p style={{ color: '#94A3B8', fontSize: 13, margin: 0, lineHeight: 1.6 }}>
-              {result.summary}
-            </p>
-          )}
-          {result.developerType && (
-            <div style={{ marginTop: 6, fontSize: 12, color: '#A78BFA' }}>
-              🧠 {result.developerType}
-            </div>
-          )}
-        </div>
-      </div>
+      <ResultHeader
+        score={score}
+        passed={passed}
+        grade={grade}
+        summary={result.summary}
+        developerType={result.developerType}
+      />
 
       {result.strengths && result.strengths.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#10B981', letterSpacing: 3, marginBottom: 8 }}>
-            ✓ STRENGTHS
-          </div>
-          {result.strengths.map((s, i) => (
-            <div key={i} style={{ fontSize: 13, color: '#64748B', marginBottom: 4 }}>
-              <span style={{ color: '#10B981' }}>▸ </span>
-              {s}
-            </div>
-          ))}
-        </div>
+        <ResultSection label="✓ STRENGTHS" color="#10B981" items={result.strengths} />
       )}
 
-      {result.improvements && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#F59E0B', letterSpacing: 3, marginBottom: 8 }}>
-            ↑ IMPROVEMENTS
-          </div>
-          {(Array.isArray(result.improvements) ? result.improvements : [result.improvements]).map(
-            (imp, i) => (
-              <div key={i} style={{ fontSize: 13, color: '#64748B', marginBottom: 4 }}>
-                <span style={{ color: '#F59E0B' }}>▸ </span>
-                {typeof imp === 'string'
-                  ? imp
-                  : (imp as { suggestion?: string; issue?: string }).suggestion ??
-                    (imp as { suggestion?: string; issue?: string }).issue ??
-                    JSON.stringify(imp)}
-              </div>
-            ),
-          )}
-        </div>
-      )}
+      {result.improvements && (() => {
+        const improvementItems = (
+          Array.isArray(result.improvements) ? result.improvements : [result.improvements]
+        ).map((imp) =>
+          typeof imp === 'string'
+            ? imp
+            : (imp as { suggestion?: string; issue?: string }).suggestion ??
+              (imp as { suggestion?: string; issue?: string }).issue ??
+              JSON.stringify(imp),
+        )
+        return improvementItems.length > 0 ? (
+          <ResultSection label="↑ IMPROVEMENTS" color="#F59E0B" items={improvementItems} />
+        ) : null
+      })()}
 
       {(result.detailedFeedback ?? result.feedback) && (
         <div
@@ -178,19 +147,13 @@ export function BossPackageResultCard({ result }: BossPackageResultCardProps) {
         animation: 'slideIn 0.5s ease',
       }}
     >
-      <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', marginBottom: 18 }}>
-        <ScoreRing score={result.overallScore} />
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <GradeTag grade={grade} />
-            <span
-              style={{ fontSize: 13, color: passed ? '#10B981' : '#EF4444', fontWeight: 'bold' }}
-            >
-              {passed ? '✓ 통과 — 지원 패키지 완성!' : '✗ 미통과 — 패키지 보완 필요'}
-            </span>
-          </div>
-        </div>
-      </div>
+      <ResultHeader
+        score={result.overallScore}
+        passed={passed}
+        grade={grade}
+        passLabel="✓ 통과 — 지원 패키지 완성!"
+        failLabel="✗ 미통과 — 패키지 보완 필요"
+      />
 
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 3, marginBottom: 10 }}>
@@ -229,33 +192,9 @@ export function BossPackageResultCard({ result }: BossPackageResultCardProps) {
         </div>
       </div>
 
-      {result.strengths.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#10B981', letterSpacing: 3, marginBottom: 8 }}>
-            ✓ STRENGTHS
-          </div>
-          {result.strengths.map((s, i) => (
-            <div key={i} style={{ fontSize: 13, color: '#64748B', marginBottom: 4 }}>
-              <span style={{ color: '#10B981' }}>▸ </span>
-              {s}
-            </div>
-          ))}
-        </div>
-      )}
+      <ResultSection label="✓ STRENGTHS" color="#10B981" items={result.strengths} />
 
-      {result.improvements.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#F59E0B', letterSpacing: 3, marginBottom: 8 }}>
-            ↑ IMPROVEMENTS
-          </div>
-          {result.improvements.map((imp, i) => (
-            <div key={i} style={{ fontSize: 13, color: '#64748B', marginBottom: 4 }}>
-              <span style={{ color: '#F59E0B' }}>▸ </span>
-              {imp}
-            </div>
-          ))}
-        </div>
-      )}
+      <ResultSection label="↑ IMPROVEMENTS" color="#F59E0B" items={result.improvements} />
 
       <div
         style={{
