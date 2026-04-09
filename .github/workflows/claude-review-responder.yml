@@ -1,15 +1,16 @@
 name: Claude Review Responder
 
 on:
-  pull_request_review:
-    types: [submitted]
+  schedule:
+    - cron: '*/15 * * * *'  # 15분마다 실행 — github-actions[bot] (신뢰된 액터)
+  workflow_dispatch:          # 수동 실행용
 
 jobs:
   respond-to-copilot:
-    if: contains(github.event.review.user.login, 'copilot-pull-request-reviewer')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      actions: write
 
     steps:
       - name: Claude가 Copilot 리뷰 코멘트에 자동 답글
@@ -18,42 +19,57 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           script: |
-            const reviewId = context.payload.review.id;
-            const prNumber = Number(context.payload.review.pull_request_url.split('/').pop());
-
-            // PR 제목 가져오기
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
-
-            // 전체 인라인 코멘트 수집
-            const allComments = await github.paginate(
-              github.rest.pulls.listReviewComments,
-              { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber }
+            // 오픈 PR 전체 조회
+            const openPRs = await github.paginate(
+              github.rest.pulls.list,
+              { owner: context.repo.owner, repo: context.repo.repo, state: 'open' }
             );
 
-            // 이 리뷰의 최상위 Copilot 코멘트만 (답글 제외)
-            const copilotComments = allComments.filter(c =>
-              c.pull_request_review_id === reviewId && !c.in_reply_to_id
-            );
+            core.notice(`오픈 PR ${openPRs.length}건 조회`);
 
-            // 이미 답글 달린 코멘트 제외
-            const repliedIds = new Set(
-              allComments.filter(c => c.in_reply_to_id).map(c => c.in_reply_to_id)
-            );
-            const unreplied = copilotComments.filter(c => !repliedIds.has(c.id));
+            for (const pr of openPRs) {
+              const prNumber = pr.number;
 
-            if (unreplied.length === 0) {
-              core.notice('모든 Copilot 코멘트에 이미 답글이 달려 있습니다.');
-              return;
-            }
+              // Copilot 리뷰 존재 여부 확인
+              const reviews = await github.paginate(
+                github.rest.pulls.listReviews,
+                { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber }
+              );
 
-            core.notice(`${unreplied.length}개 코멘트에 Claude 답글 작성 시작`);
+              const copilotReviews = reviews.filter(
+                r => r.user.login === 'copilot-pull-request-reviewer[bot]'
+              );
 
-            for (const comment of unreplied) {
-              const prompt = `당신은 Spring Boot(Kotlin) + React(TypeScript) 풀스택 프로젝트의 코드 리뷰 보조자입니다.
+              if (copilotReviews.length === 0) continue;
+
+              // 전체 인라인 코멘트 수집
+              const allComments = await github.paginate(
+                github.rest.pulls.listReviewComments,
+                { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber }
+              );
+
+              const copilotReviewIds = new Set(copilotReviews.map(r => r.id));
+
+              // Copilot 최상위 코멘트 (답글 아닌 것)
+              const copilotTopComments = allComments.filter(c =>
+                copilotReviewIds.has(c.pull_request_review_id) && !c.in_reply_to_id
+              );
+
+              // 이미 답글 달린 코멘트 제외
+              const repliedIds = new Set(
+                allComments.filter(c => c.in_reply_to_id).map(c => c.in_reply_to_id)
+              );
+
+              const unreplied = copilotTopComments.filter(c => !repliedIds.has(c.id));
+
+              if (unreplied.length === 0) continue;
+
+              core.notice(`PR #${prNumber}: 미답변 Copilot 코멘트 ${unreplied.length}건 처리 시작`);
+
+              let repliedCount = 0;
+
+              for (const comment of unreplied) {
+                const prompt = `당신은 Spring Boot(Kotlin) + React(TypeScript) 풀스택 프로젝트의 코드 리뷰 보조자입니다.
 
 GitHub Copilot이 PR에 인라인 리뷰 코멘트를 달았습니다.
 이 코멘트의 타당성을 판단하고 수용 또는 거부를 결정해 주세요.
@@ -79,40 +95,58 @@ ${comment.body}
 
 이유는 1~2문장으로 간결하게. 앞뒤 장식 없이 위 문장 형식만 출력해.`;
 
-              try {
-                const res = await fetch('https://api.anthropic.com/v1/messages', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': process.env.ANTHROPIC_API_KEY,
-                    'anthropic-version': '2023-06-01',
-                  },
-                  body: JSON.stringify({
-                    model: 'claude-haiku-4-5-20251001',
-                    max_tokens: 300,
-                    messages: [{ role: 'user', content: prompt }],
-                  }),
-                });
+                try {
+                  const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-api-key': process.env.ANTHROPIC_API_KEY,
+                      'anthropic-version': '2023-06-01',
+                    },
+                    body: JSON.stringify({
+                      model: 'claude-haiku-4-5-20251001',
+                      max_tokens: 300,
+                      messages: [{ role: 'user', content: prompt }],
+                    }),
+                  });
 
-                if (!res.ok) {
-                  const err = await res.text();
-                  core.warning(`Claude API 오류 (comment ${comment.id}): ${err}`);
-                  continue;
+                  if (!res.ok) {
+                    const err = await res.text();
+                    core.warning(`Claude API 오류 (comment ${comment.id}): ${err}`);
+                    continue;
+                  }
+
+                  const data = await res.json();
+                  const reply = data.content[0].text.trim();
+
+                  await github.rest.pulls.createReplyForReviewComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: prNumber,
+                    comment_id: comment.id,
+                    body: `🤖 **Claude 자동 평가**\n\n${reply}`,
+                  });
+
+                  core.notice(`답글 완료: comment ${comment.id}`);
+                  repliedCount++;
+                } catch (e) {
+                  core.warning(`코멘트 ${comment.id} 처리 실패: ${e.message}`);
                 }
+              }
 
-                const data = await res.json();
-                const reply = data.content[0].text.trim();
-
-                await github.rest.pulls.createReplyForReviewComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: prNumber,
-                  comment_id: comment.id,
-                  body: `🤖 **Claude 자동 평가**\n\n${reply}`,
-                });
-
-                core.notice(`답글 완료: comment ${comment.id}`);
-              } catch (e) {
-                core.warning(`코멘트 ${comment.id} 처리 실패: ${e.message}`);
+              // 답글을 달았으면 Gate 재실행 (workflow_dispatch — 신뢰된 액터)
+              if (repliedCount > 0) {
+                try {
+                  await github.rest.actions.createWorkflowDispatch({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    workflow_id: 'copilot-review-evaluator.yml',
+                    ref: pr.head.ref,
+                    inputs: { pr_number: String(prNumber) },
+                  });
+                  core.notice(`PR #${prNumber}: Gate 재실행 dispatch 완료`);
+                } catch (e) {
+                  core.warning(`PR #${prNumber}: Gate dispatch 실패: ${e.message}`);
+                }
               }
             }
