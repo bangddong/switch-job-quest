@@ -1,0 +1,131 @@
+name: Copilot Batch Fix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'  # 매주 월요일 오전 9시 UTC
+
+jobs:
+  batch-fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Collect open copilot-suggestion issues
+        id: collect
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: 'copilot-suggestion',
+                state: 'open',
+              }
+            );
+
+            if (issues.length === 0) {
+              core.notice('처리할 copilot-suggestion 이슈가 없습니다.');
+              core.setOutput('has_issues', 'false');
+              return;
+            }
+
+            core.setOutput('has_issues', 'true');
+            core.setOutput('issue_count', issues.length.toString());
+            core.setOutput('issue_numbers', issues.map(i => i.number).join(','));
+
+            const fs = require('fs');
+            fs.writeFileSync('/tmp/issues.json', JSON.stringify(issues, null, 2));
+            core.notice(`${issues.length}개 이슈 수집`);
+
+      - name: Setup git and create branch
+        if: steps.collect.outputs.has_issues == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="fix/copilot-batch-$(date +%Y%m%d)"
+          git checkout -b $BRANCH
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Install Claude CLI
+        if: steps.collect.outputs.has_issues == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate prompt and run Claude
+        if: steps.collect.outputs.has_issues == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          node << 'SCRIPT'
+          const issues = require('/tmp/issues.json');
+          const items = issues.map(issue =>
+            `### 이슈 #${issue.number}: ${issue.title}\n\n${issue.body}`
+          ).join('\n\n---\n\n');
+
+          const prompt = `당신은 Spring Boot(Kotlin) + React(TypeScript) 풀스택 프로젝트의 코드 개선 담당자입니다.
+
+다음은 GitHub Copilot 코드 리뷰에서 수용된 제안들입니다.
+각 제안에 대해 해당 파일을 읽고 제안된 개선 사항을 적용해주세요.
+
+## 규칙
+- be/ 경로 파일: Kotlin/Spring Boot 컨벤션 (be/CLAUDE.md 참고)
+- fe/ 경로 파일: React/TypeScript 컨벤션 (fe/CLAUDE.md 참고)
+- 수정 범위는 제안된 부분만, 불필요한 리팩토링 금지
+- 각 이슈 처리 후 git commit (메시지 형식: "fix: apply copilot suggestion (#이슈번호)")
+
+## 수용된 제안 목록
+
+${items}`;
+
+          require('fs').writeFileSync('/tmp/prompt.txt', prompt);
+          SCRIPT
+
+          claude -p "$(cat /tmp/prompt.txt)" \
+            --allowedTools "Read,Edit,Bash" \
+            --model claude-sonnet-4-6
+
+      - name: Check for changes and push
+        if: steps.collect.outputs.has_issues == 'true'
+        id: push
+        run: |
+          if git diff --quiet HEAD; then
+            echo "변경사항 없음 — 수정할 코드가 없습니다."
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            git push origin $BRANCH
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create PR
+        if: steps.collect.outputs.has_issues == 'true' && steps.push.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        env:
+          BRANCH: ${{ env.BRANCH }}
+          ISSUE_NUMBERS: ${{ steps.collect.outputs.issue_numbers }}
+          ISSUE_COUNT: ${{ steps.collect.outputs.issue_count }}
+        with:
+          script: |
+            const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
+            const closes = issueNumbers.map(n => `closes #${n}`).join('\n');
+            const count = process.env.ISSUE_COUNT;
+
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `fix: Copilot 제안 배치 적용 (${count}건)`,
+              body: `## Copilot 제안 배치 수정\n\n${closes}\n\n🤖 자동 생성된 PR — copilot-batch-fix 워크플로우`,
+              head: process.env.BRANCH,
+              base: 'main',
+            });
+
+            core.notice(`PR 생성: #${pr.number} — ${pr.html_url}`);
