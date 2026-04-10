@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
-      actions: write
+      statuses: write
 
     steps:
       - name: Claude가 Copilot 리뷰 코멘트에 자동 답글
@@ -26,8 +26,20 @@ jobs:
 
             core.notice(`오픈 PR ${openPRs.length}건 조회`);
 
+            const setStatus = async (sha, state, description) => {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha,
+                state,
+                context: 'check-copilot-review',
+                description,
+              });
+            };
+
             for (const pr of openPRs) {
               const prNumber = pr.number;
+              const sha = pr.head.sha;
 
               const reviews = await github.paginate(
                 github.rest.pulls.listReviews,
@@ -57,7 +69,11 @@ jobs:
 
               const unreplied = copilotTopComments.filter(c => !repliedIds.has(c.id));
 
-              if (unreplied.length === 0) continue;
+              if (unreplied.length === 0) {
+                // 모든 코멘트 처리됨 → success 갱신
+                await setStatus(sha, 'success', `Copilot 리뷰 ${copilotTopComments.length}건 — 모두 처리됨`);
+                continue;
+              }
 
               core.notice(`PR #${prNumber}: 미답변 Copilot 코멘트 ${unreplied.length}건 처리 시작`);
 
@@ -131,18 +147,15 @@ jobs:
                 }
               }
 
+              // 답글 완료 후 남은 미처리 수 재계산해서 Commit Status 업데이트
               if (repliedCount > 0) {
-                try {
-                  await github.rest.actions.createWorkflowDispatch({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    workflow_id: 'copilot-review-evaluator.yml',
-                    ref: pr.head.ref,
-                    inputs: { pr_number: String(prNumber) },
-                  });
-                  core.notice(`PR #${prNumber}: Gate 재실행 dispatch 완료`);
-                } catch (e) {
-                  core.warning(`PR #${prNumber}: Gate dispatch 실패: ${e.message}`);
+                const remaining = unreplied.length - repliedCount;
+                if (remaining === 0) {
+                  await setStatus(sha, 'success', `Copilot 리뷰 ${copilotTopComments.length}건 — 모두 처리됨`);
+                  core.notice(`PR #${prNumber}: Commit Status → success`);
+                } else {
+                  await setStatus(sha, 'failure', `미처리 ${remaining}건 남음`);
+                  core.notice(`PR #${prNumber}: Commit Status → failure (${remaining}건 남음)`);
                 }
               }
             }
