@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 
 const acts = [
@@ -8,7 +9,7 @@ const acts = [
   { label: 'ACT V', icon: '👑', title: '취뽀 달성' },
 ]
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   root: {
     minHeight: '100vh',
     overflowY: 'auto',
