@@ -1,8 +1,28 @@
 #!/usr/bin/env bash
-# main 브랜치에서 파일 수정 차단
+# main 브랜치에서 프로젝트 파일 수정 차단
 # Write/Edit PreToolUse hook — exit 2로 Claude에게 브랜치 생성을 강제함
 
-BRANCH=$(git -C "$(git rev-parse --show-toplevel 2>/dev/null || echo '.')" branch --show-current 2>/dev/null)
+# stdin에서 tool input JSON 읽기 (Claude Code 훅 프로토콜)
+INPUT=$(cat)
+
+FILE_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null || echo "")
+
+# git 레포 외부 경로 (메모리, 홈 디렉토리 등)는 브랜치와 무관 → 허용
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -n "$REPO_ROOT" ] && [ -n "$FILE_PATH" ]; then
+  if [[ "$FILE_PATH" != "$REPO_ROOT"* ]]; then
+    exit 0
+  fi
+elif [ -z "$REPO_ROOT" ]; then
+  exit 0
+fi
+
+BRANCH=$(git branch --show-current 2>/dev/null)
+
+# .claude/ 메타 파일은 main에서 직접 업데이트 허용 (CONTEXT.md, TASKS.md 등)
+if [ "$BRANCH" = "main" ] && [[ "$FILE_PATH" == "$REPO_ROOT/.claude/"* ]]; then
+  exit 0
+fi
 
 if [ "$BRANCH" = "main" ]; then
   echo "⛔ main 브랜치에서 파일을 수정할 수 없습니다." >&2
