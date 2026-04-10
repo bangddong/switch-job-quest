@@ -7,7 +7,7 @@
 
 | 브랜치 | 상태 | 설명 |
 |--------|------|------|
-| `main` | 최신 | 인증/정책 분리 + GitHub OAuth 인증 전체 완료 (2026-04-06 정리) |
+| `main` | 최신 | 리팩토링 시리즈 PR #37~#40 전체 머지 완료 (2026-04-10) |
 
 ## 열린 PR
 
@@ -111,10 +111,60 @@
 - GitHub OAuth App secret **즉시 regenerate** 필요 (이미 public repo에 노출됨)
 - regenerate 후 `application-local.yml` + Fly.io secrets + GitHub Secrets 값 교체
 
+## GitHub OAuth 로그인 수정 (2026-04-08)
+
+| PR | 내용 | 상태 |
+|----|------|------|
+| #32 | FE AuthCallback 응답 필드 불일치 수정 (`json.success` → `json.result === 'SUCCESS'`) | ✅ 머지 |
+| #33 | Copilot Review Gate 트리거/조건 수정 + Claude 자동 답글 봇 로그인 조건 수정 | ✅ 머지 |
+
+### 인프라 조치 (2026-04-08)
+- **Cloudflare**: `api.quest.dhbang.co.kr` DNS 레코드 Proxied → DNS only 전환 (SSL 핸드셰이크 실패 해결)
+- **Vercel**: `VITE_GITHUB_CLIENT_ID` 환경변수 추가 후 재배포 (`client_id=undefined` 해결)
+- **GitHub OAuth App**: Callback URL `https://quest.dhbang.co.kr/auth/callback` 등록
+- **Fly.io**: 머신 stopped 상태 → `auto_start_machines = true` 확인 (정상)
+- **브랜치 보호**: Required check 이름 `Copilot Review Gate / check-copilot-review` → `check-copilot-review` 수정
+
+### Copilot Review Gate 최종 동작
+- PR 열림/커밋 → 실행, Copilot 리뷰 없으면 **fail** ("Copilot 리뷰 대기 중")
+- Copilot 리뷰 제출 → 재평가, 미처리 인라인 코멘트 있으면 fail
+- 인라인 코멘트에 답글 달면 → 재평가, 모두 처리 시 pass
+- `claude-review-responder`: `contains()` 조건으로 Copilot 봇 감지 수정
+
+## 리팩토링 시리즈 (2026-04-09) — 전체 완료
+
+| Sprint | PR | 내용 | 상태 |
+|--------|-----|------|------|
+| Sprint 1 (BE) | #37 | QuestProgressRecorder 추출 (saveProgress/saveHistory 분리) | ✅ 머지 |
+| Sprint 2 (BE) | #38 | BaseAiEvaluator 추상 클래스 + QuestConstants 상수화 | ✅ 머지 (충돌 해결) |
+| Sprint 3 (FE) | #34 | gradeUtils.ts + styles.ts 공통 유틸 추출 | ✅ 머지 |
+| Sprint 4 (FE) | #39 | ResultHeader + ResultSection 서브컴포넌트 분리 | ✅ 머지 |
+| Sprint 5 (FE) | #40 | useAiCheckForm 훅 + FormField 컴포넌트 분리 | ✅ 머지 |
+
+### PR #37↔#38 충돌 원인 및 재발 방지 (2026-04-10)
+
+**원인:** 두 BE 스프린트가 `AiCheckService.kt` 동일 라인을 다른 방향으로 수정
+- #37: `saveProgress()` → `questProgressRecorder.record()` (quest ID 하드코딩 유지)
+- #38: `saveProgress()` + 하드코딩 → `QuestConstants.*` (#37 머지 전 main 기준 브랜치)
+
+**재발 방지 규칙 — 동일 파일 수정 스프린트:**
+```
+# ❌ 잘못된 방식: 동일 파일 건드리는 스프린트를 origin/main 기준 병렬 브랜치로 생성
+git checkout -b refactor/sprint-1 origin/main   # AiCheckService.kt 수정
+git checkout -b refactor/sprint-2 origin/main   # 동일 파일 수정 → 충돌 확정
+
+# ✅ 올바른 방식: 먼저 머지 후 다음 브랜치 생성 (직렬)
+git checkout -b refactor/sprint-1 origin/main   # 머지 완료 후
+git checkout -b refactor/sprint-2 origin/main   # 최신 main 기준으로 새 브랜치
+```
+
+**기획 단계 체크리스트:**
+- BE 파일 ↔ FE 파일 수정: 병렬 브랜치 OK
+- 동일 파일(BE↔BE 또는 FE↔FE) 수정: **직렬 순서 필수** — 앞 PR 머지 후 다음 브랜치
+
 ## 다음 작업
 
-- [ ] GitHub OAuth secret regenerate 후 Fly.io + GitHub Secrets 값 교체 (사용자 직접)
-- [ ] 다음 기능 기획 (대시보드/통계, UX 개선, GitHub Actions Node.js 24 대응 등)
+- [ ] 다음 기능 기획 (대시보드/통계, UX 개선 등)
 
 ## 참조 문서
 
