@@ -5,12 +5,13 @@
 # stdin에서 tool input JSON 읽기 (Claude Code 훅 프로토콜)
 INPUT=$(cat)
 
-FILE_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null || echo "")
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null || echo "")
 
 # git 레포 외부 경로 (메모리, 홈 디렉토리 등)는 브랜치와 무관 → 허용
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 if [ -n "$REPO_ROOT" ] && [ -n "$FILE_PATH" ]; then
-  if [[ "$FILE_PATH" != "$REPO_ROOT"* ]]; then
+  # 절대경로 또는 상대경로 모두 처리: 절대경로면 REPO_ROOT prefix 체크, 상대경로면 항상 레포 내부로 간주
+  if [[ "$FILE_PATH" == /* ]] && [[ "$FILE_PATH" != "$REPO_ROOT"* ]]; then
     exit 0
   fi
 elif [ -z "$REPO_ROOT" ]; then
@@ -20,7 +21,7 @@ fi
 BRANCH=$(git branch --show-current 2>/dev/null)
 
 # .claude/ 메타 파일은 main에서 직접 업데이트 허용 (CONTEXT.md, TASKS.md 등)
-if [ "$BRANCH" = "main" ] && [[ "$FILE_PATH" == "$REPO_ROOT/.claude/"* ]]; then
+if [ "$BRANCH" = "main" ] && echo "$FILE_PATH" | grep -qE "(^|/|^$REPO_ROOT/)\.claude/"; then
   exit 0
 fi
 
