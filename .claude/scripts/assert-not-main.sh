@@ -5,7 +5,11 @@
 # stdin에서 tool input JSON 읽기 (Claude Code 훅 프로토콜)
 INPUT=$(cat)
 
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null || echo "")
+if command -v jq &>/dev/null; then
+  FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null || echo "")
+else
+  FILE_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path') or d.get('tool_input',{}).get('path') or '')" 2>/dev/null || echo "")
+fi
 
 # git 레포 외부 경로 (메모리, 홈 디렉토리 등)는 브랜치와 무관 → 허용
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
