@@ -11,6 +11,7 @@ jobs:
     permissions:
       pull-requests: write
       statuses: write
+      issues: write
 
     steps:
       - name: Claude가 Copilot 리뷰 코멘트에 자동 답글
@@ -132,12 +133,70 @@ jobs:
                   const data = await res.json();
                   const reply = data.content[0].text.trim();
 
+                  const isAccepted = reply.includes('수정하는 걸 권장');
+
+                  let replyBody = `🤖 **Claude 자동 평가**\n\n${reply}`;
+
+                  if (isAccepted) {
+                    const lineRef = comment.line ?? comment.original_line ?? '?';
+                    const issueTitle = `[Copilot] ${comment.path}:${lineRef}`;
+                    const issueBody = [
+                      `## Copilot 제안`,
+                      ``,
+                      `- **PR:** #${prNumber} — ${pr.title}`,
+                      `- **파일:** \`${comment.path}\`:${lineRef}`,
+                      `- **브랜치:** \`${pr.head.ref}\``,
+                      ``,
+                      `### Claude 평가`,
+                      reply,
+                      ``,
+                      `### Copilot 코멘트`,
+                      comment.body,
+                      ``,
+                      `### 코드 컨텍스트`,
+                      '```diff',
+                      comment.diff_hunk,
+                      '```',
+                    ].join('\n');
+
+                    try {
+                      // copilot-suggestion 라벨 보장 (없으면 생성)
+                      try {
+                        await github.rest.issues.getLabel({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          name: 'copilot-suggestion',
+                        });
+                      } catch {
+                        await github.rest.issues.createLabel({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          name: 'copilot-suggestion',
+                          color: '0075ca',
+                          description: 'Copilot 리뷰에서 수용된 제안',
+                        });
+                      }
+
+                      const { data: issue } = await github.rest.issues.create({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        title: issueTitle,
+                        body: issueBody,
+                        labels: ['copilot-suggestion'],
+                      });
+                      replyBody += `\n\n→ 수정 이슈 등록: #${issue.number}`;
+                      core.notice(`이슈 생성: #${issue.number} (${comment.path}:${lineRef})`);
+                    } catch (e) {
+                      core.warning(`이슈 생성 실패: ${e.message}`);
+                    }
+                  }
+
                   await github.rest.pulls.createReplyForReviewComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     pull_number: prNumber,
                     comment_id: comment.id,
-                    body: `🤖 **Claude 자동 평가**\n\n${reply}`,
+                    body: replyBody,
                   });
 
                   core.notice(`답글 완료: comment ${comment.id}`);
