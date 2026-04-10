@@ -1,6 +1,7 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.BaseAiEvaluator
 import com.devquest.core.domain.model.evaluation.BossPackageResult
 import com.devquest.core.domain.port.BossPackageEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -11,9 +12,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class BossPackageEvaluator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient,
-    private val aiCallExecutor: AiCallExecutor
-) : BossPackageEvaluatorPort {
+    @Qualifier("bossChatClient") chatClient: ChatClient,
+    aiCallExecutor: AiCallExecutor
+) : BaseAiEvaluator(chatClient, aiCallExecutor), BossPackageEvaluatorPort {
 
     private val template = PromptTemplate(ClassPathResource("prompts/boss-package.st"))
 

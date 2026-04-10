@@ -1,6 +1,7 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.BaseAiEvaluator
 import com.devquest.core.domain.model.evaluation.CoachAnswerHistory
 import com.devquest.core.domain.model.evaluation.CoachAnswerResult
 import com.devquest.core.domain.model.evaluation.CoachReportResult
@@ -13,9 +14,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class InterviewCoachEvaluator(
-    private val chatClient: ChatClient,
-    private val aiCallExecutor: AiCallExecutor
-) : InterviewCoachPort {
+    chatClient: ChatClient,
+    aiCallExecutor: AiCallExecutor
+) : BaseAiEvaluator(chatClient, aiCallExecutor), InterviewCoachPort {
 
     private val startTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-start.st"))
     private val evaluateTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-evaluate.st"))

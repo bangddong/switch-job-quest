@@ -3,6 +3,7 @@ package com.devquest.core.domain
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
 import com.devquest.core.domain.PassCriteriaPolicy
+import com.devquest.core.domain.QuestConstants
 import com.devquest.core.domain.QuestXpPolicy
 import com.devquest.core.enums.QuestStatus
 import org.springframework.stereotype.Service
@@ -28,7 +29,7 @@ class AiCheckService(
     @Transactional
     fun checkSkillAssessment(userId: String, skills: List<String>, targetRole: String): SkillAssessmentResult {
         val result = skillAssessmentPort.evaluate(skills, targetRole)
-        questProgressRecorder.record(userId, "1-1", 1, result.score, true, QuestXpPolicy.calculate("1-1", true))
+        questProgressRecorder.record(userId, QuestConstants.SKILL_ASSESSMENT, 1, result.score, true, QuestXpPolicy.calculate(QuestConstants.SKILL_ASSESSMENT, true))
         return result
     }
 
@@ -37,7 +38,7 @@ class AiCheckService(
         userId: String, dissatisfactions: List<String>, goals: List<String>, fiveYearVision: String
     ): EssayCheckResult {
         val result = essayEvaluator.evaluate(dissatisfactions, goals, fiveYearVision)
-        questProgressRecorder.record(userId, "1-2", 1, result.score, result.passed, QuestXpPolicy.calculate("1-2", result.passed, score = result.score))
+        questProgressRecorder.record(userId, QuestConstants.CAREER_ESSAY, 1, result.score, result.passed, QuestXpPolicy.calculate(QuestConstants.CAREER_ESSAY, result.passed, score = result.score))
         return result
     }
 
@@ -71,7 +72,7 @@ class AiCheckService(
     @Transactional
     fun analyzeJd(userId: String, companyName: String, jobDescription: String, userSkills: List<String>, userExperiences: List<String>): JdAnalysisResult {
         val result = jdAnalysisEvaluator.analyze(companyName, jobDescription, userSkills, userExperiences)
-        questProgressRecorder.record(userId, "3-2", 3, result.overallMatchScore, true, QuestXpPolicy.calculate("3-2", true))
+        questProgressRecorder.record(userId, QuestConstants.JD_ANALYSIS, 3, result.overallMatchScore, true, QuestXpPolicy.calculate(QuestConstants.JD_ANALYSIS, true))
         return result
     }
 
@@ -79,7 +80,7 @@ class AiCheckService(
     fun checkResume(userId: String, targetCompany: String, targetJd: String, resumeContent: String): ResumeCheckResult {
         val result = resumeEvaluator.evaluate(targetCompany, targetJd, resumeContent)
         val passed = PassCriteriaPolicy.evaluate(result.overallScore)
-        questProgressRecorder.record(userId, "4-1", 4, result.overallScore, passed, QuestXpPolicy.calculate("4-1", passed))
+        questProgressRecorder.record(userId, QuestConstants.RESUME_CHECK, 4, result.overallScore, passed, QuestXpPolicy.calculate(QuestConstants.RESUME_CHECK, passed))
         return result
     }
 
@@ -88,14 +89,14 @@ class AiCheckService(
         val result = companyFitEvaluator.analyze(preferences, companies)
         val maxScore = result.maxOfOrNull { it.fitScore } ?: 0
         val passed = PassCriteriaPolicy.evaluateMax(result.map { it.fitScore })
-        questProgressRecorder.record(userId, "1-BOSS", 1, maxScore, passed, QuestXpPolicy.calculate("1-BOSS", passed))
+        questProgressRecorder.record(userId, QuestConstants.COMPANY_FIT_BOSS, 1, maxScore, passed, QuestXpPolicy.calculate(QuestConstants.COMPANY_FIT_BOSS, passed))
         return result
     }
 
     @Transactional
     fun checkPersonalityInterview(userId: String, question: String, answer: String): AiEvaluationResult {
         val result = personalityEvaluator.evaluate(question, answer)
-        questProgressRecorder.record(userId, "5-1", 5, result.score, result.passed, QuestXpPolicy.calculate("5-1", result.passed, xpMultiplier = result.xpMultiplier))
+        questProgressRecorder.record(userId, QuestConstants.PERSONALITY_INTERVIEW, 5, result.score, result.passed, QuestXpPolicy.calculate(QuestConstants.PERSONALITY_INTERVIEW, result.passed, xpMultiplier = result.xpMultiplier))
         return result
     }
 
@@ -103,7 +104,7 @@ class AiCheckService(
     fun checkBossPackage(userId: String, resumeContent: String, githubUrl: String, blogUrl: String, targetPosition: String): BossPackageResult {
         val result = bossPackageEvaluator.evaluate(resumeContent, githubUrl, blogUrl, targetPosition)
         val passed = PassCriteriaPolicy.evaluate(result.overallScore)
-        questProgressRecorder.record(userId, "4-BOSS", 4, result.overallScore, passed, QuestXpPolicy.calculate("4-BOSS", passed))
+        questProgressRecorder.record(userId, QuestConstants.BOSS_PACKAGE, 4, result.overallScore, passed, QuestXpPolicy.calculate(QuestConstants.BOSS_PACKAGE, passed))
         return result
     }
 

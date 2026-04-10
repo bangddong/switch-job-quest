@@ -1,6 +1,7 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.BaseAiEvaluator
 import com.devquest.core.domain.model.evaluation.JourneyReportResult
 import com.devquest.core.domain.port.JourneyReportPort
 import org.springframework.ai.chat.client.ChatClient
@@ -11,9 +12,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class JourneyReportGenerator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient,
-    private val aiCallExecutor: AiCallExecutor
-) : JourneyReportPort {
+    @Qualifier("bossChatClient") chatClient: ChatClient,
+    aiCallExecutor: AiCallExecutor
+) : BaseAiEvaluator(chatClient, aiCallExecutor), JourneyReportPort {
 
     private val template = PromptTemplate(ClassPathResource("prompts/journey-report.st"))
 

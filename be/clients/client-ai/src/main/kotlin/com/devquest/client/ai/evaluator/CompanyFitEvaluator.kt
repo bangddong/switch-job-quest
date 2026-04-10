@@ -1,6 +1,7 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.BaseAiEvaluator
 import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.port.CompanyFitEvaluatorPort
@@ -16,9 +17,9 @@ import org.springframework.stereotype.Component
 
 @Component
 class CompanyFitEvaluator(
-    @Qualifier("bossChatClient") private val chatClient: ChatClient,
-    private val aiCallExecutor: AiCallExecutor
-) : CompanyFitEvaluatorPort {
+    @Qualifier("bossChatClient") chatClient: ChatClient,
+    aiCallExecutor: AiCallExecutor
+) : BaseAiEvaluator(chatClient, aiCallExecutor), CompanyFitEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()
 
