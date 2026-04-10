@@ -1,11 +1,8 @@
 package com.devquest.core.domain
 
-import com.devquest.core.domain.model.QuestHistory
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
-import com.devquest.core.enums.QuestStatus
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.InjectMocks
@@ -13,9 +10,9 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.springframework.context.ApplicationEventPublisher
 
 @ExtendWith(MockitoExtension::class)
 class AiCheckServiceTest {
@@ -31,19 +28,12 @@ class AiCheckServiceTest {
     @Mock lateinit var skillAssessmentPort: SkillAssessmentPort
     @Mock lateinit var actClearReportPort: ActClearReportPort
     @Mock lateinit var progressPort: QuestProgressPort
-    @Mock lateinit var historyPort: QuestHistoryPort
     @Mock lateinit var bossPackageEvaluator: BossPackageEvaluatorPort
     @Mock lateinit var journeyReportPort: JourneyReportPort
-    @Mock lateinit var publisher: ApplicationEventPublisher
+    @Mock lateinit var questProgressRecorder: QuestProgressRecorder
 
     @InjectMocks
     private lateinit var service: AiCheckService
-
-    @BeforeEach
-    fun setUp() {
-        whenever(progressPort.save(any())).thenAnswer { it.arguments[0] }
-        whenever(historyPort.save(any())).thenAnswer { it.arguments[0] }
-    }
 
     // ===== analyzeCompanyFit 테스트 =====
 
@@ -53,11 +43,7 @@ class AiCheckServiceTest {
 
         service.analyzeCompanyFit("user1", emptyMap(), emptyList())
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.AI_FAILED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(0)
-        assertThat(captor.firstValue.aiScore).isEqualTo(0)
+        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(0), eq(false), eq(0))
     }
 
     @Test
@@ -70,11 +56,7 @@ class AiCheckServiceTest {
 
         service.analyzeCompanyFit("user1", emptyMap(), emptyList())
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.AI_FAILED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(0)
-        assertThat(captor.firstValue.aiScore).isEqualTo(69)
+        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(69), eq(false), eq(0))
     }
 
     @Test
@@ -87,12 +69,7 @@ class AiCheckServiceTest {
 
         service.analyzeCompanyFit("user1", emptyMap(), emptyList())
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(500)
-        assertThat(captor.firstValue.aiScore).isEqualTo(70)
-        verify(publisher).publishEvent(any<com.devquest.core.domain.event.QuestEvaluatedEvent>())
+        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(70), eq(true), eq(500))
     }
 
     @Test
@@ -105,11 +82,19 @@ class AiCheckServiceTest {
 
         service.analyzeCompanyFit("user1", emptyMap(), emptyList())
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.aiScore).isEqualTo(95)
-        assertThat(captor.firstValue.questId).isEqualTo("1-BOSS")
+        val userIdCaptor = argumentCaptor<String>()
+        val questIdCaptor = argumentCaptor<String>()
+        val actIdCaptor = argumentCaptor<Int>()
+        val scoreCaptor = argumentCaptor<Int>()
+        val passedCaptor = argumentCaptor<Boolean>()
+        val xpCaptor = argumentCaptor<Int>()
+        verify(questProgressRecorder).record(
+            userIdCaptor.capture(), questIdCaptor.capture(), actIdCaptor.capture(),
+            scoreCaptor.capture(), passedCaptor.capture(), xpCaptor.capture()
+        )
+        assertThat(questIdCaptor.firstValue).isEqualTo("1-BOSS")
+        assertThat(scoreCaptor.firstValue).isEqualTo(95)
+        assertThat(passedCaptor.firstValue).isTrue()
     }
 
     // ===== checkResume 테스트 =====
@@ -121,13 +106,7 @@ class AiCheckServiceTest {
 
         service.checkResume("user1", "카카오", "JD", "이력서 내용")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(500)
-        assertThat(captor.firstValue.aiScore).isEqualTo(85)
-        assertThat(captor.firstValue.questId).isEqualTo("4-1")
-        verify(publisher).publishEvent(any<com.devquest.core.domain.event.QuestEvaluatedEvent>())
+        verify(questProgressRecorder).record(eq("user1"), eq("4-1"), eq(4), eq(85), eq(true), eq(500))
     }
 
     @Test
@@ -137,11 +116,7 @@ class AiCheckServiceTest {
 
         service.checkResume("user1", "카카오", "JD", "이력서 내용")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.AI_FAILED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(0)
-        assertThat(captor.firstValue.aiScore).isEqualTo(69)
+        verify(questProgressRecorder).record(eq("user1"), eq("4-1"), eq(4), eq(69), eq(false), eq(0))
     }
 
     // ===== checkCareerEssay 테스트 =====
@@ -153,11 +128,7 @@ class AiCheckServiceTest {
 
         service.checkCareerEssay("user1", listOf("불만"), listOf("목표"), "비전")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(160) // 200 * 80 / 100
-        assertThat(captor.firstValue.questId).isEqualTo("1-2")
+        verify(questProgressRecorder).record(eq("user1"), eq("1-2"), eq(1), eq(80), eq(true), eq(160))
     }
 
     @Test
@@ -167,10 +138,7 @@ class AiCheckServiceTest {
 
         service.checkCareerEssay("user1", listOf("불만"), listOf("목표"), "비전")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.AI_FAILED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(0)
+        verify(questProgressRecorder).record(eq("user1"), eq("1-2"), eq(1), eq(50), eq(false), eq(0))
     }
 
     // ===== checkTechBlog 테스트 =====
@@ -182,11 +150,7 @@ class AiCheckServiceTest {
 
         service.checkTechBlog("user1", "2-1", "Kotlin", "제목", "내용")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(900) // (600 * 1.5).toInt()
-        assertThat(captor.firstValue.questId).isEqualTo("2-1")
+        verify(questProgressRecorder).record(eq("user1"), eq("2-1"), eq(2), eq(85), eq(true), eq(900))
     }
 
     @Test
@@ -196,10 +160,7 @@ class AiCheckServiceTest {
 
         service.checkTechBlog("user1", "2-1", "Kotlin", "제목", "내용")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.AI_FAILED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(0)
+        verify(questProgressRecorder).record(eq("user1"), eq("2-1"), eq(2), eq(40), eq(false), eq(0))
     }
 
     // ===== checkMockInterview 테스트 =====
@@ -211,10 +172,7 @@ class AiCheckServiceTest {
 
         service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(800)
+        verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(90), eq(true), eq(800))
     }
 
     @Test
@@ -224,10 +182,7 @@ class AiCheckServiceTest {
 
         service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.AI_FAILED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(0)
+        verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(30), eq(false), eq(0))
     }
 
     // ===== analyzeJd 테스트 =====
@@ -239,11 +194,7 @@ class AiCheckServiceTest {
 
         service.analyzeJd("user1", "카카오", "JD 내용", listOf("Kotlin"), listOf("3년 경력"))
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(350)
-        assertThat(captor.firstValue.questId).isEqualTo("3-2")
+        verify(questProgressRecorder).record(eq("user1"), eq("3-2"), eq(3), eq(60), eq(true), eq(350))
     }
 
     // ===== checkBossPackage 테스트 =====
@@ -265,12 +216,7 @@ class AiCheckServiceTest {
 
         service.checkBossPackage("user-1", "이력서 내용", "https://github.com/user", "", "시니어 백엔드")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(700)
-        assertThat(captor.firstValue.aiScore).isEqualTo(80)
-        assertThat(captor.firstValue.questId).isEqualTo("4-BOSS")
+        verify(questProgressRecorder).record(eq("user-1"), eq("4-BOSS"), eq(4), eq(80), eq(true), eq(700))
     }
 
     // ===== checkPersonalityInterview 테스트 =====
@@ -282,10 +228,6 @@ class AiCheckServiceTest {
 
         service.checkPersonalityInterview("user1", "장단점은?", "저는...")
 
-        val captor = argumentCaptor<com.devquest.core.domain.model.QuestProgress>()
-        verify(progressPort).save(captor.capture())
-        assertThat(captor.firstValue.status).isEqualTo(QuestStatus.COMPLETED)
-        assertThat(captor.firstValue.earnedXp).isEqualTo(480) // (400 * 1.2).toInt()
-        assertThat(captor.firstValue.questId).isEqualTo("5-1")
+        verify(questProgressRecorder).record(eq("user1"), eq("5-1"), eq(5), eq(88), eq(true), eq(480))
     }
 }
