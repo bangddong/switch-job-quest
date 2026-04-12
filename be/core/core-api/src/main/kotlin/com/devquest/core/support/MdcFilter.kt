@@ -20,12 +20,14 @@ class MdcFilter : OncePerRequestFilter() {
         chain: FilterChain,
     ) {
         try {
-            MDC.put("requestId", UUID.randomUUID().toString().take(8))
+            MDC.put("requestId", UUID.randomUUID().toString())
             MDC.put("method", request.method)
             MDC.put("uri", request.requestURI)
             chain.doFilter(request, response)
         } finally {
-            MDC.clear()
+            MDC.remove("requestId")
+            MDC.remove("method")
+            MDC.remove("uri")
         }
     }
 }

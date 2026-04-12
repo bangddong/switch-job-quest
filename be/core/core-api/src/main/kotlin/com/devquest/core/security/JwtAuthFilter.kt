@@ -31,7 +31,11 @@ class JwtAuthFilter(
                     MDC.put("userId", userId.toString())
                 }
         }
-        chain.doFilter(request, response)
+        try {
+            chain.doFilter(request, response)
+        } finally {
+            MDC.remove("userId")
+        }
     }
 
     private fun resolveToken(request: HttpServletRequest): String? =
