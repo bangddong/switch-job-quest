@@ -3,6 +3,7 @@ package com.devquest.core.security
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.MDC
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
@@ -27,9 +28,14 @@ class JwtAuthFilter(
                         userId, null, listOf(SimpleGrantedAuthority("ROLE_USER"))
                     )
                     SecurityContextHolder.getContext().authentication = auth
+                    MDC.put("userId", userId.toString())
                 }
         }
-        chain.doFilter(request, response)
+        try {
+            chain.doFilter(request, response)
+        } finally {
+            MDC.remove("userId")
+        }
     }
 
     private fun resolveToken(request: HttpServletRequest): String? =
