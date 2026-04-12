@@ -1,3 +1,3 @@
 dependencies {
-    // logging configuration only - no code dependencies
+    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 }
