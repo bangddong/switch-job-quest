@@ -7,8 +7,6 @@ tasks.named<Jar>("jar").configure {
 }
 
 dependencies {
-    implementation("io.sentry:sentry-spring-boot-starter-jakarta:8.38.0")
-
     implementation(project(":core:core-enum"))
     implementation(project(":core:core-domain"))
     implementation(project(":support:logging"))
