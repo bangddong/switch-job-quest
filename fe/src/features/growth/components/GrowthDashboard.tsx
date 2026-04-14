@@ -4,6 +4,11 @@ import type { QuestHistoryItem } from '@/types/api.types'
 import { fetchHistory } from '@/lib/apiClient'
 import { ScoreTimeline } from './ScoreTimeline'
 import { QuestHistoryList } from './QuestHistoryList'
+import { ActPassRate } from './ActPassRate'
+import { GradeDistribution } from './GradeDistribution'
+import { StreakBadge } from './StreakBadge'
+import { HourlyActivity } from './HourlyActivity'
+import { QuestAttemptCount } from './QuestAttemptCount'
 
 interface BestScoreEntry {
   questId: string
@@ -171,6 +176,135 @@ export function GrowthDashboard() {
                   </ResponsiveContainer>
                 </div>
               )}
+            </div>
+          </section>
+
+          {/* ACT별 합격률 */}
+          <section style={{ marginBottom: 28 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: '#475569',
+                marginBottom: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
+            >
+              ACT별 합격률
+            </div>
+            <div
+              style={{
+                background: '#0F172A',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 10,
+                padding: '16px 8px 8px',
+              }}
+            >
+              <ActPassRate history={history} />
+            </div>
+          </section>
+
+          {/* 등급 분포 + 연속 스트릭 */}
+          <section style={{ marginBottom: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#475569',
+                  marginBottom: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                등급 분포
+              </div>
+              <div
+                style={{
+                  background: '#0F172A',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 10,
+                  padding: '16px 8px 8px',
+                  height: '100%',
+                }}
+              >
+                <GradeDistribution history={history} />
+              </div>
+            </div>
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#475569',
+                  marginBottom: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                연속 학습 스트릭
+              </div>
+              <div
+                style={{
+                  background: '#0F172A',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 10,
+                  padding: '8px',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <StreakBadge history={history} />
+              </div>
+            </div>
+          </section>
+
+          {/* 시간대별 활동 */}
+          <section style={{ marginBottom: 28 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: '#475569',
+                marginBottom: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
+            >
+              시간대별 활동
+            </div>
+            <div
+              style={{
+                background: '#0F172A',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 10,
+                padding: '16px 8px 8px',
+              }}
+            >
+              <HourlyActivity history={history} />
+            </div>
+          </section>
+
+          {/* 퀘스트별 시도 횟수 */}
+          <section style={{ marginBottom: 28 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: '#475569',
+                marginBottom: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
+            >
+              퀘스트별 시도 횟수 (많은 순)
+            </div>
+            <div
+              style={{
+                background: '#0F172A',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 10,
+                padding: '16px 8px 8px',
+              }}
+            >
+              <QuestAttemptCount history={history} />
             </div>
           </section>
 
