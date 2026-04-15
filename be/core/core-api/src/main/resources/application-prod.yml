@@ -25,7 +25,7 @@ storage:
   datasource:
     core:
       driver-class-name: org.postgresql.Driver
-      jdbc-url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+      jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
       username: ${DB_USERNAME}
       password: ${DB_PASSWORD}
       maximum-pool-size: 10
