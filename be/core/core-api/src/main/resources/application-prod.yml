@@ -6,8 +6,26 @@ spring:
   h2:
     console:
       enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
 
 server:
   error:
     include-stacktrace: never
     include-message: never
+
+storage:
+  datasource:
+    core:
+      driver-class-name: org.postgresql.Driver
+      jdbc-url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+      username: ${DB_USERNAME}
+      password: ${DB_PASSWORD}
+      maximum-pool-size: 10
