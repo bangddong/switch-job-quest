@@ -12,6 +12,9 @@ spring:
       - classpath:logging.yml
       - classpath:monitoring.yml
 
+  flyway:
+    enabled: false
+
   h2:
     console:
       enabled: false
