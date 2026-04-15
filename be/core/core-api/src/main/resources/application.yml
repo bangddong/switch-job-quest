@@ -12,9 +12,6 @@ spring:
       - classpath:logging.yml
       - classpath:monitoring.yml
 
-  flyway:
-    enabled: false
-
   h2:
     console:
       enabled: false
@@ -42,3 +39,11 @@ devquest:
     github-client-secret: ${GITHUB_CLIENT_SECRET}
     jwt-secret: ${JWT_SECRET}
     jwt-expiration-ms: ${JWT_EXPIRATION_MS:2592000000}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "!prod"
+  flyway:
+    enabled: false
