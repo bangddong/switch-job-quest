@@ -135,7 +135,7 @@ jobs:
 
                   const isAccepted = reply.includes('수정하는 걸 권장');
 
-                  let replyBody = `🤖 **Claude 자동 평가**\n\n${reply}`;
+                  let replyBody = reply;
 
                   if (isAccepted) {
                     const lineRef = comment.line ?? comment.original_line ?? '?';
