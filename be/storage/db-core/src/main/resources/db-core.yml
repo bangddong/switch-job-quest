@@ -8,6 +8,8 @@ storage:
       maximum-pool-size: 5
 
 spring:
+  flyway:
+    enabled: false
   jpa:
     hibernate:
       ddl-auto: create-drop
