@@ -1,7 +1,10 @@
 package com.devquest.core.api.controller.v1
 
 import com.devquest.core.security.JwtProvider
+import com.devquest.core.support.error.CoreException
+import com.devquest.core.support.error.ErrorType
 import com.devquest.core.support.response.ApiResponse
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -16,6 +19,7 @@ class AuthController(
     @Value("\${devquest.auth.github-client-id}") private val clientId: String,
     @Value("\${devquest.auth.github-client-secret}") private val clientSecret: String,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
     private val restClient = RestClient.create()
 
     data class GithubAuthRequest(val code: String, val redirectUri: String)
@@ -39,7 +43,8 @@ class AuthController(
         if (tokenResponse.containsKey("error")) {
             val githubError = tokenResponse["error"]
             val description = tokenResponse["error_description"]
-            error("GitHub OAuth error: $githubError — $description")
+            log.warn("GitHub OAuth token exchange failed: error={}, description={}", githubError, description)
+            throw CoreException(ErrorType.INVALID_REQUEST)
         }
 
         val accessToken = tokenResponse["access_token"]?.toString()

@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'devquest-token'
+export const GITHUB_REDIRECT_URI = `${window.location.origin}/auth/callback`
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -18,7 +19,7 @@ export function useAuth() {
 
   const loginWithGithub = () => {
     const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID
-    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`)
+    const redirectUri = encodeURIComponent(GITHUB_REDIRECT_URI)
     window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=read:user`
   }
 
