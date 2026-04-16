@@ -1,256 +1,50 @@
 # 작업 컨텍스트
 
-> Claude가 매 대화 끝에 업데이트하는 파일입니다.
-> 새 대화 시작 시 이 파일을 먼저 읽으면 이전 상태를 이어받을 수 있습니다.
+> 새 대화 시작 시 이 파일을 먼저 읽으세요.
+> 전체 작업 이력은 `.claude/CONTEXT.archive.md` 참조.
 
-## 현재 브랜치 상태
+## 현재 상태 (2026-04-16)
 
-| 브랜치 | 상태 | 설명 |
-|--------|------|------|
-| `main` | 최신 | Observability 시리즈 PR #48, #50 머지 완료 (2026-04-12) |
+| 항목 | 내용 |
+|------|------|
+| 브랜치 | `main` (최신) |
+| 열린 PR | 없음 |
 
-## 열린 PR
+## 최근 완료 (최근 3건)
 
-없음
+| PR | 내용 | 날짜 |
+|----|------|------|
+| #68 | Copilot 게이트 reply 트리거 + `cancel-in-progress: false` | 2026-04-16 |
+| #67 | GitHub OAuth `redirect_uri` 누락 수정 (`DEFAULT` 에러 해결) | 2026-04-16 |
+| #52 | Sentry 의존성 제거 (Spring Boot 4.x 미지원) | 2026-04-16 |
 
-## 완료된 인증/정책 분리 시리즈 (2026-04-05)
+## 알아둬야 할 비자명적 결정
 
-| Sprint | PR | 내용 | 상태 |
-|--------|-----|------|------|
-| BE Auth | #28 | GitHub OAuth + JWT 인증 (JwtProvider, SecurityConfig) | ✅ 머지 |
-| BE 1 | #29 | userId DTO 제거 + @AuthenticationPrincipal + try-catch 정리 | ✅ 머지 |
-| BE 2 | #30 | PassCriteriaPolicy + GradePolicy 추출 | ✅ 머지 |
-| FE | #31 | GitHub OAuth 로그인 + useAuth + apiClient 리팩토링 | ✅ 머지 |
-
-## 완료된 횡단 관심사 리팩토링 시리즈 (2026-04-04)
-
-| Sprint | PR | 내용 | 상태 |
-|--------|-----|------|------|
-| 1 | #23 | 4-BOSS 합격 기준 이중 판단 제거 | ✅ 머지 |
-| 2 | #24 | XP 정책 중앙화 (QuestXpPolicy) | ✅ 머지 |
-| 3+4 | #25 | AI 모델 라우팅 + 감사 로그 이벤트화 | ✅ 머지 |
-
-## 최근 결정 사항
-
-### 인증/정책 분리 완료 (2026-04-05)
-- **BE Auth**: `JwtProvider`, `JwtAuthFilter`, `SecurityConfig` — stateless JWT, GitHub OAuth `/api/v1/auth/github`
-- **BE Sprint 1**: 16개 DTO에서 userId 제거, `@AuthenticationPrincipal`로 SecurityContext 추출, Controller try-catch 제거
-- **BE Sprint 2**: `PassCriteriaPolicy.evaluate()`, `GradePolicy.from()` — passScore/grade 판단 중앙화, `@Value passScore` 제거
-- **FE**: `useAuth.ts` + `LoginPage` + `AuthCallback` — JWT localStorage, GitHub OAuth flow 완성
-
-### Controller 테스트 패턴 (2026-04-05)
+### Controller 테스트 패턴
 `standaloneSetup` + `@AuthenticationPrincipal` 조합 시 반드시:
 ```kotlin
 .setCustomArgumentResolvers(AuthenticationPrincipalArgumentResolver())
-// + @BeforeEach에 SecurityContextHolder.getContext().authentication 설정
-// + @AfterEach에 SecurityContextHolder.clearContext()
+// + @BeforeEach: SecurityContextHolder.getContext().authentication 설정
+// + @AfterEach: SecurityContextHolder.clearContext()
 ```
 
-### 횡단 관심사 리팩토링 완료 (2026-04-04)
-- **Sprint 2**: `QuestXpPolicy` object 추출 — questId별 baseXp 매핑 + 계산 로직 중앙화
-- **Sprint 3**: `bossChatClient` 빈 추가 — BOSS Evaluator 4개에 claude-sonnet-4-5 라우팅 (`@Qualifier`)
-- **Sprint 4**: `QuestEvaluatedEvent` 도메인 이벤트 + `QuestAuditEventListener` — 감사 로그 분리
+### 동일 파일 수정 스프린트 — 직렬 순서 필수
+두 스프린트가 같은 파일을 수정하면 병렬 브랜치 금지.
+앞 PR 머지 완료 후 다음 브랜치 생성. (BE↔FE 다른 파일이면 병렬 OK)
 
-### ACT V 5-BOSS 취뽀 달성 화면 (2026-04-03)
-- **BE**: `POST /api/v1/ai-check/journey-report` — 전체 여정 AI 감성 회고 내러티브 생성
-- **FE**: `FinalBossView` — 합격 신고 입력 → 취뽀 타이틀/통계/AI 내러티브/마지막 한 마디
-
-### UX 포기 방지 시스템 — 전체 완료 (2026-04-02)
-- **Sprint 1** (PR #18): E (다음 퀘스트 연결 카드) + F (재도전 코치 + 이전 답변 불러오기)
-- **Sprint 2** (PR #19): B (오늘의 미션 배너) + C (퀘스트 브리핑 화면)
-- **Sprint 3** (PR #20): D (필드별 작성 가이드 `?` 버튼) + G (복귀 배너, BE lastCompletedAt)
-- **Sprint 4** (PR #21): A (온보딩 스토리텔링 5슬라이드 인트로)
-
-## 아키텍처 강화 (2026-04-07)
-
-### AI 신뢰성
-- `AiCallExecutor` 신규 — `devquest.ai.max-retry: 3` 실제 연결, null/예외 시 자동 재시도, 3회 실패 시 `AiEvaluationException`
-- 13개 Evaluator 전체 적용
-
-### AI 프롬프트 분리
-- `client-ai/src/main/resources/prompts/*.st` — 16개 Spring AI `PromptTemplate` 파일로 코드와 분리
-- `InterviewCoachEvaluator` 3개, `MockInterviewEvaluator` 2개로 메서드별 분리
-
-### Policy 단위 테스트 보강
-- GradePolicy: 2 → 11개 (전 구간 `@ParameterizedTest`)
-- PassCriteriaPolicy: 6 → 8개 (`evaluateMax` 커스텀 passScore 추가)
-- QuestXpPolicy: 7 → 24개 (multiplier 그룹, 고정 XP 전체, 경계값)
-
-### CI/CD 강화 (2026-04-07)
-- `copilot-review-evaluator.yml` → `Copilot Review Gate`로 교체 (API 키 불필요)
-- Copilot 인라인 코멘트에 답글 없으면 머지 블록 (수용/거부 무관, 답글만 있으면 통과)
-- `Copilot Review Gate / check-copilot-review` → main 브랜치 required check 등록
-
-## Feature Dev Team 하네스 구축 완료 (2026-04-06)
-
-### 구성
-- `.claude/agents/` — be-developer, fe-developer, qa-reviewer (Team 모드), be-feature-builder, fe-feature-builder, logic-reviewer, convention-reviewer, test-writer (Sub-agent 모드)
-- `.claude/skills/feature-dev/SKILL.md` — TeamCreate 오케스트레이터 스킬
-
-### 제약 사항 (테스트로 확인)
-- `.claude/agents/` 파일은 `subagent_type`으로 직접 참조 불가
-- 팀 에이전트 스폰 시 `subagent_type: "general-purpose"` + `prompt`에 에이전트 역할 내용 포함 필요
-- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` → `~/.claude/settings.json` env에 설정 완료
-
-## 보안 조치 완료 (2026-04-06)
-
-### 원인
-- `application.yml`의 `${VAR:default}` fallback에 GitHub OAuth secret, JWT secret이 하드코딩됨 (PR #28 이후)
-- `application-local.yml`이 존재했지만 시크릿 분리 없이 `application.yml`에 직접 작성
-- `.gitignore`에 BE profile yml 제외 규칙 없었음
-
-### 조치 내용
-- `application.yml` fallback 시크릿 제거 → `${GITHUB_CLIENT_SECRET}` 형태로 변경
-- `application-local.yml` git untrack + 로컬 시크릿 이동
-- `.gitignore`에 `**/application-local.yml`, `**/application-secret.yml` 추가
-- `fe/src/hooks/useAuth.ts` clientId → `import.meta.env.VITE_GITHUB_CLIENT_ID`
-- `fe/.env.local` 생성, `.env.example` 업데이트
-- BE/FE `CLAUDE.md`에 시크릿 관리 규칙 추가
-
-### ⚠️ 사용자 필수 조치
-- GitHub OAuth App secret **즉시 regenerate** 필요 (이미 public repo에 노출됨)
-- regenerate 후 `application-local.yml` + Fly.io secrets + GitHub Secrets 값 교체
-
-## GitHub OAuth 로그인 수정 (2026-04-08)
-
-| PR | 내용 | 상태 |
-|----|------|------|
-| #32 | FE AuthCallback 응답 필드 불일치 수정 (`json.success` → `json.result === 'SUCCESS'`) | ✅ 머지 |
-| #33 | Copilot Review Gate 트리거/조건 수정 + Claude 자동 답글 봇 로그인 조건 수정 | ✅ 머지 |
-
-### 인프라 조치 (2026-04-08)
-- **Cloudflare**: `api.quest.dhbang.co.kr` DNS 레코드 Proxied → DNS only 전환 (SSL 핸드셰이크 실패 해결)
-- **Vercel**: `VITE_GITHUB_CLIENT_ID` 환경변수 추가 후 재배포 (`client_id=undefined` 해결)
-- **GitHub OAuth App**: Callback URL `https://quest.dhbang.co.kr/auth/callback` 등록
-- **Fly.io**: 머신 stopped 상태 → `auto_start_machines = true` 확인 (정상)
-- **브랜치 보호**: Required check 이름 `Copilot Review Gate / check-copilot-review` → `check-copilot-review` 수정
-
-### Copilot Review Gate 최종 동작
-- PR 열림/커밋 → 실행, Copilot 리뷰 없으면 **fail** ("Copilot 리뷰 대기 중")
-- Copilot 리뷰 제출 → 재평가, 미처리 인라인 코멘트 있으면 fail
-- 인라인 코멘트에 답글 달면 → 재평가, 모두 처리 시 pass
-- `claude-review-responder`: `contains()` 조건으로 Copilot 봇 감지 수정
-
-## 리팩토링 시리즈 (2026-04-09) — 전체 완료
-
-| Sprint | PR | 내용 | 상태 |
-|--------|-----|------|------|
-| Sprint 1 (BE) | #37 | QuestProgressRecorder 추출 (saveProgress/saveHistory 분리) | ✅ 머지 |
-| Sprint 2 (BE) | #38 | BaseAiEvaluator 추상 클래스 + QuestConstants 상수화 | ✅ 머지 (충돌 해결) |
-| Sprint 3 (FE) | #34 | gradeUtils.ts + styles.ts 공통 유틸 추출 | ✅ 머지 |
-| Sprint 4 (FE) | #39 | ResultHeader + ResultSection 서브컴포넌트 분리 | ✅ 머지 |
-| Sprint 5 (FE) | #40 | useAiCheckForm 훅 + FormField 컴포넌트 분리 | ✅ 머지 |
-
-### PR #37↔#38 충돌 원인 및 재발 방지 (2026-04-10)
-
-**원인:** 두 BE 스프린트가 `AiCheckService.kt` 동일 라인을 다른 방향으로 수정
-- #37: `saveProgress()` → `questProgressRecorder.record()` (quest ID 하드코딩 유지)
-- #38: `saveProgress()` + 하드코딩 → `QuestConstants.*` (#37 머지 전 main 기준 브랜치)
-
-**재발 방지 규칙 — 동일 파일 수정 스프린트:**
+### Copilot Gate 동작 흐름
 ```
-# ❌ 잘못된 방식: 동일 파일 건드리는 스프린트를 origin/main 기준 병렬 브랜치로 생성
-git checkout -b refactor/sprint-1 origin/main   # AiCheckService.kt 수정
-git checkout -b refactor/sprint-2 origin/main   # 동일 파일 수정 → 충돌 확정
-
-# ✅ 올바른 방식: 먼저 머지 후 다음 브랜치 생성 (직렬)
-git checkout -b refactor/sprint-1 origin/main   # 머지 완료 후
-git checkout -b refactor/sprint-2 origin/main   # 최신 main 기준으로 새 브랜치
-```
-
-**기획 단계 체크리스트:**
-- BE 파일 ↔ FE 파일 수정: 병렬 브랜치 OK
-- 동일 파일(BE↔BE 또는 FE↔FE) 수정: **직렬 순서 필수** — 앞 PR 머지 후 다음 브랜치
-
-## Copilot Gate 구조 수정 (2026-04-10)
-
-| PR | 내용 | 상태 |
-|----|------|------|
-| #41 | assert-not-main.sh — .claude/ 예외 추가 | ✅ 머지 |
-| #42 | assert-not-main.sh — jq 없을 때 python3 fallback | ✅ 머지 |
-| #43 | Commit Status 동작 검증 (테스트 PR, 머지 안 함) | ✅ 닫힘 |
-| #44 | check run → Commit Status 교체 (gate 구조 수정) | ✅ 머지 |
-
-### 수정 내용
-
-**근본 원인:** `workflow_dispatch` check run이 PR check_suite에 귀속되지 않아 `mergeStateStatus`가 BLOCKED 상태를 유지 → `--admin` 머지 불가피
-
-**해결:** `core.setFailed()` 제거 → `createCommitStatus(pending/failure/success)` 사용
-- Commit Status는 SHA에 직접 기록, actor/check_suite 무관하게 PR merge check에 즉시 반영
-- `claude-review-responder`: 답글 후 `createWorkflowDispatch` → `createCommitStatus` 직접 호출
-- 브랜치 보호 `check-copilot-review` → `app_id: null` (Commit Status 인식)
-
-**검증된 흐름:**
-```
-PR 열림 → Gate 실행 → Commit Status: pending
-Copilot 리뷰 → 인라인 코멘트 있으면 → Gate: failure
-claude-review-responder → 답글 → Gate dispatch → Commit Status: success
+PR 열림 → Commit Status: pending
+Copilot 리뷰 → 인라인 코멘트 있으면 → failure
+claude-review-responder 답글 → Gate dispatch → success
 → mergeStateStatus: CLEAN → 일반 머지 가능 (--admin 불필요)
 ```
+- Commit Status 방식 (SHA 직접 기록) — check_suite 독립적
+- `cancel-in-progress: false` — 취소된 check run이 branch protection을 block하는 현상 방지
 
-## Harness 개선 (2026-04-10)
-
-| PR | 내용 | 상태 |
-|----|------|------|
-| #45 | CLAUDE.md — 설계·판단 규칙 추가 | ✅ 머지 |
-
-### 추가된 규칙
-- **리스크 선제 제시**: 구조 변경 / 우회 행동 / 멀티 스텝 계획 시 리스크·전제 조건·대안을 제안 전에 제시
-- **원인 파악 우선**: 막혔을 때 우회보다 원인 파악 먼저, 우회책은 원인·트레이드오프 명시 후 제안
-
-## 랜딩 페이지 개선 (2026-04-10)
-
-| PR | 내용 | 상태 |
-|----|------|------|
-| #46 | LoginPage 랜딩 페이지 개선 | ✅ 머지 |
-
-- 기존 타이틀+버튼 3줄 → 공감 훅 + ACT I~V 흐름 + CTA + 서브카피 구성으로 확장
-- Copilot 접근성 지적 (aria-hidden, ul/li, hr) — claude-review-responder 자동 답글 처리
-
-## Observability 구축 완료 (2026-04-12)
-
-| PR | 내용 | 상태 |
-|----|------|------|
-| #48 | Sentry Spring Boot Starter + application.yml 설정 (`SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE:0.1`) | ✅ 머지 |
-| #50 | 구조화 JSON 로그 (logback-spring.xml) + MdcFilter (requestId/method/uri) + JwtAuthFilter userId MDC | ✅ 머지 |
-
-### 로그 MDC 필드
-
-| 필드 | 주입 위치 |
-|------|----------|
-| `requestId` | MdcFilter (UUID 전체) |
-| `method`, `uri` | MdcFilter |
-| `userId` | JwtAuthFilter (인증 성공 시) |
-
-### ⚠️ 남은 외부 설정 (`.claude/TASKS.md` 참조)
-
-- Sentry: sentry.io 프로젝트 생성 → `flyctl secrets set SENTRY_DSN=...`
-- Logtail: betterstack.com 소스 생성 → `flyctl logs drain create ...`
-
-## Observability 최종 상태 (2026-04-16)
-
-- **Sentry**: Spring Boot 4.x 미지원으로 포기. PR #52에서 의존성 제거 완료.
-- **Logtail (Better Stack)**: fly.io log drain 연동 완료.
-
-## GitHub OAuth 로그인 버그 수정 (2026-04-16)
-
-| PR | 내용 | 상태 |
-|----|------|------|
-| #67 | GitHub OAuth `redirect_uri` 누락 → `DEFAULT` 에러 수정 | ✅ 머지 |
-
-- **원인**: BE 토큰 교환 시 `redirect_uri` 미포함 → GitHub이 `DEFAULT` 에러 반환
-- **수정**: `GithubAuthRequest`에 `redirectUri` 필드 추가, FE에서 `GITHUB_REDIRECT_URI` 상수화 후 전달
-- **추가**: GitHub 에러 응답 시 `log.warn` + `CoreException(INVALID_REQUEST)` 처리
-
-## Copilot 리뷰 게이트 개선 (2026-04-16)
-
-| PR | 내용 | 상태 |
-|----|------|------|
-| #68 | Copilot 답글 시 게이트 재평가 + concurrency cancel 방지 | ✅ 머지 |
-
-- **원인 1**: `pull_request_review_comment` 트리거 없어서 수동 답글 후 게이트 미재실행
-- **원인 2**: `cancel-in-progress: true`로 이전 실행 취소 → cancelled check run이 branch protection을 block
-- **수정**: `pull_request_review_comment` 트리거 추가 + job if-조건 (`in_reply_to_id != null`) + `cancel-in-progress: false`
+### Observability 최종 상태
+- Sentry: Spring Boot 4.x 미지원으로 포기 (PR #52)
+- Logtail (Better Stack): fly.io log drain 연동 완료
 
 ## 다음 작업
 
@@ -263,3 +57,4 @@ claude-review-responder → 답글 → Gate dispatch → Commit Status: success
 | 멀티 에이전트 운영 | `.claude/docs/agent-workflow.md` |
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
 | 커밋 / PR / 브랜치 | `.claude/docs/git-strategy.md` |
+| 전체 작업 이력 | `.claude/CONTEXT.archive.md` |
