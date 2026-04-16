@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { setToken } from '@/hooks/useAuth'
+import { setToken, GITHUB_REDIRECT_URI } from '@/hooks/useAuth'
 
 export function AuthCallback() {
   useEffect(() => {
@@ -9,7 +9,7 @@ export function AuthCallback() {
     fetch('/api/v1/auth/github', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, redirectUri: GITHUB_REDIRECT_URI }),
     })
       .then((res) => res.json())
       .then((json) => {
