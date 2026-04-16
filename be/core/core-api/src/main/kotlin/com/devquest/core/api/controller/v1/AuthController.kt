@@ -18,7 +18,7 @@ class AuthController(
 ) {
     private val restClient = RestClient.create()
 
-    data class GithubAuthRequest(val code: String)
+    data class GithubAuthRequest(val code: String, val redirectUri: String)
     data class TokenResponse(val token: String)
 
     @PostMapping("/github")
@@ -31,9 +31,16 @@ class AuthController(
                 "client_id" to clientId,
                 "client_secret" to clientSecret,
                 "code" to request.code,
+                "redirect_uri" to request.redirectUri,
             ))
             .retrieve()
-            .body(Map::class.java) ?: error("Failed to get access token")
+            .body(Map::class.java) ?: error("Failed to get access token from GitHub")
+
+        if (tokenResponse.containsKey("error")) {
+            val githubError = tokenResponse["error"]
+            val description = tokenResponse["error_description"]
+            error("GitHub OAuth error: $githubError — $description")
+        }
 
         val accessToken = tokenResponse["access_token"]?.toString()
             ?: error("No access token in response")

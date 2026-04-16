@@ -6,10 +6,12 @@ export function AuthCallback() {
     const code = new URLSearchParams(window.location.search).get('code')
     if (!code) return
 
+    const redirectUri = `${window.location.origin}/auth/callback`
+
     fetch('/api/v1/auth/github', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, redirectUri }),
     })
       .then((res) => res.json())
       .then((json) => {
