@@ -26,6 +26,7 @@
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": ".claude/scripts/assert-no-main-push.sh" },
+          { "type": "command", "command": ".claude/scripts/assert-no-admin.sh" },
           { "type": "command", "command": ".claude/scripts/log-event.sh PreToolUse main" }
         ]
       },

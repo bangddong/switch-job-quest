@@ -227,9 +227,33 @@ claude-review-responder → 답글 → Gate dispatch → Commit Status: success
 - Sentry: sentry.io 프로젝트 생성 → `flyctl secrets set SENTRY_DSN=...`
 - Logtail: betterstack.com 소스 생성 → `flyctl logs drain create ...`
 
+## Observability 최종 상태 (2026-04-16)
+
+- **Sentry**: Spring Boot 4.x 미지원으로 포기. PR #52에서 의존성 제거 완료.
+- **Logtail (Better Stack)**: fly.io log drain 연동 완료.
+
+## GitHub OAuth 로그인 버그 수정 (2026-04-16)
+
+| PR | 내용 | 상태 |
+|----|------|------|
+| #67 | GitHub OAuth `redirect_uri` 누락 → `DEFAULT` 에러 수정 | ✅ 머지 |
+
+- **원인**: BE 토큰 교환 시 `redirect_uri` 미포함 → GitHub이 `DEFAULT` 에러 반환
+- **수정**: `GithubAuthRequest`에 `redirectUri` 필드 추가, FE에서 `GITHUB_REDIRECT_URI` 상수화 후 전달
+- **추가**: GitHub 에러 응답 시 `log.warn` + `CoreException(INVALID_REQUEST)` 처리
+
+## Copilot 리뷰 게이트 개선 (2026-04-16)
+
+| PR | 내용 | 상태 |
+|----|------|------|
+| #68 | Copilot 답글 시 게이트 재평가 + concurrency cancel 방지 | ✅ 머지 |
+
+- **원인 1**: `pull_request_review_comment` 트리거 없어서 수동 답글 후 게이트 미재실행
+- **원인 2**: `cancel-in-progress: true`로 이전 실행 취소 → cancelled check run이 branch protection을 block
+- **수정**: `pull_request_review_comment` 트리거 추가 + job if-조건 (`in_reply_to_id != null`) + `cancel-in-progress: false`
+
 ## 다음 작업
 
-- [ ] Sentry / Logtail 외부 설정 완료 후 TASKS.md 정리
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
 
 ## 참조 문서
