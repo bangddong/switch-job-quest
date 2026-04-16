@@ -14,7 +14,7 @@ on:
 
 concurrency:
   group: copilot-gate-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   check-copilot-review:
