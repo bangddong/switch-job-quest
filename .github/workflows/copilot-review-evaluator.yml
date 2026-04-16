@@ -12,9 +12,17 @@ on:
         required: false
         type: string
 
+concurrency:
+  group: copilot-gate-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
 jobs:
   check-copilot-review:
     runs-on: ubuntu-latest
+    # pull_request_review_comment 트리거 시 reply 코멘트(in_reply_to_id 있음)일 때만 실행
+    if: >
+      github.event_name != 'pull_request_review_comment' ||
+      github.event.comment.in_reply_to_id != null
     permissions:
       pull-requests: read
       statuses: write
