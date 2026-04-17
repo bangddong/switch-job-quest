@@ -21,7 +21,8 @@ function toHistoryDateStr(createdAt: string): string {
 }
 
 function subtractDays(dateStr: string, days: number): string {
-  const [year, month, day] = dateStr.split('-').map(Number)
+  const parts = dateStr.split('-').map(Number)
+  const [year, month, day] = parts as [number, number, number]
   const date = new Date(Date.UTC(year, month - 1, day))
   date.setUTCDate(date.getUTCDate() - days)
   return toUtcDateStr(date)
