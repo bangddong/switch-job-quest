@@ -3,7 +3,7 @@
 > 새 대화 시작 시 이 파일을 먼저 읽으세요.
 > 전체 작업 이력은 `.claude/CONTEXT.archive.md` 참조.
 
-## 현재 상태 (2026-04-16)
+## 현재 상태 (2026-04-17)
 
 | 항목 | 내용 |
 |------|------|
@@ -14,9 +14,9 @@
 
 | PR | 내용 | 날짜 |
 |----|------|------|
-| #68 | Copilot 게이트 reply 트리거 + `cancel-in-progress: false` | 2026-04-16 |
-| #67 | GitHub OAuth `redirect_uri` 누락 수정 (`DEFAULT` 에러 해결) | 2026-04-16 |
-| #52 | Sentry 의존성 제거 (Spring Boot 4.x 미지원) | 2026-04-16 |
+| #71 | Copilot 리뷰 자동 처리 복구 (job-level if → early return) | 2026-04-17 |
+| #70 | AI 평가 응답 오류 수정 + max-tokens 증가 + 로딩 스피너 | 2026-04-17 |
+| #69 | CONTEXT.md 분리 + CLAUDE.md 정리 + `/compact` 템플릿 | 2026-04-16 |
 
 ## 알아둬야 할 비자명적 결정
 
@@ -41,6 +41,11 @@ claude-review-responder 답글 → Gate dispatch → success
 ```
 - Commit Status 방식 (SHA 직접 기록) — check_suite 독립적
 - `cancel-in-progress: false` — 취소된 check run이 branch protection을 block하는 현상 방지
+
+### job-level if → action_required 패턴
+GitHub Actions에서 job-level `if` 조건이 false이면 `skipped` 대신 `action_required`를 반환하는 경우 있음.
+**해결책**: job-level `if` 제거 → 내부 script early return 으로 교체.
+적용된 워크플로우: `claude-review-responder.yml`, `copilot-review-evaluator.yml`, `review-comment-to-issue.yml`
 
 ### Observability 최종 상태
 - Sentry: Spring Boot 4.x 미지원으로 포기 (PR #52)
