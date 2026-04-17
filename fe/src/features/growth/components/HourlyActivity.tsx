@@ -18,11 +18,11 @@ export function HourlyActivity({ history }: HourlyActivityProps) {
   const hourCounts = new Array<number>(24).fill(0)
   for (const h of history) {
     const hour = getCreatedAtHour(h.createdAt)
-    if (hour !== null) hourCounts[hour]++
+    if (hour !== null) hourCounts[hour] = (hourCounts[hour] ?? 0) + 1
   }
   const counts = Array.from({ length: 24 }, (_, hour) => ({
     hour: `${String(hour).padStart(2, '0')}시`,
-    count: hourCounts[hour],
+    count: hourCounts[hour] ?? 0,
   }))
 
   const maxCount = Math.max(...counts.map((c) => c.count), 1)
