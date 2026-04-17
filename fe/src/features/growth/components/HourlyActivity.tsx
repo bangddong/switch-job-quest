@@ -5,10 +5,19 @@ interface HourlyActivityProps {
   history: QuestHistoryItem[]
 }
 
+function getCreatedAtHour(createdAt: string): number | null {
+  const match = createdAt.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):\d{2}(?::\d{2}(?:\.\d+)?)?$/)
+  if (!match) {
+    return null
+  }
+  const hour = Number(match[1])
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null
+}
+
 export function HourlyActivity({ history }: HourlyActivityProps) {
   const counts = Array.from({ length: 24 }, (_, hour) => ({
     hour: `${String(hour).padStart(2, '0')}시`,
-    count: history.filter((h) => new Date(h.createdAt).getHours() === hour).length,
+    count: history.filter((h) => getCreatedAtHour(h.createdAt) === hour).length,
   }))
 
   const maxCount = Math.max(...counts.map((c) => c.count), 1)
