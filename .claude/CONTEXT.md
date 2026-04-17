@@ -14,9 +14,9 @@
 
 | PR | 내용 | 날짜 |
 |----|------|------|
-| #74 | PR description 템플릿 표준화 + copilot-instructions.md Why 규칙 통일 | 2026-04-17 |
-| #73 | CONTEXT.md — Copilot 직접 처리 방식 기록 + gh api 커맨드 정리 | 2026-04-17 |
-| #72 | Copilot 리뷰 처리 방식 전환 — GitHub Actions 자동화 → Claude Code 직접 처리 | 2026-04-17 |
+| #77 | FE growth dashboard — timezone 파싱 수정, 모바일 그리드 레이아웃, HourlyActivity O(N) 최적화 | 2026-04-17 |
+| #76 | BE QuestProgressEntity.status length=50, QuestHistoryEntity.grade length=10 (마이그레이션 스키마 정합) | 2026-04-17 |
+| #75 | CONTEXT.md PR #73, #74 완료 기록 | 2026-04-17 |
 
 ## 알아둬야 할 비자명적 결정
 
