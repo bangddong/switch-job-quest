@@ -107,7 +107,7 @@ export async function callAiCheck<T>(
 
   const json: ApiResponse<T> = await res.json()
 
-  if (!json.success || json.data == null) {
+  if (json.result !== 'SUCCESS' || json.data == null) {
     throw new Error(json.message ?? 'AI 평가 오류')
   }
 
