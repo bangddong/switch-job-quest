@@ -4,17 +4,38 @@ interface StreakBadgeProps {
   history: QuestHistoryItem[]
 }
 
-function toDateStr(date: Date): string {
+function toLocalDateStr(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+function toUtcDateStr(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+}
+
+function toHistoryDateStr(createdAt: string): string {
+  const datePart = createdAt.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (datePart) {
+    return datePart
+  }
+  return toLocalDateStr(new Date(createdAt))
+}
+
+function subtractDays(dateStr: string, days: number): string {
+  const parts = dateStr.split('-').map(Number)
+  const [year, month, day] = parts as [number, number, number]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  date.setUTCDate(date.getUTCDate() - days)
+  return toUtcDateStr(date)
+}
+
 function calcStreak(history: QuestHistoryItem[]): number {
-  const activeDates = new Set(history.map((h) => toDateStr(new Date(h.createdAt))))
+  const activeDates = new Set(history.map((h) => toHistoryDateStr(h.createdAt)))
   let streak = 0
-  const cursor = new Date()
-  while (activeDates.has(toDateStr(cursor))) {
+  let cursor = toLocalDateStr(new Date())
+
+  while (activeDates.has(cursor)) {
     streak++
-    cursor.setDate(cursor.getDate() - 1)
+    cursor = subtractDays(cursor, 1)
   }
   return streak
 }

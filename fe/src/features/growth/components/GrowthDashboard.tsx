@@ -205,7 +205,7 @@ export function GrowthDashboard() {
           </section>
 
           {/* 등급 분포 + 연속 스트릭 */}
-          <section style={{ marginBottom: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <section style={{ marginBottom: 28, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
             <div>
               <div
                 style={{
