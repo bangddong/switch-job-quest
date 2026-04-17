@@ -55,7 +55,7 @@ gh api --paginate repos/bangddong/switch-job-quest/pulls/<PR>/comments \
 git add -A && git commit -m "fix: ..." && git push
 
 # 3. 각 코멘트에 답글
-gh api repos/bangddong/switch-job-quest/pulls/comments/<id>/replies \
+gh api repos/bangddong/switch-job-quest/pulls/<PR>/comments/<id>/replies \
   -X POST -f body="<답글 내용>"
 
 # 4. Gate 확인 후 머지
