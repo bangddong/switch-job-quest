@@ -17,7 +17,7 @@ class QuestHistoryEntity(
     @Column(nullable = false)
     val score: Int = 0,
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 10)
     val grade: String = "D",
 
     @Column(nullable = false)

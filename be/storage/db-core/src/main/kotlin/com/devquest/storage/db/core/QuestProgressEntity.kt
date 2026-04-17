@@ -17,7 +17,7 @@ class QuestProgressEntity(
     val actId: Int = 0,
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 50)
     var status: QuestStatus = QuestStatus.NOT_STARTED,
 
     var aiScore: Int = 0,
