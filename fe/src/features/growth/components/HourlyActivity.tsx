@@ -15,9 +15,14 @@ function getCreatedAtHour(createdAt: string): number | null {
 }
 
 export function HourlyActivity({ history }: HourlyActivityProps) {
+  const hourCounts = new Array<number>(24).fill(0)
+  for (const h of history) {
+    const hour = getCreatedAtHour(h.createdAt)
+    if (hour !== null) hourCounts[hour]++
+  }
   const counts = Array.from({ length: 24 }, (_, hour) => ({
     hour: `${String(hour).padStart(2, '0')}시`,
-    count: history.filter((h) => getCreatedAtHour(h.createdAt) === hour).length,
+    count: hourCounts[hour],
   }))
 
   const maxCount = Math.max(...counts.map((c) => c.count), 1)
