@@ -6,7 +6,6 @@ on:
 
 jobs:
   respond-to-copilot:
-    if: contains(github.event.review.user.login, 'copilot-pull-request-reviewer')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -20,6 +19,14 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // Copilot 리뷰가 아닌 경우 스킵 (job-level if 대신 early return으로 action_required 방지)
+            const reviewerLogin = context.payload.review?.user?.login ?? '';
+            if (!reviewerLogin.includes('copilot-pull-request-reviewer')) {
+              core.notice(`리뷰어 ${reviewerLogin} — Copilot 아님, 건너뜀`);
+              core.setOutput('has_work', 'false');
+              return;
+            }
+
             const prNumber = context.payload.pull_request.number;
             const pr = context.payload.pull_request;
             const sha = pr.head.sha;
