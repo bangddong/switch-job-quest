@@ -32,9 +32,26 @@ chore/add-github-actions
 
 ```bash
 git push origin feat/xxx
-gh pr create --title "feat(be): ..." --base main
+gh pr create --title "feat(be): ..." --base main --body "$(cat <<'EOF'
+## Summary
+- 
+
+## Why
+<!-- 변경 이유가 자명하지 않을 때만 작성 -->
+
+## Test plan
+- [ ] 
+EOF
+)"
 gh pr merge --squash --delete-branch
 ```
+
+## PR Description 규칙
+
+- `.github/pull_request_template.md` 기본 템플릿 사용
+- **`Why` 섹션**: 변경 이유가 자명하지 않을 때만 포함, 자명하면 생략
+- **`fix` 타입**: Summary 대신 `원인` + `변경 내용` 섹션 사용
+- Attribution 줄(`🤖 Generated with ...`) **포함하지 않음**
 
 ## CI/CD 파이프라인
 
