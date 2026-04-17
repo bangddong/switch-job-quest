@@ -48,14 +48,14 @@ Claude Code가 직접 평가 + gh api로 답글 → Gate 재평가 → success
 ### Copilot 리뷰 처리 — 내가 직접 하는 방법
 ```bash
 # 1. PR의 Copilot 코멘트 확인
-gh api repos/bangddong/switch-job-quest/pulls/<PR>/comments \
+gh api --paginate repos/bangddong/switch-job-quest/pulls/<PR>/comments \
   --jq '.[] | {id, path, line, body}'
 
 # 2. 코드 수정 후 커밋 (suggestion 적용 시)
 git add -A && git commit -m "fix: ..." && git push
 
 # 3. 각 코멘트에 답글
-gh api repos/bangddong/switch-job-quest/pulls/<PR>/comments/<id>/replies \
+gh api repos/bangddong/switch-job-quest/pulls/comments/<id>/replies \
   -X POST -f body="<답글 내용>"
 
 # 4. Gate 확인 후 머지
