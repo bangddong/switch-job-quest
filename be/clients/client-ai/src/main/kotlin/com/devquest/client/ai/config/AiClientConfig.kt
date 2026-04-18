@@ -22,7 +22,7 @@ class AiClientConfig {
 
     @Bean("bossChatClient")
     fun bossChatClient(
-        @Value("\${devquest.ai.boss-model:claude-sonnet-4-5}") bossModel: String,
+        @Value("\${devquest.ai.boss-model:claude-sonnet-4-6}") bossModel: String,
         @Value("\${devquest.ai.boss-max-tokens:4000}") bossMaxTokens: Int,
         @Value("\${spring.ai.anthropic.api-key}") apiKey: String,
     ): ChatClient {
