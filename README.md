@@ -457,8 +457,8 @@ cd be
 | 키 | 기본값 | 용도 |
 |-----|--------|------|
 | `spring.ai.anthropic.chat.options.model` | claude-haiku-4-5-20251001 | 일반 퀘스트 |
-| `devquest.ai.boss-model` | claude-sonnet-4-5 | BOSS 퀘스트 |
-| `spring.ai.anthropic.chat.options.max-tokens` | 2000 | 일반 최대 토큰 |
+| `devquest.ai.boss-model` | claude-sonnet-4-6 | BOSS 퀘스트 |
+| `spring.ai.anthropic.chat.options.max-tokens` | 4000 | 일반 최대 토큰 |
 | `devquest.ai.boss-max-tokens` | 4000 | BOSS 최대 토큰 |
 
 ### 환경변수
