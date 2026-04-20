@@ -3,6 +3,8 @@ name: Copilot Review Gate
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
   pull_request_review_comment:
     types: [created]
   workflow_dispatch:
@@ -34,8 +36,16 @@ jobs:
               return;
             }
 
+            // pull_request_review 이벤트에서 Copilot bot이 아닌 경우 스킵
+            if (context.eventName === 'pull_request_review' &&
+                context.payload.review?.user?.login !== 'copilot-pull-request-reviewer[bot]') {
+              core.notice('Copilot 외 리뷰어 — 평가 스킵');
+              return;
+            }
+
             const prNumber = context.payload.inputs?.pr_number
-              ?? context.payload.pull_request?.number;
+              ?? context.payload.pull_request?.number
+              ?? context.payload.review?.pull_request_url?.match(/\/(\d+)$/)?.[1];
 
             if (!prNumber) {
               core.warning('PR number을 확인할 수 없습니다.');
