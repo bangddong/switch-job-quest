@@ -14,6 +14,7 @@
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| #82 | Copilot gate 자동 트리거 수정 — pull_request_review: submitted 트리거 추가로 Copilot 리뷰 후 자동 failure 전환 | 2026-04-20 |
 | #80 | FE AI 분석 로딩 박스 UI 통일 — MockInterviewPanel/CoachOnboarding/CoachQASession에 로딩 박스 추가, CoachQASession 에러 핸들링 + textarea disabled 버그 수정 | 2026-04-20 |
 | #79 | BOSS 모델 claude-sonnet-4-5 → 4-6 업그레이드, AiClientConfig @Value 기본값 수정, README max-tokens 4000 정합 | 2026-04-19 |
 | #77 | FE growth dashboard — timezone 파싱 수정, 모바일 그리드 레이아웃, HourlyActivity O(N) 최적화 | 2026-04-17 |
