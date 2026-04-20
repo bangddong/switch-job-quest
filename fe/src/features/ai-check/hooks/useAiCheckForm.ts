@@ -38,7 +38,8 @@ export function useAiCheckForm({ questId, cfg, onResult, onSubmit, initialValues
         }
       } else if (field.type === 'list') {
         const arr = (val as string[] | undefined) ?? []
-        if (arr.filter((s) => s.trim().length > 0).length === 0) {
+        const hasNonEmptyItem = arr.some((s) => (typeof s === 'string' ? s : '').trim().length > 0)
+        if (!hasNonEmptyItem) {
           return `'${field.label}' 항목을 최소 1개 이상 입력해주세요`
         }
       } else if (field.type === 'tag-search') {
