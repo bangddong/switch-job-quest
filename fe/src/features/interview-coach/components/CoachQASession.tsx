@@ -14,6 +14,7 @@ export function CoachQASession({ questions, onSubmitAnswer, onComplete }: CoachQ
   const [feedback, setFeedback] = useState<CoachAnswerResult | null>(null)
   const [history, setHistory] = useState<CoachAnswerHistory[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const current = questions[currentIndex]!
   const isLast = currentIndex === questions.length - 1
@@ -21,9 +22,12 @@ export function CoachQASession({ questions, onSubmitAnswer, onComplete }: CoachQ
   const handleSubmit = async () => {
     if (!answer.trim() || loading) return
     setLoading(true)
+    setError(null)
     try {
       const result = await onSubmitAnswer(current.question, answer.trim(), currentIndex, questions.length)
       setFeedback(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 평가 중 오류가 발생했습니다. 다시 시도해주세요.')
     } finally {
       setLoading(false)
     }
@@ -100,9 +104,23 @@ export function CoachQASession({ questions, onSubmitAnswer, onComplete }: CoachQ
               </div>
             </div>
           )}
+          {error && (
+            <div style={{
+              background: 'rgba(239,68,68,0.1)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: 8,
+              padding: '10px 14px',
+              marginBottom: 10,
+              fontSize: 13,
+              color: '#EF4444',
+            }}>
+              {error}
+            </div>
+          )}
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
+            disabled={loading}
             placeholder="답변을 입력해주세요. 구체적인 경험과 수치를 포함하면 더 좋은 평가를 받을 수 있습니다."
             rows={6}
             style={{
