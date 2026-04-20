@@ -35,6 +35,41 @@ body {
   50% { transform: scale(1.05); text-shadow: 0 0 16px rgba(239, 68, 68, 0.6); }
 }
 
+@keyframes oracleBreathe {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.15); }
+}
+
+@keyframes oracleGlow {
+  0%, 100% { box-shadow: 0 0 24px rgba(78, 205, 196, 0.3), 0 0 48px rgba(78, 205, 196, 0.1); }
+  50% { box-shadow: 0 0 24px rgba(167, 139, 250, 0.4), 0 0 48px rgba(167, 139, 250, 0.15); }
+}
+
+@keyframes oracleOrbit1 {
+  from { transform: rotate(0deg) translateX(38px) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(38px) rotate(-360deg); }
+}
+
+@keyframes oracleOrbit2 {
+  from { transform: rotate(120deg) translateX(28px) rotate(-120deg); }
+  to { transform: rotate(480deg) translateX(28px) rotate(-480deg); }
+}
+
+@keyframes oracleOrbit3 {
+  from { transform: rotate(240deg) translateX(48px) rotate(-240deg); }
+  to { transform: rotate(600deg) translateX(48px) rotate(-600deg); }
+}
+
+@keyframes oracleShimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(200%); }
+}
+
+@keyframes oracleSlideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .hov-act {
   transition: transform 0.2s, box-shadow 0.2s;
   cursor: pointer;
