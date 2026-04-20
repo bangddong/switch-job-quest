@@ -96,7 +96,7 @@ export function FormField({ field: f, value, activeHint, onActiveHintChange, onC
               <input
                 value={((value as string[] | undefined) ?? [])[i] ?? ''}
                 onChange={(e) => onListItemChange(i, e.target.value)}
-                placeholder={f.placeholder}
+                placeholder={i === 0 ? f.placeholder : ''}
                 style={{ ...inputStyle, flex: 1 }}
               />
             </div>

@@ -29,7 +29,35 @@ export function useAiCheckForm({ questId, cfg, onResult, onSubmit, initialValues
 
   const handleActiveHintChange = (key: string | null) => setActiveHint(key)
 
+  const validate = (): string | null => {
+    for (const field of cfg.fields) {
+      const val = values[field.key]
+      if (field.type === 'text' || field.type === 'textarea') {
+        if (!val || !(val as string).trim()) {
+          return `'${field.label}' 항목을 입력해주세요`
+        }
+      } else if (field.type === 'list') {
+        const arr = (val as string[] | undefined) ?? []
+        const hasNonEmptyItem = arr.some((s) => (typeof s === 'string' ? s : '').trim().length > 0)
+        if (!hasNonEmptyItem) {
+          return `'${field.label}' 항목을 최소 1개 이상 입력해주세요`
+        }
+      } else if (field.type === 'tag-search') {
+        const arr = (val as string[] | undefined) ?? []
+        if (arr.length === 0) {
+          return `'${field.label}' 항목을 최소 1개 이상 선택해주세요`
+        }
+      }
+    }
+    return null
+  }
+
   const handleSubmit = async () => {
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
     setLoading(true)
     setError('')
     try {

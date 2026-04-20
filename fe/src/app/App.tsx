@@ -31,6 +31,7 @@ export function App() {
   const [lastCompletedAt, setLastCompletedAt] = useState<string | null>(null)
   const [aiScores, setAiScores] = useState<Record<string, number>>({})
   const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | null>(null)
+  const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult>>({})
   const [showForm, setShowForm] = useState(false)
   const [showIntro, setShowIntro] = useState(true)
 
@@ -81,14 +82,14 @@ export function App() {
   const handleSelectAct = (act: Act) => {
     if (act.quests.length > 0) {
       const quest = act.quests.find((q) => !completed[q.id]) ?? act.quests[act.quests.length - 1]!
-      setAiResult(null)
+      setAiResult(aiResults[quest.id] ?? null)
       setShowForm(false)
       setView({ kind: 'briefing', act, quest })
     }
   }
 
   const handleSelectQuest = (act: Act, quest: Quest) => {
-    setAiResult(null)
+    setAiResult(aiResults[quest.id] ?? null)
     setShowForm(false)
     setView({ kind: 'briefing', act, quest })
   }
@@ -118,6 +119,7 @@ export function App() {
     setShowForm(false)
     if (view.kind === 'detail') {
       const { quest, act } = view
+      setAiResults((prev) => ({ ...prev, [quest.id]: result }))
       const isBoss = quest.id === '4-BOSS'
       const score = isBoss
         ? (result as BossPackageResult).overallScore
@@ -135,7 +137,7 @@ export function App() {
     for (const act of ACTS) {
       const quest = act.quests.find((q) => q.id === questId)
       if (quest) {
-        setAiResult(null)
+        setAiResult(aiResults[quest.id] ?? null)
         setShowForm(false)
         setView({ kind: 'detail', act, quest })
         return

@@ -27,10 +27,12 @@ export function TechStackInput({ value, onChange, placeholder }: TechStackInputP
   const [query, setQuery] = useState('')
   const [pendingStack, setPendingStack] = useState<string | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [focusedIndex, setFocusedIndex] = useState(-1)
 
   const isMaxReached = value.length >= 10
 
   const addedNames = value.map((v) => v.split(':')[0])
+  const addedNamesLower = addedNames.map((n) => (n ?? '').toLowerCase())
 
   const filtered = query.trim().length === 0
     ? []
@@ -38,16 +40,47 @@ export function TechStackInput({ value, onChange, placeholder }: TechStackInputP
         s.toLowerCase().includes(query.toLowerCase())
       ).slice(0, 8)
 
+  const queryNorm = query.trim().toLowerCase()
+  const showFreeText =
+    query.trim().length > 0 &&
+    !TECH_STACKS.some((s) => s.toLowerCase() === queryNorm) &&
+    !addedNamesLower.includes(queryNorm)
+
+  const totalDropdownItems = filtered.length + (showFreeText ? 1 : 0)
+
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value)
     setPendingStack(null)
     setShowDropdown(true)
+    setFocusedIndex(-1)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showDropdown || totalDropdownItems === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setFocusedIndex((i) => Math.min(i + 1, totalDropdownItems - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setFocusedIndex((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (focusedIndex >= 0 && focusedIndex < filtered.length) {
+        handleStackSelect(filtered[focusedIndex]!)
+      } else if (focusedIndex === filtered.length && showFreeText) {
+        handleStackSelect(query.trim())
+      }
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false)
+      setFocusedIndex(-1)
+    }
   }
 
   const handleStackSelect = (stack: string) => {
-    if (addedNames.includes(stack)) return
+    if (addedNamesLower.includes(stack.toLowerCase())) return
     setPendingStack(stack)
     setShowDropdown(false)
+    setFocusedIndex(-1)
     setQuery('')
   }
 
@@ -64,6 +97,7 @@ export function TechStackInput({ value, onChange, placeholder }: TechStackInputP
   const handleBlur = () => {
     setTimeout(() => {
       setShowDropdown(false)
+      setFocusedIndex(-1)
     }, 150)
   }
 
@@ -205,27 +239,40 @@ export function TechStackInput({ value, onChange, placeholder }: TechStackInputP
         <input
           value={query}
           onChange={handleQueryChange}
+          onKeyDown={handleKeyDown}
           onFocus={() => query.trim().length > 0 && setShowDropdown(true)}
           onBlur={handleBlur}
           placeholder={isMaxReached ? '최대 10개 선택됨' : (placeholder ?? '기술 검색...')}
           disabled={isMaxReached}
+          role="combobox"
+          aria-expanded={showDropdown && totalDropdownItems > 0}
+          aria-haspopup="listbox"
+          aria-activedescendant={focusedIndex >= 0 ? `tech-option-${focusedIndex}` : undefined}
           style={inputStyle}
         />
 
-        {showDropdown && filtered.length > 0 && !isMaxReached && (
-          <div style={{ ...dropdownStyle, position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10 }}>
-            {filtered.map((stack) => {
-              const alreadyAdded = addedNames.includes(stack)
+        {showDropdown && totalDropdownItems > 0 && !isMaxReached && (
+          <div
+            role="listbox"
+            style={{ ...dropdownStyle, position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10 }}
+          >
+            {filtered.map((stack, i) => {
+              const alreadyAdded = addedNamesLower.includes(stack.toLowerCase())
+              const isFocused = focusedIndex === i
               return (
                 <button
                   key={stack}
+                  id={`tech-option-${i}`}
                   type="button"
+                  role="option"
+                  aria-selected={isFocused}
                   onMouseDown={() => handleStackSelect(stack)}
                   disabled={alreadyAdded}
                   style={{
                     ...dropdownItemBase,
                     color: alreadyAdded ? '#334155' : '#F1F5F9',
                     cursor: alreadyAdded ? 'default' : 'pointer',
+                    background: isFocused ? 'rgba(78,205,196,0.1)' : 'transparent',
                   }}
                 >
                   {stack}
@@ -235,6 +282,25 @@ export function TechStackInput({ value, onChange, placeholder }: TechStackInputP
                 </button>
               )
             })}
+            {showFreeText && (
+              <button
+                id={`tech-option-${filtered.length}`}
+                type="button"
+                role="option"
+                aria-selected={focusedIndex === filtered.length}
+                onMouseDown={() => handleStackSelect(query.trim())}
+                style={{
+                  ...dropdownItemBase,
+                  color: '#A78BFA',
+                  cursor: 'pointer',
+                  background: focusedIndex === filtered.length ? 'rgba(167,139,250,0.1)' : 'transparent',
+                  borderTop: filtered.length > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                }}
+              >
+                <span style={{ color: '#475569', marginRight: 4 }}>직접 입력:</span>
+                {query.trim()}
+              </button>
+            )}
           </div>
         )}
       </div>
