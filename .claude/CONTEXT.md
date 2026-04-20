@@ -3,7 +3,7 @@
 > 새 대화 시작 시 이 파일을 먼저 읽으세요.
 > 전체 작업 이력은 `.claude/CONTEXT.archive.md` 참조.
 
-## 현재 상태 (2026-04-18)
+## 현재 상태 (2026-04-20)
 
 | 항목 | 내용 |
 |------|------|
@@ -14,9 +14,9 @@
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| #80 | FE AI 분석 로딩 박스 UI 통일 — MockInterviewPanel/CoachOnboarding/CoachQASession에 로딩 박스 추가, CoachQASession 에러 핸들링 + textarea disabled 버그 수정 | 2026-04-20 |
+| #79 | BOSS 모델 claude-sonnet-4-5 → 4-6 업그레이드, AiClientConfig @Value 기본값 수정, README max-tokens 4000 정합 | 2026-04-19 |
 | #77 | FE growth dashboard — timezone 파싱 수정, 모바일 그리드 레이아웃, HourlyActivity O(N) 최적화 | 2026-04-17 |
-| #76 | BE QuestProgressEntity.status length=50, QuestHistoryEntity.grade length=10 (마이그레이션 스키마 정합) | 2026-04-17 |
-| #75 | CONTEXT.md PR #73, #74 완료 기록 | 2026-04-17 |
 
 ## 알아둬야 할 비자명적 결정
 
@@ -43,6 +43,7 @@ Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
 
 ## 다음 작업
 
+- [ ] LoadingBox 공용 컴포넌트 추출 (#81 — refactor)
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
 
 ## 참조 문서
