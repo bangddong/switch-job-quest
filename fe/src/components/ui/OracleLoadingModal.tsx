@@ -58,38 +58,59 @@ export function OracleLoadingModal({ isOpen }: OracleLoadingModalProps) {
 
   useEffect(() => {
     if (!isOpen) return
-    const interval = setInterval(() => {
-      setVisible(false)
-      setTimeout(() => {
-        setMsgIdx((i) => (i + 1) % ORACLE_MESSAGES.length)
-        setVisible(true)
-      }, 300)
-    }, 3000)
-    return () => clearInterval(interval)
+
+    let cycleTimeout: ReturnType<typeof setTimeout> | undefined
+    let transitionTimeout: ReturnType<typeof setTimeout> | undefined
+
+    const scheduleNext = () => {
+      cycleTimeout = setTimeout(() => {
+        setVisible(false)
+        transitionTimeout = setTimeout(() => {
+          setMsgIdx((i) => (i + 1) % ORACLE_MESSAGES.length)
+          setVisible(true)
+          scheduleNext()
+        }, 300)
+      }, 3000)
+    }
+
+    scheduleNext()
+
+    return () => {
+      if (cycleTimeout) clearTimeout(cycleTimeout)
+      if (transitionTimeout) clearTimeout(transitionTimeout)
+    }
   }, [isOpen])
 
   if (!isOpen) return null
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(6, 6, 16, 0.85)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-    }}>
-      <div style={{
-        background: '#0F172A',
-        border: '1px solid rgba(78, 205, 196, 0.3)',
-        borderRadius: 20,
-        padding: '40px 48px',
-        textAlign: 'center',
-        width: 320,
-        animation: 'oracleGlow 3s ease-in-out infinite',
-      }}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="AI 분석 중"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(6, 6, 16, 0.85)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        aria-busy="true"
+        style={{
+          background: '#0F172A',
+          border: '1px solid rgba(78, 205, 196, 0.3)',
+          borderRadius: 20,
+          padding: '40px 48px',
+          textAlign: 'center',
+          width: 320,
+          animation: 'oracleGlow 3s ease-in-out infinite',
+        }}
+      >
         {/* 파티클 레이어 */}
         <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto 24px' }}>
           {/* 파티클 1 */}
@@ -142,7 +163,7 @@ export function OracleLoadingModal({ isOpen }: OracleLoadingModalProps) {
         </div>
 
         {/* 멘트 */}
-        <div style={{
+        <div aria-live="polite" style={{
           fontSize: 14,
           color: '#F1F5F9',
           marginBottom: 20,

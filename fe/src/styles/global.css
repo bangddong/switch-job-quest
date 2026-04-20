@@ -35,11 +35,6 @@ body {
   50% { transform: scale(1.05); text-shadow: 0 0 16px rgba(239, 68, 68, 0.6); }
 }
 
-@keyframes oracleRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 @keyframes oracleBreathe {
   0%, 100% { transform: rotate(0deg) scale(1); }
   50% { transform: rotate(180deg) scale(1.15); }
