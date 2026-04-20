@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OracleLoadingModal } from '@/components/ui/OracleLoadingModal'
 import { CoachBubble } from './CoachBubble'
 
 interface CoachOnboardingProps {
@@ -69,22 +70,7 @@ export function CoachOnboarding({ onStart, loading }: CoachOnboardingProps) {
           />
         </div>
 
-        {loading && (
-          <div style={{
-            background: 'rgba(78,205,196,0.06)',
-            border: '1px solid rgba(78,205,196,0.2)',
-            borderRadius: 10,
-            padding: '14px 16px',
-            textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 12, color: '#4ECDC4', letterSpacing: 2, marginBottom: 6 }}>
-              ⟳ JD 분석 중
-            </div>
-            <div style={{ fontSize: 11, color: '#94A3B8' }}>
-              약 30초 소요됩니다. 잠시만 기다려주세요.
-            </div>
-          </div>
-        )}
+        <OracleLoadingModal isOpen={loading} />
         <button
           onClick={() => onStart(targetRole.trim(), jdText.trim())}
           disabled={!canSubmit}

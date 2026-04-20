@@ -1,4 +1,5 @@
 import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
+import { OracleLoadingModal } from '@/components/ui/OracleLoadingModal'
 import { AI_FORMS } from '../constants/formConfig'
 import { useAiCheckForm } from '../hooks/useAiCheckForm'
 import { FormField } from './FormField'
@@ -34,23 +35,7 @@ export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCh
           onListItemChange={(index, val) => setListItem(f.key, index, val)}
         />
       ))}
-      {loading && (
-        <div style={{
-          background: 'rgba(78,205,196,0.06)',
-          border: '1px solid rgba(78,205,196,0.2)',
-          borderRadius: 10,
-          padding: '14px 16px',
-          marginBottom: 12,
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 12, color: '#4ECDC4', letterSpacing: 2, marginBottom: 6 }}>
-            ⟳ AI 분석 중
-          </div>
-          <div style={{ fontSize: 11, color: '#94A3B8' }}>
-            약 30초 소요됩니다. 잠시만 기다려주세요.
-          </div>
-        </div>
-      )}
+      <OracleLoadingModal isOpen={loading} />
       {error && (
         <div
           style={{
