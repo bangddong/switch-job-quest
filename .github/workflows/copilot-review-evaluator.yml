@@ -15,7 +15,7 @@ on:
         type: string
 
 concurrency:
-  group: copilot-gate-${{ github.event.pull_request.number || github.event.review.pull_request_url || github.event.inputs.pr_number }}
+  group: copilot-gate-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
   cancel-in-progress: false
 
 jobs:
