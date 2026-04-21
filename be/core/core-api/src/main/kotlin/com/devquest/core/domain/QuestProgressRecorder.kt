@@ -28,7 +28,7 @@ class QuestProgressRecorder(
             status = if (passed) QuestStatus.COMPLETED else QuestStatus.AI_FAILED,
             aiScore = score,
             earnedXp = xp,
-            aiEvaluationJson = evaluationJson,
+            aiEvaluationJson = evaluationJson ?: existing?.aiEvaluationJson,
             completedAt = if (passed) LocalDateTime.now() else null,
             updatedAt = LocalDateTime.now()
         )
