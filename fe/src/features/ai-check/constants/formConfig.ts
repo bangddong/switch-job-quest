@@ -207,6 +207,13 @@ export const AI_FORMS: AiFormsMap = {
     ],
     transform: (v) => v,
   },
+  '1-BOSS': {
+    label: '개발자 클래스 판별',
+    endpoint: 'developer-class',
+    fields: [],
+    description: '1-1, 1-2 결과를 종합하여 AI가 개발자 클래스를 판별합니다. 별도 입력 없이 바로 분석을 시작하세요.',
+    transform: () => ({}),
+  },
   '5-1': {
     label: '인성 면접 연습',
     endpoint: 'personality-interview',

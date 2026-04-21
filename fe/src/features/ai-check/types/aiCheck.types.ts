@@ -15,6 +15,7 @@ export interface AiFormConfig {
   label: string
   endpoint: string
   fields: FormFieldConfig[]
+  description?: string
   transform: (values: Record<string, unknown>) => Record<string, unknown>
 }
 

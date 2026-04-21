@@ -1,4 +1,4 @@
-import type { AiEvaluationResult, BossPackageResult, InterviewEvaluationResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, InterviewEvaluationResult } from '@/types/api.types'
 import { callAiCheck } from '@/lib/apiClient'
 
 export async function submitAiCheck(
@@ -6,6 +6,10 @@ export async function submitAiCheck(
   body: Record<string, unknown>,
 ): Promise<AiEvaluationResult> {
   return callAiCheck<AiEvaluationResult>(endpoint, body)
+}
+
+export async function submitDeveloperClass(): Promise<DeveloperClassResult> {
+  return callAiCheck<DeveloperClassResult>('developer-class', {})
 }
 
 export async function submitBossPackage(

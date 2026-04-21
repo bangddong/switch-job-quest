@@ -6,6 +6,7 @@ import com.devquest.core.domain.PassCriteriaPolicy
 import com.devquest.core.domain.QuestConstants
 import com.devquest.core.domain.QuestXpPolicy
 import com.devquest.core.enums.QuestStatus
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -25,11 +26,14 @@ class AiCheckService(
     private val bossPackageEvaluator: BossPackageEvaluatorPort,
     private val journeyReportPort: JourneyReportPort,
     private val questProgressRecorder: QuestProgressRecorder,
+    private val developerClassEvaluator: DeveloperClassEvaluatorPort,
+    private val objectMapper: ObjectMapper,
 ) {
     @Transactional
     fun checkSkillAssessment(userId: String, skills: List<String>, targetRole: String): SkillAssessmentResult {
         val result = skillAssessmentPort.evaluate(skills, targetRole)
-        questProgressRecorder.record(userId, QuestConstants.SKILL_ASSESSMENT, 1, result.score, true, QuestXpPolicy.calculate(QuestConstants.SKILL_ASSESSMENT, true))
+        val json = objectMapper.writeValueAsString(result)
+        questProgressRecorder.record(userId, QuestConstants.SKILL_ASSESSMENT, 1, result.score, true, QuestXpPolicy.calculate(QuestConstants.SKILL_ASSESSMENT, true), json)
         return result
     }
 
@@ -38,7 +42,8 @@ class AiCheckService(
         userId: String, dissatisfactions: List<String>, goals: List<String>, fiveYearVision: String
     ): EssayCheckResult {
         val result = essayEvaluator.evaluate(dissatisfactions, goals, fiveYearVision)
-        questProgressRecorder.record(userId, QuestConstants.CAREER_ESSAY, 1, result.score, result.passed, QuestXpPolicy.calculate(QuestConstants.CAREER_ESSAY, result.passed, score = result.score))
+        val json = objectMapper.writeValueAsString(result)
+        questProgressRecorder.record(userId, QuestConstants.CAREER_ESSAY, 1, result.score, result.passed, QuestXpPolicy.calculate(QuestConstants.CAREER_ESSAY, result.passed, score = result.score), json)
         return result
     }
 
@@ -91,6 +96,17 @@ class AiCheckService(
         val passed = PassCriteriaPolicy.evaluateMax(result.map { it.fitScore })
         questProgressRecorder.record(userId, QuestConstants.COMPANY_FIT_BOSS, 1, maxScore, passed, QuestXpPolicy.calculate(QuestConstants.COMPANY_FIT_BOSS, passed))
         return result
+    }
+
+    @Transactional
+    fun evaluateDeveloperClass(userId: String): DeveloperClassResult {
+        val skillJson = progressPort.findByUserIdAndQuestId(userId, QuestConstants.SKILL_ASSESSMENT)?.aiEvaluationJson ?: ""
+        val essayJson = progressPort.findByUserIdAndQuestId(userId, QuestConstants.CAREER_ESSAY)?.aiEvaluationJson ?: ""
+        val result = developerClassEvaluator.evaluate(skillJson, essayJson)
+        val passed = PassCriteriaPolicy.evaluate(result.overallScore)
+        val normalizedResult = result.copy(passed = passed)
+        questProgressRecorder.record(userId, QuestConstants.COMPANY_FIT_BOSS, 1, normalizedResult.overallScore, normalizedResult.passed, QuestXpPolicy.calculate(QuestConstants.COMPANY_FIT_BOSS, normalizedResult.passed), objectMapper.writeValueAsString(normalizedResult))
+        return normalizedResult
     }
 
     @Transactional

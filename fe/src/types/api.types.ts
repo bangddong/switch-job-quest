@@ -91,3 +91,13 @@ export interface InterviewEvaluationResult {
   keyPointsMissed?: string[]
   correctAnswer?: string
 }
+
+export interface DeveloperClassResult {
+  overallScore: number
+  passed: boolean
+  developerClass: string
+  classDescription: string
+  strengths: string[]
+  strategies: string[]
+  overallFeedback: string
+}

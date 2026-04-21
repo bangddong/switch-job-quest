@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
 import type { AiFormConfig } from '../types/aiCheck.types'
-import { submitAiCheck, submitBossPackage } from '../api/aiCheckApi'
+import { submitAiCheck, submitBossPackage, submitDeveloperClass } from '../api/aiCheckApi'
 
 interface UseAiCheckFormParams {
   questId: string
   cfg: AiFormConfig
-  onResult: (result: AiEvaluationResult | BossPackageResult) => void
+  onResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult) => void
   onSubmit?: (values: Record<string, unknown>) => void
   initialValues?: Record<string, unknown>
 }
@@ -66,7 +66,9 @@ export function useAiCheckForm({ questId, cfg, onResult, onSubmit, initialValues
       const result =
         questId === '4-BOSS'
           ? await submitBossPackage(body)
-          : await submitAiCheck(cfg.endpoint, body)
+          : questId === '1-BOSS'
+            ? await submitDeveloperClass()
+            : await submitAiCheck(cfg.endpoint, body)
       onResult(result)
     } catch (e) {
       setError('서버 연결 오류: ' + (e instanceof Error ? e.message : String(e)))

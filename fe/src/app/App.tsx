@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, BossPackageResult, ActClearReportResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, ActClearReportResult } from '@/types/api.types'
 import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail, QuestBriefingView } from '@/features/quest-detail'
@@ -30,8 +30,8 @@ export function App() {
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
   const [lastCompletedAt, setLastCompletedAt] = useState<string | null>(null)
   const [aiScores, setAiScores] = useState<Record<string, number>>({})
-  const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | null>(null)
-  const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult>>({})
+  const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | DeveloperClassResult | null>(null)
+  const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult>>({})
   const [showForm, setShowForm] = useState(false)
   const [showIntro, setShowIntro] = useState(true)
 
@@ -114,17 +114,18 @@ export function App() {
     if (isBossQuest(questId)) triggerActClearReport(act)
   }
 
-  const handleAiResult = (result: AiEvaluationResult | BossPackageResult) => {
+  const handleAiResult = (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult) => {
     setAiResult(result)
     setShowForm(false)
     if (view.kind === 'detail') {
       const { quest, act } = view
       setAiResults((prev) => ({ ...prev, [quest.id]: result }))
-      const isBoss = quest.id === '4-BOSS'
-      const score = isBoss
-        ? (result as BossPackageResult).overallScore
+      const isBossPackage = quest.id === '4-BOSS'
+      const isDeveloperClass = 'developerClass' in result
+      const score = isBossPackage || isDeveloperClass
+        ? (result as BossPackageResult | DeveloperClassResult).overallScore
         : (result as AiEvaluationResult).score
-      const passed = (result as AiEvaluationResult | BossPackageResult).passed
+      const passed = result.passed
       if (passed) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
         setAiScores((prev) => ({ ...prev, [quest.id]: score }))

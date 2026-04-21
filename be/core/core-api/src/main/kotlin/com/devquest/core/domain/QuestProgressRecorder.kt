@@ -18,7 +18,7 @@ class QuestProgressRecorder(
     private val publisher: ApplicationEventPublisher,
 ) {
     @Transactional
-    fun record(userId: String, questId: String, actId: Int, score: Int, passed: Boolean, xp: Int) {
+    fun record(userId: String, questId: String, actId: Int, score: Int, passed: Boolean, xp: Int, evaluationJson: String? = null) {
         val existing = progressPort.findByUserIdAndQuestId(userId, questId)
         val progress = QuestProgress(
             id = existing?.id,
@@ -28,6 +28,7 @@ class QuestProgressRecorder(
             status = if (passed) QuestStatus.COMPLETED else QuestStatus.AI_FAILED,
             aiScore = score,
             earnedXp = xp,
+            aiEvaluationJson = evaluationJson ?: existing?.aiEvaluationJson,
             completedAt = if (passed) LocalDateTime.now() else null,
             updatedAt = LocalDateTime.now()
         )

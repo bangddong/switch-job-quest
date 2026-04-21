@@ -20,7 +20,7 @@ export const ACTS: Act[] = [
       { id: '1-2', type: 'WRITE', title: '이직 동기 에세이', xp: 200, aiCheck: true, tag: '✍️ AI검사', difficulty: 1,
         desc: 'AI가 이직 동기의 명확성·논리성·진정성을 4개 기준으로 평가한다',
         tasks: ['현 직장 불만족 사항 3가지', '이직 후 목표 3가지', '5년 후 비전 200자 → AI 제출'] },
-      { id: '1-BOSS', type: 'BOSS', title: '🐉 BOSS: 개발자 클래스 판별', xp: 500, aiCheck: false, tag: '⚔️ 보스전', difficulty: 2,
+      { id: '1-BOSS', type: 'BOSS', title: '🐉 BOSS: 개발자 클래스 판별', xp: 500, aiCheck: true, tag: '⚔️ 보스전', difficulty: 2,
         desc: 'Act I 데이터를 종합해 AI가 개발자 유형과 맞춤 전략을 제시한다',
         tasks: ['1-1, 1-2 완료 데이터 종합', 'AI 클래스 분석 수령', '맞춤 이직 전략 3가지 확인'] },
     ],
