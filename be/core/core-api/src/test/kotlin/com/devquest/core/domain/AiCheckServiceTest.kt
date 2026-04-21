@@ -2,6 +2,7 @@ package com.devquest.core.domain
 
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -11,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -31,6 +33,8 @@ class AiCheckServiceTest {
     @Mock lateinit var bossPackageEvaluator: BossPackageEvaluatorPort
     @Mock lateinit var journeyReportPort: JourneyReportPort
     @Mock lateinit var questProgressRecorder: QuestProgressRecorder
+    @Mock lateinit var developerClassEvaluator: DeveloperClassEvaluatorPort
+    @Mock lateinit var objectMapper: ObjectMapper
 
     @InjectMocks
     private lateinit var service: AiCheckService
@@ -43,7 +47,7 @@ class AiCheckServiceTest {
 
         service.analyzeCompanyFit("user1", emptyMap(), emptyList())
 
-        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(0), eq(false), eq(0))
+        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(0), eq(false), eq(0), isNull())
     }
 
     @Test
@@ -56,7 +60,7 @@ class AiCheckServiceTest {
 
         service.analyzeCompanyFit("user1", emptyMap(), emptyList())
 
-        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(69), eq(false), eq(0))
+        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(69), eq(false), eq(0), isNull())
     }
 
     @Test
@@ -69,7 +73,7 @@ class AiCheckServiceTest {
 
         service.analyzeCompanyFit("user1", emptyMap(), emptyList())
 
-        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(70), eq(true), eq(500))
+        verify(questProgressRecorder).record(eq("user1"), eq("1-BOSS"), eq(1), eq(70), eq(true), eq(500), isNull())
     }
 
     @Test
@@ -90,7 +94,7 @@ class AiCheckServiceTest {
         val xpCaptor = argumentCaptor<Int>()
         verify(questProgressRecorder).record(
             userIdCaptor.capture(), questIdCaptor.capture(), actIdCaptor.capture(),
-            scoreCaptor.capture(), passedCaptor.capture(), xpCaptor.capture()
+            scoreCaptor.capture(), passedCaptor.capture(), xpCaptor.capture(), isNull()
         )
         assertThat(questIdCaptor.firstValue).isEqualTo("1-BOSS")
         assertThat(scoreCaptor.firstValue).isEqualTo(95)
@@ -106,7 +110,7 @@ class AiCheckServiceTest {
 
         service.checkResume("user1", "카카오", "JD", "이력서 내용")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("4-1"), eq(4), eq(85), eq(true), eq(500))
+        verify(questProgressRecorder).record(eq("user1"), eq("4-1"), eq(4), eq(85), eq(true), eq(500), isNull())
     }
 
     @Test
@@ -116,7 +120,7 @@ class AiCheckServiceTest {
 
         service.checkResume("user1", "카카오", "JD", "이력서 내용")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("4-1"), eq(4), eq(69), eq(false), eq(0))
+        verify(questProgressRecorder).record(eq("user1"), eq("4-1"), eq(4), eq(69), eq(false), eq(0), isNull())
     }
 
     // ===== checkCareerEssay 테스트 =====
@@ -128,7 +132,7 @@ class AiCheckServiceTest {
 
         service.checkCareerEssay("user1", listOf("불만"), listOf("목표"), "비전")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("1-2"), eq(1), eq(80), eq(true), eq(160))
+        verify(questProgressRecorder).record(eq("user1"), eq("1-2"), eq(1), eq(80), eq(true), eq(160), isNull())
     }
 
     @Test
@@ -138,7 +142,7 @@ class AiCheckServiceTest {
 
         service.checkCareerEssay("user1", listOf("불만"), listOf("목표"), "비전")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("1-2"), eq(1), eq(50), eq(false), eq(0))
+        verify(questProgressRecorder).record(eq("user1"), eq("1-2"), eq(1), eq(50), eq(false), eq(0), isNull())
     }
 
     // ===== checkTechBlog 테스트 =====
@@ -150,7 +154,7 @@ class AiCheckServiceTest {
 
         service.checkTechBlog("user1", "2-1", "Kotlin", "제목", "내용")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("2-1"), eq(2), eq(85), eq(true), eq(900))
+        verify(questProgressRecorder).record(eq("user1"), eq("2-1"), eq(2), eq(85), eq(true), eq(900), isNull())
     }
 
     @Test
@@ -160,7 +164,7 @@ class AiCheckServiceTest {
 
         service.checkTechBlog("user1", "2-1", "Kotlin", "제목", "내용")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("2-1"), eq(2), eq(40), eq(false), eq(0))
+        verify(questProgressRecorder).record(eq("user1"), eq("2-1"), eq(2), eq(40), eq(false), eq(0), isNull())
     }
 
     // ===== checkMockInterview 테스트 =====
@@ -172,7 +176,7 @@ class AiCheckServiceTest {
 
         service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(90), eq(true), eq(800))
+        verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(90), eq(true), eq(800), isNull())
     }
 
     @Test
@@ -182,7 +186,7 @@ class AiCheckServiceTest {
 
         service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(30), eq(false), eq(0))
+        verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(30), eq(false), eq(0), isNull())
     }
 
     // ===== analyzeJd 테스트 =====
@@ -194,7 +198,7 @@ class AiCheckServiceTest {
 
         service.analyzeJd("user1", "카카오", "JD 내용", listOf("Kotlin"), listOf("3년 경력"))
 
-        verify(questProgressRecorder).record(eq("user1"), eq("3-2"), eq(3), eq(60), eq(true), eq(350))
+        verify(questProgressRecorder).record(eq("user1"), eq("3-2"), eq(3), eq(60), eq(true), eq(350), isNull())
     }
 
     // ===== checkBossPackage 테스트 =====
@@ -216,7 +220,7 @@ class AiCheckServiceTest {
 
         service.checkBossPackage("user-1", "이력서 내용", "https://github.com/user", "", "시니어 백엔드")
 
-        verify(questProgressRecorder).record(eq("user-1"), eq("4-BOSS"), eq(4), eq(80), eq(true), eq(700))
+        verify(questProgressRecorder).record(eq("user-1"), eq("4-BOSS"), eq(4), eq(80), eq(true), eq(700), isNull())
     }
 
     // ===== checkPersonalityInterview 테스트 =====
@@ -228,6 +232,6 @@ class AiCheckServiceTest {
 
         service.checkPersonalityInterview("user1", "장단점은?", "저는...")
 
-        verify(questProgressRecorder).record(eq("user1"), eq("5-1"), eq(5), eq(88), eq(true), eq(480))
+        verify(questProgressRecorder).record(eq("user1"), eq("5-1"), eq(5), eq(88), eq(true), eq(480), isNull())
     }
 }
