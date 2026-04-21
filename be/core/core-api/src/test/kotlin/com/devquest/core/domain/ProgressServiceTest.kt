@@ -114,17 +114,42 @@ class ProgressServiceTest {
         verify(progressPort, never()).save(any())
     }
 
+    @Test
+    fun `aiEvaluationJson이 있으면 questDetails에 그대로 포함된다`() {
+        val json = "{\"score\":85}"
+        whenever(progressPort.findAllByUserId("user-1")).thenReturn(listOf(
+            progress("1-2", QuestStatus.COMPLETED, aiEvaluationJson = json),
+        ))
+
+        val result = service.getProgress("user-1")
+
+        assertThat(result.questDetails["1-2"]!!.aiEvaluationJson).isEqualTo(json)
+    }
+
+    @Test
+    fun `aiEvaluationJson이 null이면 questDetails에서도 null이다`() {
+        whenever(progressPort.findAllByUserId("user-1")).thenReturn(listOf(
+            progress("1-2", QuestStatus.COMPLETED, aiEvaluationJson = null),
+        ))
+
+        val result = service.getProgress("user-1")
+
+        assertThat(result.questDetails["1-2"]!!.aiEvaluationJson).isNull()
+    }
+
     private fun progress(
         questId: String,
         status: QuestStatus,
         aiScore: Int = 0,
-        earnedXp: Int = 0
+        earnedXp: Int = 0,
+        aiEvaluationJson: String? = null
     ) = QuestProgress(
         userId = "user-1",
         questId = questId,
         actId = 1,
         status = status,
         aiScore = aiScore,
-        earnedXp = earnedXp
+        earnedXp = earnedXp,
+        aiEvaluationJson = aiEvaluationJson
     )
 }
