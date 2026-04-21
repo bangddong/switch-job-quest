@@ -146,3 +146,4 @@ export function [Feature]ResultCard({ result }: [Feature]ResultCardProps) {
 - [ ] `api.types.ts`에 응답 타입 추가
 - [ ] App.tsx props drilling 연결
 - [ ] `features/ai-check/index.ts` export 등록
+- [ ] `JSON.parse()` 결과에 명시적 타입 캐스팅 (`as [ResultType]`) 또는 속성 존재 타입 가드 적용
