@@ -104,7 +104,7 @@ class AiCheckService(
         val essayJson = progressPort.findByUserIdAndQuestId(userId, QuestConstants.CAREER_ESSAY)?.aiEvaluationJson ?: ""
         val result = developerClassEvaluator.evaluate(skillJson, essayJson)
         val passed = PassCriteriaPolicy.evaluate(result.overallScore)
-        questProgressRecorder.record(userId, QuestConstants.COMPANY_FIT_BOSS, 1, result.overallScore, passed, QuestXpPolicy.calculate(QuestConstants.COMPANY_FIT_BOSS, passed))
+        questProgressRecorder.record(userId, QuestConstants.COMPANY_FIT_BOSS, 1, result.overallScore, passed, QuestXpPolicy.calculate(QuestConstants.COMPANY_FIT_BOSS, passed), objectMapper.writeValueAsString(result))
         return result
     }
 

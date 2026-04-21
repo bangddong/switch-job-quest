@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, DeveloperClassResult } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult } from '@/types/api.types'
 import { getToken } from '@/hooks/useAuth'
 
 const API_BASE = '/api/v1'
@@ -82,10 +82,6 @@ export async function fetchJourneyReport(
   const json: ApiResponse<JourneyReportResult> = await res.json()
   if (!json.success || json.data == null) throw new Error('여정 리포트 생성 실패')
   return json.data
-}
-
-export async function submitDeveloperClass(): Promise<DeveloperClassResult> {
-  return callAiCheck<DeveloperClassResult>('developer-class', {})
 }
 
 export async function callAiCheck<T>(
