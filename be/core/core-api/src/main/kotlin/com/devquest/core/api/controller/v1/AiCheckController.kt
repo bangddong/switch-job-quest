@@ -118,6 +118,11 @@ class AiCheckController(
         )
     }
 
+    @PostMapping("/developer-class")
+    fun evaluateDeveloperClass(@AuthenticationPrincipal userId: String): ApiResponse<*> {
+        return ApiResponse.success(aiCheckService.evaluateDeveloperClass(userId))
+    }
+
     @PostMapping("/boss-package")
     fun checkBossPackage(
         @AuthenticationPrincipal userId: String,
