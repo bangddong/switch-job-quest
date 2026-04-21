@@ -1,4 +1,4 @@
-import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
 import { OracleLoadingModal } from '@/components/ui/OracleLoadingModal'
 import { AI_FORMS } from '../constants/formConfig'
 import { useAiCheckForm } from '../hooks/useAiCheckForm'
@@ -6,7 +6,7 @@ import { FormField } from './FormField'
 
 interface AiCheckFormProps {
   questId: string
-  onResult: (result: AiEvaluationResult | BossPackageResult) => void
+  onResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult) => void
   initialValues?: Record<string, unknown>
   onSubmit?: (values: Record<string, unknown>) => void
 }
@@ -24,6 +24,22 @@ export function AiCheckForm({ questId, onResult, initialValues, onSubmit }: AiCh
       <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 4, marginBottom: 14 }}>
         🤖 AI SUBMISSION FORM
       </div>
+      {cfg.description && cfg.fields.length === 0 && (
+        <div
+          style={{
+            background: 'rgba(167,139,250,0.06)',
+            border: '1px solid rgba(167,139,250,0.18)',
+            borderRadius: 10,
+            padding: '12px 14px',
+            marginBottom: 14,
+            fontSize: 13,
+            color: '#94A3B8',
+            lineHeight: 1.6,
+          }}
+        >
+          {cfg.description}
+        </div>
+      )}
       {cfg.fields.map((f) => (
         <FormField
           key={f.key}

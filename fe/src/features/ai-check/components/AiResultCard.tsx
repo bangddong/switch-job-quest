@@ -1,4 +1,4 @@
-import type { AiEvaluationResult, BossPackageResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
 import { getGrade, PASS_THRESHOLD } from '../../../utils/gradeUtils'
 import { ResultHeader } from './ResultHeader'
 import { ResultSection } from './ResultSection'
@@ -116,6 +116,123 @@ export function AiResultCard({ result }: AiResultCardProps) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+interface DeveloperClassResultCardProps {
+  result: DeveloperClassResult
+}
+
+export function DeveloperClassResultCard({ result }: DeveloperClassResultCardProps) {
+  const passed = result.passed ?? result.overallScore >= 70
+  const grade = getGrade(result.overallScore)
+
+  return (
+    <div
+      style={{
+        background: passed ? 'rgba(16,185,129,0.04)' : 'rgba(239,68,68,0.04)',
+        border: `1px solid ${passed ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
+        borderRadius: 14,
+        padding: 22,
+        marginTop: 18,
+        animation: 'slideIn 0.5s ease',
+      }}
+    >
+      <ResultHeader
+        score={result.overallScore}
+        passed={passed}
+        grade={grade}
+        passLabel="✓ 통과 — 개발자 클래스 판별 완료!"
+        failLabel="✗ 미통과 — 더 많은 경험이 필요합니다"
+      />
+
+      {/* 개발자 클래스 강조 */}
+      <div
+        style={{
+          background: 'rgba(167,139,250,0.06)',
+          border: '1px solid rgba(167,139,250,0.2)',
+          borderRadius: 12,
+          padding: '18px 20px',
+          marginBottom: 16,
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ fontSize: 10, color: '#A78BFA', letterSpacing: 3, marginBottom: 10 }}>
+          🏷️ 개발자 클래스
+        </div>
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 'bold',
+            color: '#A78BFA',
+            marginBottom: 10,
+            lineHeight: 1.3,
+          }}
+        >
+          {result.developerClass}
+        </div>
+        <p style={{ color: '#94A3B8', fontSize: 13, margin: 0, lineHeight: 1.7 }}>
+          {result.classDescription}
+        </p>
+      </div>
+
+      {result.strengths.length > 0 && (
+        <ResultSection label="✓ STRENGTHS" color="#10B981" items={result.strengths} />
+      )}
+
+      {result.strategies.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: '#F59E0B', letterSpacing: 3, marginBottom: 10 }}>
+            🎯 맞춤 이직 전략
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {result.strategies.map((strategy, i) => (
+              <div
+                key={i}
+                style={{
+                  background: 'rgba(245,158,11,0.05)',
+                  border: '1px solid rgba(245,158,11,0.18)',
+                  borderRadius: 10,
+                  padding: '12px 14px',
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'flex-start',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: '#F59E0B',
+                    fontWeight: 'bold',
+                    minWidth: 20,
+                    paddingTop: 1,
+                  }}
+                >
+                  {i + 1}.
+                </span>
+                <span style={{ fontSize: 13, color: '#CBD5E1', lineHeight: 1.6 }}>{strategy}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          background: 'rgba(15,23,42,0.7)',
+          borderRadius: 10,
+          padding: '14px 16px',
+          borderLeft: '3px solid #4ECDC4',
+        }}
+      >
+        <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 3, marginBottom: 8 }}>
+          💬 OVERALL FEEDBACK
+        </div>
+        <p style={{ color: '#94A3B8', fontSize: 13, margin: 0, lineHeight: 1.7 }}>
+          {result.overallFeedback}
+        </p>
+      </div>
     </div>
   )
 }
