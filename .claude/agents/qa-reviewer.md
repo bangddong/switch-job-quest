@@ -113,7 +113,7 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 |------|------|
 | 신규 Service 메서드 | 대응 테스트 케이스 존재 여부 |
 | 생성자 변경 | `@Mock` 목록에 새 의존성 추가 여부 (누락 시 CI 파괴 — **CRITICAL**) |
-| AI 응답 `passed` 처리 | AI 응답 `passed` 그대로 반환 금지 — `PassCriteriaPolicy.evaluate(score)` override 여부 |
+| AI 응답 `passed` 처리 | `overallScore`/`fitScore` 등 복합 점수 Result(Resume, DeveloperClass, BossPackage 등)에 한해 `PassCriteriaPolicy.evaluate*()` 정규화 여부 확인. 단순 `result.passed` 사용은 정상 패턴 |
 | `aiEvaluationJson` 보존 | `record()` null 전달 시 기존 JSON이 null로 덮어쓰이지 않는지 |
 
 ## 보고서 형식

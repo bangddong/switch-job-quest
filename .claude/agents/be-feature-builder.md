@@ -134,9 +134,9 @@ fun check[Feature](@Valid @RequestBody request: [Feature]RequestDto): ApiRespons
 ### 순서
 1. 해당 Service의 테스트 파일 열기
 2. 기대 동작 테스트 케이스 작성 (이 시점 컴파일 오류 또는 실패 예상)
-3. `./gradlew :core:core-api:test 2>&1 | tail -20` — **실패** 확인 (red)
+3. `cd be && ./gradlew :core:core-api:test 2>&1 | tail -20` — **실패** 확인 (red)
 4. 최소 구현
-5. `./gradlew :core:core-api:test 2>&1 | tail -20` — **통과** 확인 (green)
+5. `cd be && ./gradlew :core:core-api:test 2>&1 | tail -20` — **통과** 확인 (green)
 
 ### 생성자 변경 시 필수 확인 ⚠️
 
@@ -148,8 +148,8 @@ Service 생성자에 새 의존성(Port, ObjectMapper 등) 추가 시:
 
 | Service | 테스트 파일 |
 |---------|------------|
-| AiCheckService | `core-api/src/test/kotlin/com/devquest/core/domain/AiCheckServiceTest.kt` |
-| ProgressService | `core-api/src/test/kotlin/com/devquest/core/domain/ProgressServiceTest.kt` |
+| AiCheckService | `be/core/core-api/src/test/kotlin/com/devquest/core/domain/AiCheckServiceTest.kt` |
+| ProgressService | `be/core/core-api/src/test/kotlin/com/devquest/core/domain/ProgressServiceTest.kt` |
 
 ## Kotlin 스타일 규칙
 - `val` 선호, `var`는 Entity 변경 필드만
