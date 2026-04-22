@@ -139,24 +139,38 @@ fun check[Feature](@Valid @RequestBody request: [Feature]RequestDto): ApiRespons
 새 Evaluator 구현 시 단위 테스트를 함께 작성한다.
 
 ### Evaluator 테스트 패턴
+
+ChatClient fluent 체인은 `RETURNS_DEEP_STUBS`로 목킹, Evaluator는 직접 생성한다.
+`@Mock`/`@InjectMocks` 사용 금지 — 기존 패턴(CareerEssayEvaluatorTest 등) 참고.
+
 ```kotlin
 @ExtendWith(MockitoExtension::class)
 class [Feature]EvaluatorTest {
-    @Mock private lateinit var chatClient: ChatClient
-    // ChatClient builder chain mock: chatClient.prompt().user(...).call().entity(...)
-    @InjectMocks private lateinit var evaluator: [Feature]Evaluator
+    // RETURNS_DEEP_STUBS로 fluent 체인 전체 목킹
+    private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val evaluator = [Feature]Evaluator(chatClient, aiCallExecutor)
 
     @Test
-    fun `평가 성공 시 결과 반환`() {
-        // given: chatClient mock — entity() 반환값 설정
-        // when: evaluator.evaluate(...)
-        // then: score, passed, grade 검증
+    fun `AI가 null을 반환하면 AiEvaluationException 발생`() {
+        whenever(
+            chatClient.prompt().user(any<String>()).call().entity([Feature]Result::class.java)
+        ).thenReturn(null)
+
+        assertThatThrownBy { evaluator.evaluate(/* 파라미터 */) }
+            .isInstanceOf(AiEvaluationException::class.java)
+            .hasMessageContaining("최종 실패")
     }
 
     @Test
-    fun `AI null 응답 시 AiEvaluationException 발생`() {
-        // given: entity() → null 반환
-        // then: assertThrows<AiEvaluationException>
+    fun `AI가 정상 응답을 반환하면 결과를 그대로 반환`() {
+        val expected = [Feature]Result(score = 80, passed = true, grade = "B")
+        whenever(
+            chatClient.prompt().user(any<String>()).call().entity([Feature]Result::class.java)
+        ).thenReturn(expected)
+
+        val result = evaluator.evaluate(/* 파라미터 */)
+        assertThat(result.score).isEqualTo(80)
     }
 }
 ```
