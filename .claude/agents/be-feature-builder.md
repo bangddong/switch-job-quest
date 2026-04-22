@@ -8,6 +8,10 @@ tools:
   - Bash
   - Glob
   - Grep
+skills:
+  - be-port-adapter
+  - be-api-endpoint
+  - be-ai-evaluator
 description: Kotlin/Spring Boot 기능 구현 전담 에이전트. Port & Adapter 패턴을 준수하며 Domain Model → Port → AI/DB Adapter → Service → Controller 전체 플로우를 구현한다.
 hooks:
   PreToolUse:
@@ -56,77 +60,8 @@ be/
 
 ## 구현 순서
 
-### 1. Domain Model (`core-domain/model/`)
-```kotlin
-data class [Feature]Result(
-    val score: Int = 0,
-    val passed: Boolean = false,
-    val grade: String = "D",
-    // 모든 필드에 기본값 필수 (AI JSON 파싱 대비)
-)
-```
-
-### 2. Port 인터페이스 (`core-domain/port/`)
-```kotlin
-interface [Feature]Port {
-    fun evaluate(/* 도메인 파라미터 */): [Feature]Result
-}
-```
-- Spring 어노테이션 금지
-- 반환 타입은 Domain Model (Entity 아님)
-
-### 3. AI Adapter (`client-ai/evaluator/`)
-```kotlin
-@Component
-class [Feature]Evaluator(private val chatClient: ChatClient) : [Feature]Port {
-    override fun evaluate(/* */): [Feature]Result {
-        val prompt = """
-            [컨텍스트]
-            ## 입력 데이터
-            [사용자 입력]
-            ## 평가 기준 (총 100점)
-            - 항목A (N점): 설명
-            반드시 다음 JSON 형식으로만 응답하세요 (다른 텍스트 금지):
-            { "score": 75, "passed": true, "grade": "B", ... }
-        """.trimIndent()
-        return chatClient.prompt().user(prompt).call()
-            .entity([Feature]Result::class.java)
-            ?: throw AiEvaluationException("파싱 실패")
-    }
-}
-```
-
-### 4. Service 메서드 (`core-api/domain/AiCheckService.kt`)
-```kotlin
-@Transactional
-fun check[Feature](userId: String, /* params */): [Feature]Result {
-    val result = [feature]Port.evaluate(/* */)
-    saveProgress(userId, "[questId]", actId, result.score, result.passed, xp)
-    return result
-}
-```
-- Port 인터페이스로 주입 (구체 클래스 X)
-
-### 5. Request DTO (`core-api/controller/v1/request/`)
-```kotlin
-data class [Feature]RequestDto(
-    @field:NotBlank val userId: String,
-    @field:NotBlank val fieldA: String,
-)
-```
-
-### 6. Controller 엔드포인트 (`core-api/controller/v1/AiCheckController.kt`에 추가)
-```kotlin
-@PostMapping("/[endpoint]")
-fun check[Feature](@Valid @RequestBody request: [Feature]RequestDto): ApiResponse<*> {
-    return try {
-        ApiResponse.success(aiCheckService.check[Feature](/* */))
-    } catch (e: Exception) {
-        log.error("[Feature] check failed", e)
-        throw CoreException(ErrorType.AI_EVALUATION_FAILED)
-    }
-}
-```
+주입된 skills(be-port-adapter, be-api-endpoint, be-ai-evaluator) 패턴을 따른다:
+`Domain Model → Port 인터페이스 → AI Adapter → Service 메서드 → Request DTO → Controller 엔드포인트`
 
 ## TDD 규칙 (필수)
 
@@ -152,17 +87,7 @@ Service 생성자에 새 의존성(Port, ObjectMapper 등) 추가 시:
 | AiCheckService | `be/core/core-api/src/test/kotlin/com/devquest/core/domain/AiCheckServiceTest.kt` |
 | ProgressService | `be/core/core-api/src/test/kotlin/com/devquest/core/domain/ProgressServiceTest.kt` |
 
-## Kotlin 스타일 규칙
-- `val` 선호, `var`는 Entity 변경 필드만
-- `!!` 사용 금지
-- 문자열 템플릿에서 한글 붙을 때: `${score}점` (파싱 오류 방지)
-- 로거: `LoggerFactory.getLogger(javaClass)`
-
-## TDD 규칙
-
-새 Evaluator 구현 시 단위 테스트를 함께 작성한다.
-
-### Evaluator 테스트 패턴
+## Evaluator 단위 테스트 패턴
 
 ChatClient fluent 체인은 `RETURNS_DEEP_STUBS`로 목킹, Evaluator는 직접 생성한다.
 `@Mock`/`@InjectMocks` 사용 금지 — 기존 패턴(CareerEssayEvaluatorTest 등) 참고.
@@ -170,7 +95,6 @@ ChatClient fluent 체인은 `RETURNS_DEEP_STUBS`로 목킹, Evaluator는 직접 
 ```kotlin
 @ExtendWith(MockitoExtension::class)
 class [Feature]EvaluatorTest {
-    // RETURNS_DEEP_STUBS로 fluent 체인 전체 목킹
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
     private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
     private val evaluator = [Feature]Evaluator(chatClient, aiCallExecutor)
@@ -199,7 +123,8 @@ class [Feature]EvaluatorTest {
 }
 ```
 
-### Controller 테스트 패턴
+## Controller 테스트 패턴
+
 `standaloneSetup` + `@AuthenticationPrincipal` 조합:
 ```kotlin
 @BeforeEach fun setup() {
@@ -212,13 +137,18 @@ class [Feature]EvaluatorTest {
 @AfterEach fun teardown() { SecurityContextHolder.clearContext() }
 ```
 
+## Kotlin 스타일 규칙
+- `val` 선호, `var`는 Entity 변경 필드만
+- `!!` 사용 금지
+- 문자열 템플릿에서 한글 붙을 때: `${score}점` (파싱 오류 방지)
+- 로거: `LoggerFactory.getLogger(javaClass)`
+
 ## 구현 후 체크리스트
 - [ ] Port에 Spring 어노테이션 없음
 - [ ] Domain Model 모든 필드 기본값 있음
 - [ ] AI 프롬프트 JSON 스키마가 Result 필드와 일치
 - [ ] Service에서 Port 인터페이스로 주입
 - [ ] `saveProgress` 올바른 questId, actId, xp 전달
-- [ ] 기존 테스트 패턴과 일관성 유지
 - [ ] 신규 Service 메서드에 대응하는 테스트 케이스 작성됨 (TDD)
 - [ ] 생성자 파라미터 변경 시 테스트 `@Mock` 목록 및 `verify()` 호출 업데이트 완료
 - [ ] 테스트 실패(red) → 구현 → 통과(green) 순서 확인
