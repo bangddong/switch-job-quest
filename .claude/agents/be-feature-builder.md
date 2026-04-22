@@ -1,6 +1,6 @@
 ---
 name: be-feature-builder
-model: claude-sonnet-4-6
+model: sonnet
 tools:
   - Read
   - Write

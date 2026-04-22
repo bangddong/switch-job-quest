@@ -1,15 +1,19 @@
 ---
 name: orchestrator
-model: claude-sonnet-4-6
-tools:
-  - Agent(be-feature-builder, fe-feature-builder, design-reviewer, qa-reviewer)
-  - Read
-  - Glob
-  - Grep
-  - Bash
-  - Write
-  - Edit
+model: sonnet
+tools: "Agent(be-feature-builder, fe-feature-builder, design-reviewer, qa-reviewer), Read, Glob, Grep, Bash, Write, Edit"
 description: Feature Dev 오케스트레이터. 사용자 요청을 분석해 필요한 에이전트만 선택적으로 스폰하며 BE·FE·Design·QA를 조율한다. `claude --agent orchestrator`로 실행.
+hooks:
+  PreToolUse:
+    - matcher: "Write|Edit"
+      hooks:
+        - type: command
+          command: ".claude/scripts/assert-orchestrator-path.sh"
+  PostToolUse:
+    - matcher: ".*"
+      hooks:
+        - type: command
+          command: ".claude/scripts/log-event.sh PostToolUse orchestrator"
 ---
 
 # Feature Dev Orchestrator
