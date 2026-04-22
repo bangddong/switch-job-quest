@@ -1,4 +1,5 @@
 ---
+name: qa-reviewer
 model: claude-sonnet-4-6
 tools:
   - Read
@@ -115,6 +116,11 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 | 생성자 변경 | `@Mock` 목록에 새 의존성 추가 여부 (누락 시 CI 파괴 — **CRITICAL**) |
 | AI 응답 `passed` 처리 | `overallScore`/`fitScore` 등 복합 점수 Result(Resume, DeveloperClass, BossPackage 등)에 한해 `PassCriteriaPolicy.evaluate*()` 정규화 여부 확인. 단순 `result.passed` 사용은 정상 패턴 |
 | `aiEvaluationJson` 보존 | `record()` null 전달 시 기존 JSON이 null로 덮어쓰이지 않는지 |
+| Evaluator 단위 테스트 | 새 `*Evaluator` 구현 시 `*EvaluatorTest.kt` 존재 여부 |
+| AI null 응답 예외 | `AiEvaluationException` 발생 케이스 테스트 포함 여부 |
+| Controller 테스트 패턴 | `standaloneSetup` + `AuthenticationPrincipalArgumentResolver` 사용 여부 |
+
+테스트 없음 → **WARNING** 처리 (CRITICAL 아님, tech-debt로 분류)
 
 ## 보고서 형식
 

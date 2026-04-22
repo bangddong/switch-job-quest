@@ -1,4 +1,5 @@
 ---
+name: be-feature-builder
 model: claude-sonnet-4-6
 tools:
   - Read
@@ -157,6 +158,60 @@ Service 생성자에 새 의존성(Port, ObjectMapper 등) 추가 시:
 - 문자열 템플릿에서 한글 붙을 때: `${score}점` (파싱 오류 방지)
 - 로거: `LoggerFactory.getLogger(javaClass)`
 
+## TDD 규칙
+
+새 Evaluator 구현 시 단위 테스트를 함께 작성한다.
+
+### Evaluator 테스트 패턴
+
+ChatClient fluent 체인은 `RETURNS_DEEP_STUBS`로 목킹, Evaluator는 직접 생성한다.
+`@Mock`/`@InjectMocks` 사용 금지 — 기존 패턴(CareerEssayEvaluatorTest 등) 참고.
+
+```kotlin
+@ExtendWith(MockitoExtension::class)
+class [Feature]EvaluatorTest {
+    // RETURNS_DEEP_STUBS로 fluent 체인 전체 목킹
+    private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val evaluator = [Feature]Evaluator(chatClient, aiCallExecutor)
+
+    @Test
+    fun `AI가 null을 반환하면 AiEvaluationException 발생`() {
+        whenever(
+            chatClient.prompt().user(any<String>()).call().entity([Feature]Result::class.java)
+        ).thenReturn(null)
+
+        assertThatThrownBy { evaluator.evaluate(/* 파라미터 */) }
+            .isInstanceOf(AiEvaluationException::class.java)
+            .hasMessageContaining("최종 실패")
+    }
+
+    @Test
+    fun `AI가 정상 응답을 반환하면 결과를 그대로 반환`() {
+        val expected = [Feature]Result(score = 80, passed = true, grade = "B")
+        whenever(
+            chatClient.prompt().user(any<String>()).call().entity([Feature]Result::class.java)
+        ).thenReturn(expected)
+
+        val result = evaluator.evaluate(/* 파라미터 */)
+        assertThat(result.score).isEqualTo(80)
+    }
+}
+```
+
+### Controller 테스트 패턴
+`standaloneSetup` + `@AuthenticationPrincipal` 조합:
+```kotlin
+@BeforeEach fun setup() {
+    mockMvc = MockMvcBuilders.standaloneSetup(controller)
+        .setCustomArgumentResolvers(AuthenticationPrincipalArgumentResolver())
+        .build()
+    SecurityContextHolder.getContext().authentication =
+        UsernamePasswordAuthenticationToken("testUser", null)
+}
+@AfterEach fun teardown() { SecurityContextHolder.clearContext() }
+```
+
 ## 구현 후 체크리스트
 - [ ] Port에 Spring 어노테이션 없음
 - [ ] Domain Model 모든 필드 기본값 있음
@@ -167,3 +222,6 @@ Service 생성자에 새 의존성(Port, ObjectMapper 등) 추가 시:
 - [ ] 신규 Service 메서드에 대응하는 테스트 케이스 작성됨 (TDD)
 - [ ] 생성자 파라미터 변경 시 테스트 `@Mock` 목록 및 `verify()` 호출 업데이트 완료
 - [ ] 테스트 실패(red) → 구현 → 통과(green) 순서 확인
+- [ ] Evaluator 단위 테스트 추가 (AI 응답 mock, null 응답 예외)
+- [ ] Controller 테스트 `standaloneSetup` + `AuthenticationPrincipalArgumentResolver` 사용
+- [ ] 테스트 파일이 `be/core/core-api/src/test/` 패키지 구조와 일치

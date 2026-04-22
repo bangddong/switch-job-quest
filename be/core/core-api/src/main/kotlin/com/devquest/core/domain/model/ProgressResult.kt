@@ -13,6 +13,7 @@ data class ProgressResult(
     data class QuestDetail(
         val status: QuestStatus,
         val score: Int,
-        val xp: Int
+        val xp: Int,
+        val aiEvaluationJson: String? = null
     )
 }

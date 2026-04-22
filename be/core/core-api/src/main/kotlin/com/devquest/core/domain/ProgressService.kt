@@ -56,7 +56,8 @@ class ProgressService(
                 it.questId to ProgressResult.QuestDetail(
                     status = it.status,
                     score = it.aiScore,
-                    xp = it.earnedXp
+                    xp = it.earnedXp,
+                    aiEvaluationJson = it.aiEvaluationJson
                 )
             },
             lastCompletedAt = lastCompletedAt
