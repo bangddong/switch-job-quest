@@ -133,6 +133,46 @@ fun check[Feature](@Valid @RequestBody request: [Feature]RequestDto): ApiRespons
 - 문자열 템플릿에서 한글 붙을 때: `${score}점` (파싱 오류 방지)
 - 로거: `LoggerFactory.getLogger(javaClass)`
 
+## TDD 규칙
+
+새 Evaluator 구현 시 단위 테스트를 함께 작성한다.
+
+### Evaluator 테스트 패턴
+```kotlin
+@ExtendWith(MockitoExtension::class)
+class [Feature]EvaluatorTest {
+    @Mock private lateinit var chatClient: ChatClient
+    // ChatClient builder chain mock: chatClient.prompt().user(...).call().entity(...)
+    @InjectMocks private lateinit var evaluator: [Feature]Evaluator
+
+    @Test
+    fun `평가 성공 시 결과 반환`() {
+        // given: chatClient mock — entity() 반환값 설정
+        // when: evaluator.evaluate(...)
+        // then: score, passed, grade 검증
+    }
+
+    @Test
+    fun `AI null 응답 시 AiEvaluationException 발생`() {
+        // given: entity() → null 반환
+        // then: assertThrows<AiEvaluationException>
+    }
+}
+```
+
+### Controller 테스트 패턴
+`standaloneSetup` + `@AuthenticationPrincipal` 조합:
+```kotlin
+@BeforeEach fun setup() {
+    mockMvc = MockMvcBuilders.standaloneSetup(controller)
+        .setCustomArgumentResolvers(AuthenticationPrincipalArgumentResolver())
+        .build()
+    SecurityContextHolder.getContext().authentication =
+        UsernamePasswordAuthenticationToken("testUser", null)
+}
+@AfterEach fun teardown() { SecurityContextHolder.clearContext() }
+```
+
 ## 구현 후 체크리스트
 - [ ] Port에 Spring 어노테이션 없음
 - [ ] Domain Model 모든 필드 기본값 있음
@@ -140,3 +180,6 @@ fun check[Feature](@Valid @RequestBody request: [Feature]RequestDto): ApiRespons
 - [ ] Service에서 Port 인터페이스로 주입
 - [ ] `saveProgress` 올바른 questId, actId, xp 전달
 - [ ] 기존 테스트 패턴과 일관성 유지
+- [ ] Evaluator 단위 테스트 추가 (AI 응답 mock, null 응답 예외)
+- [ ] Controller 테스트 `standaloneSetup` + `AuthenticationPrincipalArgumentResolver` 사용
+- [ ] 테스트 파일이 `src/test/` 패키지 구조와 일치

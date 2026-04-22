@@ -3,6 +3,10 @@ name: feature-dev
 description: "BE + FE 기능 구현 팀을 조율하는 오케스트레이터. 새 퀘스트/기능 구현, BE API 추가, FE 연동, 풀스택 기능 개발 요청 시 반드시 이 스킬을 사용. 후속 작업: 기능 수정, 재구현, 부분 변경, 버그 수정 요청 시에도 이 스킬 사용."
 ---
 
+> **Deprecated**: 이 스킬은 `.claude/agents/orchestrator.md` 기반 named agent 방식으로 대체되었습니다.
+> 새 기능 구현은 `claude --agent orchestrator`를 사용하세요.
+> 이 파일은 하위 호환성을 위해 유지됩니다.
+
 # Feature Dev Orchestrator
 
 ## 오케스트레이터 경계 (절대 규칙)

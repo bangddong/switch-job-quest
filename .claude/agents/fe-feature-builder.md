@@ -36,6 +36,16 @@ hooks:
 
 ---
 
+## Design Spec 수신
+
+오케스트레이터가 Design Spec을 전달하는 경우:
+1. Spec의 `layout`, `colorPalette`, `components` 필드를 기준으로 구현한다.
+2. Spec이 문자열로 전달된 경우 반드시 `JSON.parse()` 후 사용한다 (문자열 그대로 렌더링 금지).
+3. JSON 파싱 실패 시 임의로 해석하지 않고 오케스트레이터에 보고 후 멈춘다.
+4. Spec에 없는 컴포넌트·레이아웃을 임의로 추가하지 않는다.
+
+---
+
 이 프로젝트의 FE는 React 19 + TypeScript + Vite 기반이며 **인라인 스타일만** 사용한다.
 
 ## 모듈 구조
@@ -146,3 +156,4 @@ export function [Feature]ResultCard({ result }: [Feature]ResultCardProps) {
 - [ ] `api.types.ts`에 응답 타입 추가
 - [ ] App.tsx props drilling 연결
 - [ ] `features/ai-check/index.ts` export 등록
+- [ ] Design Spec 전달 시 `JSON.parse()` 후 사용 (문자열 그대로 렌더링 금지)
