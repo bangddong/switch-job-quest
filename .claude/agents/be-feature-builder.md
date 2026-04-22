@@ -128,6 +128,30 @@ fun check[Feature](@Valid @RequestBody request: [Feature]RequestDto): ApiRespons
 }
 ```
 
+## TDD 규칙 (필수)
+
+모든 신규 Service 메서드는 **테스트를 먼저 작성**한 뒤 구현한다.
+
+### 순서
+1. 해당 Service의 테스트 파일 열기
+2. 기대 동작 테스트 케이스 작성 (이 시점 컴파일 오류 또는 실패 예상)
+3. `cd be && ./gradlew :core:core-api:test 2>&1 | tail -20` — **실패** 확인 (red)
+4. 최소 구현
+5. `cd be && ./gradlew :core:core-api:test 2>&1 | tail -20` — **통과** 확인 (green)
+
+### 생성자 변경 시 필수 확인 ⚠️
+
+Service 생성자에 새 의존성(Port, ObjectMapper 등) 추가 시:
+- 테스트 파일의 `@Mock` 목록에 **동일 타입 추가** — 누락 시 `@InjectMocks` 실패로 CI 파괴
+- 기존 `verify(...).method(...)` 호출의 파라미터 수 변경 시 **모든 호출 업데이트**
+
+### 테스트 파일 위치
+
+| Service | 테스트 파일 |
+|---------|------------|
+| AiCheckService | `be/core/core-api/src/test/kotlin/com/devquest/core/domain/AiCheckServiceTest.kt` |
+| ProgressService | `be/core/core-api/src/test/kotlin/com/devquest/core/domain/ProgressServiceTest.kt` |
+
 ## Kotlin 스타일 규칙
 - `val` 선호, `var`는 Entity 변경 필드만
 - `!!` 사용 금지
@@ -195,6 +219,9 @@ class [Feature]EvaluatorTest {
 - [ ] Service에서 Port 인터페이스로 주입
 - [ ] `saveProgress` 올바른 questId, actId, xp 전달
 - [ ] 기존 테스트 패턴과 일관성 유지
+- [ ] 신규 Service 메서드에 대응하는 테스트 케이스 작성됨 (TDD)
+- [ ] 생성자 파라미터 변경 시 테스트 `@Mock` 목록 및 `verify()` 호출 업데이트 완료
+- [ ] 테스트 실패(red) → 구현 → 통과(green) 순서 확인
 - [ ] Evaluator 단위 테스트 추가 (AI 응답 mock, null 응답 예외)
 - [ ] Controller 테스트 `standaloneSetup` + `AuthenticationPrincipalArgumentResolver` 사용
-- [ ] 테스트 파일이 `src/test/` 패키지 구조와 일치
+- [ ] 테스트 파일이 `be/core/core-api/src/test/` 패키지 구조와 일치
