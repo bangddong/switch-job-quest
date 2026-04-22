@@ -11,7 +11,7 @@ tools:
 skills:
   - fe-component
   - fe-feature
-description: React 19 + TypeScript 기능 구현 전담 에이전트. App.tsx props drilling 패턴을 준수하며 타입 정의 → API 클라이언트 → 컴포넌트 전체 플로우를 구현한다.
+description: React 19 + TypeScript 기능 구현 전담 에이전트. App.tsx props drilling 패턴을 준수하며 타입 정의와 컴포넌트 구현을 포함한 FE 기능 구현 플로우를 수행한다.
 hooks:
   PreToolUse:
     - matcher: "Write|Edit"
@@ -96,7 +96,7 @@ export interface [Feature]Result {
   fields: [
     { key: 'fieldA', label: '필드명', placeholder: '입력하세요', multiline: true },
   ],
-  endpoint: '/api/v1/ai-check/[endpoint]',
+  endpoint: '[endpoint]',  // callAiCheck가 /api/v1/ai-check/ 접두사를 자동 추가함
 }
 ```
 
