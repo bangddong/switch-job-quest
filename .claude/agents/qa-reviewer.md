@@ -1,4 +1,5 @@
 ---
+name: qa-reviewer
 model: claude-sonnet-4-6
 tools:
   - Read
