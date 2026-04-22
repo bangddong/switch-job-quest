@@ -1,4 +1,5 @@
 ---
+name: qa-reviewer
 model: claude-sonnet-4-6
 tools:
   - Read
@@ -106,6 +107,16 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 ```
 
 각 단계가 연결되어 있는지 확인한다.
+
+### 8. 테스트 커버리지
+
+| 체크 | 기준 |
+|------|------|
+| Evaluator 단위 테스트 | 새 `*Evaluator` 구현 시 `*EvaluatorTest.kt` 존재 여부 |
+| AI null 응답 예외 | `AiEvaluationException` 발생 케이스 테스트 포함 여부 |
+| Controller 테스트 패턴 | `standaloneSetup` + `AuthenticationPrincipalArgumentResolver` 사용 여부 |
+
+테스트 없음 → **WARNING** 처리 (CRITICAL 아님, tech-debt로 분류)
 
 ## 보고서 형식
 

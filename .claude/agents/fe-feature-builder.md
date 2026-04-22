@@ -1,4 +1,5 @@
 ---
+name: fe-feature-builder
 model: claude-sonnet-4-6
 tools:
   - Read
@@ -33,6 +34,16 @@ hooks:
 | 완료 후 | 구현 결과 반환 | BE 수정 요청, 직접 PR 외 브랜치 작업 |
 
 이 경계를 벗어나는 판단이 필요하면 오케스트레이터에게 보고하고 멈춘다.
+
+---
+
+## Design Spec 수신
+
+오케스트레이터가 `design-reviewer`의 Design Spec(Markdown)을 전달하는 경우:
+1. Spec의 `### 레이아웃`, `### 색상`, `### 컴포넌트 구조`, `### 상태 처리` 섹션을 기준으로 구현한다.
+2. Spec은 Markdown 텍스트 형식 — `JSON.parse()` 불필요, 텍스트로 직접 읽는다.
+3. Spec에 없는 컴포넌트·색상·레이아웃을 임의로 추가하지 않는다.
+4. 해석이 모호한 부분은 오케스트레이터에 보고 후 멈춘다.
 
 ---
 
@@ -146,3 +157,4 @@ export function [Feature]ResultCard({ result }: [Feature]ResultCardProps) {
 - [ ] `api.types.ts`에 응답 타입 추가
 - [ ] App.tsx props drilling 연결
 - [ ] `features/ai-check/index.ts` export 등록
+- [ ] Design Spec 전달 시 Markdown 섹션 기준으로 구현 (JSON.parse 불필요)
