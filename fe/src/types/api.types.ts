@@ -9,6 +9,7 @@ export interface QuestDetail {
   status: string
   score: number
   xp: number
+  aiEvaluationJson?: string
 }
 
 export interface ProgressResult {

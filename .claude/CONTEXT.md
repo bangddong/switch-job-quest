@@ -8,15 +8,15 @@
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `main` (최신) |
-| 열린 PR | 없음 |
+| 열린 PR | #87 브라우저 재로드 후 aiResults 복원 (머지 대기), #88 agent 프롬프트 TDD 추가 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| #88 | agent 프롬프트 TDD 워크플로우 추가 — be-feature-builder TDD 규칙, qa-reviewer 테스트 커버리지 섹션, fe-feature-builder JSON.parse 타입 가드 | 2026-04-21 |
+| #87 | 브라우저 재로드 후 aiResults 복원 — ProgressResult.QuestDetail aiEvaluationJson 추가, App.tsx fetchProgress 응답에서 setAiResults 복원, ProgressServiceTest 케이스 추가 | 2026-04-21 |
 | #85 | 1-BOSS 개발자 클래스 판별 AI 평가 — /ai-check/developer-class 신규, 1-1/1-2 aiEvaluationJson 저장, DeveloperClassResultCard FE 렌더링 | 2026-04-21 |
-| #84 | ACT1 UX 개선 — TechStackInput 키보드 네비게이션+자유입력, list placeholder 첫 항목만, FE 유효성 검증, aiResults 히스토리 유지 | 2026-04-20 |
-| #83 | OracleLoadingModal — RPG 테마 풀스크린 로딩 모달, 45개 신탁 멘트, 파티클 애니메이션, 4개 컴포넌트 인라인 로딩 박스 교체 | 2026-04-20 |
 
 ## 알아둬야 할 비자명적 결정
 
@@ -43,8 +43,9 @@ Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
 
 ## 다음 작업
 
+- [ ] PR #87, #88 머지
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
-- [ ] Issue #86: DeveloperClassEvaluator 단위 테스트 추가 (tech-debt)
+- [ ] Issue #86: DeveloperClassEvaluator 단위 테스트 추가 (tech-debt, TDD 방식으로 진행)
 
 ## 참조 문서
 

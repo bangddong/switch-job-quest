@@ -41,14 +41,24 @@ export function App() {
       .then((progress) => {
         const completedMap: Record<string, boolean> = {}
         const scoresMap: Record<string, number> = {}
+        const aiResultsMap: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult> = {}
         progress.completedQuests.forEach((id) => {
           completedMap[id] = true
         })
         Object.entries(progress.questDetails).forEach(([id, detail]) => {
           if (detail.score > 0) scoresMap[id] = detail.score
         })
+        Object.entries(progress.questDetails).forEach(([id, detail]) => {
+          if (detail.aiEvaluationJson) {
+            try {
+              const parsed = JSON.parse(detail.aiEvaluationJson)
+              aiResultsMap[id] = parsed
+            } catch { /* 파싱 실패 무시 */ }
+          }
+        })
         setCompleted(completedMap)
         setAiScores(scoresMap)
+        setAiResults(aiResultsMap)
         if (progress.lastCompletedAt) setLastCompletedAt(progress.lastCompletedAt)
       })
       .catch(() => {
