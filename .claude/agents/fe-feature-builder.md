@@ -8,7 +8,10 @@ tools:
   - Bash
   - Glob
   - Grep
-description: React 19 + TypeScript 기능 구현 전담 에이전트. App.tsx props drilling 패턴을 준수하며 타입 정의 → API 클라이언트 → 컴포넌트 전체 플로우를 구현한다.
+skills:
+  - fe-component
+  - fe-feature
+description: React 19 + TypeScript 기능 구현 전담 에이전트. App.tsx props drilling 패턴을 준수하며 타입 정의와 컴포넌트 구현을 포함한 FE 기능 구현 플로우를 수행한다.
 hooks:
   PreToolUse:
     - matcher: "Write|Edit"
@@ -48,6 +51,7 @@ hooks:
 ---
 
 이 프로젝트의 FE는 React 19 + TypeScript + Vite 기반이며 **인라인 스타일만** 사용한다.
+컴포넌트 패턴, 색상 팔레트, 상태 관리 규칙은 주입된 skills(fe-component, fe-feature)를 따른다.
 
 ## 모듈 구조
 
@@ -73,7 +77,7 @@ fe/src/
 - **외부 상태관리 금지** — Redux, Context, Zustand 등. `useState` only
 - **!!** 타입 단언 지양 — `?.`, `?:` 선호
 
-## 구현 순서
+## 이 프로젝트 AI Check 구현 순서
 
 ### 1. 타입 정의 (`types/api.types.ts`)
 
@@ -85,69 +89,26 @@ export interface [Feature]Result {
 }
 ```
 
-### 2. API 클라이언트 (`lib/apiClient.ts`)
-
-```typescript
-export async function [featureAction](
-  userId: string,
-  params: ...,
-): Promise<[Feature]Result> {
-  return callAiCheck<[Feature]Result>('/api/v1/ai-check/[endpoint]', {
-    userId,
-    ...params,
-  }, userId)
-}
-```
-
-### 3. AI Check Form 등록 (`features/ai-check/constants/formConfig.ts`)
+### 2. AI Check Form 등록 (`features/ai-check/constants/formConfig.ts`)
 
 ```typescript
 '[questId]': {
   fields: [
     { key: 'fieldA', label: '필드명', placeholder: '입력하세요', multiline: true },
   ],
-  endpoint: '/api/v1/ai-check/[endpoint]',
+  endpoint: '[endpoint]',  // callAiCheck가 /api/v1/ai-check/ 접두사를 자동 추가함
 }
 ```
 
-### 4. 결과 카드 컴포넌트 (`features/ai-check/components/[Feature]ResultCard.tsx`)
+### 3. 결과 카드 컴포넌트 (`features/ai-check/components/[Feature]ResultCard.tsx`)
 
-```typescript
-interface [Feature]ResultCardProps {
-  result: [Feature]Result
-}
+fe-component skill의 컴포넌트 구조와 색상 팔레트를 따른다.
 
-export function [Feature]ResultCard({ result }: [Feature]ResultCardProps) {
-  return (
-    <div style={{ background: '#0F172A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 20 }}>
-      {/* 결과 내용 */}
-    </div>
-  )
-}
-```
-
-### 5. App.tsx 상태 연결
+### 4. App.tsx 상태 연결
 
 - 새로운 결과 타입이면 `useState`로 상태 추가
 - BOSS 퀘스트 완료 시 특수 처리 필요하면 `handleBossComplete` 패턴 참고
 - View 전환: `setCurrentView('...')` + `viewContent` 렌더링
-
-## 다크 테마 컬러 팔레트
-
-| 용도 | 색상 |
-|------|------|
-| 배경 | `#060610` |
-| 카드 배경 | `#0F172A` |
-| 테두리 | `rgba(255,255,255,0.08)` |
-| 주요 텍스트 | `#F8FAFC` |
-| 보조 텍스트 | `#475569` |
-| Teal (성공/액센트) | `#4ECDC4` |
-| Purple (AI) | `#A78BFA` |
-| Amber (XP) | `#F59E0B` |
-| Green (통과) | `#10B981` |
-| Red (실패) | `#EF4444` |
-
-폰트: `'Courier New', monospace`
 
 ## 구현 후 체크리스트
 
