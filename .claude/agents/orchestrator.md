@@ -213,14 +213,18 @@ gh pr create \
   --title "<type>(<scope>): <message>" \
   --body "$(cat <<'EOF'
 ## Summary
-- ...
+- <변경 내용 1-3줄 요약>
+
+## Why
+<!-- 변경 이유가 자명하지 않을 때만 작성 -->
 
 ## Test plan
-- [ ] ...
+- [ ] <수행한 테스트>
 EOF
 )"
 ```
 
+> **PR body는 한국어로 작성한다.** (title의 type/scope/message는 영어 컨벤션 유지)
 > **"🤖 Generated with Claude Code" 문구는 PR body에 포함하지 않는다.**
 
 `.claude/CONTEXT.md` 업데이트 — **PR 생성 직후, 세션 종료 전 반드시 실행**:

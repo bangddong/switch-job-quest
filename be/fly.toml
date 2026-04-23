@@ -22,6 +22,13 @@ primary_region = 'nrt'
     hard_limit = 25
     soft_limit = 20
 
+[[http_service.checks]]
+  grace_period = "60s"
+  interval = "15s"
+  method = "get"
+  path = "/health"
+  timeout = "10s"
+
 [[vm]]
   memory = '512mb'
   cpu_kind = 'shared'
