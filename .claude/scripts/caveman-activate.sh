@@ -12,5 +12,6 @@ SKILL_FILE="$REPO_ROOT/.claude/skills/caveman/SKILL.md"
 
 [ -f "$SKILL_FILE" ] || exit 0
 
-# YAML frontmatter (--- ... ---) 제거 후 본문만 출력
-awk 'BEGIN{c=0} /^---/{c++; next} c>=2{print}' "$SKILL_FILE"
+# YAML frontmatter (첫 두 개 ---) 제거 후 본문만 출력
+# c<=2 조건으로 세 번째 이후 --- (Markdown 구분선 등)는 그대로 출력
+awk 'BEGIN{c=0} { if ($0=="---") { c++; if (c<=2) next } if (c>=2) print }' "$SKILL_FILE"
