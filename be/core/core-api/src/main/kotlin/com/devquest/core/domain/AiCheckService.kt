@@ -6,7 +6,7 @@ import com.devquest.core.domain.PassCriteriaPolicy
 import com.devquest.core.domain.QuestConstants
 import com.devquest.core.domain.QuestXpPolicy
 import com.devquest.core.enums.QuestStatus
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 

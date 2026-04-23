@@ -2,7 +2,7 @@ package com.devquest.core.domain
 
 import com.devquest.core.domain.model.evaluation.*
 import com.devquest.core.domain.port.*
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
