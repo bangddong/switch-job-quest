@@ -7,16 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/improve-context-recording` |
-| 열린 PR | #93 — Windows 훅 수정 + orchestrator 0단계 (머지 대기) |
+| 브랜치 | `chore/add-caveman` |
+| 열린 PR | 진행 중 — caveman 토큰 절약 모드 |
 
 ## 최근 완료 (최근 3건)
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| #93 | Windows 훅 수정 + orchestrator 0/9단계 CONTEXT 기록 강화 | 2026-04-23 |
 | #92 | agent frontmatter 수정 — model alias, tools format, orchestrator path guard | 2026-04-22 |
 | #91 | skills 주입 방식 적용 — be/fe-feature-builder에 skills 필드 추가, Copilot 리뷰 수정 | 2026-04-22 |
-| #90 | deprecated feature-dev/SKILL.md 삭제 | 2026-04-22 |
 
 ## 알아둬야 할 비자명적 결정
 
