@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `chore/improve-context-recording` |
+| 열린 PR | #93 — Windows 훅 수정 + orchestrator 0단계 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
