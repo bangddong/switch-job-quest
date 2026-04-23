@@ -51,6 +51,19 @@ cat .claude/CONTEXT.md
 
 ---
 
+## 0단계: CONTEXT.md 작업 시작 기록
+
+**브랜치 생성 전에** `.claude/CONTEXT.md`의 "현재 상태" 표를 갱신한다.
+
+| 항목 | 갱신 값 |
+|------|--------|
+| 브랜치 | `<생성 예정 브랜치명>` |
+| 열린 PR | 진행 중 — \<기능명\> |
+
+> 세션 중단 시 다음 대화에서 상태를 복원할 수 없으므로 반드시 실행한다.
+
+---
+
 ## 1단계: 작업 분류
 
 | 유형 | 판단 기준 | 브랜치 prefix |
@@ -198,12 +211,26 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 ```bash
 gh pr create \
   --title "<type>(<scope>): <message>" \
-  --body "..."
+  --body "$(cat <<'EOF'
+## Summary
+- ...
+
+## Test plan
+- [ ] ...
+EOF
+)"
 ```
 
-`.claude/CONTEXT.md` 업데이트:
+> **"🤖 Generated with Claude Code" 문구는 PR body에 포함하지 않는다.**
+
+`.claude/CONTEXT.md` 업데이트 — **PR 생성 직후, 세션 종료 전 반드시 실행**:
+
+| 셀 | 갱신 값 |
+|----|--------|
+| 현재 상태 › `브랜치` | 브랜치명 그대로 유지 |
+| 현재 상태 › `열린 PR` | `#번호 — 제목 (머지 대기)` |
+
 - "최근 완료"에 PR 번호·내용·날짜 추가 (3건 유지)
-- "열린 PR" 갱신
 - "다음 작업" 갱신
 
 ---

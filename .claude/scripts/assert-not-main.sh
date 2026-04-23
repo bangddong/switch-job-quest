@@ -11,10 +11,19 @@ else
   FILE_PATH=$(echo "$INPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path') or d.get('tool_input',{}).get('path') or '')" 2>/dev/null || echo "")
 fi
 
+# Windows 절대경로(C:\... 또는 C:/...)를 Git Bash 스타일(/c/...)로 정규화
+# 이후 로직이 Unix 경로 기준으로 동작하므로 선행 정규화가 필요
+# 효과: .claude/ 예외 처리 및 REPO_ROOT 비교 모두 정상 동작
+if [[ "$FILE_PATH" =~ ^[A-Za-z]:[\\/] ]]; then
+  FILE_PATH="${FILE_PATH//\\//}"           # 역슬래시 → 슬래시
+  DRIVE="${FILE_PATH:0:1}"                  # 드라이브 문자 추출
+  FILE_PATH="/${DRIVE,,}${FILE_PATH:2}"    # E:/foo → /e/foo
+fi
+
 # git 레포 외부 경로 (메모리, 홈 디렉토리 등)는 브랜치와 무관 → 허용
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 if [ -n "$REPO_ROOT" ] && [ -n "$FILE_PATH" ]; then
-  # 절대경로 또는 상대경로 모두 처리: 절대경로면 REPO_ROOT prefix 체크, 상대경로면 항상 레포 내부로 간주
+  # 절대경로이고 REPO_ROOT 아래가 아니면 허용
   if [[ "$FILE_PATH" == /* ]] && [[ "$FILE_PATH" != "$REPO_ROOT"* ]]; then
     exit 0
   fi
