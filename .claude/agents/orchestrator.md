@@ -211,8 +211,17 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 ```bash
 gh pr create \
   --title "<type>(<scope>): <message>" \
-  --body "..."
+  --body "$(cat <<'EOF'
+## Summary
+- ...
+
+## Test plan
+- [ ] ...
+EOF
+)"
 ```
+
+> **"🤖 Generated with Claude Code" 문구는 PR body에 포함하지 않는다.**
 
 `.claude/CONTEXT.md` 업데이트 — **PR 생성 직후, 세션 종료 전 반드시 실행**:
 - "현재 상태" 브랜치를 열린 PR 번호로 교체
