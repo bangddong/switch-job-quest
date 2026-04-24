@@ -13,6 +13,7 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
 
@@ -20,6 +21,8 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
     var endpoint: String = "https://in.logs.betterstack.com"
 
     private val queue = ConcurrentLinkedQueue<ILoggingEvent>()
+    private val queueSize = AtomicInteger(0)
+    private val maxQueueSize = 1000
     private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "logtail-flusher").also { it.isDaemon = true }
     }
@@ -32,11 +35,16 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
         DateTimeFormatter.ISO_INSTANT.withZone(ZoneOffset.UTC)
 
     override fun start() {
+        if (sourceToken.isBlank()) {
+            addInfo("LOGTAIL_SOURCE_TOKEN 미설정 — LogtailHttpAppender 비활성화")
+            return
+        }
         super.start()
         scheduler.scheduleAtFixedRate(::flush, 1, 1, TimeUnit.SECONDS)
     }
 
     override fun stop() {
+        if (!isStarted) return
         scheduler.shutdown()
         try {
             scheduler.awaitTermination(10, TimeUnit.SECONDS)
@@ -48,16 +56,21 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
     }
 
     override fun append(event: ILoggingEvent) {
-        if (sourceToken.isBlank()) return
+        if (!isStarted) return
+        if (queueSize.get() >= maxQueueSize) return
         event.prepareForDeferredProcessing()
         queue.add(event)
-        if (queue.size >= 100) scheduler.execute(::flush)
+        if (queueSize.incrementAndGet() >= 100) scheduler.execute(::flush)
     }
 
     private fun flush() {
-        if (sourceToken.isBlank() || queue.isEmpty()) return
+        if (!isStarted || queue.isEmpty()) return
         val batch = mutableListOf<ILoggingEvent>()
-        while (true) { batch.add(queue.poll() ?: break) }
+        while (true) {
+            val event = queue.poll() ?: break
+            batch.add(event)
+            queueSize.decrementAndGet()
+        }
         if (batch.isEmpty()) return
 
         try {
@@ -110,11 +123,18 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
         return """{"dt":"$timestamp","message":"$message","level":"$level","logger":"$logger","thread":"$thread"$mdcEntries$throwableInfo}"""
     }
 
-    private fun escapeJson(value: String): String =
-        value
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
+    private fun escapeJson(value: String): String = buildString {
+        for (ch in value) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"'  -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                '\b' -> append("\\b")
+                '' -> append("\\f")
+                else -> if (ch.code < 0x20) append("\\u%04x".format(ch.code)) else append(ch)
+            }
+        }
+    }
 }
