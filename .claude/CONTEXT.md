@@ -7,16 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/logtail-http-appender` (커밋 a6f6d22, PR 미생성) |
-| 열린 PR | 없음 (PR 생성 대기) |
+| 브랜치 | `feature/desgin-system` |
+| 열린 PR | #100 — PixelIcon 픽셀 아트 디자인 시스템 도입 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR | 내용 | 날짜 |
 |----|------|------|
-| #95 | 502 재발방지 — ObjectMapper Jackson 3.x import 수정 + @SpringBootTest smoke test + fly.toml 헬스 체크 | 2026-04-23 |
-| #94 | caveman lite 모드 — SessionStart hook으로 오케스트레이터 응답 ~65% 압축 | 2026-04-23 |
-| #93 | Windows 훅 수정 + orchestrator 0/9단계 CONTEXT 기록 강화 | 2026-04-23 |
+| #99 | Copilot gate 레이스 컨디션 수정 + 커밋 컨벤션 한국어 전환 | 2026-04-24 |
+| #98 | README 인프라 구성도 추가 — Vercel→Fly.io→외부 API 흐름, CI/CD, 외부 의존성 표 | 2026-04-24 |
+| #97 | README 아키텍처 보강 — 모듈 의존성, 로그 파이프라인, 배포 구성 추가 | 2026-04-24 |
 
 ## 알아둬야 할 비자명적 결정
 
