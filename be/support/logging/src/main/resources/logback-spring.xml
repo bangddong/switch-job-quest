@@ -28,8 +28,20 @@
             </encoder>
         </appender>
 
+        <appender name="LOGTAIL" class="com.devquest.support.logging.LogtailHttpAppender">
+            <sourceToken>${LOGTAIL_SOURCE_TOKEN:-}</sourceToken>
+        </appender>
+
+        <appender name="ASYNC_LOGTAIL" class="ch.qos.logback.classic.AsyncAppender">
+            <appender-ref ref="LOGTAIL"/>
+            <queueSize>512</queueSize>
+            <discardingThreshold>0</discardingThreshold>
+            <neverBlock>true</neverBlock>
+        </appender>
+
         <root level="INFO">
             <appender-ref ref="STDOUT"/>
+            <appender-ref ref="ASYNC_LOGTAIL"/>
         </root>
     </springProfile>
 
