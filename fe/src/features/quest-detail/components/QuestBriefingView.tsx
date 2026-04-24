@@ -1,5 +1,6 @@
 import type { Act, Quest } from '@/types/quest.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map/constants/questData'
+import { PixelIcon } from '@/components/ui/PixelIcon'
 
 interface QuestBriefingViewProps {
   quest: Quest
@@ -142,14 +143,18 @@ export function QuestBriefingView({ quest, act, onStart }: QuestBriefingViewProp
   return (
     <div style={containerStyle}>
       <p style={actContextStyle}>
-        <span>{act.icon}</span>
+        <span style={{ color: act.color, display: 'inline-flex', alignItems: 'center' }}>
+          <PixelIcon name={act.icon} size={14} />
+        </span>
         <span>
           {act.title} · {act.subtitle}
         </span>
       </p>
 
       <div style={badgeRowStyle}>
-        <span style={{ fontSize: 22 }}>{typeConfig.icon}</span>
+        <span style={{ color: typeConfig.border, display: 'inline-flex', alignItems: 'center' }}>
+          <PixelIcon name={typeConfig.icon} size={22} />
+        </span>
         <span style={tagBadgeStyle}>{quest.tag}</span>
         <span style={xpBadgeStyle}>+{quest.xp} XP</span>
       </div>

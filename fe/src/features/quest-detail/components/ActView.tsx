@@ -1,5 +1,6 @@
 import type { Act, Quest } from '@/types/quest.types'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { PixelIcon } from '@/components/ui/PixelIcon'
 import { QuestCard } from './QuestCard'
 
 interface ActViewProps {
@@ -14,7 +15,17 @@ export function ActView({ act, completed, aiScores, progress, onSelectQuest }: A
   return (
     <div style={{ animation: 'slideIn 0.4s ease' }}>
       <div style={{ padding: '24px 0 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ fontSize: 40, animation: 'float 3s ease-in-out infinite' }}>{act.icon}</div>
+        <div
+          style={{
+            animation: 'float 3s ease-in-out infinite',
+            color: act.color,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <PixelIcon name={act.icon} size={40} />
+        </div>
         <div>
           <div style={{ fontSize: 9, letterSpacing: 4, color: act.color, marginBottom: 3 }}>
             {act.title}

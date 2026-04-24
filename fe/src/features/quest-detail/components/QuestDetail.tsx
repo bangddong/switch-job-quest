@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
 import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
-
-type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
+import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
 import { QUEST_NEXT } from '../constants/questConnections'
 import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
 import { FinalBossView } from './FinalBossView'
+
+type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult
 
 interface QuestDetailProps {
   quest: Quest
@@ -86,7 +87,9 @@ export function QuestDetail({
     <div style={{ animation: 'slideIn 0.4s ease' }}>
       <div style={{ padding: '24px 0 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          <div style={{ fontSize: 36 }}>{qc.icon}</div>
+          <div style={{ color: qc.border, display: 'flex', alignItems: 'center' }}>
+            <PixelIcon name={qc.icon} size={36} />
+          </div>
           <div>
             <div style={{ display: 'flex', gap: 7, marginBottom: 5 }}>
               <span

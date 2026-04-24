@@ -1,3 +1,5 @@
+import type { PixelIconName } from '@/types/icon.types'
+
 export type QuestType = 'STUDY' | 'WRITE' | 'DISCOVER' | 'BUILD' | 'BOSS'
 
 export interface Quest {
@@ -17,12 +19,14 @@ export interface Act {
   title: string
   subtitle: string
   color: string
-  icon: string
+  /** Pixel icon name — see PIXEL_ICONS. */
+  icon: PixelIconName
   quests: Quest[]
 }
 
 export interface QuestTypeConfig {
   bg: string
   border: string
-  icon: string
+  /** Pixel icon name — see PIXEL_ICONS. */
+  icon: PixelIconName
 }
