@@ -41,7 +41,7 @@ Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
 - Sentry: Spring Boot 4.x 미지원으로 포기 (PR #52)
 - Logtail (Better Stack): fly.io log drain 방식 → 커스텀 LogtailHttpAppender로 직접 전송으로 전환 (feat/logtail-http-appender)
   - `LOGTAIL_SOURCE_TOKEN` fly secret으로 주입, 빈값이면 자동 비활성화
-  - `java.net.http.HttpClient` 사용, AsyncAppender(queue=512, neverBlock) 래핑
+  - `java.net.http.HttpClient` 사용, 내부 큐(max 1000) + `AtomicInteger` 카운터, `ScheduledExecutorService` 1초 배치 플러시
 
 ### 에이전트 Remote Control 운영 방식
 - 대화형 세션에서는 named agent(`.claude/agents/*.md`) 스폰 불가 — 내장 타입만 지원
