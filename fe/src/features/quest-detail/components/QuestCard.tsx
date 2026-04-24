@@ -1,5 +1,6 @@
 import type { Quest } from '@/types/quest.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
+import { PixelIcon } from '@/components/ui/PixelIcon'
 
 interface QuestCardProps {
   quest: Quest
@@ -26,7 +27,17 @@ export function QuestCard({ quest, done, score, onClick }: QuestCardProps) {
         gap: 12,
       }}
     >
-      <div style={{ fontSize: 22, minWidth: 32 }}>{qc.icon}</div>
+      <div
+        style={{
+          minWidth: 32,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: qc.border,
+        }}
+      >
+        <PixelIcon name={qc.icon} size={22} />
+      </div>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
           <span

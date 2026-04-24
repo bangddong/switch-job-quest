@@ -1,5 +1,6 @@
 import type { Act } from '@/types/quest.types'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { PixelIcon } from '@/components/ui/PixelIcon'
 
 interface ActCardProps {
   act: Act
@@ -43,13 +44,15 @@ export function ActCard({ act, progress, locked, onClick }: ActCardProps) {
       />
       <div
         style={{
-          fontSize: 32,
           minWidth: 44,
-          textAlign: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           animation: locked ? 'none' : 'float 3s ease-in-out infinite',
+          color: locked ? '#334155' : act.color,
         }}
       >
-        {locked ? '🔒' : act.icon}
+        <PixelIcon name={locked ? 'lock' : act.icon} size={32} />
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
@@ -60,9 +63,7 @@ export function ActCard({ act, progress, locked, onClick }: ActCardProps) {
           )}
         </div>
         <div style={{ fontSize: 14, fontWeight: 'bold', color: '#E2E8F0', marginBottom: 8 }}>
-          {act.quests
-            .map((q) => q.title.replace('🐉 BOSS: ', '').replace('👑 FINAL BOSS: ', ''))
-            .join(' → ')}
+          {act.quests.map((q) => q.title.replace(/^(BOSS|FINAL BOSS): /, '')).join(' → ')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1 }}>
