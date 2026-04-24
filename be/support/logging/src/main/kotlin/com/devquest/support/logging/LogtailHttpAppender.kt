@@ -10,11 +10,19 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
 
     var sourceToken: String = ""
     var endpoint: String = "https://in.logs.betterstack.com"
+
+    private val queue = ConcurrentLinkedQueue<ILoggingEvent>()
+    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "logtail-flusher").also { it.isDaemon = true }
+    }
 
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))
@@ -23,13 +31,32 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
     private val timestampFormatter: DateTimeFormatter =
         DateTimeFormatter.ISO_INSTANT.withZone(ZoneOffset.UTC)
 
+    override fun start() {
+        super.start()
+        scheduler.scheduleAtFixedRate(::flush, 1, 1, TimeUnit.SECONDS)
+    }
+
+    override fun stop() {
+        scheduler.shutdown()
+        flush()
+        super.stop()
+    }
+
     override fun append(event: ILoggingEvent) {
-        if (sourceToken.isBlank()) {
-            return
-        }
+        if (sourceToken.isBlank()) return
+        event.prepareForDeferredProcessing()
+        queue.add(event)
+        if (queue.size >= 100) flush()
+    }
+
+    private fun flush() {
+        if (sourceToken.isBlank() || queue.isEmpty()) return
+        val batch = mutableListOf<ILoggingEvent>()
+        while (true) { batch.add(queue.poll() ?: break) }
+        if (batch.isEmpty()) return
 
         try {
-            val body = buildJsonBody(event)
+            val body = buildJsonArrayBody(batch)
             val request = HttpRequest.newBuilder()
                 .uri(URI.create(endpoint))
                 .header("Authorization", "Bearer ${sourceToken}")
@@ -48,7 +75,12 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
         }
     }
 
-    private fun buildJsonBody(event: ILoggingEvent): String {
+    private fun buildJsonArrayBody(events: List<ILoggingEvent>): String {
+        val entries = events.joinToString(",") { buildJsonEntry(it) }
+        return "[$entries]"
+    }
+
+    private fun buildJsonEntry(event: ILoggingEvent): String {
         val timestamp = timestampFormatter.format(Instant.ofEpochMilli(event.timeStamp))
         val message = escapeJson(event.formattedMessage)
         val level = escapeJson(event.level.toString())
@@ -70,7 +102,7 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
             ""
         }
 
-        return """[{"dt":"$timestamp","message":"$message","level":"$level","logger":"$logger","thread":"$thread"$mdcEntries$throwableInfo}]"""
+        return """{"dt":"$timestamp","message":"$message","level":"$level","logger":"$logger","thread":"$thread"$mdcEntries$throwableInfo}"""
     }
 
     private fun escapeJson(value: String): String =

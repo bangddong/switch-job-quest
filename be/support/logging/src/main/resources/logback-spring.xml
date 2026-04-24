@@ -14,6 +14,9 @@
     </springProfile>
 
     <springProfile name="prod">
+        <springProperty scope="context" name="logtailSourceToken"
+                        source="LOGTAIL_SOURCE_TOKEN" defaultValue=""/>
+
         <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
                 <includeContext>false</includeContext>
@@ -29,19 +32,12 @@
         </appender>
 
         <appender name="LOGTAIL" class="com.devquest.support.logging.LogtailHttpAppender">
-            <sourceToken>${LOGTAIL_SOURCE_TOKEN:-}</sourceToken>
-        </appender>
-
-        <appender name="ASYNC_LOGTAIL" class="ch.qos.logback.classic.AsyncAppender">
-            <appender-ref ref="LOGTAIL"/>
-            <queueSize>512</queueSize>
-            <discardingThreshold>0</discardingThreshold>
-            <neverBlock>true</neverBlock>
+            <sourceToken>${logtailSourceToken}</sourceToken>
         </appender>
 
         <root level="INFO">
             <appender-ref ref="STDOUT"/>
-            <appender-ref ref="ASYNC_LOGTAIL"/>
+            <appender-ref ref="LOGTAIL"/>
         </root>
     </springProfile>
 
