@@ -92,6 +92,48 @@ Controller → Service → Port (interface) ← Adapter (implementation)
 - **Adapter**: `client-ai`의 AI 평가기, `db-core`의 JPA 리포지토리
 - **정책**: `PassCriteriaPolicy`, `GradePolicy`, `QuestXpPolicy` — 도메인 정책 중앙화
 
+### 모듈 의존성
+
+```
+core-enum ←── core-domain ←── core-api (bootJar)
+                    ↑               ↑
+               client-ai        db-core
+               support/*  (독립 — 어댑터 간 직접 의존 금지)
+```
+
+| 모듈 | 허용 의존 |
+|------|----------|
+| `core-enum` | 없음 |
+| `core-domain` | `core-enum` |
+| `core-api` | 모든 모듈 (bootstrap) |
+| `db-core` | `core-domain`, `core-enum` |
+| `client-ai` | `core-domain` |
+| `support/*` | 독립 |
+
+### 로그 파이프라인
+
+```
+애플리케이션
+  ├── STDOUT (LogstashEncoder → JSON)   ── fly.io 콘솔
+  └── LogtailHttpAppender (배치, 1초)   ── Better Stack (prod only)
+```
+
+- **로컬**: 패턴 기반 STDOUT (`logback-spring.xml` local 프로파일)
+- **프로덕션**: JSON STDOUT + Better Stack HTTP 직접 전송 (`LOGTAIL_SOURCE_TOKEN` 미설정 시 자동 비활성화)
+
+---
+
+## 배포
+
+| 대상 | 플랫폼 | 도메인 |
+|------|--------|--------|
+| Frontend | Vercel | `quest.dhbang.co.kr` |
+| Backend | Fly.io (Tokyo, 512MB) | `api.quest.dhbang.co.kr` |
+
+- BE: 트래픽 없을 시 머신 자동 정지 (`auto_stop_machines = stop`, `min_machines_running = 0`)
+- FE → BE: `/api/*` 경로는 Vercel 프록시로 BE에 포워딩 (`vercel.json`)
+- CI/CD: PR open → BE/FE CI (빌드+테스트), main 머지 → 자동 배포
+
 ---
 
 ## 퀘스트 시스템
@@ -471,4 +513,5 @@ cd be
 | `JWT_SECRET` | ✅ | JWT 서명 키 (256비트 이상) |
 | `JWT_EXPIRATION_MS` | - | JWT 만료 시간 (기본: 30일) |
 | `CORS_ALLOWED_ORIGINS` | - | CORS 허용 오리진 (기본: localhost:5173) |
+| `LOGTAIL_SOURCE_TOKEN` | - | Better Stack 소스 토큰 (미설정 시 로그 전송 비활성화) |
 | `VITE_GITHUB_CLIENT_ID` | ✅ (FE) | FE GitHub OAuth Client ID |
