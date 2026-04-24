@@ -38,6 +38,11 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
 
     override fun stop() {
         scheduler.shutdown()
+        try {
+            scheduler.awaitTermination(10, TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
         flush()
         super.stop()
     }
@@ -46,7 +51,7 @@ class LogtailHttpAppender : AppenderBase<ILoggingEvent>() {
         if (sourceToken.isBlank()) return
         event.prepareForDeferredProcessing()
         queue.add(event)
-        if (queue.size >= 100) flush()
+        if (queue.size >= 100) scheduler.execute(::flush)
     }
 
     private fun flush() {
