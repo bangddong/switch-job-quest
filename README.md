@@ -134,6 +134,56 @@ core-enum ←── core-domain ←── core-api (bootJar)
 - FE → BE: `/api/*` 경로는 Vercel 프록시로 BE에 포워딩 (`vercel.json`)
 - CI/CD: PR open → BE/FE CI (빌드+테스트), main 머지 → 자동 배포
 
+### 인프라 구성도
+
+```
+사용자 (브라우저)
+    │ HTTPS
+    ▼
+┌─────────────────────────────┐
+│  Vercel  (quest.dhbang.co.kr)│
+│  React SPA 정적 서빙         │
+│  /api/* → 프록시             │
+└──────────────┬──────────────┘
+               │ HTTPS /api/*
+               ▼
+┌─────────────────────────────────────┐
+│  Fly.io  (api.quest.dhbang.co.kr)   │
+│  Spring Boot 4 · Kotlin · port 8080 │
+│  H2 in-memory DB                    │
+│  auto-stop (트래픽 없을 시 정지)      │
+└──────┬──────────────┬───────────────┘
+       │ Claude API   │ OAuth
+       ▼              ▼
+ Anthropic API   GitHub API
+ (Haiku / Sonnet)  (인증)
+       │
+       │ HTTP 배치 (LogtailHttpAppender)
+       ▼
+  Better Stack (로그 수집)
+```
+
+### CI/CD 파이프라인
+
+```
+PR open
+  ├── BE CI: Gradle 빌드 + 테스트 (JaCoCo)
+  ├── FE CI: npm 빌드
+  └── Copilot 리뷰 gate
+
+main 머지
+  ├── BE CD: fly deploy → Fly.io (Tokyo)
+  └── FE CD: vercel --prod → Vercel
+```
+
+### 외부 의존성
+
+| 서비스 | 용도 | 비고 |
+|--------|------|------|
+| Anthropic API | AI 퀘스트 평가 | Haiku(일반) / Sonnet(BOSS) |
+| GitHub OAuth | 사용자 인증 | stateless JWT 발급 |
+| Better Stack | 로그 수집 | prod only, 토큰 미설정 시 비활성화 |
+
 ---
 
 ## 퀘스트 시스템
