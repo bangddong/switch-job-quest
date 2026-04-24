@@ -150,7 +150,7 @@ core-enum ←── core-domain ←── core-api (bootJar)
 ┌─────────────────────────────────────┐
 │  Fly.io  (api.quest.dhbang.co.kr)   │
 │  Spring Boot 4 · Kotlin · port 8080 │
-│  H2 in-memory DB                    │
+│  PostgreSQL (prod datasource)        │
 │  auto-stop (트래픽 없을 시 정지)      │
 └──────┬──────────────┬───────────────┘
        │ Claude API   │ OAuth
@@ -167,7 +167,7 @@ core-enum ←── core-domain ←── core-api (bootJar)
 
 ```
 PR open
-  ├── BE CI: Gradle 빌드 + 테스트 (JaCoCo)
+  ├── BE CI: Gradle `:core:core-api:bootJar` + root `test`
   ├── FE CI: npm 빌드
   └── Copilot 리뷰 gate
 
@@ -444,7 +444,8 @@ GET /health
 | earned_xp | INT | 획득 XP |
 | created_at | DATETIME | 평가 시각 |
 
-> 현재 H2 인메모리 DB 사용 (서버 재시작 시 초기화)
+> **로컬**: H2 인메모리 DB (`local` 프로파일, 서버 재시작 시 초기화)
+> **프로덕션**: PostgreSQL (`prod` 프로파일, Fly.io — `DB_HOST`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` 시크릿 필요)
 
 ---
 
