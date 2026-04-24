@@ -3,20 +3,20 @@
 > 새 대화 시작 시 이 파일을 먼저 읽으세요.
 > 전체 작업 이력은 `.claude/CONTEXT.archive.md` 참조.
 
-## 현재 상태 (2026-04-23)
+## 현재 상태 (2026-04-24)
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/add-caveman` |
-| 열린 PR | #94 — caveman 토큰 절약 모드 (머지 대기) |
+| 브랜치 | `feat/logtail-http-appender` (커밋 a6f6d22, PR 미생성) |
+| 열린 PR | 없음 (PR 생성 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| #95 | 502 재발방지 — ObjectMapper Jackson 3.x import 수정 + @SpringBootTest smoke test + fly.toml 헬스 체크 | 2026-04-23 |
+| #94 | caveman lite 모드 — SessionStart hook으로 오케스트레이터 응답 ~65% 압축 | 2026-04-23 |
 | #93 | Windows 훅 수정 + orchestrator 0/9단계 CONTEXT 기록 강화 | 2026-04-23 |
-| #92 | agent frontmatter 수정 — model alias, tools format, orchestrator path guard | 2026-04-22 |
-| #91 | skills 주입 방식 적용 — be/fe-feature-builder에 skills 필드 추가, Copilot 리뷰 수정 | 2026-04-22 |
 
 ## 알아둬야 할 비자명적 결정
 
@@ -39,7 +39,9 @@ Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
 
 ### Observability 최종 상태
 - Sentry: Spring Boot 4.x 미지원으로 포기 (PR #52)
-- Logtail (Better Stack): fly.io log drain 연동 완료
+- Logtail (Better Stack): fly.io log drain 방식 → 커스텀 LogtailHttpAppender로 직접 전송으로 전환 (feat/logtail-http-appender)
+  - `LOGTAIL_SOURCE_TOKEN` fly secret으로 주입, 빈값이면 자동 비활성화
+  - `java.net.http.HttpClient` 사용, AsyncAppender(queue=512, neverBlock) 래핑
 
 ### 에이전트 Remote Control 운영 방식
 - 대화형 세션에서는 named agent(`.claude/agents/*.md`) 스폰 불가 — 내장 타입만 지원
@@ -48,9 +50,16 @@ Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
 
 ## 다음 작업
 
-- [ ] `claude --agent orchestrator --remote-control` 직접 실행 테스트
-- [ ] Issue #86: DeveloperClassEvaluator 단위 테스트 추가 (tech-debt)
+### 코드 작업
+- [ ] Issue #86: DeveloperClassEvaluator 단위 테스트 추가
+- [ ] client-ai Jackson 2/3 혼재 정리 (CompanyFitEvaluator, MockInterviewEvaluator → tools.jackson 마이그레이션)
+
+### 사용자 확인 필요
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
+
+### 백로그
+- [x] devquest-log-shipper 제거 — 커스텀 Logback HTTP 어펜더 구현 완료 (feat/logtail-http-appender, a6f6d22)
+  - fly secret 설정 + fly.io log drain 제거는 PR 머지 후 사용자 직접 실행 필요
 
 ## 참조 문서
 
