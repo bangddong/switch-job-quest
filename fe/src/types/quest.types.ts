@@ -1,4 +1,4 @@
-import type { PixelIconName } from '@/components/ui/PixelIcon'
+import type { PixelIconName } from '@/types/icon.types'
 
 export type QuestType = 'STUDY' | 'WRITE' | 'DISCOVER' | 'BUILD' | 'BOSS'
 

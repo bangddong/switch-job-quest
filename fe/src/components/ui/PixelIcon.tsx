@@ -9,6 +9,8 @@ import type { CSSProperties } from 'react'
 
 type Rect = [number, number, number, number] | [number, number, number, number, number]
 type IconDef = { grid: number; rects: Rect[] }
+// PixelIconName is exported from @/types/icon.types — defined here only for internal use
+type PixelIconName = keyof typeof PIXEL_ICONS
 
 export const PIXEL_ICONS = {
   // ═══ ACT symbols ═══
@@ -132,7 +134,7 @@ export const PIXEL_ICONS = {
     rects: [
       [3, 0, 2, 1], [2, 1, 4, 1], [1, 2, 6, 1],
       [2, 3, 4, 2],
-      [3, 5, 2, 1], [3.5, 6, 1, 1],
+      [3, 5, 2, 1], [3, 6, 2, 1],
       [2, 2, 1, 1, 0.5], [5, 2, 1, 1, 0.5],
     ],
   },
@@ -183,8 +185,6 @@ export const PIXEL_ICONS = {
   },
 } as const satisfies Record<string, IconDef>
 
-export type PixelIconName = keyof typeof PIXEL_ICONS
-
 interface PixelIconProps {
   name: PixelIconName
   size?: number
@@ -215,6 +215,8 @@ export function PixelIcon({
       shapeRendering="crispEdges"
       role={ariaLabel ? 'img' : 'presentation'}
       aria-label={ariaLabel}
+      aria-hidden={ariaLabel ? undefined : true}
+      focusable={ariaLabel ? undefined : 'false'}
       style={{ imageRendering: 'pixelated', flexShrink: 0, display: 'inline-block', ...style }}
     >
       {icon.rects

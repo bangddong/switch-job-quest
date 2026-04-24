@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
 import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
-
-type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, MockInterviewPanel } from '@/features/ai-check'
@@ -11,6 +9,8 @@ import { QUEST_NEXT } from '../constants/questConnections'
 import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
 import { FinalBossView } from './FinalBossView'
+
+type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult
 
 interface QuestDetailProps {
   quest: Quest
