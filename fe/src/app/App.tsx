@@ -34,36 +34,66 @@ export function App() {
   const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult>>({})
   const [showForm, setShowForm] = useState(false)
   const [showIntro, setShowIntro] = useState(true)
+  const [progressLoading, setProgressLoading] = useState(false)
 
   useEffect(() => {
     if (!isLoggedIn) return
-    fetchProgress()
-      .then((progress) => {
-        const completedMap: Record<string, boolean> = {}
-        const scoresMap: Record<string, number> = {}
-        const aiResultsMap: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult> = {}
-        progress.completedQuests.forEach((id) => {
-          completedMap[id] = true
-        })
-        Object.entries(progress.questDetails).forEach(([id, detail]) => {
-          if (detail.score > 0) scoresMap[id] = detail.score
-        })
-        Object.entries(progress.questDetails).forEach(([id, detail]) => {
-          if (detail.aiEvaluationJson) {
-            try {
-              const parsed = JSON.parse(detail.aiEvaluationJson)
-              aiResultsMap[id] = parsed
-            } catch { /* 파싱 실패 무시 */ }
+
+    const MAX_RETRIES = 5
+    const RETRY_INTERVAL_MS = 5000
+
+    const applyProgress = (progress: Awaited<ReturnType<typeof fetchProgress>>) => {
+      const completedMap: Record<string, boolean> = {}
+      const scoresMap: Record<string, number> = {}
+      const aiResultsMap: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult> = {}
+      progress.completedQuests.forEach((id) => {
+        completedMap[id] = true
+      })
+      Object.entries(progress.questDetails).forEach(([id, detail]) => {
+        if (detail.score > 0) scoresMap[id] = detail.score
+      })
+      Object.entries(progress.questDetails).forEach(([id, detail]) => {
+        if (detail.aiEvaluationJson) {
+          try {
+            const parsed = JSON.parse(detail.aiEvaluationJson)
+            aiResultsMap[id] = parsed
+          } catch { /* 파싱 실패 무시 */ }
+        }
+      })
+      setCompleted(completedMap)
+      setAiScores(scoresMap)
+      setAiResults(aiResultsMap)
+      if (progress.lastCompletedAt) setLastCompletedAt(progress.lastCompletedAt)
+    }
+
+    let cancelled = false
+
+    const fetchWithRetry = async () => {
+      setProgressLoading(true)
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          const progress = await fetchProgress()
+          if (!cancelled) {
+            applyProgress(progress)
+            setProgressLoading(false)
           }
-        })
-        setCompleted(completedMap)
-        setAiScores(scoresMap)
-        setAiResults(aiResultsMap)
-        if (progress.lastCompletedAt) setLastCompletedAt(progress.lastCompletedAt)
-      })
-      .catch(() => {
-        // 서버 미응답 시 로컬 상태로 계속 진행
-      })
+          return
+        } catch {
+          if (cancelled) return
+          if (attempt < MAX_RETRIES - 1) {
+            await new Promise<void>((resolve) => setTimeout(resolve, RETRY_INTERVAL_MS))
+          }
+        }
+      }
+      // 5회 모두 실패 — 빈 상태로 계속 진행
+      if (!cancelled) setProgressLoading(false)
+    }
+
+    fetchWithRetry()
+
+    return () => {
+      cancelled = true
+    }
   }, [isLoggedIn])
 
   const getActProgress = useCallback(
@@ -174,6 +204,29 @@ export function App() {
           ? <OnboardingIntro onComplete={() => setShowIntro(false)} />
           : <CharacterCreate onComplete={handleCharacterComplete} />
         }
+      </div>
+    )
+  }
+
+  if (progressLoading) {
+    return (
+      <div
+        style={{
+          maxWidth: 480,
+          margin: '0 auto',
+          padding: '0 20px',
+          minHeight: '100vh',
+          fontFamily: "'Courier New', monospace",
+          color: '#F8FAFC',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+        }}
+      >
+        <p style={{ color: '#4ECDC4', fontSize: 14, margin: 0 }}>서버 기동 중...</p>
+        <p style={{ color: '#475569', fontSize: 12, margin: 0 }}>진척 데이터를 불러오는 중입니다 (최대 25초)</p>
       </div>
     )
   }
