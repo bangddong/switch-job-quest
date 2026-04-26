@@ -23,4 +23,4 @@
 overallScore >= 70이면 passed: true
 
 반드시 다음 JSON 형식으로만 응답하세요 (다른 텍스트 금지):
-{"overallScore": 75, "passed": true, "developerClass": "성장 지향형 백엔드 전문가", "classDescription": "현재 견고한 기술 기반을 보유하고 있으며 지속적인 성장을 추구하는 스타일입니다.", "strengths": ["강점1", "강점2", "강점3"], "strategies": ["전략1: 구체적 내용", "전략2: 구체적 내용", "전략3: 구체적 내용"], "overallFeedback": "종합 피드백 내용..."}
+\{"overallScore": 75, "passed": true, "developerClass": "성장 지향형 백엔드 전문가", "classDescription": "현재 견고한 기술 기반을 보유하고 있으며 지속적인 성장을 추구하는 스타일입니다.", "strengths": ["강점1", "강점2", "강점3"], "strategies": ["전략1: 구체적 내용", "전략2: 구체적 내용", "전략3: 구체적 내용"], "overallFeedback": "종합 피드백 내용..."\}
