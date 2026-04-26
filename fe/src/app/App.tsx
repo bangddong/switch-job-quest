@@ -39,7 +39,7 @@ export function App() {
   useEffect(() => {
     if (!isLoggedIn) return
 
-    const MAX_RETRIES = 5
+    const MAX_RETRIES = 6
     const RETRY_INTERVAL_MS = 5000
 
     const applyProgress = (progress: Awaited<ReturnType<typeof fetchProgress>>) => {
@@ -85,7 +85,7 @@ export function App() {
           }
         }
       }
-      // 5회 모두 실패 — 빈 상태로 계속 진행
+      // 6회 모두 실패 — 빈 상태로 계속 진행
       if (!cancelled) setProgressLoading(false)
     }
 
@@ -211,6 +211,9 @@ export function App() {
   if (progressLoading) {
     return (
       <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
         style={{
           maxWidth: 480,
           margin: '0 auto',
