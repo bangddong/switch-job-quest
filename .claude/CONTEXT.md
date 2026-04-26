@@ -14,9 +14,9 @@
 
 | PR | 내용 | 날짜 |
 |----|------|------|
-| #101 | CLAUDE.md Compact Instructions 섹션 추가 + CONTEXT.md PR #100 반영 | 2026-04-26 |
-| #100 | PixelIcon 픽셀 아트 디자인 시스템 도입 — 19종 SVG 아이콘, PixelIconName 타입 분리 | 2026-04-24 |
-| #99 | Copilot gate 레이스 컨디션 수정 + 커밋 컨벤션 한국어 전환 | 2026-04-24 |
+| #104 | fetchProgress cold start 5회 retry 로직 추가 — 로딩 UI 및 접근성 개선 | 2026-04-26 |
+| #103 | developer-class.st ST4 템플릿 중괄호 이스케이프 — 1스테이지 보스전 500 에러 수정 | 2026-04-26 |
+| #102 | CONTEXT.md PR #101 반영 + CONTEXT.archive.md PR #97~98 이력 추가 | 2026-04-26 |
 
 ## 알아둬야 할 비자명적 결정
 
