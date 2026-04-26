@@ -157,3 +157,12 @@
 
 로그 MDC 필드: `requestId` (MdcFilter), `method`/`uri` (MdcFilter), `userId` (JwtAuthFilter)
 Logtail (Better Stack): fly.io log drain 연동 완료.
+
+---
+
+## 문서 보강 시리즈 (2026-04-24)
+
+| PR | 내용 |
+|----|------|
+| #97 | README 아키텍처 보강 — 모듈 의존성, 로그 파이프라인, 배포 구성 추가 |
+| #98 | README 인프라 구성도 추가 — Vercel→Fly.io→외부 API 흐름, CI/CD, 외부 의존성 표 |
