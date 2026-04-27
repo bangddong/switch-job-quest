@@ -3,20 +3,20 @@
 > 새 대화 시작 시 이 파일을 먼저 읽으세요.
 > 전체 작업 이력은 `.claude/CONTEXT.archive.md` 참조.
 
-## 현재 상태 (2026-04-26)
+## 현재 상태 (2026-04-27)
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `chore/token-budget-agent-guidelines` |
+| 열린 PR | 진행 중 — token budget 에이전트 가이드라인 |
 
 ## 최근 완료 (최근 3건)
 
 | PR | 내용 | 날짜 |
 |----|------|------|
-| #104 | fetchProgress cold start 5회 retry 로직 추가 — 로딩 UI 및 접근성 개선 | 2026-04-26 |
-| #103 | developer-class.st ST4 템플릿 중괄호 이스케이프 — 1스테이지 보스전 500 에러 수정 | 2026-04-26 |
-| #102 | CONTEXT.md PR #101 반영 + CONTEXT.archive.md PR #97~98 이력 추가 | 2026-04-26 |
+| #109 | Compact Instructions 강화 및 수동 /compact 가이드 개선 | 2026-04-27 |
+| #108 | 성장 기록 화면 텍스트 가독성 개선 — 저대비 색상 교체 (8개 컴포넌트) | 2026-04-27 |
+| #107 | fly.io suspend 모드 전환 + HikariCP stale 커넥션 대응 | 2026-04-27 |
 
 ## 알아둬야 할 비자명적 결정
 
