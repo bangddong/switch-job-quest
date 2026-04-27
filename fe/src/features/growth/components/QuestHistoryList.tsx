@@ -22,7 +22,7 @@ export function QuestHistoryList({ history }: QuestHistoryListProps) {
         style={{
           padding: '20px 0',
           textAlign: 'center',
-          color: '#475569',
+          color: '#64748B',
           fontSize: 13,
           fontFamily: "'Courier New', monospace",
         }}
@@ -65,7 +65,7 @@ export function QuestHistoryList({ history }: QuestHistoryListProps) {
           </span>
           <span style={{ color: '#F8FAFC', minWidth: 48, textAlign: 'right' }}>{item.score}점</span>
           <span style={{ color: '#F59E0B', minWidth: 56, textAlign: 'right' }}>+{item.earnedXp} XP</span>
-          <span style={{ color: '#475569', minWidth: 72, textAlign: 'right' }}>{formatDate(item.createdAt)}</span>
+          <span style={{ color: '#64748B', minWidth: 72, textAlign: 'right' }}>{formatDate(item.createdAt)}</span>
         </div>
       ))}
     </div>

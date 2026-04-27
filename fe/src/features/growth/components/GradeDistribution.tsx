@@ -21,13 +21,13 @@ export function GradeDistribution({ history }: GradeDistributionProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
           <XAxis
             dataKey="grade"
-            tick={{ fill: '#475569', fontSize: 13, fontFamily: "'Courier New', monospace", fontWeight: 'bold' }}
+            tick={{ fill: '#64748B', fontSize: 13, fontFamily: "'Courier New', monospace", fontWeight: 'bold' }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
@@ -41,7 +41,7 @@ export function GradeDistribution({ history }: GradeDistributionProps) {
               color: '#F8FAFC',
             }}
             formatter={(value) => [`${value}회`, '횟수']}
-            labelStyle={{ color: '#475569' }}
+            labelStyle={{ color: '#94A3B8' }}
           />
           <Bar dataKey="count" radius={[4, 4, 0, 0]}>
             {data.map((entry) => (

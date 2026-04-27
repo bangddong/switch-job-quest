@@ -26,13 +26,13 @@ export function ActPassRate({ history }: ActPassRateProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
           <XAxis
             dataKey="name"
-            tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
           <YAxis
             domain={[0, 100]}
-            tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
@@ -49,7 +49,7 @@ export function ActPassRate({ history }: ActPassRateProps) {
               `${value}% (${(props.payload as { total: number } | undefined)?.total ?? 0}회 시도)`,
               '합격률',
             ]}
-            labelStyle={{ color: '#475569' }}
+            labelStyle={{ color: '#94A3B8' }}
           />
           <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
             {data.map((_, i) => (

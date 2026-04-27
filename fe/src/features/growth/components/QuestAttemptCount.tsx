@@ -22,7 +22,7 @@ export function QuestAttemptCount({ history }: QuestAttemptCountProps) {
         style={{
           padding: '32px 0',
           textAlign: 'center',
-          color: '#475569',
+          color: '#64748B',
           fontSize: 13,
           fontFamily: "'Courier New', monospace",
         }}
@@ -39,7 +39,7 @@ export function QuestAttemptCount({ history }: QuestAttemptCountProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
           <XAxis
             dataKey="questId"
-            tick={{ fill: '#475569', fontSize: 9, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 9, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
             interval={0}
@@ -49,7 +49,7 @@ export function QuestAttemptCount({ history }: QuestAttemptCountProps) {
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
@@ -63,7 +63,7 @@ export function QuestAttemptCount({ history }: QuestAttemptCountProps) {
               color: '#F8FAFC',
             }}
             formatter={(value) => [`${value}회`, '시도 횟수']}
-            labelStyle={{ color: '#475569' }}
+            labelStyle={{ color: '#94A3B8' }}
           />
           <Bar dataKey="count" fill="#F59E0B" radius={[4, 4, 0, 0]} />
         </BarChart>

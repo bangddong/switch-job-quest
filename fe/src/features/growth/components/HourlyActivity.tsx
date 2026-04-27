@@ -34,7 +34,7 @@ export function HourlyActivity({ history }: HourlyActivityProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
           <XAxis
             dataKey="hour"
-            tick={{ fill: '#475569', fontSize: 9, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 9, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
             interval={2}
@@ -42,7 +42,7 @@ export function HourlyActivity({ history }: HourlyActivityProps) {
           <YAxis
             allowDecimals={false}
             domain={[0, maxCount]}
-            tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
@@ -56,7 +56,7 @@ export function HourlyActivity({ history }: HourlyActivityProps) {
               color: '#F8FAFC',
             }}
             formatter={(value) => [`${value}회`, '시도']}
-            labelStyle={{ color: '#475569' }}
+            labelStyle={{ color: '#94A3B8' }}
           />
           <Bar dataKey="count" fill="#60A5FA" radius={[2, 2, 0, 0]} />
         </BarChart>
