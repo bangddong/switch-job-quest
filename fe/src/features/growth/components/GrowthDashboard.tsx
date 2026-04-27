@@ -69,14 +69,14 @@ export function GrowthDashboard() {
           ⚔️ 성장 기록
         </h2>
         {!loading && (
-          <div style={{ fontSize: 12, color: '#475569' }}>
+          <div style={{ fontSize: 12, color: '#94A3B8' }}>
             총 {history.length}회 시도 · 획득 XP {xpTotal.toLocaleString()}
           </div>
         )}
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', color: '#475569', fontSize: 13, padding: '40px 0' }}>
+        <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, padding: '40px 0' }}>
           로딩 중...
         </div>
       ) : (
@@ -86,7 +86,7 @@ export function GrowthDashboard() {
             <div
               style={{
                 fontSize: 12,
-                color: '#475569',
+                color: '#94A3B8',
                 marginBottom: 10,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -111,7 +111,7 @@ export function GrowthDashboard() {
             <div
               style={{
                 fontSize: 12,
-                color: '#475569',
+                color: '#94A3B8',
                 marginBottom: 10,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -132,7 +132,7 @@ export function GrowthDashboard() {
                   style={{
                     padding: '32px 0',
                     textAlign: 'center',
-                    color: '#475569',
+                    color: '#64748B',
                     fontSize: 13,
                   }}
                 >
@@ -145,7 +145,7 @@ export function GrowthDashboard() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                       <XAxis
                         dataKey="questId"
-                        tick={{ fill: '#475569', fontSize: 9, fontFamily: "'Courier New', monospace" }}
+                        tick={{ fill: '#64748B', fontSize: 9, fontFamily: "'Courier New', monospace" }}
                         axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                         tickLine={false}
                         interval={0}
@@ -155,7 +155,7 @@ export function GrowthDashboard() {
                       />
                       <YAxis
                         domain={[0, 100]}
-                        tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+                        tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
                         axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                         tickLine={false}
                       />
@@ -169,7 +169,7 @@ export function GrowthDashboard() {
                           color: '#F8FAFC',
                         }}
                         formatter={(value) => [`${value ?? ''}점`, '최고점']}
-                        labelStyle={{ color: '#475569' }}
+                        labelStyle={{ color: '#94A3B8' }}
                       />
                       <Bar dataKey="score" fill="#A78BFA" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -184,7 +184,7 @@ export function GrowthDashboard() {
             <div
               style={{
                 fontSize: 12,
-                color: '#475569',
+                color: '#94A3B8',
                 marginBottom: 10,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -210,7 +210,7 @@ export function GrowthDashboard() {
               <div
                 style={{
                   fontSize: 12,
-                  color: '#475569',
+                  color: '#94A3B8',
                   marginBottom: 10,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
@@ -234,7 +234,7 @@ export function GrowthDashboard() {
               <div
                 style={{
                   fontSize: 12,
-                  color: '#475569',
+                  color: '#94A3B8',
                   marginBottom: 10,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
@@ -263,7 +263,7 @@ export function GrowthDashboard() {
             <div
               style={{
                 fontSize: 12,
-                color: '#475569',
+                color: '#94A3B8',
                 marginBottom: 10,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -288,7 +288,7 @@ export function GrowthDashboard() {
             <div
               style={{
                 fontSize: 12,
-                color: '#475569',
+                color: '#94A3B8',
                 marginBottom: 10,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -313,7 +313,7 @@ export function GrowthDashboard() {
             <div
               style={{
                 fontSize: 12,
-                color: '#475569',
+                color: '#94A3B8',
                 marginBottom: 10,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',

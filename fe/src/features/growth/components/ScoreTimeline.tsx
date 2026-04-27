@@ -30,7 +30,7 @@ export function ScoreTimeline({ history }: ScoreTimelineProps) {
         style={{
           padding: '32px 0',
           textAlign: 'center',
-          color: '#475569',
+          color: '#64748B',
           fontSize: 13,
           fontFamily: "'Courier New', monospace",
         }}
@@ -47,13 +47,13 @@ export function ScoreTimeline({ history }: ScoreTimelineProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
           <XAxis
             dataKey="date"
-            tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
           <YAxis
             domain={[0, 100]}
-            tick={{ fill: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace" }}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
           />
@@ -70,7 +70,7 @@ export function ScoreTimeline({ history }: ScoreTimelineProps) {
               `${value ?? ''}점`,
               (props.payload as ChartDataPoint | undefined)?.questId ?? '',
             ]}
-            labelStyle={{ color: '#475569' }}
+            labelStyle={{ color: '#94A3B8' }}
           />
           <Line
             type="monotone"

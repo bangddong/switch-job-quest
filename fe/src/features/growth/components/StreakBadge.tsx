@@ -55,10 +55,10 @@ export function StreakBadge({ history }: StreakBadgeProps) {
       }}
     >
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 48, fontWeight: 'bold', color: streak > 0 ? '#F59E0B' : '#334155', lineHeight: 1 }}>
+        <div style={{ fontSize: 48, fontWeight: 'bold', color: streak > 0 ? '#F59E0B' : '#475569', lineHeight: 1 }}>
           {streak}
         </div>
-        <div style={{ fontSize: 12, color: '#475569', marginTop: 6 }}>연속 학습일</div>
+        <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 6 }}>연속 학습일</div>
       </div>
       <div style={{ fontSize: 36 }}>{streak >= 7 ? '🔥' : streak >= 3 ? '⚡' : streak > 0 ? '✨' : '💤'}</div>
     </div>
