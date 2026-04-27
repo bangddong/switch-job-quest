@@ -132,7 +132,7 @@ export function GrowthDashboard() {
                   style={{
                     padding: '32px 0',
                     textAlign: 'center',
-                    color: '#94A3B8',
+                    color: '#64748B',
                     fontSize: 13,
                   }}
                 >
