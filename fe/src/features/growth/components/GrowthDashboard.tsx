@@ -210,7 +210,7 @@ export function GrowthDashboard() {
               <div
                 style={{
                   fontSize: 12,
-                  color: '#475569',
+                  color: '#94A3B8',
                   marginBottom: 10,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
@@ -234,7 +234,7 @@ export function GrowthDashboard() {
               <div
                 style={{
                   fontSize: 12,
-                  color: '#475569',
+                  color: '#94A3B8',
                   marginBottom: 10,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
