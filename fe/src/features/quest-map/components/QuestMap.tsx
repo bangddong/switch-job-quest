@@ -33,24 +33,6 @@ export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, g
         </p>
       </div>
 
-      <div
-        style={{
-          background: 'rgba(78,205,196,0.04)',
-          border: '1px solid rgba(78,205,196,0.15)',
-          borderRadius: 10,
-          padding: '10px 16px',
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          fontSize: 12,
-        }}
-      >
-        <span style={{ color: '#4ECDC4' }}>🔌</span>
-        <span style={{ color: '#475569' }}>Spring Boot 4.x + Spring AI 연동 필요</span>
-        <span style={{ color: '#1E293B', marginLeft: 'auto' }}>localhost:8080</span>
-      </div>
-
       {lastCompletedAt && (() => {
         const days = Math.floor((Date.now() - new Date(lastCompletedAt).getTime()) / (1000 * 60 * 60 * 24))
         return days >= 1 ? (
