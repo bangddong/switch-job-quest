@@ -70,6 +70,22 @@ fe/src/
 └── components/ui/           # ScoreRing, ProgressBar, GradeTag 공용 컴포넌트
 ```
 
+## Token 절약 규칙
+
+context 한도(200K tokens) 보호. 아래 규칙 위반 시 세션 강제 종료 위험.
+
+| 규칙 | 올바른 사용 | 금지 |
+|------|------------|------|
+| Glob → Read | Glob 결과 확인 후 관련 파일만 선택적 Read | Glob 결과 전체 Read |
+| Grep | `head_limit: 20` 설정, 결과 많으면 조건 좁혀 재시도 | head_limit 없는 광범위 Grep |
+| 병렬 Read | 한 번에 최대 4개 | 5개 이상 병렬 Read |
+| 대용량 파일 | `offset` + `limit`으로 필요한 범위만 Read | 500줄 이상 파일 전체 Read |
+| Bash 출력 | 마지막 N줄만 캡처 | 긴 빌드 로그 전체 출력 |
+
+> Bash 출력 예: `npm run build 2>&1 | tail -20`
+
+---
+
 ## 금지 규칙
 
 - **default export 금지** — `export function Foo` 또는 `export const Foo`
