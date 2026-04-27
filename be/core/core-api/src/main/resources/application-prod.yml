@@ -32,3 +32,5 @@ storage:
       username: ${DB_USERNAME}
       password: ${DB_PASSWORD}
       maximum-pool-size: 10
+      minimum-idle: 0
+      connection-test-query: SELECT 1
