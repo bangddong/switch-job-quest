@@ -100,7 +100,7 @@ export function App() {
       setCompleted(completedMap)
       setAiScores(scoresMap)
       setAiResults(aiResultsMap)
-      if (progress.lastCompletedAt) setLastCompletedAt(progress.lastCompletedAt)
+      setLastCompletedAt(progress.lastCompletedAt ?? null)
       saveProgressCache({
         completed: completedMap,
         aiScores: scoresMap,
@@ -136,6 +136,17 @@ export function App() {
 
     return () => {
       cancelled = true
+    }
+  }, [isLoggedIn])
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    saveProgressCache({ completed, aiScores, aiResults, lastCompletedAt })
+  }, [completed, aiScores, aiResults, lastCompletedAt, isLoggedIn])
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      localStorage.removeItem(PROGRESS_CACHE_KEY)
     }
   }, [isLoggedIn])
 

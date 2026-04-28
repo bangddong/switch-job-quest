@@ -20,6 +20,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [completionReported, setCompletionReported] = useState(false)
 
   const q = questions[idx]
   const totalScore = results.length
@@ -38,9 +39,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
       setResults(newResults)
 
       if (idx + 1 >= questions.length) {
-        const avg = Math.round(newResults.reduce((a, r) => a + r.score, 0) / newResults.length)
         setDone(true)
-        onComplete(avg)
       } else {
         setIdx((i) => i + 1)
         setAnswer('')
@@ -79,6 +78,32 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
             </div>
           ))}
         </div>
+        {!completionReported && (
+          <button
+            type="button"
+            onClick={() => {
+              setCompletionReported(true)
+              onComplete(totalScore)
+            }}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: totalScore >= PASS_THRESHOLD
+                ? 'linear-gradient(135deg, #10B981, #059669)'
+                : 'rgba(78,205,196,0.1)',
+              border: totalScore >= PASS_THRESHOLD ? 'none' : '1px solid rgba(78,205,196,0.3)',
+              borderRadius: 10,
+              color: totalScore >= PASS_THRESHOLD ? '#060610' : '#4ECDC4',
+              fontSize: 14,
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontFamily: "'Courier New', monospace",
+              marginTop: 20,
+            }}
+          >
+            {totalScore >= PASS_THRESHOLD ? '🏆 완료 저장 & Act III 해금' : '📚 결과 확인 완료'}
+          </button>
+        )}
       </div>
     )
   }
