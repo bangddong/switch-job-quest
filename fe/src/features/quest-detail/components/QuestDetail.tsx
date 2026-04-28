@@ -5,6 +5,7 @@ import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
+import { MOCK_FORM_VALUES } from '@/features/ai-check/constants/mockValues'
 import { QUEST_NEXT } from '../constants/questConnections'
 import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
@@ -61,7 +62,6 @@ export function QuestDetail({
   const isMock = quest.id === '2-BOSS'
   const hasForm = quest.id in AI_FORMS
   const [lastSubmittedValues, setLastSubmittedValues] = useState<Record<string, unknown>>({})
-  const [retryInitialValues, setRetryInitialValues] = useState<Record<string, unknown> | undefined>(undefined)
 
   const passed = aiResult ? isPassed(aiResult) : false
   const failed = aiResult !== null && !passed
@@ -69,7 +69,6 @@ export function QuestDetail({
   const nextQuestInfo = QUEST_NEXT[quest.id]
 
   const handleRetry = () => {
-    setRetryInitialValues(lastSubmittedValues)
     onShowForm()
   }
 
@@ -228,7 +227,7 @@ export function QuestDetail({
                 <AiCheckForm
                   questId={quest.id}
                   onResult={onAiResult}
-                  initialValues={retryInitialValues}
+                  initialValues={Object.keys(lastSubmittedValues).length > 0 ? lastSubmittedValues : MOCK_FORM_VALUES[quest.id as keyof typeof MOCK_FORM_VALUES]}
                   onSubmit={(vals) => setLastSubmittedValues(vals)}
                 />
               )
