@@ -6,6 +6,7 @@ import { FALLBACK_QUESTIONS } from '../constants/fallbackQuestions'
 import { submitMockInterview } from '../api/aiCheckApi'
 import { InterviewResultCard } from './InterviewResultCard'
 import { PASS_THRESHOLD } from '@/utils/gradeUtils'
+import { MOCK_INTERVIEW_SAMPLE_ANSWER } from '../constants/mockValues'
 
 interface MockInterviewPanelProps {
   onComplete: (score: number) => void
@@ -162,6 +163,23 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
       {lastResult && <InterviewResultCard result={lastResult} />}
       {!lastResult && (
         <>
+          <button
+            onClick={() => setAnswer(MOCK_INTERVIEW_SAMPLE_ANSWER)}
+            style={{
+              background: 'none',
+              border: '1px solid rgba(78,205,196,0.3)',
+              borderRadius: 6,
+              color: '#4ECDC4',
+              fontSize: 11,
+              padding: '4px 10px',
+              cursor: 'pointer',
+              fontFamily: "'Courier New', monospace",
+              marginBottom: 8,
+              display: 'block',
+            }}
+          >
+            샘플 답변 채우기
+          </button>
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}

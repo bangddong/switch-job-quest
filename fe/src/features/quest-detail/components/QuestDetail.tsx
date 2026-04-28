@@ -5,6 +5,7 @@ import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
+import { MOCK_FORM_VALUES } from '@/features/ai-check/constants/mockValues'
 import { QUEST_NEXT } from '../constants/questConnections'
 import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
@@ -228,7 +229,7 @@ export function QuestDetail({
                 <AiCheckForm
                   questId={quest.id}
                   onResult={onAiResult}
-                  initialValues={retryInitialValues}
+                  initialValues={retryInitialValues ?? MOCK_FORM_VALUES[quest.id]}
                   onSubmit={(vals) => setLastSubmittedValues(vals)}
                 />
               )
