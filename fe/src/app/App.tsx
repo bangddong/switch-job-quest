@@ -15,6 +15,35 @@ import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
 import { ACTS } from '@/features/quest-map/constants/questData'
 
+const PROGRESS_CACHE_KEY = 'devquest-progress'
+
+interface ProgressCache {
+  completed: Record<string, boolean>
+  aiScores: Record<string, number>
+  aiResults: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult>
+  lastCompletedAt: string | null
+}
+
+function loadProgressCache(): ProgressCache | null {
+  try {
+    const raw = localStorage.getItem(PROGRESS_CACHE_KEY)
+    return raw ? (JSON.parse(raw) as ProgressCache) : null
+  } catch {
+    return null
+  }
+}
+
+function saveProgressCache(cache: ProgressCache): void {
+  try {
+    localStorage.setItem(PROGRESS_CACHE_KEY, JSON.stringify(cache))
+  } catch {
+    // ignore
+  }
+}
+
+// 모듈 로드 시 1회 읽음 (컴포넌트 리렌더와 무관)
+const INITIAL_PROGRESS_CACHE = loadProgressCache()
+
 type View =
   | { kind: 'map' }
   | { kind: 'briefing'; act: Act; quest: Quest }
@@ -27,11 +56,19 @@ export function App() {
   const { isLoggedIn } = useAuth()
   const { character, setCharacter } = useCharacter()
   const [view, setView] = useState<View>({ kind: 'map' })
-  const [completed, setCompleted] = useState<Record<string, boolean>>({})
-  const [lastCompletedAt, setLastCompletedAt] = useState<string | null>(null)
-  const [aiScores, setAiScores] = useState<Record<string, number>>({})
+  const [completed, setCompleted] = useState<Record<string, boolean>>(
+    INITIAL_PROGRESS_CACHE?.completed ?? {}
+  )
+  const [lastCompletedAt, setLastCompletedAt] = useState<string | null>(
+    INITIAL_PROGRESS_CACHE?.lastCompletedAt ?? null
+  )
+  const [aiScores, setAiScores] = useState<Record<string, number>>(
+    INITIAL_PROGRESS_CACHE?.aiScores ?? {}
+  )
   const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | DeveloperClassResult | null>(null)
-  const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult>>({})
+  const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult>>(
+    INITIAL_PROGRESS_CACHE?.aiResults ?? {}
+  )
   const [showForm, setShowForm] = useState(false)
   const [showIntro, setShowIntro] = useState(true)
   const [progressLoading, setProgressLoading] = useState(false)
@@ -63,7 +100,13 @@ export function App() {
       setCompleted(completedMap)
       setAiScores(scoresMap)
       setAiResults(aiResultsMap)
-      if (progress.lastCompletedAt) setLastCompletedAt(progress.lastCompletedAt)
+      setLastCompletedAt(progress.lastCompletedAt ?? null)
+      saveProgressCache({
+        completed: completedMap,
+        aiScores: scoresMap,
+        aiResults: aiResultsMap,
+        lastCompletedAt: progress.lastCompletedAt ?? null,
+      })
     }
 
     let cancelled = false
@@ -93,6 +136,17 @@ export function App() {
 
     return () => {
       cancelled = true
+    }
+  }, [isLoggedIn])
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    saveProgressCache({ completed, aiScores, aiResults, lastCompletedAt })
+  }, [completed, aiScores, aiResults, lastCompletedAt, isLoggedIn])
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      localStorage.removeItem(PROGRESS_CACHE_KEY)
     }
   }, [isLoggedIn])
 
@@ -192,6 +246,7 @@ export function App() {
       if (score >= 70) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
         setAiScores((prev) => ({ ...prev, [quest.id]: score }))
+        completeQuest(quest.id, act.id, quest.xp).catch(() => {})
         if (isBossQuest(quest.id)) triggerActClearReport(act)
       }
     }
@@ -208,7 +263,7 @@ export function App() {
     )
   }
 
-  if (progressLoading) {
+  if (progressLoading && INITIAL_PROGRESS_CACHE === null) {
     return (
       <div
         role="status"
