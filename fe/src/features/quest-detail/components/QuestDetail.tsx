@@ -62,7 +62,6 @@ export function QuestDetail({
   const isMock = quest.id === '2-BOSS'
   const hasForm = quest.id in AI_FORMS
   const [lastSubmittedValues, setLastSubmittedValues] = useState<Record<string, unknown>>({})
-  const [retryInitialValues, setRetryInitialValues] = useState<Record<string, unknown> | undefined>(undefined)
 
   const passed = aiResult ? isPassed(aiResult) : false
   const failed = aiResult !== null && !passed
@@ -70,7 +69,6 @@ export function QuestDetail({
   const nextQuestInfo = QUEST_NEXT[quest.id]
 
   const handleRetry = () => {
-    setRetryInitialValues(lastSubmittedValues)
     onShowForm()
   }
 
@@ -229,7 +227,7 @@ export function QuestDetail({
                 <AiCheckForm
                   questId={quest.id}
                   onResult={onAiResult}
-                  initialValues={retryInitialValues ?? MOCK_FORM_VALUES[quest.id]}
+                  initialValues={Object.keys(lastSubmittedValues).length > 0 ? lastSubmittedValues : MOCK_FORM_VALUES[quest.id as keyof typeof MOCK_FORM_VALUES]}
                   onSubmit={(vals) => setLastSubmittedValues(vals)}
                 />
               )

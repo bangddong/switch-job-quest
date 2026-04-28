@@ -164,6 +164,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
       {!lastResult && (
         <>
           <button
+            type="button"
             onClick={() => setAnswer(MOCK_INTERVIEW_SAMPLE_ANSWER)}
             style={{
               background: 'none',

@@ -1,4 +1,6 @@
-export const MOCK_FORM_VALUES: Record<string, Record<string, unknown>> = {
+import { AI_FORMS } from './formConfig'
+
+export const MOCK_FORM_VALUES = {
   '1-1': {
     skills: ['Kotlin', 'Spring Boot', 'JPA', 'MySQL', 'Redis', 'Docker'],
     targetRole: '시니어 백엔드 개발자 (Kotlin/Spring Boot)',
@@ -66,7 +68,7 @@ export const MOCK_FORM_VALUES: Record<string, Record<string, unknown>> = {
     answer:
       '먼저 업무의 배경과 목적을 파악하기 위해 담당자나 팀장에게 구체적으로 질문합니다. 제가 이해하지 못한 맥락이 있을 수 있기 때문입니다. 충분한 설명을 들은 후에도 납득이 되지 않는다면, 제 우려 사항을 데이터와 근거를 들어 명확하게 전달합니다. 예를 들어 과거 레거시 시스템을 단기간에 교체하라는 지시를 받았을 때, 기술 부채 현황과 위험도를 문서로 정리해 2단계 마이그레이션 계획을 역제안하여 수용된 경험이 있습니다. 최종 결정이 제 의견과 다르더라도, 일단 팀의 방향에 맞춰 최선을 다해 진행합니다. 개인 판단보다 팀의 협업과 신뢰가 장기적으로 더 중요하다고 생각합니다.',
   },
-}
+} satisfies Partial<Record<keyof typeof AI_FORMS, Record<string, unknown>>>
 
 export const MOCK_INTERVIEW_SAMPLE_ANSWER =
   'HashMap의 내부 구조는 배열 기반의 버킷 구조입니다. 키를 해시 함수로 변환한 값을 인덱스로 사용해 버킷에 저장합니다. Java 8부터는 충돌이 많을 경우(동일 버킷 8개 이상) 연결 리스트에서 레드-블랙 트리로 전환해 탐색 성능을 O(n)에서 O(log n)으로 개선합니다. 로드 팩터 기본값은 0.75로, 저장 용량의 75%가 채워지면 배열을 2배로 리해시합니다. 리해시 시 모든 요소를 재배치하므로 O(n) 비용이 발생합니다. 실무에서는 초기 용량을 예상 크기의 1.5배로 설정해 불필요한 리해시를 방지합니다.'
