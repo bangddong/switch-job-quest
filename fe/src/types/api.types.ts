@@ -102,3 +102,19 @@ export interface DeveloperClassResult {
   strategies: string[]
   overallFeedback: string
 }
+
+export interface SkillRequirement {
+  skill: string
+  required: boolean
+  userLevel: string
+  importance: string
+}
+
+export interface JdAnalysisResult {
+  companyName: string
+  requiredSkills: SkillRequirement[]
+  hiddenRequirements: string[]
+  overallMatchScore: number
+  keyDifferentiators: string[]
+  applicationStrategy: string
+}

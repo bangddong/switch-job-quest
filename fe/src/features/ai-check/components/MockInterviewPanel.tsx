@@ -15,6 +15,7 @@ interface MockInterviewPanelProps {
 export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
   const [questions] = useState(FALLBACK_QUESTIONS)
   const [idx, setIdx] = useState(0)
+  const [answers, setAnswers] = useState<string[]>([])
   const [answer, setAnswer] = useState('')
   const [results, setResults] = useState<InterviewEvaluationResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -23,27 +24,38 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
   const [completionReported, setCompletionReported] = useState(false)
 
   const q = questions[idx]
+  const isLastQuestion = idx + 1 >= questions.length
   const totalScore = results.length
     ? Math.round(results.reduce((a, r) => a + r.score, 0) / results.length)
     : 0
 
-  const handleSubmit = async () => {
-    if (!q || !answer.trim()) return
+  const handleNext = () => {
+    if (!answer.trim()) return
+    setAnswers(prev => { const next = [...prev]; next[idx] = answer; return next })
+    setIdx(i => i + 1)
+    setAnswer('')
+  }
+
+  const handleSubmitAll = async () => {
+    if (!answer.trim()) return
+    const allAnswers = [...answers]
+    allAnswers[idx] = answer
     setLoading(true)
     setError(null)
     try {
-      const result = await submitMockInterview(
-        { questId: '2-BOSS', questionId: q.id, question: q.question, answer, category: q.category },
+      const allResults = await Promise.all(
+        questions.map((question, i) =>
+          submitMockInterview({
+            questId: '2-BOSS',
+            questionId: question.id,
+            question: question.question,
+            answer: allAnswers[i] ?? '',
+            category: question.category,
+          })
+        )
       )
-      const newResults = [...results, result]
-      setResults(newResults)
-
-      if (idx + 1 >= questions.length) {
-        setDone(true)
-      } else {
-        setIdx((i) => i + 1)
-        setAnswer('')
-      }
+      setResults(allResults)
+      setDone(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 평가 중 오류가 발생했습니다. 다시 시도해주세요.')
     } finally {
@@ -138,7 +150,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
         <p style={{ fontSize: 14, color: '#F1F5F9', margin: 0, lineHeight: 1.7 }}>{q.question}</p>
       </div>
 
-      <OracleLoadingModal isOpen={loading} />
+      <OracleLoadingModal isOpen={loading && isLastQuestion} />
       {error && (
         <div
           style={{
@@ -195,14 +207,16 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
         }}
       />
       <button
-        onClick={handleSubmit}
+        onClick={isLastQuestion ? handleSubmitAll : handleNext}
         disabled={loading || !answer.trim()}
         style={{
           width: '100%',
           padding: '12px',
           background: loading
             ? 'rgba(239,68,68,0.2)'
-            : 'linear-gradient(135deg, #EF4444, #DC2626)',
+            : isLastQuestion
+              ? 'linear-gradient(135deg, #A78BFA, #7C3AED)'
+              : 'linear-gradient(135deg, #EF4444, #DC2626)',
           border: 'none',
           borderRadius: 10,
           color: '#fff',
@@ -212,7 +226,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
           fontFamily: "'Courier New', monospace",
         }}
       >
-        {loading ? '⟳ 채점 중...' : '답변 제출 →'}
+        {loading ? '⟳ 채점 중...' : isLastQuestion ? '🤖 채점하기' : '다음 질문 →'}
       </button>
     </div>
   )

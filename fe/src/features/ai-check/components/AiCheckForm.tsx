@@ -1,4 +1,4 @@
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult } from '@/types/api.types'
 import { OracleLoadingModal } from '@/components/ui/OracleLoadingModal'
 import { AI_FORMS } from '../constants/formConfig'
 import { useAiCheckForm } from '../hooks/useAiCheckForm'
@@ -6,7 +6,7 @@ import { FormField } from './FormField'
 
 interface AiCheckFormProps {
   questId: string
-  onResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult) => void
+  onResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult) => void
   initialValues?: Record<string, unknown>
   onSubmit?: (values: Record<string, unknown>) => void
 }

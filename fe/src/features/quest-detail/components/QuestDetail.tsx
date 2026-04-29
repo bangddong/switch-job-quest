@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult } from '@/types/api.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { PixelIcon } from '@/components/ui/PixelIcon'
-import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, MockInterviewPanel } from '@/features/ai-check'
+import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, JdAnalysisResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
 import { MOCK_FORM_VALUES } from '@/features/ai-check/constants/mockValues'
 import { QUEST_NEXT } from '../constants/questConnections'
@@ -11,17 +11,17 @@ import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
 import { FinalBossView } from './FinalBossView'
 
-type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult
+type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult
 
 interface QuestDetailProps {
   quest: Quest
   act: Act
   completed: Record<string, boolean>
   aiScores: Record<string, number>
-  aiResult: AiEvaluationResult | BossPackageResult | DeveloperClassResult | null
+  aiResult: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | null
   showForm: boolean
   onShowForm: () => void
-  onAiResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult) => void
+  onAiResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult) => void
   onComplete: (questId: string, xp: number, actId: number, act: Act) => void
   onMockInterviewComplete: (score: number) => void
   onNextQuest?: (questId: string) => void
@@ -40,7 +40,10 @@ function extractImprovements(aiResult: AnyAiResult): string[] {
 }
 
 function isPassed(aiResult: AnyAiResult): boolean {
-  return aiResult.passed === true
+  if ('overallMatchScore' in aiResult && !('passed' in aiResult)) {
+    return (aiResult as JdAnalysisResult).overallMatchScore >= 70
+  }
+  return (aiResult as { passed: boolean }).passed === true
 }
 
 export function QuestDetail({
@@ -239,9 +242,11 @@ export function QuestDetail({
         {aiResult && !isMock && (
           quest.id === '4-BOSS'
             ? <BossPackageResultCard result={aiResult as BossPackageResult} />
-            : 'developerClass' in aiResult
-              ? <DeveloperClassResultCard result={aiResult as DeveloperClassResult} />
-              : <AiResultCard result={aiResult as AiEvaluationResult} />
+            : quest.id === '3-2'
+              ? <JdAnalysisResultCard result={aiResult as JdAnalysisResult} />
+              : 'developerClass' in aiResult
+                ? <DeveloperClassResultCard result={aiResult as DeveloperClassResult} />
+                : <AiResultCard result={aiResult as AiEvaluationResult} />
         )}
 
         {/* Feature E: Next quest card after passing */}
