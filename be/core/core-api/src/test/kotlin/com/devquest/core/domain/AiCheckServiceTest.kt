@@ -192,13 +192,23 @@ class AiCheckServiceTest {
     // ===== analyzeJd 테스트 =====
 
     @Test
-    fun `analyzeJd - 항상 passed=true이고 xp=350 고정으로 저장`() {
+    fun `analyzeJd - 점수 70 이상이면 passed=true, xp=350으로 저장`() {
+        whenever(jdAnalysisEvaluator.analyze(any(), any(), any(), any()))
+            .thenReturn(JdAnalysisResult(companyName = "카카오", overallMatchScore = 75))
+
+        service.analyzeJd("user1", "카카오", "JD 내용", listOf("Kotlin"), listOf("3년 경력"))
+
+        verify(questProgressRecorder).record(eq("user1"), eq("3-2"), eq(3), eq(75), eq(true), eq(350), isNull())
+    }
+
+    @Test
+    fun `analyzeJd - 점수 69 이하이면 passed=false, xp=0으로 저장`() {
         whenever(jdAnalysisEvaluator.analyze(any(), any(), any(), any()))
             .thenReturn(JdAnalysisResult(companyName = "카카오", overallMatchScore = 60))
 
         service.analyzeJd("user1", "카카오", "JD 내용", listOf("Kotlin"), listOf("3년 경력"))
 
-        verify(questProgressRecorder).record(eq("user1"), eq("3-2"), eq(3), eq(60), eq(true), eq(350), isNull())
+        verify(questProgressRecorder).record(eq("user1"), eq("3-2"), eq(3), eq(60), eq(false), eq(0), isNull())
     }
 
     // ===== checkBossPackage 테스트 =====

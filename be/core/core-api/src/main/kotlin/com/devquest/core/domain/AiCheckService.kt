@@ -77,7 +77,8 @@ class AiCheckService(
     @Transactional
     fun analyzeJd(userId: String, companyName: String, jobDescription: String, userSkills: List<String>, userExperiences: List<String>): JdAnalysisResult {
         val result = jdAnalysisEvaluator.analyze(companyName, jobDescription, userSkills, userExperiences)
-        questProgressRecorder.record(userId, QuestConstants.JD_ANALYSIS, 3, result.overallMatchScore, true, QuestXpPolicy.calculate(QuestConstants.JD_ANALYSIS, true))
+        val passed = PassCriteriaPolicy.evaluate(result.overallMatchScore)
+        questProgressRecorder.record(userId, QuestConstants.JD_ANALYSIS, 3, result.overallMatchScore, passed, QuestXpPolicy.calculate(QuestConstants.JD_ANALYSIS, passed))
         return result
     }
 
