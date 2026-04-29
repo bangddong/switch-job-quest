@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, ActClearReportResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ActClearReportResult } from '@/types/api.types'
 import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail, QuestBriefingView } from '@/features/quest-detail'
@@ -20,7 +20,7 @@ const PROGRESS_CACHE_KEY = 'devquest-progress'
 interface ProgressCache {
   completed: Record<string, boolean>
   aiScores: Record<string, number>
-  aiResults: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult>
+  aiResults: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult>
   lastCompletedAt: string | null
 }
 
@@ -65,8 +65,8 @@ export function App() {
   const [aiScores, setAiScores] = useState<Record<string, number>>(
     INITIAL_PROGRESS_CACHE?.aiScores ?? {}
   )
-  const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | DeveloperClassResult | null>(null)
-  const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult>>(
+  const [aiResult, setAiResult] = useState<AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | null>(null)
+  const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult>>(
     INITIAL_PROGRESS_CACHE?.aiResults ?? {}
   )
   const [showForm, setShowForm] = useState(false)
@@ -82,7 +82,7 @@ export function App() {
     const applyProgress = (progress: Awaited<ReturnType<typeof fetchProgress>>) => {
       const completedMap: Record<string, boolean> = {}
       const scoresMap: Record<string, number> = {}
-      const aiResultsMap: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult> = {}
+      const aiResultsMap: Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult> = {}
       progress.completedQuests.forEach((id) => {
         completedMap[id] = true
       })
@@ -208,18 +208,23 @@ export function App() {
     if (isBossQuest(questId)) triggerActClearReport(act)
   }
 
-  const handleAiResult = (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult) => {
+  const handleAiResult = (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult) => {
     setAiResult(result)
     setShowForm(false)
     if (view.kind === 'detail') {
       const { quest, act } = view
       setAiResults((prev) => ({ ...prev, [quest.id]: result }))
+      const isJdAnalysis = 'overallMatchScore' in result && !('passed' in result)
       const isBossPackage = quest.id === '4-BOSS'
       const isDeveloperClass = 'developerClass' in result
-      const score = isBossPackage || isDeveloperClass
-        ? (result as BossPackageResult | DeveloperClassResult).overallScore
-        : (result as AiEvaluationResult).score
-      const passed = result.passed
+      const score = isJdAnalysis
+        ? (result as JdAnalysisResult).overallMatchScore
+        : isBossPackage || isDeveloperClass
+          ? (result as BossPackageResult | DeveloperClassResult).overallScore
+          : (result as AiEvaluationResult).score
+      const passed = isJdAnalysis
+        ? (result as JdAnalysisResult).overallMatchScore >= 70
+        : (result as { passed: boolean }).passed
       if (passed) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
         setAiScores((prev) => ({ ...prev, [quest.id]: score }))

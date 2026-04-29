@@ -1,4 +1,4 @@
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, SkillRequirement } from '@/types/api.types'
 import { getGrade, PASS_THRESHOLD } from '../../../utils/gradeUtils'
 import { ResultHeader } from './ResultHeader'
 import { ResultSection } from './ResultSection'
@@ -233,6 +233,150 @@ export function DeveloperClassResultCard({ result }: DeveloperClassResultCardPro
           {result.overallFeedback}
         </p>
       </div>
+    </div>
+  )
+}
+
+interface JdAnalysisResultCardProps {
+  result: JdAnalysisResult
+}
+
+const IMPORTANCE_COLOR: Record<string, string> = {
+  HIGH: '#EF4444',
+  MEDIUM: '#F59E0B',
+  LOW: '#10B981',
+}
+
+export function JdAnalysisResultCard({ result }: JdAnalysisResultCardProps) {
+  const score = result.overallMatchScore
+  const passed = score >= PASS_THRESHOLD
+  const grade = getGrade(score)
+
+  return (
+    <div
+      style={{
+        background: passed ? 'rgba(16,185,129,0.04)' : 'rgba(239,68,68,0.04)',
+        border: `1px solid ${passed ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
+        borderRadius: 14,
+        padding: 22,
+        marginTop: 18,
+        animation: 'slideIn 0.5s ease',
+      }}
+    >
+      <ResultHeader
+        score={score}
+        passed={passed}
+        grade={grade}
+        passLabel="✓ 통과 — JD 매칭 분석 완료!"
+        failLabel="✗ 미통과 — 역량 보완이 필요합니다"
+      />
+
+      {/* 회사명 */}
+      {result.companyName && (
+        <div style={{ fontSize: 13, color: '#94A3B8', marginBottom: 16 }}>
+          <span style={{ color: '#4ECDC4' }}>대상 회사:</span> {result.companyName}
+        </div>
+      )}
+
+      {/* 스킬 매칭 테이블 */}
+      {result.requiredSkills.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 3, marginBottom: 10 }}>
+            📊 스킬 매칭
+          </div>
+          <div
+            style={{
+              background: 'rgba(15,23,42,0.7)',
+              borderRadius: 10,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 60px 50px 60px',
+                padding: '8px 12px',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                fontSize: 10,
+                color: '#475569',
+                letterSpacing: 1,
+              }}
+            >
+              <span>스킬</span>
+              <span style={{ textAlign: 'center' }}>구분</span>
+              <span style={{ textAlign: 'center' }}>내 수준</span>
+              <span style={{ textAlign: 'center' }}>중요도</span>
+            </div>
+            {result.requiredSkills.map((skill: SkillRequirement, i: number) => {
+              const importanceColor = IMPORTANCE_COLOR[skill.importance] ?? '#64748B'
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 60px 50px 60px',
+                    padding: '9px 12px',
+                    borderBottom: i < result.requiredSkills.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                    fontSize: 12,
+                    alignItems: 'center',
+                  }}
+                >
+                  <span style={{ color: '#F1F5F9' }}>{skill.skill}</span>
+                  <span
+                    style={{
+                      textAlign: 'center',
+                      color: skill.required ? '#EF4444' : '#60A5FA',
+                      fontSize: 11,
+                    }}
+                  >
+                    {skill.required ? '필수' : '우대'}
+                  </span>
+                  <span style={{ textAlign: 'center', color: '#94A3B8' }}>{skill.userLevel}</span>
+                  <span
+                    style={{
+                      textAlign: 'center',
+                      color: importanceColor,
+                      fontSize: 11,
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {skill.importance}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 강점 */}
+      {result.keyDifferentiators.length > 0 && (
+        <ResultSection label="✓ STRENGTHS" color="#10B981" items={result.keyDifferentiators} />
+      )}
+
+      {/* 숨겨진 요구사항 */}
+      {result.hiddenRequirements.length > 0 && (
+        <ResultSection label="⚠ 숨겨진 요구사항" color="#F59E0B" items={result.hiddenRequirements} />
+      )}
+
+      {/* 지원 전략 */}
+      {result.applicationStrategy && (
+        <div
+          style={{
+            background: 'rgba(15,23,42,0.7)',
+            borderRadius: 10,
+            padding: '14px 16px',
+            borderLeft: '3px solid #4ECDC4',
+          }}
+        >
+          <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 3, marginBottom: 8 }}>
+            🎯 지원 전략
+          </div>
+          <p style={{ color: '#94A3B8', fontSize: 13, margin: 0, lineHeight: 1.7 }}>
+            {result.applicationStrategy}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
