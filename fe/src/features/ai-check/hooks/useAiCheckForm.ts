@@ -68,7 +68,7 @@ export function useAiCheckForm({ questId, cfg, onResult, onSubmit, initialValues
           ? await submitBossPackage(body)
           : questId === '1-BOSS'
             ? await submitDeveloperClass()
-            : questId === '3-2'
+            : cfg.endpoint === 'jd-analysis'
               ? await submitJdAnalysis(body)
               : await submitAiCheck(cfg.endpoint, body)
       onResult(result)

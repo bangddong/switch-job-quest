@@ -249,7 +249,7 @@ const IMPORTANCE_COLOR: Record<string, string> = {
 
 export function JdAnalysisResultCard({ result }: JdAnalysisResultCardProps) {
   const score = result.overallMatchScore
-  const passed = score >= 70
+  const passed = score >= PASS_THRESHOLD
   const grade = getGrade(score)
 
   return (
