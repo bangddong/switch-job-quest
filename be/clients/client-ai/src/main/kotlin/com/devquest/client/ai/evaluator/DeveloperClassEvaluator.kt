@@ -16,16 +16,18 @@ class DeveloperClassEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), DeveloperClassEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/developer-class.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/developer-class-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/developer-class-user.st"))
 
     override fun evaluate(skillAssessmentJson: String, careerEssayJson: String): DeveloperClassResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "skillAssessmentJson" to skillAssessmentJson.ifBlank { "{}" },
             "careerEssayJson" to careerEssayJson.ifBlank { "{}" },
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(DeveloperClassResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(DeveloperClassResult::class.java)
         }
     }
 }

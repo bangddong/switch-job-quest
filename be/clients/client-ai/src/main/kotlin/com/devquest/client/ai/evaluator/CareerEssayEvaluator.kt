@@ -15,17 +15,19 @@ class CareerEssayEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), EssayEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/career-essay.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/career-essay-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/career-essay-user.st"))
 
     override fun evaluate(dissatisfactions: List<String>, goals: List<String>, fiveYearVision: String): EssayCheckResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "dissatisfactions" to dissatisfactions.mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n"),
             "goals" to goals.mapIndexed { i, g -> "${i + 1}. $g" }.joinToString("\n"),
             "fiveYearVision" to fiveYearVision,
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(EssayCheckResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(EssayCheckResult::class.java)
         }
     }
 }

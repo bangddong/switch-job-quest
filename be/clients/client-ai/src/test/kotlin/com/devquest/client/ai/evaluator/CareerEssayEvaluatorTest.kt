@@ -25,7 +25,7 @@ class CareerEssayEvaluatorTest {
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(EssayCheckResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(EssayCheckResult::class.java)
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -54,7 +54,7 @@ class CareerEssayEvaluatorTest {
             suggestedFocus = listOf("기술 스타트업")
         )
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(EssayCheckResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(EssayCheckResult::class.java)
         ).thenReturn(expected)
 
         val result = evaluator.evaluate(

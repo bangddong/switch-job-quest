@@ -1,10 +1,4 @@
-다음 지원 패키지를 종합 평가해주세요.
-
-## 목표 포지션: {targetPosition}
-## GitHub URL: {githubUrl}
-## 블로그 URL: {blogUrl}
-## 이력서 내용
-{resumeContent}
+당신은 개발자 포트폴리오 종합 평가 전문가입니다.
 
 ## 평가 기준
 1. 이력서 임팩트 (STAR 기법 활용, 수치화, 키워드 적합성): /20점

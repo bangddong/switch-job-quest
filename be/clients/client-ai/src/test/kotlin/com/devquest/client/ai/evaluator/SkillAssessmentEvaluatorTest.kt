@@ -25,7 +25,7 @@ class SkillAssessmentEvaluatorTest {
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(SkillAssessmentResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(SkillAssessmentResult::class.java)
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -50,7 +50,7 @@ class SkillAssessmentEvaluatorTest {
             feedback = "백엔드 핵심 기술은 탄탄하나 클라우드 역량 보완 필요"
         )
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(SkillAssessmentResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(SkillAssessmentResult::class.java)
         ).thenReturn(expected)
 
         val result = evaluator.evaluate(
@@ -65,10 +65,10 @@ class SkillAssessmentEvaluatorTest {
     }
 
     @Test
-    fun `프롬프트에 경력기간 형식 안내와 기술 목록이 포함된다`() {
+    fun `사용자 프롬프트에 기술 목록과 목표 포지션이 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().user(capture(promptCaptor)).call().entity(SkillAssessmentResult::class.java)
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(SkillAssessmentResult::class.java)
         ).thenReturn(
             SkillAssessmentResult(score = 70, passed = true, grade = "B")
         )
@@ -83,6 +83,5 @@ class SkillAssessmentEvaluatorTest {
         assertThat(prompt).contains("Java:5년")
         assertThat(prompt).contains("Spring Boot:3년")
         assertThat(prompt).contains("시니어 백엔드 개발자")
-        assertThat(prompt).contains("경력기간을 고려한")
     }
 }

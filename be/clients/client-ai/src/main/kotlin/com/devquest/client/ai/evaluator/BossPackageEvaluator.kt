@@ -16,7 +16,8 @@ class BossPackageEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), BossPackageEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/boss-package.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/boss-package-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/boss-package-user.st"))
 
     override fun evaluate(
         resumeContent: String,
@@ -24,7 +25,8 @@ class BossPackageEvaluator(
         blogUrl: String,
         targetPosition: String
     ): BossPackageResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "targetPosition" to targetPosition,
             "githubUrl" to githubUrl,
             "blogUrl" to blogUrl.ifBlank { "미제공" },
@@ -32,7 +34,7 @@ class BossPackageEvaluator(
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(BossPackageResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(BossPackageResult::class.java)
         }
     }
 }

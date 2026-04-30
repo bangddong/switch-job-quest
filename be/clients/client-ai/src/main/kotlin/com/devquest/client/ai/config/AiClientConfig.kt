@@ -2,6 +2,8 @@ package com.devquest.client.ai.config
 
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.models.messages.Model
+import org.springframework.ai.anthropic.AnthropicCacheOptions
+import org.springframework.ai.anthropic.AnthropicCacheStrategy
 import org.springframework.ai.anthropic.AnthropicChatModel
 import org.springframework.ai.anthropic.AnthropicChatOptions
 import org.springframework.ai.chat.client.ChatClient
@@ -29,10 +31,14 @@ class AiClientConfig {
         val anthropicClient = AnthropicOkHttpClient.builder()
             .apiKey(apiKey)
             .build()
+        val cacheOptions = AnthropicCacheOptions.builder()
+            .strategy(AnthropicCacheStrategy.SYSTEM_ONLY)
+            .build()
         val options = AnthropicChatOptions.builder()
             .model(Model.of(bossModel))
             .maxTokens(bossMaxTokens)
             .temperature(0.3)
+            .cacheOptions(cacheOptions)
             .build()
         val model = AnthropicChatModel.builder()
             .anthropicClient(anthropicClient)

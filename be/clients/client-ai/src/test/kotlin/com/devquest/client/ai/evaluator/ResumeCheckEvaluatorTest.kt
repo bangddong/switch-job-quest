@@ -23,7 +23,7 @@ class ResumeCheckEvaluatorTest {
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
-        whenever(chatClient.prompt().user(any<String>()).call().entity(ResumeCheckResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
             .thenReturn(null)
 
         assertThatThrownBy {
@@ -45,7 +45,7 @@ class ResumeCheckEvaluatorTest {
             quantificationScore = 22,
             keywordMatchScore = 22
         )
-        whenever(chatClient.prompt().user(any<String>()).call().entity(ResumeCheckResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
             .thenReturn(expected)
 
         val result = evaluator.evaluate(
