@@ -23,7 +23,7 @@ class JdAnalysisEvaluatorTest {
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
-        whenever(chatClient.prompt().user(any<String>()).call().entity(JdAnalysisResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(JdAnalysisResult::class.java))
             .thenReturn(null)
 
         assertThatThrownBy {
@@ -45,7 +45,7 @@ class JdAnalysisEvaluatorTest {
             overallMatchScore = 85,
             applicationStrategy = "포트폴리오 강조"
         )
-        whenever(chatClient.prompt().user(any<String>()).call().entity(JdAnalysisResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(JdAnalysisResult::class.java))
             .thenReturn(expected)
 
         val result = evaluator.analyze(
