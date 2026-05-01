@@ -9,3 +9,6 @@
 
 ## 퀘스트별 점수
 {scoresText}
+
+## 최저 점수 퀘스트: {lowestQuestId}
+## 최고 점수 퀘스트: {highestQuestId}

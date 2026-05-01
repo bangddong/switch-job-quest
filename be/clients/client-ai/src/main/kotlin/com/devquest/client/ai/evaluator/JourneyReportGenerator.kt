@@ -30,6 +30,9 @@ class JourneyReportGenerator(
             "- $questId: ${score}점"
         }
 
+        val lowestEntry = questScores.minByOrNull { it.value }
+        val highestEntry = questScores.maxByOrNull { it.value }
+
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "companyName" to companyName,
@@ -37,6 +40,8 @@ class JourneyReportGenerator(
             "completedQuestCount" to completedQuestCount,
             "totalXp" to totalXp,
             "scoresText" to scoresText,
+            "lowestQuestId" to (lowestEntry?.key ?: ""),
+            "highestQuestId" to (highestEntry?.key ?: ""),
         ))
 
         return aiCallExecutor.execute {
