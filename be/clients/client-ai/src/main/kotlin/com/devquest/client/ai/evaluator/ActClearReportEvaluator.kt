@@ -15,7 +15,8 @@ class ActClearReportEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), ActClearReportPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/act-clear-report.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/act-clear-report-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/act-clear-report-user.st"))
 
     override fun generate(actId: Int, actTitle: String, questScores: Map<String, Int>): ActClearReportResult {
         val scoresText = questScores.entries.joinToString("\n") { (questId, score) ->
@@ -23,7 +24,8 @@ class ActClearReportEvaluator(
         }
         val avgScore = if (questScores.isEmpty()) 0 else questScores.values.average().toInt()
 
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "actId" to actId,
             "actTitle" to actTitle,
             "scoresText" to scoresText,
@@ -31,7 +33,7 @@ class ActClearReportEvaluator(
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(ActClearReportResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(ActClearReportResult::class.java)
         }
     }
 }

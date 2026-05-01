@@ -16,7 +16,8 @@ class JourneyReportGenerator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), JourneyReportPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/journey-report.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/journey-report-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/journey-report-user.st"))
 
     override fun generate(
         companyName: String,
@@ -28,10 +29,12 @@ class JourneyReportGenerator(
         val scoresText = questScores.entries.joinToString("\n") { (questId, score) ->
             "- $questId: ${score}점"
         }
+
         val lowestEntry = questScores.minByOrNull { it.value }
         val highestEntry = questScores.maxByOrNull { it.value }
 
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "companyName" to companyName,
             "targetPosition" to targetPosition,
             "completedQuestCount" to completedQuestCount,
@@ -42,7 +45,7 @@ class JourneyReportGenerator(
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(JourneyReportResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JourneyReportResult::class.java)
         }
     }
 }

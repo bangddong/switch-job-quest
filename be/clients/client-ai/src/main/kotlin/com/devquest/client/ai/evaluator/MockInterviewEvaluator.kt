@@ -24,11 +24,14 @@ class MockInterviewEvaluator(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    private val evaluateTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview.st"))
-    private val questionsTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-questions.st"))
+    private val evaluateSystemTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-system.st"))
+    private val evaluateUserTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-user.st"))
+    private val questionsSystemTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-questions-system.st"))
+    private val questionsUserTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-questions-user.st"))
 
     override fun evaluate(category: String, question: String, answer: String, questionId: String): InterviewEvaluationResult {
-        val prompt = evaluateTemplate.render(mapOf(
+        val systemPrompt = evaluateSystemTemplate.render()
+        val userPrompt = evaluateUserTemplate.render(mapOf(
             "category" to category,
             "question" to question,
             "answer" to answer,
@@ -37,18 +40,20 @@ class MockInterviewEvaluator(
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(InterviewEvaluationResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(InterviewEvaluationResult::class.java)
         }
     }
 
     override fun generateQuestions(categories: List<String>, count: Int): List<Map<String, String>> {
-        val prompt = questionsTemplate.render(mapOf(
+        val systemPrompt = questionsSystemTemplate.render()
+        val userPrompt = questionsUserTemplate.render(mapOf(
             "categories" to categories.joinToString(", "),
             "count" to count,
         ))
 
         val response = chatClient.prompt()
-            .user(prompt)
+            .system(systemPrompt)
+            .user(userPrompt)
             .call()
             .content() ?: "[]"
 
