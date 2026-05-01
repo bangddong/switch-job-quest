@@ -15,10 +15,12 @@ class JdAnalysisEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), JdAnalysisEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/jd-analysis.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/jd-analysis-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/jd-analysis-user.st"))
 
     override fun analyze(companyName: String, jobDescription: String, userSkills: List<String>, userExperiences: List<String>): JdAnalysisResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "companyName" to companyName,
             "jobDescription" to jobDescription,
             "userSkills" to userSkills.joinToString(", "),
@@ -26,7 +28,7 @@ class JdAnalysisEvaluator(
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(JdAnalysisResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JdAnalysisResult::class.java)
         }
     }
 }
