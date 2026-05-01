@@ -15,17 +15,19 @@ class TechBlogEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), BlogEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/tech-blog.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/tech-blog-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/tech-blog-user.st"))
 
     override fun evaluate(techTopic: String, title: String, content: String): AiEvaluationResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "techTopic" to techTopic,
             "title" to title,
             "content" to content,
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(AiEvaluationResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(AiEvaluationResult::class.java)
         }
     }
 }

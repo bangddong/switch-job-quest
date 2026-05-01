@@ -31,7 +31,7 @@ class InterviewCoachEvaluatorTest {
     @Test
     fun `startSession - AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(CoachSessionResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachSessionResult::class.java)
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -52,7 +52,7 @@ class InterviewCoachEvaluatorTest {
             )
         )
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(CoachSessionResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachSessionResult::class.java)
         ).thenReturn(expected)
 
         val result = evaluator.startSession(
@@ -66,10 +66,10 @@ class InterviewCoachEvaluatorTest {
     }
 
     @Test
-    fun `startSession - 프롬프트에 JD 내용과 목표 포지션이 포함된다`() {
+    fun `startSession - 사용자 프롬프트에 JD 내용과 목표 포지션이 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().user(capture(promptCaptor)).call().entity(CoachSessionResult::class.java)
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(CoachSessionResult::class.java)
         ).thenReturn(CoachSessionResult())
 
         evaluator.startSession(
@@ -80,7 +80,6 @@ class InterviewCoachEvaluatorTest {
         val prompt = promptCaptor.value
         assertThat(prompt).contains("Kotlin과 Spring Boot를 사용하는 팀입니다.")
         assertThat(prompt).contains("백엔드 개발자")
-        assertThat(prompt).contains("핵심 역량")
     }
 
     // ── evaluateAnswer ────────────────────────────────────────────────────────
@@ -88,7 +87,7 @@ class InterviewCoachEvaluatorTest {
     @Test
     fun `evaluateAnswer - AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(CoachAnswerResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachAnswerResult::class.java)
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -112,7 +111,7 @@ class InterviewCoachEvaluatorTest {
             encouragement = "좋은 경험을 잘 전달하셨어요. 계속 화이팅!"
         )
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(CoachAnswerResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachAnswerResult::class.java)
         ).thenReturn(expected)
 
         val result = evaluator.evaluateAnswer(
@@ -128,10 +127,10 @@ class InterviewCoachEvaluatorTest {
     }
 
     @Test
-    fun `evaluateAnswer - 프롬프트에 질문 번호와 전체 문제 수가 포함된다`() {
+    fun `evaluateAnswer - 사용자 프롬프트에 질문 번호와 전체 문제 수가 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().user(capture(promptCaptor)).call().entity(CoachAnswerResult::class.java)
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(CoachAnswerResult::class.java)
         ).thenReturn(CoachAnswerResult())
 
         evaluator.evaluateAnswer(
@@ -151,7 +150,7 @@ class InterviewCoachEvaluatorTest {
     @Test
     fun `generateReport - AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(CoachReportResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachReportResult::class.java)
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -175,7 +174,7 @@ class InterviewCoachEvaluatorTest {
             finalAdvice = "STAR 기법 연습을 꾸준히 하면 합격 가능성이 높아집니다."
         )
         whenever(
-            chatClient.prompt().user(any<String>()).call().entity(CoachReportResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachReportResult::class.java)
         ).thenReturn(expected)
 
         val result = evaluator.generateReport(
@@ -193,10 +192,10 @@ class InterviewCoachEvaluatorTest {
     }
 
     @Test
-    fun `generateReport - 프롬프트에 목표 포지션과 JD 요약이 포함된다`() {
+    fun `generateReport - 사용자 프롬프트에 목표 포지션과 JD 요약이 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().user(capture(promptCaptor)).call().entity(CoachReportResult::class.java)
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(CoachReportResult::class.java)
         ).thenReturn(CoachReportResult())
 
         evaluator.generateReport(
@@ -208,6 +207,5 @@ class InterviewCoachEvaluatorTest {
         val prompt = promptCaptor.value
         assertThat(prompt).contains("시니어 백엔드 개발자")
         assertThat(prompt).contains("Kotlin 기반 서비스 개발")
-        assertThat(prompt).contains("합격 가능성")
     }
 }

@@ -30,7 +30,7 @@ class CompanyFitEvaluatorTest {
     @Test
     fun `AI가 유효한 JSON을 반환하면 파싱된 결과 목록을 반환한다`() {
         val json = """[{"companyName":"토스","fitScore":90,"fitGrade":"A","cultureFit":23,"techFit":24,"growthFit":22,"lifestyleFit":21,"pros":["수평적 문화"],"cons":[],"recommendation":"적극 추천"}]"""
-        whenever(chatClient.prompt().user(any<String>()).call().content()).thenReturn(json)
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content()).thenReturn(json)
 
         val result = evaluator.analyze(preferences, companies)
 
@@ -42,7 +42,7 @@ class CompanyFitEvaluatorTest {
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
-        whenever(chatClient.prompt().user(any<String>()).call().content()).thenReturn(null)
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content()).thenReturn(null)
 
         assertThatThrownBy { evaluator.analyze(preferences, companies) }
             .isInstanceOf(AiEvaluationException::class.java)
@@ -51,7 +51,7 @@ class CompanyFitEvaluatorTest {
 
     @Test
     fun `AI가 잘못된 JSON을 반환하면 AiEvaluationException이 발생한다`() {
-        whenever(chatClient.prompt().user(any<String>()).call().content()).thenReturn("invalid json")
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content()).thenReturn("invalid json")
 
         assertThatThrownBy { evaluator.analyze(preferences, companies) }
             .isInstanceOf(AiEvaluationException::class.java)

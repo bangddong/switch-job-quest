@@ -15,16 +15,18 @@ class PersonalityInterviewEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), PersonalityEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/personality-interview.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/personality-interview-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/personality-interview-user.st"))
 
     override fun evaluate(question: String, answer: String): AiEvaluationResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "question" to question,
             "answer" to answer,
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(AiEvaluationResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(AiEvaluationResult::class.java)
         }
     }
 }

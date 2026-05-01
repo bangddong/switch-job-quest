@@ -25,7 +25,8 @@ class CompanyFitEvaluator(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    private val template = PromptTemplate(ClassPathResource("prompts/company-fit.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/company-fit-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/company-fit-user.st"))
 
     override fun analyze(preferences: Map<String, String>, companies: List<CompanyInfo>): List<CompanyFitResult> {
         val preferencesText = preferences.entries.joinToString("\n") { (k, v) -> "- $k: $v" }
@@ -33,13 +34,14 @@ class CompanyFitEvaluator(
             "${i + 1}. ${c.name}\n   - 문화: ${c.culture}\n   - 기술스택: ${c.techStack.joinToString(", ")}\n   - 규모: ${c.size}\n   - 설명: ${c.description}"
         }.joinToString("\n\n")
 
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "preferencesText" to preferencesText,
             "companiesText" to companiesText,
         ))
 
         val response = aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().content()
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
         }
 
         return try {

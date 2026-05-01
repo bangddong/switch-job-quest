@@ -15,18 +15,20 @@ class SkillAssessmentEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), SkillAssessmentPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/skill-assessment.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/skill-assessment-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/skill-assessment-user.st"))
 
     override fun evaluate(skills: List<String>, targetRole: String): SkillAssessmentResult {
         val skillsText = skills.joinToString("\n") { "- $it" }
 
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "skillsText" to skillsText,
             "targetRole" to targetRole,
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(SkillAssessmentResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(SkillAssessmentResult::class.java)
         }
     }
 }

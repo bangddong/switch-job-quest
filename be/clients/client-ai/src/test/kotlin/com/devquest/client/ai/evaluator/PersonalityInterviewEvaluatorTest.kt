@@ -23,7 +23,7 @@ class PersonalityInterviewEvaluatorTest {
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
-        whenever(chatClient.prompt().user(any<String>()).call().entity(AiEvaluationResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(AiEvaluationResult::class.java))
             .thenReturn(null)
 
         assertThatThrownBy {
@@ -43,7 +43,7 @@ class PersonalityInterviewEvaluatorTest {
             passed = true,
             grade = "B"
         )
-        whenever(chatClient.prompt().user(any<String>()).call().entity(AiEvaluationResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(AiEvaluationResult::class.java))
             .thenReturn(expected)
 
         val result = evaluator.evaluate(

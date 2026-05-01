@@ -15,17 +15,19 @@ class SystemDesignEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), SystemDesignEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/system-design.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/system-design-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/system-design-user.st"))
 
     override fun evaluate(problemStatement: String, architectureDescription: String, considerations: List<String>): AiEvaluationResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "problemStatement" to problemStatement,
             "architectureDescription" to architectureDescription,
             "considerations" to considerations.mapIndexed { i, c -> "${i + 1}. $c" }.joinToString("\n"),
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(AiEvaluationResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(AiEvaluationResult::class.java)
         }
     }
 }

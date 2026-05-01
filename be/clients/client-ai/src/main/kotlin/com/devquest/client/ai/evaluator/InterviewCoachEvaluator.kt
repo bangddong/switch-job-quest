@@ -18,23 +18,28 @@ class InterviewCoachEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), InterviewCoachPort {
 
-    private val startTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-start.st"))
-    private val evaluateTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-evaluate.st"))
-    private val reportTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-report.st"))
+    private val startSystemTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-start-system.st"))
+    private val startUserTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-start-user.st"))
+    private val evaluateSystemTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-evaluate-system.st"))
+    private val evaluateUserTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-evaluate-user.st"))
+    private val reportSystemTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-report-system.st"))
+    private val reportUserTemplate = PromptTemplate(ClassPathResource("prompts/interview-coach-report-user.st"))
 
     override fun startSession(jdText: String, targetRole: String): CoachSessionResult {
-        val prompt = startTemplate.render(mapOf(
+        val systemPrompt = startSystemTemplate.render()
+        val userPrompt = startUserTemplate.render(mapOf(
             "targetRole" to targetRole,
             "jdText" to jdText,
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(CoachSessionResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachSessionResult::class.java)
         }
     }
 
     override fun evaluateAnswer(question: String, answer: String, questionIndex: Int, totalQuestions: Int): CoachAnswerResult {
-        val prompt = evaluateTemplate.render(mapOf(
+        val systemPrompt = evaluateSystemTemplate.render()
+        val userPrompt = evaluateUserTemplate.render(mapOf(
             "questionNumber" to (questionIndex + 1),
             "totalQuestions" to totalQuestions,
             "question" to question,
@@ -42,7 +47,7 @@ class InterviewCoachEvaluator(
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(CoachAnswerResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachAnswerResult::class.java)
         }
     }
 
@@ -56,14 +61,15 @@ class InterviewCoachEvaluator(
             """.trimIndent()
         }.joinToString("\n\n")
 
-        val prompt = reportTemplate.render(mapOf(
+        val systemPrompt = reportSystemTemplate.render()
+        val userPrompt = reportUserTemplate.render(mapOf(
             "targetRole" to targetRole,
             "jdSummary" to jdSummary,
             "answersText" to answersText,
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(CoachReportResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachReportResult::class.java)
         }
     }
 }

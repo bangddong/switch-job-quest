@@ -15,17 +15,19 @@ class ResumeCheckEvaluator(
     aiCallExecutor: AiCallExecutor
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), ResumeEvaluatorPort {
 
-    private val template = PromptTemplate(ClassPathResource("prompts/resume-check.st"))
+    private val systemTemplate = PromptTemplate(ClassPathResource("prompts/resume-check-system.st"))
+    private val userTemplate = PromptTemplate(ClassPathResource("prompts/resume-check-user.st"))
 
     override fun evaluate(targetCompany: String, targetJd: String, resumeContent: String): ResumeCheckResult {
-        val prompt = template.render(mapOf(
+        val systemPrompt = systemTemplate.render()
+        val userPrompt = userTemplate.render(mapOf(
             "targetCompany" to targetCompany,
             "targetJd" to targetJd.take(500),
             "resumeContent" to resumeContent,
         ))
 
         return aiCallExecutor.execute {
-            chatClient.prompt().user(prompt).call().entity(ResumeCheckResult::class.java)
+            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(ResumeCheckResult::class.java)
         }
     }
 }

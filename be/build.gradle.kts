@@ -62,6 +62,7 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
+        jvmArgs("-Dfile.encoding=UTF-8")
         finalizedBy(tasks.named("jacocoTestReport"))
     }
 
