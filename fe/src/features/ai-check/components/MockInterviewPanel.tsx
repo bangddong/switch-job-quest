@@ -6,7 +6,7 @@ import { FALLBACK_QUESTIONS } from '../constants/fallbackQuestions'
 import { submitMockInterview } from '../api/aiCheckApi'
 import { InterviewResultCard } from './InterviewResultCard'
 import { PASS_THRESHOLD } from '@/utils/gradeUtils'
-import { MOCK_INTERVIEW_SAMPLE_ANSWER } from '../constants/mockValues'
+import { MOCK_INTERVIEW_SAMPLE_ANSWERS } from '../constants/mockValues'
 
 interface MockInterviewPanelProps {
   onComplete: (score: number) => void
@@ -169,7 +169,7 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
 
       <button
         type="button"
-        onClick={() => setAnswer(MOCK_INTERVIEW_SAMPLE_ANSWER)}
+        onClick={() => setAnswer(MOCK_INTERVIEW_SAMPLE_ANSWERS[q.id] ?? '')}
         style={{
           background: 'none',
           border: '1px solid rgba(78,205,196,0.3)',

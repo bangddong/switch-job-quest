@@ -70,5 +70,15 @@ export const MOCK_FORM_VALUES = {
   },
 } satisfies Partial<Record<keyof typeof AI_FORMS, Record<string, unknown>>>
 
-export const MOCK_INTERVIEW_SAMPLE_ANSWER =
-  'HashMap의 내부 구조는 배열 기반의 버킷 구조입니다. 키를 해시 함수로 변환한 값을 인덱스로 사용해 버킷에 저장합니다. Java 8부터는 충돌이 많을 경우(동일 버킷 8개 이상) 연결 리스트에서 레드-블랙 트리로 전환해 탐색 성능을 O(n)에서 O(log n)으로 개선합니다. 로드 팩터 기본값은 0.75로, 저장 용량의 75%가 채워지면 배열을 2배로 리해시합니다. 리해시 시 모든 요소를 재배치하므로 O(n) 비용이 발생합니다. 실무에서는 초기 용량을 예상 크기의 1.5배로 설정해 불필요한 리해시를 방지합니다.'
+export const MOCK_INTERVIEW_SAMPLE_ANSWERS: Record<string, string> = {
+  q1: '데이터베이스 인덱스는 내부적으로 B-Tree 구조로 구현되어 있습니다. 루트 노드부터 리프 노드까지 내려가며 O(log n)으로 데이터를 탐색합니다. 잘못 사용하면 카디널리티가 낮은 컬럼(예: boolean)에 인덱스를 걸어 Full Scan보다 느려지거나, 복합 인덱스에서 선두 컬럼을 빠뜨려 인덱스가 사용되지 않는 문제가 발생합니다. 실무에서 EXPLAIN으로 쿼리 실행 계획을 확인하고, 쓰기 빈번한 테이블에는 인덱스 수를 최소화해 INSERT/UPDATE 부하를 줄입니다.',
+  q2: 'JVM GC는 크게 Serial, Parallel, CMS, G1GC, ZGC로 구분됩니다. 모든 GC는 살아있는 객체 그래프를 탐색하는 Mark 단계에서 힙 일관성을 보장하기 위해 애플리케이션 스레드를 멈추는 Stop-The-World가 발생합니다. 특히 Full GC는 Old 영역까지 수집하므로 STW가 길어집니다. 실무에서는 G1GC를 기본으로 사용하고, -Xms/-Xmx를 동일하게 설정해 힙 리사이즈 STW를 제거하며, GC 로그를 수집해 튜닝 근거로 활용합니다.',
+  q3: 'TLS Handshake는 클라이언트가 ClientHello를 보내며 지원 암호화 스펙을 알리고, 서버가 ServerHello로 선택된 스펙과 인증서를 전달하는 것으로 시작됩니다. 클라이언트는 인증서를 CA 체인으로 검증 후 Pre-Master Secret을 서버 공개키로 암호화해 전송합니다. 양측이 이를 이용해 동일한 세션 키를 도출하고, 이후 대칭 암호화로 통신합니다. TLS 1.3에서는 RTT를 1회로 줄여 초기 연결 지연이 개선됐습니다.',
+  q4: 'MSA는 서비스별 독립 배포와 기술 스택 선택이 가능하지만 분산 트랜잭션, 네트워크 레이턴시, 운영 복잡도가 증가합니다. Monolithic은 초기 개발 속도가 빠르고 트랜잭션 관리가 단순하지만 배포 단위가 커 장애 영향 범위가 넓습니다. 저는 팀 규모 10명 미만이거나 도메인 경계가 불명확한 초기 단계에서는 Monolithic을 선택하고, 서비스가 안정화되고 특정 도메인의 확장성 요구가 뚜렷해지면 점진적으로 분리하는 방식을 선호합니다.',
+  q5: 'Optimistic Lock은 버전 컬럼으로 충돌을 감지하고 커밋 시점에 롤백합니다. 충돌이 드문 읽기 중심 환경에 적합합니다. Pessimistic Lock은 SELECT FOR UPDATE로 트랜잭션 시작 시 락을 획득해 충돌 자체를 방지합니다. 충돌 빈도가 높거나 데이터 정합성이 절대적으로 중요한 재고 차감, 포인트 사용 등에 사용합니다. 실무에서 Optimistic Lock은 ObjectOptimisticLockingFailureException 재시도 로직을 함께 구현해야 합니다.',
+  q6: '@Transactional은 AOP 프록시를 통해 동작합니다. 스프링이 빈을 감싸는 프록시 객체를 생성하고, 메서드 호출 시 트랜잭션을 시작·커밋·롤백합니다. 주의사항으로 self-invocation 문제가 있는데, 같은 클래스 내 메서드 호출은 프록시를 거치지 않아 트랜잭션이 적용되지 않습니다. 또한 기본 rollbackFor는 RuntimeException이므로 Checked Exception은 명시적으로 지정해야 합니다. readOnly=true 설정 시 Hibernate의 dirty checking을 생략해 성능을 높일 수 있습니다.',
+  q7: 'Process는 독립된 메모리 공간을 가지며 OS 자원을 독립적으로 사용합니다. Thread는 같은 프로세스 내에서 힙과 메서드 영역을 공유합니다. Thread-safe 코드를 위해서는 공유 상태를 최소화하고, 불가피하면 synchronized, ReentrantLock, 또는 Atomic 클래스를 사용합니다. 실무에서는 Java의 ConcurrentHashMap, AtomicInteger 같은 스레드 안전 컬렉션을 우선 사용하고, 직접 동기화는 범위를 최소화해 데드락 위험을 줄입니다.',
+  q8: 'hashCode()는 객체를 해시 기반 컬렉션(HashMap, HashSet)에서 빠르게 탐색하기 위한 버킷 인덱스를 결정합니다. equals()는 동등성을 비교합니다. 두 메서드는 반드시 함께 재정의해야 하며, equals()가 true면 hashCode()도 같아야 합니다. 반대는 성립하지 않아도 됩니다. hashCode 구현 시 Objects.hash()를 사용하거나 핵심 필드를 31 곱산으로 조합합니다. 롬복의 @EqualsAndHashCode 사용 시 JPA 엔티티에서 연관관계 필드 포함 여부를 주의해야 합니다.',
+  q9: 'Slow Query 발견 시 먼저 EXPLAIN ANALYZE로 실행 계획을 확인해 Full Table Scan, 잘못된 인덱스 선택 여부를 파악합니다. 원인이 인덱스 누락이면 추가하고, 인덱스가 있어도 사용 안 되는 경우 함수 적용이나 묵시적 형변환 여부를 확인합니다. N+1 문제라면 Fetch Join이나 Batch Size 조정으로 해결합니다. 튜닝 후 쿼리 실행 시간을 재측정하고, 임계값을 초과하는 쿼리는 slow_query_log와 APM(Pinpoint, Datadog)으로 모니터링합니다.',
+  q10: '브라우저는 DNS 조회로 도메인을 IP로 변환하고(캐시 없으면 재귀 쿼리), TCP 3-way Handshake로 연결을 수립합니다. HTTPS이므로 TLS Handshake를 거쳐 암호화 세션을 생성합니다. 이후 HTTP GET 요청을 전송하면 서버가 HTML을 응답합니다. 브라우저는 HTML을 파싱해 DOM을 구성하고 CSS로 CSSOM을 만들어 렌더 트리를 생성합니다. JS 실행, 레이아웃, 페인트 단계를 거쳐 화면에 표시됩니다. CDN 캐시 HIT 시 원본 서버 요청 없이 엣지에서 응답합니다.',
+}
