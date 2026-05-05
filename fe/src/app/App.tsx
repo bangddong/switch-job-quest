@@ -202,10 +202,15 @@ export function App() {
 
   const isBossQuest = (questId: string) => questId.endsWith('-BOSS')
 
-  const handleComplete = (questId: string, xp: number, actId: number, act: Act) => {
+  const handleComplete = async (questId: string, xp: number, actId: number, act: Act) => {
     setCompleted((prev) => ({ ...prev, [questId]: true }))
-    completeQuest(questId, actId, xp).catch(() => {})
-    if (isBossQuest(questId)) triggerActClearReport(act)
+    try {
+      await completeQuest(questId, actId, xp)
+      if (isBossQuest(questId)) triggerActClearReport(act)
+    } catch {
+      setCompleted((prev) => ({ ...prev, [questId]: false }))
+      alert('퀘스트 완료 저장에 실패했습니다. 다시 시도해 주세요.')
+    }
   }
 
   const handleAiResult = (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult) => {
