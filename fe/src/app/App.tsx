@@ -250,14 +250,19 @@ export function App() {
     }
   }
 
-  const handleMockInterviewComplete = (score: number) => {
+  const handleMockInterviewComplete = async (score: number) => {
     if (view.kind === 'detail') {
       const { quest, act } = view
       if (score >= 70) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
         setAiScores((prev) => ({ ...prev, [quest.id]: score }))
-        completeQuest(quest.id, act.id, quest.xp).catch(() => {})
-        if (isBossQuest(quest.id)) triggerActClearReport(act)
+        try {
+          await completeQuest(quest.id, act.id, quest.xp)
+          if (isBossQuest(quest.id)) triggerActClearReport(act)
+        } catch {
+          setCompleted((prev) => ({ ...prev, [quest.id]: false }))
+          alert('퀘스트 완료 저장에 실패했습니다. 다시 시도해 주세요.')
+        }
       }
     }
   }
