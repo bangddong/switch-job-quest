@@ -28,6 +28,9 @@ git diff HEAD~1 --stat
 - [ ] core-domain에 Spring/JPA 의존성
 - [ ] Service에서 구체 Adapter 클래스 직접 주입 (Port 인터페이스 대신)
 
+#### 테스트 패턴 위반 (FAIL)
+- [ ] Evaluator 테스트에 `@Mock`/`@InjectMocks` 사용 (`RETURNS_DEEP_STUBS` 패턴 사용해야 함 — CI 파괴 위험)
+
 #### 의존성 규칙 위반 (FAIL)
 - [ ] core-enum: 다른 모듈 의존
 - [ ] core-domain: core-enum 외 의존
@@ -40,6 +43,9 @@ git diff HEAD~1 --stat
 - [ ] AI 평가기에서 프롬프트 구조 미준수 (컨텍스트→입력→기준→JSON)
 - [ ] Domain Model에 기본값 누락
 - [ ] Adapter에 `toDomain`/`toEntity` 매핑 누락
+- [ ] AI Adapter가 `BaseAiEvaluator` + `AiCallExecutor` 미사용 (구식 단일 chatClient 패턴)
+- [ ] Controller에 try-catch 블록 존재 (ApiControllerAdvice 위임 패턴 미준수)
+- [ ] DTO에 userId 필드 포함 (`@AuthenticationPrincipal` 추출 패턴 미준수)
 
 #### Kotlin 스타일 (WARN)
 - [ ] 불필요한 `var` 사용 (Entity 변경 필드 제외)

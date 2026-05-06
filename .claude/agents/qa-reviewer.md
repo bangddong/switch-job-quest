@@ -133,6 +133,7 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 | Evaluator 단위 테스트 | 새 `*Evaluator` 구현 시 `*EvaluatorTest.kt` 존재 여부 |
 | AI null 응답 예외 | `AiEvaluationException` 발생 케이스 테스트 포함 여부 |
 | Controller 테스트 패턴 | `standaloneSetup` + `AuthenticationPrincipalArgumentResolver` 사용 여부 |
+| Evaluator 테스트 패턴 | `@Mock`/`@InjectMocks` 사용 금지 — `RETURNS_DEEP_STUBS` 패턴 사용 여부 |
 
 테스트 없음 → **WARNING** 처리 (CRITICAL 아님, tech-debt로 분류)
 
