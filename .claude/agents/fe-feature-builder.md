@@ -166,11 +166,12 @@ import type { [ResultType] } from '@/types/api.types'
 
 export async function submit[Feature](
     body: Record<string, unknown>,
-    userId: string,
 ): Promise<[ResultType]> {
-    return callAiCheck<[ResultType]>('[endpoint]', body, userId)
+    return callAiCheck<[ResultType]>('[endpoint]', body)
 }
 ```
+
+인증은 `callAiCheck` 내부에서 `useAuth.getToken()`으로 처리 — `userId` 파라미터 전달 금지.
 
 ## 공유 UI 컴포넌트
 

@@ -137,7 +137,7 @@ class [Feature]Evaluator(
 
 프롬프트 파일 위치: `be/clients/client-ai/src/main/resources/prompts/`
 - `[feature]-system.st` — 역할 정의, 평가 기준 (캐시 대상)
-- `[feature]-user.st` — 사용자 입력 + JSON 응답 형식 (`${변수명}` 플레이스홀더)
+- `[feature]-user.st` — 사용자 입력 + JSON 응답 형식 (`{변수명}` 플레이스홀더, ST4 문법)
 
 ### Request DTO (core-api)
 
