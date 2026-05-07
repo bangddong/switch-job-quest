@@ -3,21 +3,6 @@
 > 새 대화 시작 시 이 파일을 먼저 읽으세요.
 > 전체 작업 이력은 `.claude/CONTEXT.archive.md` 참조.
 
-## 현재 상태 (2026-04-27)
-
-| 항목 | 내용 |
-|------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
-
-## 최근 완료 (최근 3건)
-
-| PR | 내용 | 날짜 |
-|----|------|------|
-| #110 | be/fe/qa 에이전트 Token 절약 규칙 섹션 추가 | 2026-04-27 |
-| #109 | Compact Instructions 강화 및 수동 /compact 가이드 개선 | 2026-04-27 |
-| #108 | 성장 기록 화면 텍스트 가독성 개선 — 저대비 색상 교체 (8개 컴포넌트) | 2026-04-27 |
-
 ## 알아둬야 할 비자명적 결정
 
 ### Controller 테스트 패턴
@@ -32,11 +17,6 @@
 두 스프린트가 같은 파일을 수정하면 병렬 브랜치 금지.
 앞 PR 머지 완료 후 다음 브랜치 생성. (BE↔FE 다른 파일이면 병렬 OK)
 
-### Copilot Gate
-Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
-`gh workflow run copilot-review-evaluator.yml -f pr_number=<PR>`
-→ 상세 처리 절차: `.claude/docs/copilot-review.md`
-
 ### Observability 최종 상태
 - Sentry: Spring Boot 4.x 미지원으로 포기 (PR #52)
 - Logtail (Better Stack): fly.io log drain 방식 → 커스텀 LogtailHttpAppender로 직접 전송으로 전환 (feat/logtail-http-appender)
@@ -48,19 +28,6 @@ Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
 - 오케스트레이터 + remote control 조합: `claude --agent orchestrator --remote-control` (직접 터미널 실행 필요)
 - `claude remote-control` 서버 모드는 `--agent` 플래그 미지원 (일반 세션만 생성)
 
-## 다음 작업
-
-### 코드 작업
-- [ ] Issue #86: DeveloperClassEvaluator 단위 테스트 추가
-- [ ] client-ai Jackson 2/3 혼재 정리 (CompanyFitEvaluator, MockInterviewEvaluator → tools.jackson 마이그레이션)
-
-### 사용자 확인 필요
-- [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
-
-### 백로그
-- [x] devquest-log-shipper 제거 — 커스텀 Logback HTTP 어펜더 구현 완료 (feat/logtail-http-appender, a6f6d22)
-  - fly secret 설정 + fly.io log drain 제거는 PR 머지 후 사용자 직접 실행 필요
-
 ## 참조 문서
 
 | 주제 | 문서 |
@@ -70,3 +37,32 @@ Copilot 리뷰가 달렸는데 gate가 pending이면 수동 트리거 필요:
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
 | 커밋 / PR / 브랜치 | `.claude/docs/git-strategy.md` |
 | 전체 작업 이력 | `.claude/CONTEXT.archive.md` |
+
+---
+
+## 현재 상태 (2026-05-07)
+
+| 항목 | 내용 |
+|------|------|
+| 브랜치 | `feat/cache-metrics-advisor` |
+| 열린 PR | #123 — feat(be): AI Evaluator 캐시 메트릭 관측가능성 추가 (CI 대기) |
+
+## 최근 완료 (최근 3건)
+
+| PR | 내용 | 날짜 |
+|----|------|------|
+| #122 | Copilot Review Gate 봇 트리거 제거 + pull_request 폴링 방식 전환 | 2026-05-07 |
+| #121 | ApiResponse success 필드 제거, result/error 기반으로 통일 (진행 데이터 미표시 버그 수정) | 2026-05-07 |
+| #120 | skills 파일 에이전트 본문 통합 + 구식 패턴(AI Adapter, DTO userId, try-catch) 수정 | 2026-05-06 |
+
+## 다음 작업
+
+### 코드 작업
+- [ ] client-ai Jackson 2/3 혼재 정리 (CompanyFitEvaluator, MockInterviewEvaluator → tools.jackson 마이그레이션)
+
+### 사용자 확인 필요
+- [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
+
+### 백로그
+- [x] devquest-log-shipper 제거 — 커스텀 Logback HTTP 어펜더 구현 완료 (feat/logtail-http-appender, a6f6d22)
+  - fly secret 설정 + fly.io log drain 제거는 PR 머지 후 사용자 직접 실행 필요
