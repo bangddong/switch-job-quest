@@ -28,6 +28,7 @@ class ResumeCheckEvaluator(
 
         return aiCallExecutor.execute {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(ResumeCheckResult::class.java)
+                ?.let { it.copy(passed = it.overallScore >= 70) }
         }
     }
 }

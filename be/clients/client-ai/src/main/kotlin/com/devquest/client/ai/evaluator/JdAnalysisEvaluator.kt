@@ -29,6 +29,7 @@ class JdAnalysisEvaluator(
 
         return aiCallExecutor.execute {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JdAnalysisResult::class.java)
+                ?.let { it.copy(passed = it.overallMatchScore >= 70) }
         }
     }
 }
