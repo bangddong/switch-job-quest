@@ -1,8 +1,13 @@
+export interface ErrorMessage {
+  code: string
+  message: string
+  data: unknown | null
+}
+
 export interface ApiResponse<T> {
-  success: boolean
   result: string
   data: T | null
-  message: string | null
+  error: ErrorMessage | null
 }
 
 export interface QuestDetail {
