@@ -278,7 +278,8 @@ export function App() {
     )
   }
 
-  if (progressLoading && INITIAL_PROGRESS_CACHE === null) {
+  if (progressLoading) {
+    const hasCache = INITIAL_PROGRESS_CACHE !== null
     return (
       <div
         role="status"
@@ -298,8 +299,12 @@ export function App() {
           gap: 12,
         }}
       >
-        <p style={{ color: '#4ECDC4', fontSize: 14, margin: 0 }}>서버 기동 중...</p>
-        <p style={{ color: '#475569', fontSize: 12, margin: 0 }}>진척 데이터를 불러오는 중입니다 (최대 25초)</p>
+        <p style={{ color: '#4ECDC4', fontSize: 14, margin: 0 }}>
+          {hasCache ? '최신 데이터 동기화 중...' : '서버 기동 중...'}
+        </p>
+        {!hasCache && (
+          <p style={{ color: '#475569', fontSize: 12, margin: 0 }}>진척 데이터를 불러오는 중입니다 (최대 25초)</p>
+        )}
       </div>
     )
   }
