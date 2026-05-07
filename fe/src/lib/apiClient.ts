@@ -98,7 +98,7 @@ export async function callAiCheck<T>(
     let errorMessage = `HTTP ${res.status}`
     try {
       const errorJson: ApiResponse<unknown> = await res.json()
-      if (errorJson.message) errorMessage = errorJson.message
+      if (errorJson.error?.message) errorMessage = errorJson.error.message
     } catch {
       // response body not parseable, use default
     }
@@ -108,7 +108,7 @@ export async function callAiCheck<T>(
   const json: ApiResponse<T> = await res.json()
 
   if (json.result !== 'SUCCESS' || json.data == null) {
-    throw new Error(json.message ?? 'AI 평가 오류')
+    throw new Error(json.error?.message ?? 'AI 평가 오류')
   }
 
   return json.data

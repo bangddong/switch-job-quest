@@ -22,12 +22,12 @@ async function callCoach<T>(path: string, body: Record<string, unknown>): Promis
     let message = `HTTP ${res.status}`
     try {
       const err: ApiResponse<unknown> = await res.json()
-      if (err.message) message = err.message
+      if (err.error?.message) message = err.error.message
     } catch { /* ignore */ }
     throw new Error(message)
   }
   const json: ApiResponse<T> = await res.json()
-  if (json.result !== 'SUCCESS' || json.data == null) throw new Error(json.message ?? '코치 API 오류')
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error(json.error?.message ?? '코치 API 오류')
   return json.data
 }
 
