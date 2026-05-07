@@ -13,7 +13,7 @@ on:
         type: string
 
 concurrency:
-  group: copilot-gate-${{ github.event.pull_request.number || github.event.pull_request_review_comment.pull_request_url || github.event.inputs.pr_number }}
+  group: copilot-gate-${{ github.event.pull_request.number || github.event.comment.pull_request_url || github.event.inputs.pr_number }}
   cancel-in-progress: false
 
 jobs:
@@ -118,10 +118,10 @@ jobs:
               const POLL_INTERVAL_MS = 30_000;
 
               for (let i = 0; i < MAX_POLLS; i++) {
-                await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
                 const done = await evaluate();
                 if (done) return;
                 core.info(`폴링 ${i + 1}/${MAX_POLLS} — Copilot 리뷰 미도착`);
+                if (i < MAX_POLLS - 1) await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
               }
 
               core.notice('폴링 timeout — status pending 유지. workflow_dispatch로 재평가 가능.');
