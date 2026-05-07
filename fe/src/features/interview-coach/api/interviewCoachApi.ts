@@ -27,7 +27,7 @@ async function callCoach<T>(path: string, body: Record<string, unknown>): Promis
     throw new Error(message)
   }
   const json: ApiResponse<T> = await res.json()
-  if (!json.success || json.data == null) throw new Error(json.message ?? '코치 API 오류')
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error(json.message ?? '코치 API 오류')
   return json.data
 }
 

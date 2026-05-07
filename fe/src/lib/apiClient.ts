@@ -17,7 +17,7 @@ export async function fetchProgress(): Promise<ProgressResult> {
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<ProgressResult> = await res.json()
-  if (!json.success || json.data == null) throw new Error('진행 상황 조회 실패')
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('진행 상황 조회 실패')
   return json.data
 }
 
@@ -45,7 +45,7 @@ export async function fetchActClearReport(
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<ActClearReportResult> = await res.json()
-  if (!json.success || json.data == null) throw new Error('ACT 클리어 리포트 생성 실패')
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('ACT 클리어 리포트 생성 실패')
   return json.data
 }
 
@@ -55,7 +55,7 @@ export async function fetchHistory(): Promise<QuestHistoryItem[]> {
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<QuestHistoryItem[]> = await res.json()
-  if (!json.success || json.data == null) throw new Error('히스토리 조회 실패')
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('히스토리 조회 실패')
   return json.data
 }
 
@@ -65,7 +65,7 @@ export async function fetchQuestHistory(questId: string): Promise<QuestHistoryIt
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<QuestHistoryItem[]> = await res.json()
-  if (!json.success || json.data == null) throw new Error('퀘스트 히스토리 조회 실패')
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('퀘스트 히스토리 조회 실패')
   return json.data
 }
 
@@ -80,7 +80,7 @@ export async function fetchJourneyReport(
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<JourneyReportResult> = await res.json()
-  if (!json.success || json.data == null) throw new Error('여정 리포트 생성 실패')
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('여정 리포트 생성 실패')
   return json.data
 }
 

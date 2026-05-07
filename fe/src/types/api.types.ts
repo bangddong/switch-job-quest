@@ -1,7 +1,7 @@
 export interface ApiResponse<T> {
-  success: boolean
   result: string
   data: T | null
+  error: string | null
   message: string | null
 }
 
