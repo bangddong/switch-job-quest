@@ -120,6 +120,7 @@ export interface JdAnalysisResult {
   requiredSkills: SkillRequirement[]
   hiddenRequirements: string[]
   overallMatchScore: number
+  passed: boolean
   keyDifferentiators: string[]
   applicationStrategy: string
 }

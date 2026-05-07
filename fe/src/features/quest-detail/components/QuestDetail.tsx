@@ -6,7 +6,6 @@ import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, JdAnalysisResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
 import { MOCK_FORM_VALUES } from '@/features/ai-check/constants/mockValues'
-import { PASS_THRESHOLD } from '@/utils/gradeUtils'
 import { QUEST_NEXT } from '../constants/questConnections'
 import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
@@ -41,9 +40,6 @@ function extractImprovements(aiResult: AnyAiResult): string[] {
 }
 
 function isPassed(aiResult: AnyAiResult): boolean {
-  if ('overallMatchScore' in aiResult && !('passed' in aiResult)) {
-    return (aiResult as JdAnalysisResult).overallMatchScore >= PASS_THRESHOLD
-  }
   return (aiResult as { passed: boolean }).passed === true
 }
 

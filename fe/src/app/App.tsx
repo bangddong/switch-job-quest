@@ -219,7 +219,7 @@ export function App() {
     if (view.kind === 'detail') {
       const { quest, act } = view
       setAiResults((prev) => ({ ...prev, [quest.id]: result }))
-      const isJdAnalysis = 'overallMatchScore' in result && !('passed' in result)
+      const isJdAnalysis = 'overallMatchScore' in result && !('developerClass' in result) && quest.id !== '4-BOSS'
       const isBossPackage = quest.id === '4-BOSS'
       const isDeveloperClass = 'developerClass' in result
       const score = isJdAnalysis
@@ -227,9 +227,7 @@ export function App() {
         : isBossPackage || isDeveloperClass
           ? (result as BossPackageResult | DeveloperClassResult).overallScore
           : (result as AiEvaluationResult).score
-      const passed = isJdAnalysis
-        ? (result as JdAnalysisResult).overallMatchScore >= 70
-        : (result as { passed: boolean }).passed
+      const passed = (result as { passed: boolean }).passed
       if (passed) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
         setAiScores((prev) => ({ ...prev, [quest.id]: score }))
