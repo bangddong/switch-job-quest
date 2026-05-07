@@ -40,7 +40,21 @@ function extractImprovements(aiResult: AnyAiResult): string[] {
 }
 
 function isPassed(aiResult: AnyAiResult): boolean {
-  return (aiResult as { passed: boolean }).passed === true
+  // passed 필드가 있으면 (신규 BE 응답) 그대로 사용
+  if ('passed' in aiResult) {
+    return (aiResult as { passed: boolean }).passed === true
+  }
+  // 구버전 캐시 (passed 없음) — 점수 필드로 fallback
+  if ('overallMatchScore' in aiResult) {
+    return (aiResult as JdAnalysisResult).overallMatchScore >= 70
+  }
+  if ('overallScore' in aiResult) {
+    return (aiResult as { overallScore: number }).overallScore >= 70
+  }
+  if ('score' in aiResult) {
+    return (aiResult as { score: number }).score >= 70
+  }
+  return false
 }
 
 export function QuestDetail({
