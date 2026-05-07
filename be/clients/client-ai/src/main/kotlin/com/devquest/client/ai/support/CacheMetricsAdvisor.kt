@@ -31,7 +31,7 @@ class CacheMetricsAdvisor : CallAdvisor {
             val outputTokens = usage.outputTokens()
 
             log.info(
-                "AI cache metrics — cacheHit={}, cacheReadTokens={}, cacheCreationTokens={}, inputTokens={}, outputTokens={}",
+                "AI cache metrics — cacheHit={}, cache_read_input_tokens={}, cache_creation_input_tokens={}, input_tokens={}, output_tokens={}",
                 cacheRead > 0,
                 cacheRead,
                 cacheCreation,
@@ -41,12 +41,12 @@ class CacheMetricsAdvisor : CallAdvisor {
 
             if (cacheCreation > 2_000 && cacheRead == 0L) {
                 log.warn(
-                    "AI cache miss — cacheCreationTokens={} with no cache read. Possible cache break or first call.",
+                    "AI cache miss — cache_creation_input_tokens={} with no cache read. Possible cache break or first call.",
                     cacheCreation,
                 )
             }
         }.onFailure { e ->
-            log.debug("Failed to extract cache metrics: {}", e.message)
+            log.debug("Failed to extract cache metrics", e)
         }
 
         return response
