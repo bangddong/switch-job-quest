@@ -9,6 +9,7 @@ import org.springframework.ai.anthropic.AnthropicChatOptions
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.model.ChatModel
 import org.springframework.beans.factory.annotation.Value
+import com.devquest.client.ai.support.CacheMetricsAdvisor
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
@@ -18,8 +19,10 @@ class AiClientConfig {
 
     @Bean
     @Primary
-    fun chatClient(chatModel: ChatModel): ChatClient {
-        return ChatClient.builder(chatModel).build()
+    fun chatClient(chatModel: ChatModel, cacheMetricsAdvisor: CacheMetricsAdvisor): ChatClient {
+        return ChatClient.builder(chatModel)
+            .defaultAdvisors(cacheMetricsAdvisor)
+            .build()
     }
 
     @Bean("bossChatClient")
@@ -27,6 +30,7 @@ class AiClientConfig {
         @Value("\${devquest.ai.boss-model:claude-sonnet-4-6}") bossModel: String,
         @Value("\${devquest.ai.boss-max-tokens:4000}") bossMaxTokens: Int,
         @Value("\${spring.ai.anthropic.api-key}") apiKey: String,
+        cacheMetricsAdvisor: CacheMetricsAdvisor,
     ): ChatClient {
         val anthropicClient = AnthropicOkHttpClient.builder()
             .apiKey(apiKey)
@@ -44,6 +48,8 @@ class AiClientConfig {
             .anthropicClient(anthropicClient)
             .options(options)
             .build()
-        return ChatClient.builder(model).build()
+        return ChatClient.builder(model)
+            .defaultAdvisors(cacheMetricsAdvisor)
+            .build()
     }
 }
