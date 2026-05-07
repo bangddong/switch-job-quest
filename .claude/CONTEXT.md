@@ -44,16 +44,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/cache-metrics-advisor` |
-| 열린 PR | #123 — feat(be): AI Evaluator 캐시 메트릭 관측가능성 추가 (CI 대기) |
+| 브랜치 | `fix/progress-loading-screen` |
+| 열린 PR | 진행 중 — progress 로딩 화면 캐시 우회 버그 수정 |
 
 ## 최근 완료 (최근 3건)
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| #123 | AI Evaluator 캐시 메트릭 관측가능성 추가 (CacheMetricsAdvisor) | 2026-05-07 |
 | #122 | Copilot Review Gate 봇 트리거 제거 + pull_request 폴링 방식 전환 | 2026-05-07 |
 | #121 | ApiResponse success 필드 제거, result/error 기반으로 통일 (진행 데이터 미표시 버그 수정) | 2026-05-07 |
-| #120 | skills 파일 에이전트 본문 통합 + 구식 패턴(AI Adapter, DTO userId, try-catch) 수정 | 2026-05-06 |
 
 ## 다음 작업
 
