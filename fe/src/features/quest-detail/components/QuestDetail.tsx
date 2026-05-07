@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ResumeCheckResult } from '@/types/api.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, JdAnalysisResultCard, MockInterviewPanel } from '@/features/ai-check'
@@ -11,17 +11,17 @@ import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
 import { FinalBossView } from './FinalBossView'
 
-type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult
+type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult
 
 interface QuestDetailProps {
   quest: Quest
   act: Act
   completed: Record<string, boolean>
   aiScores: Record<string, number>
-  aiResult: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | null
+  aiResult: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult | null
   showForm: boolean
   onShowForm: () => void
-  onAiResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult) => void
+  onAiResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult) => void
   onComplete: (questId: string, xp: number, actId: number, act: Act) => void
   onMockInterviewComplete: (score: number) => void
   onNextQuest?: (questId: string) => void
