@@ -108,6 +108,29 @@ export interface DeveloperClassResult {
   overallFeedback: string
 }
 
+export interface ResumeImprovement {
+  section: string
+  original: string
+  issue: string
+  suggestion: string
+}
+
+export interface ResumeRewrite {
+  original: string
+  improved: string
+  explanation: string
+}
+
+export interface ResumeCheckResult {
+  overallScore: number
+  passed: boolean
+  starMethodScore: number
+  quantificationScore: number
+  keywordMatchScore: number
+  improvements: ResumeImprovement[]
+  rewrittenExamples: ResumeRewrite[]
+}
+
 export interface SkillRequirement {
   skill: string
   required: boolean

@@ -226,7 +226,7 @@ export function App() {
         ? (result as JdAnalysisResult).overallMatchScore
         : isBossPackage || isDeveloperClass
           ? (result as BossPackageResult | DeveloperClassResult).overallScore
-          : (result as AiEvaluationResult).score
+          : (result as AiEvaluationResult).score ?? (result as { overallScore?: number }).overallScore ?? 0
       const passed = (result as { passed: boolean }).passed
       if (passed) {
         setCompleted((prev) => ({ ...prev, [quest.id]: true }))
