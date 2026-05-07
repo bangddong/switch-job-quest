@@ -3,8 +3,6 @@ name: Copilot Review Gate
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  pull_request_review:
-    types: [submitted]
   pull_request_review_comment:
     types: [created]
   workflow_dispatch:
@@ -15,7 +13,7 @@ on:
         type: string
 
 concurrency:
-  group: copilot-gate-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  group: copilot-gate-${{ github.event.pull_request.number || github.event.comment.pull_request_url || github.event.inputs.pr_number }}
   cancel-in-progress: false
 
 jobs:
@@ -28,10 +26,10 @@ jobs:
     steps:
       - name: Check for unresolved Copilot review comments
         uses: actions/github-script@v7
+        timeout-minutes: 8
         with:
           script: |
-            // pull_request_review_comment 이벤트에서 Copilot 외 새 코멘트는 스킵
-            // Copilot 새 코멘트는 스킵하지 않고 재평가 → gate를 failure로 갱신
+            // pull_request_review_comment: 사람의 초기 코멘트는 스킵 (답글만 처리)
             if (context.eventName === 'pull_request_review_comment'
                 && !context.payload.comment?.in_reply_to_id
                 && context.payload.comment?.user?.login !== 'copilot-pull-request-reviewer[bot]') {
@@ -39,16 +37,11 @@ jobs:
               return;
             }
 
-            // pull_request_review 이벤트에서 Copilot bot이 아닌 경우 스킵
-            if (context.eventName === 'pull_request_review' &&
-                context.payload.review?.user?.login !== 'copilot-pull-request-reviewer[bot]') {
-              core.notice('Copilot 외 리뷰어 — 평가 스킵');
-              return;
-            }
-
-            const prNumber = context.payload.inputs?.pr_number
+            const prNumber = Number(
+              context.payload.inputs?.pr_number
               ?? context.payload.pull_request?.number
-              ?? context.payload.review?.pull_request_url?.match(/\/(\d+)$/)?.[1];
+              ?? context.payload.comment?.pull_request_url?.match(/\/(\d+)$/)?.[1]
+            );
 
             if (!prNumber) {
               core.warning('PR number을 확인할 수 없습니다.');
@@ -59,7 +52,7 @@ jobs:
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: Number(prNumber),
+              pull_number: prNumber,
             });
             const sha = pr.head.sha;
 
@@ -74,49 +67,69 @@ jobs:
               });
             };
 
-            // 1. Copilot 리뷰 여부 확인
-            const reviews = await github.paginate(
-              github.rest.pulls.listReviews,
-              { owner: context.repo.owner, repo: context.repo.repo, pull_number: Number(prNumber) }
-            );
+            const evaluate = async () => {
+              const reviews = await github.paginate(
+                github.rest.pulls.listReviews,
+                { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber }
+              );
 
-            const copilotReviews = reviews.filter(
-              r => r.user.login === 'copilot-pull-request-reviewer[bot]'
-            );
+              const copilotReviews = reviews.filter(
+                r => r.user.login === 'copilot-pull-request-reviewer[bot]'
+              );
 
-            if (copilotReviews.length === 0) {
+              if (copilotReviews.length === 0) return false; // 아직 리뷰 없음
+
+              const allComments = await github.paginate(
+                github.rest.pulls.listReviewComments,
+                { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber }
+              );
+
+              const copilotReviewIds = new Set(copilotReviews.map(r => r.id));
+
+              const copilotTopComments = allComments.filter(c =>
+                copilotReviewIds.has(c.pull_request_review_id) && !c.in_reply_to_id
+              );
+
+              const repliedIds = new Set(
+                allComments
+                  .filter(c => c.in_reply_to_id)
+                  .map(c => c.in_reply_to_id)
+              );
+
+              const unresolvedComments = copilotTopComments.filter(c => !repliedIds.has(c.id));
+
+              if (unresolvedComments.length === 0) {
+                await setStatus('success', `Copilot 리뷰 ${copilotTopComments.length}건 — 모두 처리됨`);
+              } else {
+                const summary = unresolvedComments
+                  .map(c => `${c.path}:${c.line ?? c.original_line ?? '?'}`)
+                  .join(', ');
+                await setStatus('failure', `미처리 ${unresolvedComments.length}건: ${summary}`.slice(0, 140));
+              }
+
+              return true; // 평가 완료
+            };
+
+            // pull_request 이벤트: 폴링으로 Copilot 리뷰 감지
+            if (context.eventName === 'pull_request') {
               await setStatus('pending', 'Copilot 리뷰 대기 중');
+
+              const MAX_POLLS = 10;
+              const POLL_INTERVAL_MS = 30_000;
+
+              for (let i = 0; i < MAX_POLLS; i++) {
+                const done = await evaluate();
+                if (done) return;
+                core.info(`폴링 ${i + 1}/${MAX_POLLS} — Copilot 리뷰 미도착`);
+                if (i < MAX_POLLS - 1) await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+              }
+
+              core.notice('폴링 timeout — status pending 유지. workflow_dispatch로 재평가 가능.');
               return;
             }
 
-            // 2. 미처리 인라인 코멘트 수집
-            const allComments = await github.paginate(
-              github.rest.pulls.listReviewComments,
-              { owner: context.repo.owner, repo: context.repo.repo, pull_number: Number(prNumber) }
-            );
-
-            const copilotReviewIds = new Set(copilotReviews.map(r => r.id));
-
-            const copilotTopComments = allComments.filter(c =>
-              copilotReviewIds.has(c.pull_request_review_id) && !c.in_reply_to_id
-            );
-
-            const repliedIds = new Set(
-              allComments
-                .filter(c => c.in_reply_to_id)
-                .map(c => c.in_reply_to_id)
-            );
-
-            const unresolvedComments = copilotTopComments.filter(c => !repliedIds.has(c.id));
-
-            // 3. 판정
-            if (unresolvedComments.length === 0) {
-              await setStatus('success', `Copilot 리뷰 ${copilotTopComments.length}건 — 모두 처리됨`);
-              return;
+            // pull_request_review_comment (사람 답글) / workflow_dispatch: 즉시 평가
+            const done = await evaluate();
+            if (!done) {
+              await setStatus('pending', 'Copilot 리뷰 대기 중');
             }
-
-            const summary = unresolvedComments
-              .map(c => `${c.path}:${c.line ?? c.original_line ?? '?'}`)
-              .join(', ');
-
-            await setStatus('failure', `미처리 ${unresolvedComments.length}건: ${summary}`.slice(0, 140));
