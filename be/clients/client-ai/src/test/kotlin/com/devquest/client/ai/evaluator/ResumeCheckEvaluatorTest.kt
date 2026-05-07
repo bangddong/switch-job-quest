@@ -57,5 +57,36 @@ class ResumeCheckEvaluatorTest {
         assertThat(result.overallScore).isEqualTo(72)
         assertThat(result.starMethodScore).isEqualTo(28)
         assertThat(result.keywordMatchScore).isEqualTo(22)
+        assertThat(result.passed).isTrue()
+    }
+
+    @Test
+    fun `overallScore가 70 이상이면 passed가 true이다`() {
+        val expected = ResumeCheckResult(overallScore = 70)
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
+            .thenReturn(expected)
+
+        val result = evaluator.evaluate(
+            targetCompany = "토스",
+            targetJd = "백엔드 개발자 채용",
+            resumeContent = "3년 경력의 백엔드 개발자입니다"
+        )
+
+        assertThat(result.passed).isTrue()
+    }
+
+    @Test
+    fun `overallScore가 70 미만이면 passed가 false이다`() {
+        val expected = ResumeCheckResult(overallScore = 69)
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
+            .thenReturn(expected)
+
+        val result = evaluator.evaluate(
+            targetCompany = "토스",
+            targetJd = "백엔드 개발자 채용",
+            resumeContent = "3년 경력의 백엔드 개발자입니다"
+        )
+
+        assertThat(result.passed).isFalse()
     }
 }

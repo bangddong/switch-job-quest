@@ -57,5 +57,38 @@ class JdAnalysisEvaluatorTest {
 
         assertThat(result.companyName).isEqualTo("토스")
         assertThat(result.overallMatchScore).isEqualTo(85)
+        assertThat(result.passed).isTrue()
+    }
+
+    @Test
+    fun `overallMatchScore가 70 이상이면 passed가 true이다`() {
+        val expected = JdAnalysisResult(overallMatchScore = 70)
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(JdAnalysisResult::class.java))
+            .thenReturn(expected)
+
+        val result = evaluator.analyze(
+            companyName = "토스",
+            jobDescription = "백엔드 개발자",
+            userSkills = listOf("Kotlin"),
+            userExperiences = listOf("3년 경력")
+        )
+
+        assertThat(result.passed).isTrue()
+    }
+
+    @Test
+    fun `overallMatchScore가 70 미만이면 passed가 false이다`() {
+        val expected = JdAnalysisResult(overallMatchScore = 69)
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(JdAnalysisResult::class.java))
+            .thenReturn(expected)
+
+        val result = evaluator.analyze(
+            companyName = "토스",
+            jobDescription = "백엔드 개발자",
+            userSkills = listOf("Kotlin"),
+            userExperiences = listOf("3년 경력")
+        )
+
+        assertThat(result.passed).isFalse()
     }
 }
