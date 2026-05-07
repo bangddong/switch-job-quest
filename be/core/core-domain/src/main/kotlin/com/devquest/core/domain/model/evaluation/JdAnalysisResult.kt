@@ -5,6 +5,7 @@ data class JdAnalysisResult(
     val requiredSkills: List<SkillRequirement> = emptyList(),
     val hiddenRequirements: List<String> = emptyList(),
     val overallMatchScore: Int = 0,
+    val passed: Boolean = false,
     val keyDifferentiators: List<String> = emptyList(),
     val applicationStrategy: String = ""
 )

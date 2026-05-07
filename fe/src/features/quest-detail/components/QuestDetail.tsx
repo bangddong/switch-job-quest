@@ -1,28 +1,27 @@
 import { useState } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ResumeCheckResult } from '@/types/api.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, JdAnalysisResultCard, MockInterviewPanel } from '@/features/ai-check'
 import { AI_FORMS } from '@/features/ai-check'
 import { MOCK_FORM_VALUES } from '@/features/ai-check/constants/mockValues'
-import { PASS_THRESHOLD } from '@/utils/gradeUtils'
 import { QUEST_NEXT } from '../constants/questConnections'
 import { NextQuestCard } from './NextQuestCard'
 import { RetryCoachCard } from './RetryCoachCard'
 import { FinalBossView } from './FinalBossView'
 
-type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult
+type AnyAiResult = AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult
 
 interface QuestDetailProps {
   quest: Quest
   act: Act
   completed: Record<string, boolean>
   aiScores: Record<string, number>
-  aiResult: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | null
+  aiResult: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult | null
   showForm: boolean
   onShowForm: () => void
-  onAiResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult) => void
+  onAiResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult) => void
   onComplete: (questId: string, xp: number, actId: number, act: Act) => void
   onMockInterviewComplete: (score: number) => void
   onNextQuest?: (questId: string) => void
@@ -41,10 +40,21 @@ function extractImprovements(aiResult: AnyAiResult): string[] {
 }
 
 function isPassed(aiResult: AnyAiResult): boolean {
-  if ('overallMatchScore' in aiResult && !('passed' in aiResult)) {
-    return (aiResult as JdAnalysisResult).overallMatchScore >= PASS_THRESHOLD
+  // passed 필드가 있으면 (신규 BE 응답) 그대로 사용
+  if ('passed' in aiResult) {
+    return (aiResult as { passed: boolean }).passed === true
   }
-  return (aiResult as { passed: boolean }).passed === true
+  // 구버전 캐시 (passed 없음) — 점수 필드로 fallback
+  if ('overallMatchScore' in aiResult) {
+    return (aiResult as JdAnalysisResult).overallMatchScore >= 70
+  }
+  if ('overallScore' in aiResult) {
+    return (aiResult as { overallScore: number }).overallScore >= 70
+  }
+  if ('score' in aiResult) {
+    return (aiResult as { score: number }).score >= 70
+  }
+  return false
 }
 
 export function QuestDetail({

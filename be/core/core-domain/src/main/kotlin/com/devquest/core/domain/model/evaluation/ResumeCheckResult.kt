@@ -2,6 +2,7 @@ package com.devquest.core.domain.model.evaluation
 
 data class ResumeCheckResult(
     val overallScore: Int = 0,
+    val passed: Boolean = false,
     val starMethodScore: Int = 0,
     val quantificationScore: Int = 0,
     val keywordMatchScore: Int = 0,

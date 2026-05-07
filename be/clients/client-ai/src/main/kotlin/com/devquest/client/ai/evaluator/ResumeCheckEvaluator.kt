@@ -2,6 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.BaseAiEvaluator
+import com.devquest.core.domain.PassCriteriaPolicy
 import com.devquest.core.domain.model.evaluation.ResumeCheckResult
 import com.devquest.core.domain.port.ResumeEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -28,6 +29,7 @@ class ResumeCheckEvaluator(
 
         return aiCallExecutor.execute {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(ResumeCheckResult::class.java)
+                ?.let { it.copy(passed = PassCriteriaPolicy.evaluate(it.overallScore)) }
         }
     }
 }
