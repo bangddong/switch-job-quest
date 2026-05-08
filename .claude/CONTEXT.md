@@ -59,10 +59,11 @@
 
 ### 코드 작업
 - [ ] client-ai Jackson 2/3 혼재 정리 (CompanyFitEvaluator, MockInterviewEvaluator → tools.jackson 마이그레이션)
+- [ ] 에이전트 Disambiguation Gate / Closing Summary 실사용 검증 후 미비점 보완
 
 ### 사용자 확인 필요
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
 
 ### 백로그
-- [x] devquest-log-shipper 제거 — 커스텀 Logback HTTP 어펜더 구현 완료 (feat/logtail-http-appender, a6f6d22)
-  - fly secret 설정 + fly.io log drain 제거는 PR 머지 후 사용자 직접 실행 필요
+- [x] devquest-log-shipper 제거 — 커스텀 Logback HTTP 어펜더 구현 완료
+- [x] Disambiguation Gate + Closing Summary 에이전트 패턴 도입 (#127)
