@@ -44,16 +44,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/agent-improvements` |
-| 열린 PR | 진행 중 — Disambiguation Gate + Closing Summary 에이전트 개선 |
+| 브랜치 | `chore/backfill-may8` |
+| 열린 PR | 진행 중 — 5월 8일 잔디 backfill |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #127 | Disambiguation Gate + Closing Summary 에이전트 개선 | 2026-05-11 |
 | #125 | progress 로딩 화면 캐시 유무와 무관하게 항상 표시 | 2026-05-07 |
 | #124 | CONTEXT.md 고정 내용 상단 배치로 캐시 최적화 | 2026-05-07 |
-| cdcdf60 | passed 판정 주체를 BE로 이관 (JdAnalysis, ResumeCheck) — PR 없이 main 직접 커밋 | 2026-05-07 |
 
 ## 다음 작업
 
