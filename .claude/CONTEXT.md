@@ -44,8 +44,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/backfill-may8` |
-| 열린 PR | 진행 중 — 5월 8일 잔디 backfill |
+| 브랜치 | `chore/backfill-may10` |
+| 열린 PR | 진행 중 — 5월 10일 잔디 backfill |
 
 ## 최근 완료 (최근 3건)
 
