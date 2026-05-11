@@ -40,20 +40,20 @@
 
 ---
 
-## 현재 상태 (2026-05-07)
+## 현재 상태 (2026-05-11)
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `fix/progress-loading-screen` |
-| 열린 PR | 진행 중 — progress 로딩 화면 캐시 우회 버그 수정 |
+| 브랜치 | `chore/agent-improvements` |
+| 열린 PR | 진행 중 — Disambiguation Gate + Closing Summary 에이전트 개선 |
 
 ## 최근 완료 (최근 3건)
 
-| PR | 내용 | 날짜 |
-|----|------|------|
-| #123 | AI Evaluator 캐시 메트릭 관측가능성 추가 (CacheMetricsAdvisor) | 2026-05-07 |
-| #122 | Copilot Review Gate 봇 트리거 제거 + pull_request 폴링 방식 전환 | 2026-05-07 |
-| #121 | ApiResponse success 필드 제거, result/error 기반으로 통일 (진행 데이터 미표시 버그 수정) | 2026-05-07 |
+| PR/커밋 | 내용 | 날짜 |
+|---------|------|------|
+| #125 | progress 로딩 화면 캐시 유무와 무관하게 항상 표시 | 2026-05-07 |
+| #124 | CONTEXT.md 고정 내용 상단 배치로 캐시 최적화 | 2026-05-07 |
+| cdcdf60 | passed 판정 주체를 BE로 이관 (JdAnalysis, ResumeCheck) — PR 없이 main 직접 커밋 | 2026-05-07 |
 
 ## 다음 작업
 
