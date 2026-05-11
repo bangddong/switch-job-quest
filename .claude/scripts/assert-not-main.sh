@@ -20,7 +20,7 @@ fi
 
 # Windows 절대경로(C:\... 또는 C:/...)를 Git Bash 스타일(/c/...)로 정규화
 if [[ "$FILE_PATH" =~ ^[A-Za-z]:[\\/] ]]; then
-  FILE_PATH="${FILE_PATH//\/\/}"
+  FILE_PATH=$(echo "$FILE_PATH" | tr '\\' '/')
   DRIVE="${FILE_PATH:0:1}"
   FILE_PATH="/${DRIVE,,}${FILE_PATH:2}"
 fi
