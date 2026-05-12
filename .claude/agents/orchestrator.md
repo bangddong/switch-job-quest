@@ -256,7 +256,7 @@ EOF
 > **PR body는 한국어로 작성한다.** (title의 type/scope/message는 영어 컨벤션 유지)
 > **"🤖 Generated with Claude Code" 문구는 PR body에 포함하지 않는다.**
 
-`.claude/CONTEXT.md` 업데이트 — **PR 생성 직후, 세션 종료 전 반드시 실행**:
+`.claude/CONTEXT.md` 업데이트 — **PR 생성 직후 반드시 실행**:
 
 | 셀 | 갱신 값 |
 |----|--------|
@@ -265,6 +265,15 @@ EOF
 
 - "최근 완료"에 PR 번호·내용·날짜 추가 (3건 유지)
 - "다음 작업" 갱신
+
+수정 후 **반드시 커밋**:
+
+```bash
+git add .claude/CONTEXT.md
+git commit -m "chore: CONTEXT.md 갱신 — PR #<번호>"
+```
+
+> 커밋하지 않으면 워킹트리에만 남아 세션 종료 시 유실된다.
 
 ---
 

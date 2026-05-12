@@ -40,12 +40,12 @@
 
 ---
 
-## 현재 상태 (2026-05-11)
+## 현재 상태 (2026-05-12)
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/backfill-may10` |
-| 열린 PR | 진행 중 — 5월 10일 잔디 backfill |
+| 브랜치 | `chore/orchestrator-context-commit` |
+| 열린 PR | 진행 중 — orchestrator CONTEXT.md 커밋 누락 수정 |
 
 ## 최근 완료 (최근 3건)
 
