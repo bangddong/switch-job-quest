@@ -40,20 +40,20 @@
 
 ---
 
-## 현재 상태 (2026-05-11)
+## 현재 상태 (2026-05-12)
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/backfill-may10` |
-| 열린 PR | 진행 중 — 5월 10일 잔디 backfill |
+| 브랜치 | `chore/orchestrator-context-commit` |
+| 열린 PR | #130 — orchestrator CONTEXT.md 커밋 누락 수정 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #130 | orchestrator 9단계 CONTEXT.md 커밋 누락 수정 | 2026-05-12 |
 | #127 | Disambiguation Gate + Closing Summary 에이전트 개선 | 2026-05-11 |
-| #125 | progress 로딩 화면 캐시 유무와 무관하게 항상 표시 | 2026-05-07 |
-| #124 | CONTEXT.md 고정 내용 상단 배치로 캐시 최적화 | 2026-05-07 |
+| #126 | passed 판정 주체 BE 이관 (JdAnalysis, ResumeCheck) + PassCriteriaPolicy 적용 | 2026-05-07 |
 
 ## 다음 작업
 
