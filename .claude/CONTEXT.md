@@ -45,7 +45,7 @@
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `chore/cache-optimization-patterns` |
-| 열린 PR | 진행 중 — cache 최적화 패턴 적용 |
+| 열린 PR | 진행 중 — CONTEXT.md 헤더 날짜 제거 (cache 최적화) |
 
 ## 최근 완료 (최근 3건)
 
