@@ -266,14 +266,15 @@ EOF
 - "최근 완료"에 PR 번호·내용·날짜 추가 (3건 유지)
 - "다음 작업" 갱신
 
-수정 후 **반드시 커밋**:
+수정 후 **반드시 커밋 + push**:
 
 ```bash
 git add .claude/CONTEXT.md
 git commit -m "chore: CONTEXT.md 갱신 — PR #<번호>"
+git push
 ```
 
-> 커밋하지 않으면 워킹트리에만 남아 세션 종료 시 유실된다.
+> 커밋만 하고 push 안 하면 로컬에만 남아 세션 종료 시 유실된다.
 
 ---
 
