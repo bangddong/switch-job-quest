@@ -40,12 +40,12 @@
 
 ---
 
-## 현재 상태 (2026-05-12)
+## 현재 상태
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/orchestrator-context-commit` |
-| 열린 PR | #130 — orchestrator CONTEXT.md 커밋 누락 수정 (머지 대기) |
+| 브랜치 | `chore/cache-optimization-patterns` |
+| 열린 PR | 진행 중 — CONTEXT.md 헤더 날짜 제거 (cache 최적화) |
 
 ## 최근 완료 (최근 3건)
 
