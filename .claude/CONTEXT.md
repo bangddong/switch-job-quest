@@ -59,7 +59,7 @@
 
 ### 코드 작업
 - [ ] client-ai Jackson 2/3 혼재 정리 (CompanyFitEvaluator, MockInterviewEvaluator → tools.jackson 마이그레이션)
-- [ ] 에이전트 Disambiguation Gate / Closing Summary 실사용 검증 후 미비점 보완
+- [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 
 ### 사용자 확인 필요
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
