@@ -96,6 +96,10 @@ export interface InterviewEvaluationResult {
   communicationClarity: number
   keyPointsMissed?: string[]
   correctAnswer?: string
+  questionId?: string
+  question?: string
+  userAnswer?: string
+  improvements?: string
 }
 
 export interface DeveloperClassResult {

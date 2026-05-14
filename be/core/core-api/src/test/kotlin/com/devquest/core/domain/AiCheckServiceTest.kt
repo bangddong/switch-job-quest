@@ -171,20 +171,20 @@ class AiCheckServiceTest {
 
     @Test
     fun `checkMockInterview - passed=true면 xp=800 고정으로 저장`() {
-        whenever(interviewEvaluator.evaluate(any(), any(), any(), any()))
+        whenever(interviewEvaluator.evaluate(any(), any(), any(), any(), any(), any()))
             .thenReturn(InterviewEvaluationResult(score = 90, passed = true))
 
-        service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1")
+        service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1", listOf("Kotlin"), "3-5년")
 
         verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(90), eq(true), eq(800), isNull())
     }
 
     @Test
     fun `checkMockInterview - passed=false면 xp=0으로 저장`() {
-        whenever(interviewEvaluator.evaluate(any(), any(), any(), any()))
+        whenever(interviewEvaluator.evaluate(any(), any(), any(), any(), any(), any()))
             .thenReturn(InterviewEvaluationResult(score = 30, passed = false))
 
-        service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1")
+        service.checkMockInterview("user1", "2-2", "backend", "질문", "답변", "q-1", listOf("Kotlin"), "3-5년")
 
         verify(questProgressRecorder).record(eq("user1"), eq("2-2"), eq(2), eq(30), eq(false), eq(0), isNull())
     }

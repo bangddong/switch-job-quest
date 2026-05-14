@@ -89,6 +89,25 @@ export function InterviewResultCard({ result }: InterviewResultCardProps) {
         </div>
       )}
 
+      {result.improvements && result.improvements.trim() !== '' && (
+        <div
+          style={{
+            background: 'rgba(245,158,11,0.04)',
+            border: '1px solid rgba(245,158,11,0.2)',
+            borderRadius: 8,
+            padding: 12,
+            marginTop: 12,
+          }}
+        >
+          <div style={{ fontSize: 10, color: '#F59E0B', letterSpacing: 3, marginBottom: 6 }}>
+            💡 개선 방향
+          </div>
+          <p style={{ color: '#64748B', fontSize: 12, margin: 0, lineHeight: 1.6 }}>
+            {result.improvements}
+          </p>
+        </div>
+      )}
+
       {result.correctAnswer && (
         <div
           style={{

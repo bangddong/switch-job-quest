@@ -28,10 +28,12 @@ class MockInterviewEvaluatorTest {
 
         assertThatThrownBy {
             evaluator.evaluate(
-                category = "기술",
+                category = "JVM",
                 question = "JVM이란?",
                 answer = "자바 가상 머신입니다",
-                questionId = "q-1"
+                questionId = "q-1",
+                techStack = listOf("Kotlin", "Spring Boot"),
+                yearsOfExperience = "3-5년"
             )
         }
             .isInstanceOf(AiEvaluationException::class.java)
@@ -50,10 +52,12 @@ class MockInterviewEvaluatorTest {
             .thenReturn(expected)
 
         val result = evaluator.evaluate(
-            category = "기술",
+            category = "JVM",
             question = "JVM이란?",
             answer = "자바 가상 머신입니다",
-            questionId = "q-1"
+            questionId = "q-1",
+            techStack = listOf("Kotlin", "Spring Boot"),
+            yearsOfExperience = "3-5년"
         )
 
         assertThat(result.questionId).isEqualTo("q-1")

@@ -5,9 +5,13 @@ import com.devquest.core.domain.AiCheckService
 import com.devquest.core.domain.port.CompanyInfo
 import com.devquest.core.support.response.ApiResponse
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
+@Validated
 @RestController
 @RequestMapping("/api/v1/ai-check")
 class AiCheckController(
@@ -72,18 +76,26 @@ class AiCheckController(
     ): ApiResponse<*> {
         return ApiResponse.success(
             aiCheckService.checkMockInterview(
-                userId, request.questId, request.category, request.question, request.answer, request.questionId
+                userId, request.questId, request.category, request.question, request.answer, request.questionId,
+                request.techStack ?: emptyList(), request.yearsOfExperience ?: "3-5년"
             )
         )
     }
 
     @GetMapping("/mock-interview/questions")
     fun generateInterviewQuestions(
+        @RequestParam(defaultValue = "Kotlin,Spring Boot,JPA,MySQL") techStack: String,
+        @RequestParam(defaultValue = "백엔드 개발자") targetRole: String,
+        @RequestParam(defaultValue = "3-5년") yearsOfExperience: String,
         @RequestParam(defaultValue = "DB,JVM,네트워크,운영체제,설계") categories: String,
-        @RequestParam(defaultValue = "10") count: Int
+        @RequestParam(defaultValue = "3") @Min(0) @Max(5) personalityCount: Int,
+        @RequestParam(defaultValue = "8") @Min(1) @Max(15) techCount: Int
     ): ApiResponse<*> {
+        val techStackList = techStack.split(",").map { it.trim() }
         val categoryList = categories.split(",").map { it.trim() }
-        return ApiResponse.success(aiCheckService.generateInterviewQuestions(categoryList, count))
+        return ApiResponse.success(
+            aiCheckService.generateInterviewQuestions(techStackList, targetRole, yearsOfExperience, categoryList, personalityCount, techCount)
+        )
     }
 
     @PostMapping("/jd-analysis")
