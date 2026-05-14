@@ -64,14 +64,30 @@ class AiCheckService(
     }
 
     @Transactional
-    fun checkMockInterview(userId: String, questId: String, category: String, question: String, answer: String, questionId: String): InterviewEvaluationResult {
-        val result = interviewEvaluator.evaluate(category, question, answer, questionId)
+    fun checkMockInterview(
+        userId: String,
+        questId: String,
+        category: String,
+        question: String,
+        answer: String,
+        questionId: String,
+        techStack: List<String>,
+        yearsOfExperience: String
+    ): InterviewEvaluationResult {
+        val result = interviewEvaluator.evaluate(category, question, answer, questionId, techStack, yearsOfExperience)
         questProgressRecorder.record(userId, questId, 2, result.score, result.passed, QuestXpPolicy.calculate(questId, result.passed))
         return result
     }
 
-    fun generateInterviewQuestions(categories: List<String>, count: Int): List<Map<String, String>> {
-        return interviewEvaluator.generateQuestions(categories, count)
+    fun generateInterviewQuestions(
+        techStack: List<String>,
+        targetRole: String,
+        yearsOfExperience: String,
+        categories: List<String>,
+        personalityCount: Int,
+        techCount: Int
+    ): List<Map<String, String>> {
+        return interviewEvaluator.generateQuestions(techStack, targetRole, yearsOfExperience, categories, personalityCount, techCount)
     }
 
     @Transactional

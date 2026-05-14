@@ -209,7 +209,7 @@ class AiCheckControllerTest {
 
     @Test
     fun `mock-interview - 정상 요청이면 200과 SUCCESS 반환`() {
-        whenever(aiCheckService.checkMockInterview(any(), any(), any(), any(), any(), any()))
+        whenever(aiCheckService.checkMockInterview(any(), any(), any(), any(), any(), any(), any(), any()))
             .thenReturn(InterviewEvaluationResult(score = 90, passed = true))
 
         mockMvc.post("/api/v1/ai-check/mock-interview") {
@@ -237,7 +237,7 @@ class AiCheckControllerTest {
 
     @Test
     fun `mock-interview questions - 정상 요청이면 200과 SUCCESS 반환`() {
-        whenever(aiCheckService.generateInterviewQuestions(any(), any()))
+        whenever(aiCheckService.generateInterviewQuestions(any(), any(), any(), any(), any(), any()))
             .thenReturn(listOf(mapOf("questionId" to "q-1", "question" to "JVM이란?", "category" to "JVM")))
 
         mockMvc.get("/api/v1/ai-check/mock-interview/questions")

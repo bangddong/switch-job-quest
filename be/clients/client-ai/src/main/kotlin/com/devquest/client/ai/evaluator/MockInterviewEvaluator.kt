@@ -29,7 +29,14 @@ class MockInterviewEvaluator(
     private val questionsSystemTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-questions-system.st"))
     private val questionsUserTemplate = PromptTemplate(ClassPathResource("prompts/mock-interview-questions-user.st"))
 
-    override fun evaluate(category: String, question: String, answer: String, questionId: String): InterviewEvaluationResult {
+    override fun evaluate(
+        category: String,
+        question: String,
+        answer: String,
+        questionId: String,
+        techStack: List<String>,
+        yearsOfExperience: String
+    ): InterviewEvaluationResult {
         val systemPrompt = evaluateSystemTemplate.render()
         val userPrompt = evaluateUserTemplate.render(mapOf(
             "category" to category,
@@ -37,6 +44,8 @@ class MockInterviewEvaluator(
             "answer" to answer,
             "questionId" to questionId,
             "answerPreview" to answer.take(100),
+            "techStack" to techStack.joinToString(", "),
+            "yearsOfExperience" to yearsOfExperience,
         ))
 
         return aiCallExecutor.execute {
@@ -44,11 +53,23 @@ class MockInterviewEvaluator(
         }
     }
 
-    override fun generateQuestions(categories: List<String>, count: Int): List<Map<String, String>> {
+    override fun generateQuestions(
+        techStack: List<String>,
+        targetRole: String,
+        yearsOfExperience: String,
+        categories: List<String>,
+        personalityCount: Int,
+        techCount: Int
+    ): List<Map<String, String>> {
         val systemPrompt = questionsSystemTemplate.render()
         val userPrompt = questionsUserTemplate.render(mapOf(
+            "techStack" to techStack.joinToString(", "),
+            "targetRole" to targetRole,
+            "yearsOfExperience" to yearsOfExperience,
             "categories" to categories.joinToString(", "),
-            "count" to count,
+            "personalityCount" to personalityCount,
+            "techCount" to techCount,
+            "totalCount" to (techCount + personalityCount),
         ))
 
         val response = chatClient.prompt()

@@ -7,5 +7,7 @@ data class MockInterviewRequestDto(
     @field:NotBlank val questionId: String = "",
     @field:NotBlank val question: String = "",
     @field:NotBlank val answer: String = "",
-    @field:NotBlank val category: String = ""
+    @field:NotBlank val category: String = "",
+    val techStack: List<String>? = emptyList(),
+    val yearsOfExperience: String? = "3-5년"
 )
