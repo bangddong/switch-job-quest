@@ -384,6 +384,7 @@ export function App() {
           aiScores={aiScores}
           aiResult={aiResult}
           showForm={showForm}
+          character={character}
           onShowForm={() => setShowForm(true)}
           onAiResult={handleAiResult}
           onComplete={handleComplete}

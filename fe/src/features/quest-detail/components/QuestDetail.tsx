@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
 import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ResumeCheckResult } from '@/types/api.types'
+import type { Character } from '@/types/character.types'
 import { QUEST_TYPE_CONFIG } from '@/features/quest-map'
 import { PixelIcon } from '@/components/ui/PixelIcon'
 import { AiCheckForm, AiResultCard, BossPackageResultCard, DeveloperClassResultCard, JdAnalysisResultCard, MockInterviewPanel } from '@/features/ai-check'
@@ -20,6 +21,7 @@ interface QuestDetailProps {
   aiScores: Record<string, number>
   aiResult: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult | null
   showForm: boolean
+  character: Character
   onShowForm: () => void
   onAiResult: (result: AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult) => void
   onComplete: (questId: string, xp: number, actId: number, act: Act) => void
@@ -64,6 +66,7 @@ export function QuestDetail({
   aiScores,
   aiResult,
   showForm,
+  character,
   onShowForm,
   onAiResult,
   onComplete,
@@ -215,7 +218,7 @@ export function QuestDetail({
                 <div style={{ fontSize: 10, color: '#EF4444', letterSpacing: 3, marginBottom: 12 }}>
                   ⚔️ BOSS BATTLE — AI 모의 기술 면접
                 </div>
-                <MockInterviewPanel onComplete={onMockInterviewComplete} />
+                <MockInterviewPanel character={character} onComplete={onMockInterviewComplete} />
               </>
             ) : hasForm ? (
               !showForm ? (

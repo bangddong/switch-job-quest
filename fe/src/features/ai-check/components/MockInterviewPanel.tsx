@@ -1,19 +1,45 @@
 import { useState } from 'react'
+import type { Character } from '@/types/character.types'
 import type { InterviewEvaluationResult } from '@/types/api.types'
 import { OracleLoadingModal } from '@/components/ui/OracleLoadingModal'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { FALLBACK_QUESTIONS } from '../constants/fallbackQuestions'
-import { submitMockInterview } from '../api/aiCheckApi'
+import { generateInterviewQuestions, submitMockInterview } from '../api/aiCheckApi'
+import type { InterviewQuestion } from '../api/aiCheckApi'
 import { InterviewResultCard } from './InterviewResultCard'
 import { PASS_THRESHOLD } from '@/utils/gradeUtils'
 import { MOCK_INTERVIEW_SAMPLE_ANSWERS } from '../constants/mockValues'
 
+const PERSONALITY_FALLBACK: InterviewQuestion[] = [
+  { id: 'p1', category: '인성', question: '가장 힘들었던 팀 프로젝트 경험과 어떻게 극복했는지 말씀해주세요.', difficulty: 'MEDIUM' },
+  { id: 'p2', category: '인성', question: '이직을 결심한 이유와 새 회사에서 이루고 싶은 목표를 말씀해주세요.', difficulty: 'MEDIUM' },
+  { id: 'p3', category: '인성', question: '기술적으로 가장 크게 성장한 경험을 구체적으로 설명해주세요.', difficulty: 'MEDIUM' },
+]
+
+const ROLE_DEFAULTS: Record<string, string> = {
+  '백엔드': 'Kotlin,Spring Boot,JPA,MySQL,Redis',
+  '프론트엔드': 'React,TypeScript,Next.js',
+  '풀스택': 'React,TypeScript,Node.js,PostgreSQL',
+  '데이터/ML': 'Python,Pandas,TensorFlow,SQL',
+  'DevOps': 'Docker,Kubernetes,AWS,Terraform',
+}
+
 interface MockInterviewPanelProps {
+  character: Character
   onComplete: (score: number) => void
 }
 
-export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
-  const [questions] = useState(FALLBACK_QUESTIONS)
+type Phase = 'onboarding' | 'loading' | 'interview' | 'done'
+
+export function MockInterviewPanel({ character, onComplete }: MockInterviewPanelProps) {
+  // onboarding state
+  const [techStack, setTechStack] = useState(ROLE_DEFAULTS[character.role] ?? 'Kotlin,Spring Boot,JPA')
+  const [techCount, setTechCount] = useState(8)
+  const [personalityCount, setPersonalityCount] = useState(3)
+
+  // interview state
+  const [phase, setPhase] = useState<Phase>('onboarding')
+  const [questions, setQuestions] = useState<InterviewQuestion[]>([])
   const [idx, setIdx] = useState(0)
   const [answers, setAnswers] = useState<string[]>([])
   const [answer, setAnswer] = useState('')
@@ -23,8 +49,41 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
   const [error, setError] = useState<string | null>(null)
   const [completionReported, setCompletionReported] = useState(false)
 
+  const roleToTargetRole: Record<string, string> = {
+    '백엔드': '백엔드 개발자',
+    '프론트엔드': '프론트엔드 개발자',
+    '풀스택': '풀스택 개발자',
+    '데이터/ML': '데이터/ML 엔지니어',
+    'DevOps': 'DevOps 엔지니어',
+  }
+
+  const handleStartInterview = async () => {
+    setPhase('loading')
+    setError(null)
+    try {
+      const fetched = await generateInterviewQuestions({
+        techStack: techStack.split(',').map(s => s.trim()).filter(Boolean),
+        targetRole: roleToTargetRole[character.role] ?? '개발자',
+        yearsOfExperience: character.years,
+        categories: 'DB,JVM,네트워크,운영체제,설계,Spring',
+        techCount,
+        personalityCount,
+      })
+      setQuestions(fetched)
+    } catch {
+      // fallback
+      const techFallback = FALLBACK_QUESTIONS.slice(0, techCount)
+      const personalityFallback = PERSONALITY_FALLBACK.slice(0, personalityCount)
+      setQuestions([...techFallback, ...personalityFallback])
+    }
+    setPhase('interview')
+  }
+
   const q = questions[idx]
   const isLastQuestion = idx + 1 >= questions.length
+  const isPersonality = q?.category === '인성'
+  const questionAccent = isPersonality ? '#A78BFA' : '#4ECDC4'
+
   const totalScore = results.length
     ? Math.round(results.reduce((a, r) => a + r.score, 0) / results.length)
     : 0
@@ -51,11 +110,14 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
             question: question.question,
             answer: allAnswers[i] ?? '',
             category: question.category,
+            techStack: techStack.split(',').map(s => s.trim()).filter(Boolean),
+            yearsOfExperience: character.years,
           })
         )
       )
       setResults(allResults)
       setDone(true)
+      setPhase('done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 평가 중 오류가 발생했습니다. 다시 시도해주세요.')
     } finally {
@@ -63,6 +125,117 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
     }
   }
 
+  // Onboarding phase
+  if (phase === 'onboarding') {
+    return (
+      <div>
+        <div style={{ fontSize: 10, color: '#A78BFA', letterSpacing: 3, marginBottom: 16 }}>
+          면접 설정
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ fontSize: 12, color: '#94A3B8', display: 'block', marginBottom: 6 }}>
+            기술 스택 (쉼표로 구분)
+          </label>
+          <textarea
+            value={techStack}
+            onChange={e => setTechStack(e.target.value)}
+            rows={2}
+            style={{
+              width: '100%',
+              background: '#0A0E1A',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8,
+              padding: '10px 13px',
+              color: '#F1F5F9',
+              fontSize: 13,
+              outline: 'none',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+              fontFamily: "'Courier New', monospace",
+            }}
+          />
+          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+            {character.role} 기본값 자동 적용됨
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 12, color: '#94A3B8', display: 'block', marginBottom: 6 }}>
+              기술 질문 수 (5~12)
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input
+                type="range"
+                min={5}
+                max={12}
+                value={techCount}
+                onChange={e => setTechCount(Number(e.target.value))}
+                style={{ flex: 1, accentColor: '#4ECDC4' }}
+              />
+              <span style={{ fontSize: 16, color: '#4ECDC4', fontWeight: 'bold', minWidth: 24, textAlign: 'right' }}>
+                {techCount}
+              </span>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 12, color: '#94A3B8', display: 'block', marginBottom: 6 }}>
+              인성 질문 수 (0~5)
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input
+                type="range"
+                min={0}
+                max={5}
+                value={personalityCount}
+                onChange={e => setPersonalityCount(Number(e.target.value))}
+                style={{ flex: 1, accentColor: '#A78BFA' }}
+              />
+              <span style={{ fontSize: 16, color: '#A78BFA', fontWeight: 'bold', minWidth: 24, textAlign: 'right' }}>
+                {personalityCount}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={handleStartInterview}
+          disabled={!techStack.trim()}
+          style={{
+            width: '100%',
+            padding: '13px',
+            background: techStack.trim()
+              ? 'linear-gradient(135deg, #EF4444, #DC2626)'
+              : 'rgba(100,116,139,0.3)',
+            border: 'none',
+            borderRadius: 10,
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 'bold',
+            cursor: techStack.trim() ? 'pointer' : 'not-allowed',
+            fontFamily: "'Courier New', monospace",
+          }}
+        >
+          ⚔️ 면접 시작
+        </button>
+      </div>
+    )
+  }
+
+  // Loading phase
+  if (phase === 'loading') {
+    return (
+      <div>
+        <OracleLoadingModal isOpen={true} />
+        <div style={{ textAlign: 'center', padding: '40px 0', color: '#475569', fontSize: 13 }}>
+          AI가 맞춤 질문을 생성하고 있습니다...
+        </div>
+      </div>
+    )
+  }
+
+  // Done phase
   if (done) {
     const passed = totalScore >= PASS_THRESHOLD
     return (
@@ -81,14 +254,19 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
           📋 질문별 결과
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {results.map((r, i) => (
-            <div key={i}>
-              <div style={{ fontSize: 12, color: '#475569', marginBottom: 6 }}>
-                Q{i + 1}. {questions[i]?.category} — {questions[i]?.question}
+          {results.map((r, i) => {
+            const qItem = questions[i]
+            const isP = qItem?.category === '인성'
+            return (
+              <div key={i}>
+                <div style={{ fontSize: 12, marginBottom: 6 }}>
+                  <span style={{ color: isP ? '#A78BFA' : '#4ECDC4' }}>[{qItem?.category}]</span>
+                  <span style={{ color: '#475569', marginLeft: 6 }}>{qItem?.question}</span>
+                </div>
+                <InterviewResultCard result={r} />
               </div>
-              <InterviewResultCard result={r} />
-            </div>
-          ))}
+            )
+          })}
         </div>
         {!completionReported && (
           <button
@@ -128,23 +306,33 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
         <span style={{ fontSize: 12, color: '#475569' }}>
           Q {idx + 1} / {questions.length}
         </span>
-        <span style={{ fontSize: 12, color: '#4ECDC4' }}>{q.category}</span>
+        <span
+          style={{
+            fontSize: 12,
+            color: questionAccent,
+            background: isPersonality ? 'rgba(167,139,250,0.1)' : 'rgba(78,205,196,0.1)',
+            padding: '2px 8px',
+            borderRadius: 4,
+          }}
+        >
+          {q.category}
+        </span>
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <ProgressBar value={((idx + 1) / questions.length) * 100} color="#4ECDC4" height={4} />
+        <ProgressBar value={((idx + 1) / questions.length) * 100} color={questionAccent} height={4} />
       </div>
 
       <div
         style={{
-          background: 'rgba(78,205,196,0.04)',
-          border: '1px solid rgba(78,205,196,0.15)',
+          background: isPersonality ? 'rgba(167,139,250,0.04)' : 'rgba(78,205,196,0.04)',
+          border: `1px solid ${isPersonality ? 'rgba(167,139,250,0.15)' : 'rgba(78,205,196,0.15)'}`,
           borderRadius: 12,
           padding: 18,
           marginBottom: 14,
         }}
       >
-        <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 3, marginBottom: 8 }}>
+        <div style={{ fontSize: 10, color: questionAccent, letterSpacing: 3, marginBottom: 8 }}>
           QUESTION
         </div>
         <p style={{ fontSize: 14, color: '#F1F5F9', margin: 0, lineHeight: 1.7 }}>{q.question}</p>
@@ -172,9 +360,9 @@ export function MockInterviewPanel({ onComplete }: MockInterviewPanelProps) {
         onClick={() => setAnswer(MOCK_INTERVIEW_SAMPLE_ANSWERS[q.id] ?? '')}
         style={{
           background: 'none',
-          border: '1px solid rgba(78,205,196,0.3)',
+          border: `1px solid ${isPersonality ? 'rgba(167,139,250,0.3)' : 'rgba(78,205,196,0.3)'}`,
           borderRadius: 6,
-          color: '#4ECDC4',
+          color: questionAccent,
           fontSize: 11,
           padding: '4px 10px',
           cursor: 'pointer',
