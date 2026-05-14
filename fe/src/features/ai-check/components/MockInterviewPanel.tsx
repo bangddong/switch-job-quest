@@ -69,6 +69,7 @@ export function MockInterviewPanel({ character, onComplete }: MockInterviewPanel
         techCount,
         personalityCount,
       })
+      if (fetched.length === 0) throw new Error('빈 응답')
       setQuestions(fetched)
     } catch {
       // fallback
