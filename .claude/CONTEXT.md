@@ -44,16 +44,17 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/cache-optimization-patterns` |
-| 열린 PR | 진행 중 — CONTEXT.md 헤더 날짜 제거 (cache 최적화) |
+| 브랜치 | `feat/mock-interview-personalization` |
+| 열린 PR | #132 — 모의 면접 기술스택·연차 개인화 및 인성 질문 혼합 생성 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #132 | 모의 면접 기술스택·연차 개인화 + 인성 질문 혼합 생성 | 2026-05-14 |
+| #131 | CONTEXT.md 헤더 날짜 제거 + orchestrator 0단계 날짜 지침 보완 | 2026-05-14 |
 | #130 | orchestrator 9단계 CONTEXT.md 커밋 누락 수정 | 2026-05-12 |
-| #127 | Disambiguation Gate + Closing Summary 에이전트 개선 | 2026-05-11 |
-| #126 | passed 판정 주체 BE 이관 (JdAnalysis, ResumeCheck) + PassCriteriaPolicy 적용 | 2026-05-07 |
+| #131 | CONTEXT.md 헤더 날짜 제거 + orchestrator 0단계 날짜 지침 보완 | 2026-05-14 |
 
 ## 다음 작업
 
