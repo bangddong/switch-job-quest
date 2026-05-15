@@ -44,13 +44,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/fix-readme-neon-db` |
-| 열린 PR | #133 — README DB 정보 Neon으로 수정 (머지 대기) |
+| 브랜치 | `chore/add-ultrathink-to-agents` |
+| 열린 PR | #134 — be-feature-builder·qa-reviewer 스폰 프롬프트에 ultrathink 추가 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #134 | be-feature-builder·qa-reviewer 스폰 프롬프트에 ultrathink 추가 | 2026-05-15 |
 | #133 | README DB 정보 Fly.io → Neon으로 수정 | 2026-05-15 |
 | #132 | 모의 면접 기술스택·연차 개인화 + 인성 질문 혼합 생성 | 2026-05-14 |
 | #131 | CONTEXT.md 헤더 날짜 제거 + orchestrator 0단계 날짜 지침 보완 | 2026-05-14 |
