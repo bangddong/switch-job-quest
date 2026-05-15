@@ -129,6 +129,7 @@ core-enum ←── core-domain ←── core-api (bootJar)
 |------|--------|--------|
 | Frontend | Vercel | `quest.dhbang.co.kr` |
 | Backend | Fly.io (Tokyo, 512MB) | `api.quest.dhbang.co.kr` |
+| Database | Neon (PostgreSQL) | - |
 
 - BE: 트래픽 없을 시 머신 자동 정지 (`auto_stop_machines = stop`, `min_machines_running = 0`)
 - FE → BE: `/api/*` 경로는 Vercel 프록시로 BE에 포워딩 (`vercel.json`)
@@ -150,13 +151,12 @@ core-enum ←── core-domain ←── core-api (bootJar)
 ┌─────────────────────────────────────┐
 │  Fly.io  (api.quest.dhbang.co.kr)   │
 │  Spring Boot 4 · Kotlin · port 8080 │
-│  PostgreSQL (prod datasource)        │
 │  auto-stop (트래픽 없을 시 정지)      │
-└──────┬──────────────┬───────────────┘
-       │ Claude API   │ OAuth
-       ▼              ▼
- Anthropic API   GitHub API
- (Haiku / Sonnet)  (인증)
+└──────┬──────────────┬──────────┬────┘
+       │ Claude API   │ OAuth    │ PostgreSQL (DB_HOST secret)
+       ▼              ▼          ▼
+ Anthropic API   GitHub API   Neon
+ (Haiku / Sonnet)  (인증)    (PostgreSQL)
        │
        │ HTTP 배치 (LogtailHttpAppender)
        ▼
@@ -445,7 +445,7 @@ GET /health
 | created_at | DATETIME | 평가 시각 |
 
 > **로컬**: H2 인메모리 DB (`local` 프로파일, 서버 재시작 시 초기화)
-> **프로덕션**: PostgreSQL (`prod` 프로파일, Fly.io — `DB_HOST`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` 시크릿 필요)
+> **프로덕션**: PostgreSQL (`prod` 프로파일, Neon — `DB_HOST`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` 시크릿 필요)
 
 ---
 
