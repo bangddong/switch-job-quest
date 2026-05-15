@@ -152,13 +152,13 @@ core-enum ←── core-domain ←── core-api (bootJar)
 │  Fly.io  (api.quest.dhbang.co.kr)   │
 │  Spring Boot 4 · Kotlin · port 8080 │
 │  auto-stop (트래픽 없을 시 정지)      │
-└──────┬──────────────┬───────────────┘
-       │ Claude API   │ OAuth
-       ▼              ▼
- Anthropic API   GitHub API       Neon
- (Haiku / Sonnet)  (인증)       (PostgreSQL)
-       │                              ↑
-       │ HTTP 배치 (LogtailHttpAppender) │ DB_HOST secret
+└──────┬──────────────┬──────────┬────┘
+       │ Claude API   │ OAuth    │ PostgreSQL (DB_HOST secret)
+       ▼              ▼          ▼
+ Anthropic API   GitHub API   Neon
+ (Haiku / Sonnet)  (인증)    (PostgreSQL)
+       │
+       │ HTTP 배치 (LogtailHttpAppender)
        ▼
   Better Stack (로그 수집)
 ```
