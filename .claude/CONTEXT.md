@@ -44,8 +44,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/add-ultrathink-to-agents` |
-| 열린 PR | #134 — be-feature-builder·qa-reviewer 스폰 프롬프트에 ultrathink 추가 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
