@@ -17,6 +17,7 @@ object QuestXpPolicy {
         "5-1"    to 400,
         "4-BOSS" to 700,
         "5-BOSS" to 0,   // journeyReport는 XP 없음
+        "TECH_INTERVIEW" to 200,   // 데일리 기술 면접 반복 퀘스트
     )
 
     fun calculate(questId: String, passed: Boolean, score: Int = 0, xpMultiplier: Double = 1.0): Int {

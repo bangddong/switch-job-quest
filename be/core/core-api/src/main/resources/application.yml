@@ -20,6 +20,19 @@ spring:
     virtual:
       enabled: true
 
+  mail:
+    host: smtp.resend.com
+    port: 465
+    username: resend
+    password: ${RESEND_API_KEY}
+    protocol: smtps
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+
 server:
   port: 8080
 
@@ -39,6 +52,9 @@ devquest:
     github-client-secret: ${GITHUB_CLIENT_SECRET}
     jwt-secret: ${JWT_SECRET}
     jwt-expiration-ms: ${JWT_EXPIRATION_MS:2592000000}
+  mail:
+    from: noreply@devquest.kr
+    enabled: ${MAIL_ENABLED:false}
 
 ---
 spring:

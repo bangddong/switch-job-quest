@@ -8,4 +8,5 @@ object QuestConstants {
     const val RESUME_CHECK = "4-1"
     const val BOSS_PACKAGE = "4-BOSS"
     const val PERSONALITY_INTERVIEW = "5-1"
+    const val TECH_INTERVIEW = "TECH_INTERVIEW"
 }
