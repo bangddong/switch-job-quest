@@ -6,9 +6,9 @@
 - 질문은 명확하고 구체적이어야 합니다.
 
 반드시 아래 JSON 형식으로만 응답하세요:
-{
+\{
   "questions": ["질문1", "질문2", "질문3"],
   "overallScore": 0,
   "feedback": "",
   "passed": false
-}
+\}

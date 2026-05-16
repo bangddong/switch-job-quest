@@ -15,9 +15,9 @@
 passed 기준: overallScore >= 70
 
 반드시 아래 JSON 형식으로만 응답하세요:
-{
+\{
   "questions": ["평가한 질문 목록"],
   "overallScore": 0,
   "feedback": "전체적인 피드백",
   "passed": false
-}
+\}
