@@ -8,6 +8,8 @@ import { ActClearReportCard } from '@/features/ai-check'
 import { CharacterCreate, OnboardingIntro } from '@/features/character'
 import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
+import { SettingsPage } from '@/features/settings'
+import { TechInterviewPage } from '@/features/tech-interview'
 import { useAuth } from '@/hooks/useAuth'
 import { LoginPage } from '@/features/auth/components/LoginPage'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
@@ -51,6 +53,8 @@ type View =
   | { kind: 'act-clear'; act: Act; report: ActClearReportResult }
   | { kind: 'interview-coach' }
   | { kind: 'growth' }
+  | { kind: 'settings' }
+  | { kind: 'tech-interview' }
 
 export function App() {
   const { isLoggedIn } = useAuth()
@@ -318,7 +322,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing') && (
+      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing' || view.kind === 'settings' || view.kind === 'tech-interview') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -346,7 +350,7 @@ export function App() {
             character={character}
             lastCompletedAt={lastCompletedAt}
           />
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
               onClick={() => setView({ kind: 'growth' })}
               style={{
@@ -362,6 +366,38 @@ export function App() {
               }}
             >
               📈 성장 기록
+            </button>
+            <button
+              onClick={() => setView({ kind: 'tech-interview' })}
+              style={{
+                background: 'rgba(96,165,250,0.1)',
+                border: '1px solid rgba(96,165,250,0.3)',
+                color: '#60A5FA',
+                cursor: 'pointer',
+                fontSize: 13,
+                padding: '10px 20px',
+                borderRadius: 8,
+                fontFamily: "'Courier New', monospace",
+                width: '100%',
+              }}
+            >
+              💻 기술 면접 연습
+            </button>
+            <button
+              onClick={() => setView({ kind: 'settings' })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#475569',
+                cursor: 'pointer',
+                fontSize: 13,
+                padding: '10px 20px',
+                borderRadius: 8,
+                fontFamily: "'Courier New', monospace",
+                width: '100%',
+              }}
+            >
+              ⚙️ 설정
             </button>
           </div>
         </>
@@ -407,6 +443,14 @@ export function App() {
 
       {view.kind === 'growth' && (
         <GrowthDashboard />
+      )}
+
+      {view.kind === 'settings' && (
+        <SettingsPage />
+      )}
+
+      {view.kind === 'tech-interview' && (
+        <TechInterviewPage />
       )}
     </div>
   )
