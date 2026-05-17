@@ -11,6 +11,7 @@ dependencies {
     api("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")
+    implementation("org.springframework.boot:spring-boot-starter-json")
     runtimeOnly("com.h2database:h2")
     runtimeOnly("org.postgresql:postgresql")
 }
