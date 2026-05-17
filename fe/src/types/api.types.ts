@@ -174,7 +174,6 @@ export interface CodingProblem {
   description: string
   difficulty: string
   language: string
-  solutionCode: string
   testCases: TestCase[]
 }
 
