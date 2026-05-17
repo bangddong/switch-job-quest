@@ -2,6 +2,7 @@ package com.devquest.core.domain
 
 import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingSubmissionResult
+import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
 import com.devquest.core.domain.port.CodingSubmissionPort
@@ -80,16 +81,7 @@ class CodingQuestService(
         val fallback = codingProblemPort.findByDifficultyAndLanguage("EASY", language)
         if (fallback.isNotEmpty()) return fallback.random()
 
-        // EASY fallback도 없으면 한 번 더 강제 생성 (저장 없이)
-        val fallbackGenerated = codingProblemGeneratorPort.generate("EASY", language)
-        return CodingProblem(
-            title = fallbackGenerated.title,
-            description = fallbackGenerated.description,
-            difficulty = "EASY",
-            language = language,
-            solutionCode = fallbackGenerated.solutionCode,
-            testCases = fallbackGenerated.testCases
-        )
+        throw AiEvaluationException("코딩 문제 생성에 실패했습니다. 잠시 후 다시 시도해주세요.")
     }
 
     @Transactional
