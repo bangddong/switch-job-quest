@@ -162,3 +162,29 @@ export interface JdAnalysisResult {
   keyDifferentiators: string[]
   applicationStrategy: string
 }
+
+export interface TestCase {
+  input: string
+  expectedOutput: string
+}
+
+export interface CodingProblem {
+  id: number
+  title: string
+  description: string
+  difficulty: string
+  language: string
+  testCases: TestCase[]
+}
+
+export interface CodingSubmissionResult {
+  problemId: number
+  passed: boolean
+  stdout: string
+  stderr: string
+  message: string
+}
+
+export interface CodingLevelResult {
+  level: number
+}

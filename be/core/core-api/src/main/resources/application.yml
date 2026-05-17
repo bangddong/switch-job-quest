@@ -45,6 +45,9 @@ devquest:
     pass-score: 70
     max-retry: 3
     interview-questions: 10
+  judge0:
+    api-key: ${JUDGE0_API_KEY:}
+    api-host: judge0-ce.p.rapidapi.com
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   auth:

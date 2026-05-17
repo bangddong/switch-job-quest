@@ -10,6 +10,7 @@ import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
 import { SettingsPage } from '@/features/settings'
 import { TechInterviewPage } from '@/features/tech-interview'
+import { CodingQuestPage } from '@/features/coding-quest'
 import { useAuth } from '@/hooks/useAuth'
 import { LoginPage } from '@/features/auth/components/LoginPage'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
@@ -55,6 +56,7 @@ type View =
   | { kind: 'growth' }
   | { kind: 'settings' }
   | { kind: 'tech-interview' }
+  | { kind: 'coding-quest' }
 
 export function App() {
   const { isLoggedIn } = useAuth()
@@ -322,7 +324,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing' || view.kind === 'settings' || view.kind === 'tech-interview') && (
+      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing' || view.kind === 'settings' || view.kind === 'tech-interview' || view.kind === 'coding-quest') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -351,6 +353,22 @@ export function App() {
             lastCompletedAt={lastCompletedAt}
           />
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              onClick={() => setView({ kind: 'coding-quest' })}
+              style={{
+                background: 'rgba(167,139,250,0.1)',
+                border: '1px solid rgba(167,139,250,0.3)',
+                color: '#A78BFA',
+                cursor: 'pointer',
+                fontSize: 13,
+                padding: '10px 20px',
+                borderRadius: 8,
+                fontFamily: "'Courier New', monospace",
+                width: '100%',
+              }}
+            >
+              💻 코딩 연습
+            </button>
             <button
               onClick={() => setView({ kind: 'growth' })}
               style={{
@@ -451,6 +469,10 @@ export function App() {
 
       {view.kind === 'tech-interview' && (
         <TechInterviewPage />
+      )}
+
+      {view.kind === 'coding-quest' && (
+        <CodingQuestPage />
       )}
     </div>
   )

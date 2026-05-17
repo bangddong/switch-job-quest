@@ -1,6 +1,20 @@
 # 미완료 작업
 
-현재 미완료 항목 없음.
+### TASK-3: API 키 발급 및 환경변수 세팅 (PR #135, #136 머지 후)
+
+**RESEND_API_KEY** (PR #135 — SMTP 데일리 메일)
+1. https://resend.com 가입
+2. API Keys → Create API Key
+3. Fly.io 배포 시: `fly secrets set RESEND_API_KEY=<키>`
+4. 로컬: `be/core/core-api/src/main/resources/application-local.yml`에 추가
+5. `MAIL_ENABLED=true` 설정해야 실제 발송 활성화
+
+**JUDGE0_API_KEY** (PR #136 — 코딩 퀘스트 채점)
+1. https://rapidapi.com/judge0-official/api/judge0-ce 구독 (Basic 무료: 50req/일)
+2. RapidAPI 대시보드 → X-RapidAPI-Key 복사
+3. Fly.io: `fly secrets set JUDGE0_API_KEY=<키>`
+4. 로컬: `application-local.yml`에 추가
+5. 키 없으면 mock 모드(채점 항상 통과)로 동작함
 
 ---
 
