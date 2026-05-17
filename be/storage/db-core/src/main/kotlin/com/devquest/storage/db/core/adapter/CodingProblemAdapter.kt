@@ -7,6 +7,7 @@ import com.devquest.storage.db.core.CodingProblemEntity
 import com.devquest.storage.db.core.CodingProblemRepository
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.springframework.stereotype.Component
 
 @Component
@@ -14,7 +15,7 @@ class CodingProblemAdapter(
     private val repository: CodingProblemRepository
 ) : CodingProblemPort {
 
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = ObjectMapper().registerKotlinModule()
 
     override fun save(problem: CodingProblem): CodingProblem {
         val entity = CodingProblemEntity(

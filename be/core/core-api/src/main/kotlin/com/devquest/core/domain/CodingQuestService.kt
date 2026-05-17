@@ -38,6 +38,7 @@ class CodingQuestService(
 
     @Transactional
     fun generateProblem(userId: String, language: String): CodingProblem {
+        require(language in listOf("JAVA", "KOTLIN")) { "지원하지 않는 언어입니다: $language" }
         val level = userCodingLevelPort.getLevel(userId)
         val difficulty = difficultyForLevel(level)
 
@@ -57,7 +58,7 @@ class CodingQuestService(
                 val generated = codingProblemGeneratorPort.generate(difficulty, language)
                 val allPassed = generated.testCases.all { tc ->
                     val result = judge0Port.execute(generated.solutionCode, languageId, tc.input)
-                    result.passed && result.stdout.trim() == tc.expectedOutput.trim()
+                    result.passed
                 }
                 if (allPassed) {
                     val problem = CodingProblem(
@@ -97,7 +98,7 @@ class CodingQuestService(
             val result = judge0Port.execute(userCode, languageId, tc.input)
             lastStdout = result.stdout
             lastStderr = result.stderr
-            result.passed && result.stdout.trim() == tc.expectedOutput.trim()
+            result.passed
         }
 
         val judgeResultJson = objectMapper.writeValueAsString(

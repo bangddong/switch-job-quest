@@ -7,7 +7,8 @@ CREATE TABLE coding_problem (
     language    VARCHAR(20)  NOT NULL,
     solution_code TEXT       NOT NULL,
     test_cases  TEXT         NOT NULL,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 사용자 코딩 레벨

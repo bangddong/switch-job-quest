@@ -22,7 +22,7 @@ class Judge0Adapter(
     override fun execute(sourceCode: String, languageId: Int, stdin: String): Judge0Result {
         if (apiKey.isBlank()) {
             log.warn("JUDGE0_API_KEY가 설정되지 않아 mock 응답을 반환합니다")
-            return Judge0Result(stdout = "mock", status = "Accepted", passed = true)
+            return Judge0Result(stdout = "[MOCK] 채점 생략", stderr = "", status = "Accepted", passed = true)
         }
 
         return try {

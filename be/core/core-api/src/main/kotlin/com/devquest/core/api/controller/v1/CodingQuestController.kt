@@ -2,6 +2,7 @@ package com.devquest.core.api.controller.v1
 
 import com.devquest.core.api.controller.v1.request.CodeSubmitRequestDto
 import com.devquest.core.domain.CodingQuestService
+import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.support.response.ApiResponse
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
@@ -12,6 +13,15 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+
+data class CodingProblemResponse(
+    val id: Long,
+    val title: String,
+    val description: String,
+    val difficulty: String,
+    val language: String,
+    val testCases: List<TestCase>
+)
 
 @RestController
 @RequestMapping("/api/v1/coding")
@@ -26,7 +36,15 @@ class CodingQuestController(
         @RequestParam(defaultValue = "JAVA") language: String
     ): ApiResponse<*> {
         val problem = codingQuestService.generateProblem(userId, language)
-        return ApiResponse.success(problem)
+        val response = CodingProblemResponse(
+            id = problem.id,
+            title = problem.title,
+            description = problem.description,
+            difficulty = problem.difficulty,
+            language = problem.language,
+            testCases = problem.testCases
+        )
+        return ApiResponse.success(response)
     }
 
     @PostMapping("/submit")
