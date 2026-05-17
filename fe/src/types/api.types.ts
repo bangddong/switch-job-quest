@@ -142,6 +142,17 @@ export interface SkillRequirement {
   importance: string
 }
 
+export interface UserEmailResult {
+  email: string | null
+}
+
+export interface TechInterviewResult {
+  questions: string[]
+  overallScore: number
+  feedback: string
+  passed: boolean
+}
+
 export interface JdAnalysisResult {
   companyName: string
   requiredSkills: SkillRequirement[]

@@ -1,0 +1,8 @@
+package com.devquest.core.api.controller.v1.request
+
+import jakarta.validation.constraints.Email
+import jakarta.validation.constraints.NotBlank
+
+data class UserEmailRequestDto(
+    @field:NotBlank @field:Email val email: String = "",
+)

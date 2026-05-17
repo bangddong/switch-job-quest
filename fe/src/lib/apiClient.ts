@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult } from '@/types/api.types'
 import { getToken } from '@/hooks/useAuth'
 
 const API_BASE = '/api/v1'
@@ -81,6 +81,54 @@ export async function fetchJourneyReport(
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<JourneyReportResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('여정 리포트 생성 실패')
+  return json.data
+}
+
+export async function fetchUserEmail(): Promise<UserEmailResult> {
+  const res = await fetch(`${API_BASE}/user/email`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<UserEmailResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('이메일 조회 실패')
+  return json.data
+}
+
+export async function saveUserEmail(email: string): Promise<UserEmailResult> {
+  const res = await fetch(`${API_BASE}/user/email`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<UserEmailResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('이메일 저장 실패')
+  return json.data
+}
+
+export async function fetchTechInterviewQuestion(techStack: string): Promise<TechInterviewResult> {
+  const res = await fetch(`${API_BASE}/tech-interview/question?techStack=${encodeURIComponent(techStack)}`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<TechInterviewResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('질문 조회 실패')
+  return json.data
+}
+
+export async function evaluateTechInterview(
+  techStack: string,
+  questions: string[],
+  answers: string[],
+): Promise<TechInterviewResult> {
+  const res = await fetch(`${API_BASE}/tech-interview/evaluate`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ techStack, questions, answers }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<TechInterviewResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('평가 실패')
   return json.data
 }
 
