@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult } from '@/types/api.types'
 import { getToken } from '@/hooks/useAuth'
 
 const API_BASE = '/api/v1'
@@ -129,6 +129,42 @@ export async function evaluateTechInterview(
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<TechInterviewResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('평가 실패')
+  return json.data
+}
+
+export async function fetchCodingProblem(language: string): Promise<CodingProblem> {
+  const res = await fetch(`${API_BASE}/coding/problem?language=${encodeURIComponent(language)}`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<CodingProblem> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('코딩 문제 조회 실패')
+  return json.data
+}
+
+export async function submitCode(
+  problemId: number,
+  language: string,
+  userCode: string,
+): Promise<CodingSubmissionResult> {
+  const res = await fetch(`${API_BASE}/coding/submit`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ problemId, language, userCode }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<CodingSubmissionResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('코드 제출 실패')
+  return json.data
+}
+
+export async function fetchCodingLevel(): Promise<CodingLevelResult> {
+  const res = await fetch(`${API_BASE}/coding/level`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<CodingLevelResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('코딩 레벨 조회 실패')
   return json.data
 }
 
