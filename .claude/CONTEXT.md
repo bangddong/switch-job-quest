@@ -62,6 +62,8 @@
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 
 ### 사용자 확인 필요
+- [ ] **RESEND_API_KEY** 발급 필요 (PR #135 — SMTP 데일리 메일) → TASKS.md TASK-3 참조
+- [ ] **JUDGE0_API_KEY** 발급 필요 (PR #136 — 코딩 퀘스트 채점) → TASKS.md TASK-3 참조
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
 
 ### 백로그
