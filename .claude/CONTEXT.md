@@ -51,9 +51,9 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #137 | Flyway V2 마이그레이션 충돌 수정 (coding_quest V2→V3 rename) | 2026-05-18 |
 | #136 | 코딩 문제 퀘스트 (AI 생성 + Judge0 채점 + 코드 에디터) | 2026-05-17 |
 | #135 | 데일리 기술 연습 인프라 (이메일 저장 + SMTP + 기술면접 반복) | 2026-05-16 |
-| #134 | be-feature-builder·qa-reviewer 스폰 프롬프트에 ultrathink 추가 | 2026-05-15 |
 
 ## 다음 작업
 
@@ -62,8 +62,8 @@
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 
 ### 사용자 확인 필요
-- [ ] **RESEND_API_KEY** 발급 필요 (PR #135 — SMTP 데일리 메일) → TASKS.md TASK-3 참조
-- [ ] **JUDGE0_API_KEY** 발급 필요 (PR #136 — 코딩 퀘스트 채점) → TASKS.md TASK-3 참조
+- [x] **RESEND_API_KEY** 발급 완료 → application-local.yml 기입, Fly.io secret 세팅 완료
+- [x] **JUDGE0_API_KEY** 발급 완료 → application-local.yml 기입, Fly.io secret 세팅 완료
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
 
 ### 백로그
