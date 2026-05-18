@@ -35,6 +35,7 @@
 - **로컬 시크릿은 `application-local.yml`에만 작성** — 이 파일은 `.gitignore`에 등록됨
 - `application-local.yml`, `application-secret.yml`은 커밋 금지 (`.gitignore` 적용됨)
 - 새 시크릿 추가 시: `application.yml`에 `${NEW_VAR}` 만 추가 → `application-local.yml`에 실제 값 작성
+- **사용자가 대화 중 키 값을 알려주면 즉시 `application-local.yml`에 기입** — 대화 종료 후 복구 불가
 
 ## Kotlin 스타일
 

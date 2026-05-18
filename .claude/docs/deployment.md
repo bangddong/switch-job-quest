@@ -14,6 +14,9 @@
 | `ANTHROPIC_API_KEY` | Anthropic API 키 |
 | `CORS_ALLOWED_ORIGINS` | `https://quest.dhbang.co.kr` |
 | `SPRING_PROFILES_ACTIVE` | `prod` |
+| `RESEND_API_KEY` | Resend 이메일 API 키 (PR #135) |
+| `MAIL_ENABLED` | `true` 설정 시 실제 발송 활성화 |
+| `JUDGE0_API_KEY` | RapidAPI Judge0 채점 키 (PR #136) |
 
 ## 배포 파일 위치
 
