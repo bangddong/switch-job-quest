@@ -59,10 +59,3 @@ devquest:
     from: noreply@devquest.kr
     enabled: ${MAIL_ENABLED:false}
 
----
-spring:
-  config:
-    activate:
-      on-profile: "!prod"
-  flyway:
-    enabled: false
