@@ -44,8 +44,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `fix/fly-grace-period` |
+| 열린 PR | #139 — Fly.io grace_period 60s→180s (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
@@ -68,5 +68,11 @@
 - [ ] 앱 직접 사용 후 불편한 점 / 빠진 기능 파악 → 다음 기능 기획
 
 ### 백로그
+- [ ] **Spring 시작 시간 최적화** — 현재 cold start 시 2~3분 소요, 사용자 503 경험
+  - 원인: 512MB shared CPU + Neon DB cold start + Flyway 실행 겹침
+  - 방향 1: `spring.main.lazy-initialization=true` (필요한 빈만 즉시 초기화)
+  - 방향 2: `min_machines_running = 1` (machine 항상 warm, Fly.io 비용 발생)
+  - 방향 3: Neon connection pooler (PgBouncer) 활성화 → DB cold start 제거
+  - 방향 4: LogtailHttpAppender 초기화 비동기화 (현재 startup 중 60s timeout 블로킹)
 - [x] devquest-log-shipper 제거 — 커스텀 Logback HTTP 어펜더 구현 완료
 - [x] Disambiguation Gate + Closing Summary 에이전트 패턴 도입 (#127)
