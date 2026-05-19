@@ -61,9 +61,9 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #142 | coding_submission updated_at 컬럼 누락 — V4 migration 추가 (prod 서버 복구 완료) | 2026-05-19 |
 | #141 | Spring Boot 4.x Flyway 수동 구성 — FlywayConfig 빈 + EntityManagerFactoryDependsOnPostProcessor | 2026-05-19 |
 | #140 | Flyway Spring Boot 4.x 호환 — 별도 DataSource 제거 + @Primary 사용 | 2026-05-19 |
-| #139 | Fly.io health check grace_period 60s→180s — CD 배포 실패 수정 | 2026-05-19 |
 
 ## 다음 작업
 
