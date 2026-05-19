@@ -44,16 +44,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `fix/fly-grace-period` |
-| 열린 PR | #139 — Fly.io grace_period 60s→180s (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #139 | Fly.io health check grace_period 60s→180s — CD 배포 실패 수정 | 2026-05-19 |
 | #138 | CoreDataSource @Primary 추가 — Flyway 자동설정 DataSource 인식 누락 수정 | 2026-05-19 |
 | #137 | Flyway V2 마이그레이션 충돌 수정 (coding_quest V2→V3 rename) | 2026-05-18 |
-| #136 | 코딩 문제 퀘스트 (AI 생성 + Judge0 채점 + 코드 에디터) | 2026-05-17 |
 | #135 | 데일리 기술 연습 인프라 (이메일 저장 + SMTP + 기술면접 반복) | 2026-05-16 |
 
 ## 다음 작업
