@@ -40,6 +40,16 @@
 
 ---
 
+## 알아둬야 할 비자명적 결정 (추가)
+
+### Spring Boot 4.x Flyway 수동 구성
+Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfigure AutoConfiguration.imports에 없음).
+`db-core` 모듈에 `FlywayConfig.kt`로 수동 구성:
+- `@Profile("prod")`로 prod 전용 활성화
+- `flyway.repair()` → `flyway.migrate()` 순차 호출 (flyway 11.x에서 repairOnMigrate API 제거됨)
+- `EntityManagerFactoryDependsOnPostProcessor("flyway")`로 JPA가 Flyway 완료 후 초기화되도록 설정
+- 패키지: `org.springframework.boot.jpa.autoconfigure` (Spring Boot 4.x 변경)
+
 ## 현재 상태
 
 | 항목 | 내용 |
@@ -51,10 +61,9 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #141 | Spring Boot 4.x Flyway 수동 구성 — FlywayConfig 빈 + EntityManagerFactoryDependsOnPostProcessor | 2026-05-19 |
+| #140 | Flyway Spring Boot 4.x 호환 — 별도 DataSource 제거 + @Primary 사용 | 2026-05-19 |
 | #139 | Fly.io health check grace_period 60s→180s — CD 배포 실패 수정 | 2026-05-19 |
-| #138 | CoreDataSource @Primary 추가 — Flyway 자동설정 DataSource 인식 누락 수정 | 2026-05-19 |
-| #137 | Flyway V2 마이그레이션 충돌 수정 (coding_quest V2→V3 rename) | 2026-05-18 |
-| #135 | 데일리 기술 연습 인프라 (이메일 저장 + SMTP + 기술면접 반복) | 2026-05-16 |
 
 ## 다음 작업
 
