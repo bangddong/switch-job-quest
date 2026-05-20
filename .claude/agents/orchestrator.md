@@ -135,6 +135,21 @@ git checkout -b <prefix>/<feature-name> origin/main
 
 ## 4단계: BE 구현 (해당 시)
 
+**스폰 전: 작업 유형에 따라 주입할 스킬 파일을 읽는다.**
+
+| 작업 유형 | 읽을 스킬 파일 |
+|----------|--------------|
+| 신규 기능 | `tdd.md` + `verification-before-completion.md` |
+| 버그 수정 | `systematic-debugging.md` + `tdd.md` + `verification-before-completion.md` |
+| 리팩토링 | `verification-before-completion.md` |
+
+```bash
+# 예시: 신규 기능
+cat .claude/skills/tdd.md .claude/skills/verification-before-completion.md
+```
+
+읽은 내용을 프롬프트의 `## 적용 스킬` 섹션에 **전문 그대로** 붙여넣는다.
+
 ```
 Agent(subagent_type: "be-feature-builder", prompt: """
   ultrathink
@@ -142,6 +157,9 @@ Agent(subagent_type: "be-feature-builder", prompt: """
   ## 브랜치
   이미 생성됨: <브랜치명>
   git fetch origin && git checkout <브랜치명>
+
+  ## 적용 스킬
+  <읽은 스킬 파일 내용 전문 — 생략 금지>
 
   ## 작업
   기능명: <기능명>
@@ -185,6 +203,14 @@ Agent(subagent_type: "design-reviewer", prompt: """
 
 ## 6단계: FE 구현 (해당 시)
 
+**스폰 전: 작업 유형에 따라 주입할 스킬 파일을 읽는다.** (BE와 동일한 규칙)
+
+| 작업 유형 | 읽을 스킬 파일 |
+|----------|--------------|
+| 신규 기능 | `tdd.md` + `verification-before-completion.md` |
+| 버그 수정 | `systematic-debugging.md` + `tdd.md` + `verification-before-completion.md` |
+| 리팩토링 | `verification-before-completion.md` |
+
 ```
 Agent(subagent_type: "fe-feature-builder", prompt: """
   ultrathink
@@ -192,6 +218,9 @@ Agent(subagent_type: "fe-feature-builder", prompt: """
   ## 브랜치
   이미 생성됨: <브랜치명>
   git fetch origin && git checkout <브랜치명>
+
+  ## 적용 스킬
+  <읽은 스킬 파일 내용 전문 — 생략 금지>
 
   ## BE API 스펙
   <4단계 결과>

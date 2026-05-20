@@ -1,4 +1,23 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(flyctl status *)",
+      "Bash(flyctl logs *)",
+      "Bash(flyctl secrets list *)",
+      "Bash(flyctl apps *)",
+      "Bash(flyctl machines *)",
+      "Bash(flyctl auth *)",
+      "Bash(flyctl version *)",
+      "Bash(flyctl help *)",
+      "Bash(where *)",
+      "Bash(./gradlew *:test *)",
+      "Bash(./gradlew *:compileKotlin *)",
+      "Bash(./gradlew *:dependencies *)",
+      "Bash(./gradlew --version)",
+      "Bash(curl -s https://devquest-api.fly.dev/*)",
+      "Bash(curl -s https://api.quest.dhbang.co.kr/*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -22,7 +41,7 @@
       }
     ],
     "PreToolUse": [
-      {
+{
         "matcher": "Write|Edit",
         "hooks": [
           { "type": "command", "command": ".claude/scripts/assert-not-main.sh" },
