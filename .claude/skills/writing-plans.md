@@ -26,7 +26,7 @@
 
 - [ ] Step 1: 실패하는 테스트 작성
 - [ ] Step 2: 테스트 실행하여 실패 확인
-      Run: `./gradlew test --tests "...ClassName"`
+      Run: `cd be && ./gradlew test --tests "...ClassName"`
       Expected: FAIL with "..."
 - [ ] Step 3: 최소한의 구현 코드 작성
 - [ ] Step 4: 테스트 실행하여 통과 확인

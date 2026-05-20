@@ -36,7 +36,7 @@ test('renders error state when fetch fails', () => {
 
 ```bash
 # BE
-./gradlew test --tests "com.devquest...ClassName.테스트명"
+cd be && ./gradlew test --tests "com.devquest...ClassName.테스트명"
 
 # FE
 cd fe && npm test -- --testNamePattern="테스트명"
