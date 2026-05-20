@@ -13,7 +13,7 @@
 - [ ] 명확화 질문 — **한 번에 하나씩만** (멀티초이스 우선)
 - [ ] 2~3가지 접근법 제안 (트레이드오프 포함, 추천 명시)
 - [ ] 설계 문서 작성 후 사용자 승인
-- [ ] `.claude/plans/YYYY-MM-DD-<topic>-design.md` 저장
+- [ ] `.claude/plans/YYYY-MM-DD-<topic>-design.md` 저장 (디렉토리 없으면 먼저 생성)
 - [ ] 사용자 검토 후 → `writing-plans` 스킬로 전환
 
 ## 설계 원칙

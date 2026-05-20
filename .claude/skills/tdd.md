@@ -38,8 +38,8 @@ test('renders error state when fetch fails', () => {
 # BE
 cd be && ./gradlew test --tests "com.devquest...ClassName.테스트명"
 
-# FE
-cd fe && npm test -- --testNamePattern="테스트명"
+# FE (테스트 러너 미도입 — 현재는 타입 체크 + 빌드로 검증)
+cd fe && npx tsc --noEmit && npm run build
 ```
 
 테스트가 통과하면 → 기존 동작을 테스트하는 것 → 테스트 수정 필요

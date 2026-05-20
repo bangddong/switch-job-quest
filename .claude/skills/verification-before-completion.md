@@ -41,10 +41,10 @@
 
 ```bash
 # BE 테스트
-./gradlew test
+cd be && ./gradlew test
 
 # BE 빌드
-./gradlew build
+cd be && ./gradlew build
 
 # FE 타입 체크
 cd fe && npx tsc --noEmit

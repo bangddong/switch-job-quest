@@ -2,7 +2,7 @@
 
 **트리거:** 설계 승인 후, 멀티스텝 작업 시작 전
 
-**저장 위치:** `.claude/plans/YYYY-MM-DD-<feature-name>.md`
+**저장 위치:** `.claude/plans/YYYY-MM-DD-<feature-name>.md` (디렉토리 없으면 먼저 생성)
 
 ## 계획 헤더 (필수)
 
@@ -22,7 +22,7 @@
 **Files:**
 - Create: `exact/path/to/file.kt`
 - Modify: `exact/path/to/existing.kt:123-145`
-- Test: `be/src/test/kotlin/.../test.kt`
+- Test: `be/<module>/src/test/kotlin/com/devquest/.../test.kt`
 
 - [ ] Step 1: 실패하는 테스트 작성
 - [ ] Step 2: 테스트 실행하여 실패 확인
