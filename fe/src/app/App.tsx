@@ -313,6 +313,10 @@ export function App() {
     )
   }
 
+  if (view.kind === 'coding-quest') {
+    return <CodingQuestPage onBack={() => setView({ kind: 'map' })} />
+  }
+
   return (
     <div
       style={{
@@ -324,7 +328,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing' || view.kind === 'settings' || view.kind === 'tech-interview' || view.kind === 'coding-quest') && (
+      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing' || view.kind === 'settings' || view.kind === 'tech-interview') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -471,9 +475,6 @@ export function App() {
         <TechInterviewPage />
       )}
 
-      {view.kind === 'coding-quest' && (
-        <CodingQuestPage />
-      )}
     </div>
   )
 }
