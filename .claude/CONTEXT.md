@@ -57,14 +57,14 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 | 브랜치 | `main` |
 | 열린 PR | 없음 |
 
+
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #144 | 코딩 연습 화면 LeetCode 스타일 개편 — Monaco Editor, 풀스크린 레이아웃, 상단 탭바 | 2026-05-21 |
 | #143 | superpowers 기반 스킬 7종 추가 — brainstorming/writing-plans/tdd/debugging/verification/executing/parallel | 2026-05-20 |
 | #142 | coding_submission updated_at 컬럼 누락 — V4 migration 추가 (prod 서버 복구 완료) | 2026-05-19 |
-| #141 | Spring Boot 4.x Flyway 수동 구성 — FlywayConfig 빈 + EntityManagerFactoryDependsOnPostProcessor | 2026-05-19 |
-| #140 | Flyway Spring Boot 4.x 호환 — 별도 DataSource 제거 + @Primary 사용 | 2026-05-19 |
 
 ## 다음 작업
 
