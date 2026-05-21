@@ -17,7 +17,7 @@
 
 ## 브랜치 규칙
 
-모든 파일 수정은 반드시 feature 브랜치에서 진행 (main 직접 수정 금지).
+모든 파일 수정은 반드시 작업 브랜치에서 진행 (main 직접 수정 금지).
 
 ```bash
 git fetch origin main
@@ -30,7 +30,7 @@ git checkout -b <type>/<name> origin/main
 - `docs/` : 문서만 변경
 - `refactor/`: 리팩토링
 
-main에서 Write/Edit 시도 시 → PreToolUse hook이 차단함.
+main에서 Write/Edit 시도 시 → PreToolUse hook이 차단하고 브랜치 생성을 안내함.
 
 ## 진척 기록 규칙
 
@@ -40,7 +40,7 @@ main에서 Write/Edit 시도 시 → PreToolUse hook이 차단함.
 
 | 시점 | 해야 할 것 |
 |------|-----------|
-| 작업 시작 시 | 브랜치명·PR 번호 기록 |
+| 작업 시작 시 | 브랜치명 기록, PR 생성 후 번호 추가 |
 | 작업 완료 시 | 완료된 PR 번호·내용·날짜 추가, "다음 작업" 갱신 |
 
 ### TASKS.md (`.claude/TASKS.md`)
