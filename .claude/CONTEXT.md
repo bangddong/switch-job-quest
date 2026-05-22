@@ -55,13 +55,14 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 열린 PR | 없음 (PR #146 머지 완료) |
 
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #146 | 401/403 시 토큰 자동 삭제 + 로그인 이동, storageKeys 공용 상수화, JWT_SECRET 재설정 | 2026-05-22 |
 | #145 | CLAUDE.md 다이어트 206→117줄 — 중복 섹션 제거, Copilot 리뷰 반영 | 2026-05-21 |
 | #144 | 코딩 연습 화면 LeetCode 스타일 개편 — Monaco Editor, 풀스크린 레이아웃, 상단 탭바 | 2026-05-21 |
 | #143 | superpowers 기반 스킬 7종 추가 — brainstorming/writing-plans/tdd/debugging/verification/executing/parallel | 2026-05-20 |
