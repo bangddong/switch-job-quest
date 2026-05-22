@@ -57,7 +57,7 @@ class CodingQuestService(
             try {
                 val generated = codingProblemGeneratorPort.generate(difficulty, language)
                 val allPassed = generated.testCases.all { tc ->
-                    val result = judge0Port.execute(generated.solutionCode, languageId, tc.input)
+                    val result = judge0Port.execute(generated.solutionCode, languageId, tc.input, tc.expectedOutput)
                     result.passed
                 }
                 if (allPassed) {
@@ -95,7 +95,7 @@ class CodingQuestService(
         var lastStdout = ""
         var lastStderr = ""
         val passed = problem.testCases.all { tc ->
-            val result = judge0Port.execute(userCode, languageId, tc.input)
+            val result = judge0Port.execute(userCode, languageId, tc.input, tc.expectedOutput)
             lastStdout = result.stdout
             lastStderr = result.stderr
             result.passed

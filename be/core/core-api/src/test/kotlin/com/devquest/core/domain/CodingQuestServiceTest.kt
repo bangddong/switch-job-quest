@@ -75,9 +75,9 @@ class CodingQuestServiceTest {
         whenever(codingProblemPort.findByDifficultyAndLanguage("EASY", "JAVA")).thenReturn(emptyList())
         whenever(codingProblemGeneratorPort.generate("EASY", "JAVA")).thenReturn(generationResult)
         // testCases: input="5"→"25", "3"→"9", "0"→"0"
-        whenever(judge0Port.execute(any(), eq(62), eq("5"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("3"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
         whenever(codingProblemPort.save(any())).thenReturn(sampleProblem.copy(title = "새 문제"))
 
         val result = service.generateProblem("user1", "JAVA")
@@ -100,9 +100,9 @@ class CodingQuestServiceTest {
     @Test
     fun `submitCode - 모든 테스트케이스 통과 시 passed=true 반환`() {
         whenever(codingProblemPort.findById(1L)).thenReturn(sampleProblem)
-        whenever(judge0Port.execute(any(), eq(62), eq("5"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("3"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
         whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any())).thenReturn(10L)
         // solveCount 1 → 레벨업 조건 불충족
         whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(1)
@@ -116,7 +116,7 @@ class CodingQuestServiceTest {
     @Test
     fun `submitCode - 하나라도 실패 시 passed=false 반환`() {
         whenever(codingProblemPort.findById(1L)).thenReturn(sampleProblem)
-        whenever(judge0Port.execute(any(), eq(62), eq("5"))).thenReturn(Judge0Result(stdout = "wrong", status = "Wrong Answer", passed = false))
+        whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "wrong", status = "Wrong Answer", passed = false))
         whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any())).thenReturn(11L)
 
         val result = service.submitCode("user1", 1L, "JAVA", "class Main {}")
@@ -128,9 +128,9 @@ class CodingQuestServiceTest {
     @Test
     fun `submitCode - solve_count가 3의 배수가 되면 레벨 업`() {
         whenever(codingProblemPort.findById(1L)).thenReturn(sampleProblem)
-        whenever(judge0Port.execute(any(), eq(62), eq("5"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("3"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
+        whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
         whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any())).thenReturn(12L)
         // solveCount가 2이면 incrementSolveCount 후 3 → 레벨업
         whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(2)

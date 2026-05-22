@@ -8,5 +8,5 @@ data class Judge0Result(
 )
 
 interface Judge0Port {
-    fun execute(sourceCode: String, languageId: Int, stdin: String): Judge0Result
+    fun execute(sourceCode: String, languageId: Int, stdin: String, expectedOutput: String): Judge0Result
 }

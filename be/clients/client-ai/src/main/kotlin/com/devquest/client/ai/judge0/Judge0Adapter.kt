@@ -19,10 +19,10 @@ class Judge0Adapter(
         .baseUrl("https://judge0-ce.p.rapidapi.com")
         .build()
 
-    override fun execute(sourceCode: String, languageId: Int, stdin: String): Judge0Result {
+    override fun execute(sourceCode: String, languageId: Int, stdin: String, expectedOutput: String): Judge0Result {
         if (apiKey.isBlank()) {
             log.warn("JUDGE0_API_KEY가 설정되지 않아 mock 응답을 반환합니다")
-            return Judge0Result(stdout = "[MOCK] 채점 생략", stderr = "", status = "Accepted", passed = true)
+            return Judge0Result(stdout = "", stderr = "", status = "API Key Missing", passed = false)
         }
 
         return try {
@@ -41,7 +41,7 @@ class Judge0Adapter(
                 .retrieve()
                 .body(Judge0Response::class.java)
 
-            response?.toDomain(stdin) ?: Judge0Result(stderr = "응답 없음", status = "Internal Error")
+            response?.toDomain(expectedOutput) ?: Judge0Result(stderr = "응답 없음", status = "Internal Error")
         } catch (e: Exception) {
             log.error("Judge0 API 호출 실패: ${e.message}", e)
             Judge0Result(stderr = e.message ?: "알 수 없는 오류", status = "Internal Error")
@@ -54,13 +54,21 @@ data class Judge0Response(
     val stderr: String? = null,
     val status: Judge0StatusResponse? = null
 ) {
-    fun toDomain(stdin: String): Judge0Result {
+    fun toDomain(expectedOutput: String): Judge0Result {
         val statusDesc = status?.description ?: "Unknown"
+        val actualStdout = stdout?.trim() ?: ""
+        val outputMatches = actualStdout == expectedOutput.trim()
+        val passed = statusDesc == "Accepted" && outputMatches
+        val resolvedStatus = when {
+            statusDesc != "Accepted" -> statusDesc
+            !outputMatches -> "Wrong Answer"
+            else -> statusDesc
+        }
         return Judge0Result(
-            stdout = stdout?.trim() ?: "",
+            stdout = actualStdout,
             stderr = stderr ?: "",
-            status = statusDesc,
-            passed = statusDesc == "Accepted"
+            status = resolvedStatus,
+            passed = passed
         )
     }
 }
