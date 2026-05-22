@@ -22,7 +22,7 @@ class Judge0Adapter(
     override fun execute(sourceCode: String, languageId: Int, stdin: String, expectedOutput: String): Judge0Result {
         if (apiKey.isBlank()) {
             log.warn("JUDGE0_API_KEY가 설정되지 않아 mock 응답을 반환합니다")
-            return Judge0Result(stdout = "[MOCK] 채점 생략", stderr = "", status = "Accepted", passed = false)
+            return Judge0Result(stdout = "", stderr = "", status = "API Key Missing", passed = false)
         }
 
         return try {
@@ -57,11 +57,18 @@ data class Judge0Response(
     fun toDomain(expectedOutput: String): Judge0Result {
         val statusDesc = status?.description ?: "Unknown"
         val actualStdout = stdout?.trim() ?: ""
+        val outputMatches = actualStdout == expectedOutput.trim()
+        val passed = statusDesc == "Accepted" && outputMatches
+        val resolvedStatus = when {
+            statusDesc != "Accepted" -> statusDesc
+            !outputMatches -> "Wrong Answer"
+            else -> statusDesc
+        }
         return Judge0Result(
             stdout = actualStdout,
             stderr = stderr ?: "",
-            status = statusDesc,
-            passed = statusDesc == "Accepted" && actualStdout == expectedOutput.trim()
+            status = resolvedStatus,
+            passed = passed
         )
     }
 }
