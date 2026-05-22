@@ -1,4 +1,5 @@
-const TOKEN_KEY = 'devquest-token'
+import { STORAGE_KEYS } from '@/lib/storageKeys'
+const TOKEN_KEY = STORAGE_KEYS.TOKEN
 export const GITHUB_REDIRECT_URI = `${window.location.origin}/auth/callback`
 
 export function getToken(): string | null {

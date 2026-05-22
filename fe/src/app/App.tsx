@@ -16,9 +16,10 @@ import { LoginPage } from '@/features/auth/components/LoginPage'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
 import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
+import { STORAGE_KEYS } from '@/lib/storageKeys'
 import { ACTS } from '@/features/quest-map/constants/questData'
 
-const PROGRESS_CACHE_KEY = 'devquest-progress'
+const PROGRESS_CACHE_KEY = STORAGE_KEYS.PROGRESS
 
 interface ProgressCache {
   completed: Record<string, boolean>
