@@ -344,6 +344,7 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}
+          aria-label="퀘스트 맵으로 돌아가기"
           onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#F8FAFC' }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#475569' }}
         >
@@ -400,6 +401,7 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
           <button
             onClick={handleNewProblem}
             disabled={loadingProblem}
+            aria-label="새 문제 불러오기"
             style={{
               background: 'rgba(167,139,250,0.1)',
               border: '1px solid rgba(167,139,250,0.3)',
@@ -438,6 +440,7 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
       {/* 모바일 탭 바 */}
       {isMobile && (
         <div
+          role="tablist"
           style={{
             display: 'flex',
             background: '#0A0E1A',
@@ -451,6 +454,8 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
             return (
               <button
                 key={tab}
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setMobileTab(tab)}
                 style={{
                   flex: 1,
