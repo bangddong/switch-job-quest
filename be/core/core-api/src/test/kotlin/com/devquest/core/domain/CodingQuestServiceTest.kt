@@ -1,8 +1,10 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.model.coding.CodingHint
 import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingProblemGenerationResult
 import com.devquest.core.domain.model.coding.TestCase
+import com.devquest.core.domain.port.CodingHintPort
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
 import com.devquest.core.domain.port.CodingSubmissionPort
@@ -29,6 +31,7 @@ class CodingQuestServiceTest {
     @Mock lateinit var userCodingLevelPort: UserCodingLevelPort
     @Mock lateinit var codingSubmissionPort: CodingSubmissionPort
     @Mock lateinit var judge0Port: Judge0Port
+    @Mock lateinit var codingHintPort: CodingHintPort
 
     @InjectMocks
     private lateinit var service: CodingQuestService
@@ -123,6 +126,27 @@ class CodingQuestServiceTest {
 
         assertThat(result.passed).isEqualTo(false)
         verify(codingSubmissionPort).save(eq("user1"), eq(1L), eq("JAVA"), any(), eq(false), any())
+    }
+
+    // ===== getHint 테스트 =====
+
+    @Test
+    fun `getHint - hintLevel 1로 요청하면 힌트를 반환`() {
+        val expected = CodingHint(hint = "문제를 다른 관점으로 바라보세요.")
+        whenever(codingHintPort.getHint("uuid-1", "두 수의 합", "두 정수를 더하세요", 1))
+            .thenReturn(expected)
+
+        val result = service.getHint("uuid-1", "두 수의 합", "두 정수를 더하세요", 1)
+
+        assertThat(result.hint).isEqualTo("문제를 다른 관점으로 바라보세요.")
+        verify(codingHintPort).getHint("uuid-1", "두 수의 합", "두 정수를 더하세요", 1)
+    }
+
+    @Test
+    fun `getHint - hintLevel이 1~3 범위를 벗어나면 예외 발생`() {
+        org.assertj.core.api.Assertions.assertThatThrownBy {
+            service.getHint("uuid-1", "제목", "설명", 4)
+        }.isInstanceOf(IllegalArgumentException::class.java)
     }
 
     @Test

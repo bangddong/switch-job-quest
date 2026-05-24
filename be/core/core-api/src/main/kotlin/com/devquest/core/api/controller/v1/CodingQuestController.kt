@@ -1,6 +1,7 @@
 package com.devquest.core.api.controller.v1
 
 import com.devquest.core.api.controller.v1.request.CodeSubmitRequestDto
+import com.devquest.core.api.controller.v1.request.CodingHintRequestDto
 import com.devquest.core.domain.CodingQuestService
 import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.support.response.ApiResponse
@@ -60,5 +61,14 @@ class CodingQuestController(
     fun getLevel(@AuthenticationPrincipal userId: String): ApiResponse<*> {
         val level = codingQuestService.getLevel(userId)
         return ApiResponse.success(mapOf("level" to level))
+    }
+
+    @PostMapping("/hint")
+    fun getHint(
+        @AuthenticationPrincipal userId: String,
+        @Valid @RequestBody request: CodingHintRequestDto
+    ): ApiResponse<*> {
+        val result = codingQuestService.getHint(request.problemId, request.title, request.description, request.hintLevel)
+        return ApiResponse.success(result)
     }
 }

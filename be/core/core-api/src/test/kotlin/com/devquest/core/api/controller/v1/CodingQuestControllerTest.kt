@@ -2,6 +2,7 @@ package com.devquest.core.api.controller.v1
 
 import com.devquest.core.api.controller.ApiControllerAdvice
 import com.devquest.core.domain.CodingQuestService
+import com.devquest.core.domain.model.coding.CodingHint
 import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingSubmissionResult
 import com.devquest.core.domain.model.coding.TestCase
@@ -91,5 +92,30 @@ class CodingQuestControllerTest {
                 status { isOk() }
                 jsonPath("$.data.level") { value(3) }
             }
+    }
+
+    @Test
+    fun `POST hint - 정상 요청이면 200과 hint 반환`() {
+        whenever(codingQuestService.getHint(any(), any(), any(), any()))
+            .thenReturn(CodingHint(hint = "문제를 다른 관점으로 바라보세요."))
+
+        mockMvc.post("/api/v1/coding/hint") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"problemId": "uuid-1", "title": "두 수의 합", "description": "두 정수를 더하세요", "hintLevel": 1}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.result") { value("SUCCESS") }
+            jsonPath("$.data.hint") { value("문제를 다른 관점으로 바라보세요.") }
+        }
+    }
+
+    @Test
+    fun `POST hint - hintLevel 누락 시 400 반환`() {
+        mockMvc.post("/api/v1/coding/hint") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"problemId": "uuid-1", "title": "두 수의 합", "description": "두 정수를 더하세요"}"""
+        }.andExpect {
+            status { isBadRequest() }
+        }
     }
 }
