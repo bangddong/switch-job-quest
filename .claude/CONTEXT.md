@@ -54,19 +54,17 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/coding-hint` |
-| 열린 PR | #149 — 코딩 힌트 기능 추가 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #149 | 코딩 힌트 기능 추가 — AI 힌트 3단계, HintSection, fetchHint, problemId Long 통일, 더블클릭 방지 | 2026-05-25 |
 | #148 | 코딩 퀘스트 페이지 모바일 반응형 대응 — 문제/코드 탭, TopBar 버튼 축소, aria 접근성 추가 | 2026-05-23 |
 | #147 | 코딩 채점 expectedOutput 비교 누락 수정 — 빈 코드 통과 버그 제거 | 2026-05-22 |
-| #146 | 401/403 시 토큰 자동 삭제 + 로그인 이동, storageKeys 공용 상수화, JWT_SECRET 재설정 | 2026-05-22 |
-| #144 | 코딩 연습 화면 LeetCode 스타일 개편 — Monaco Editor, 풀스크린 레이아웃, 상단 탭바 | 2026-05-21 |
-| #143 | superpowers 기반 스킬 7종 추가 — brainstorming/writing-plans/tdd/debugging/verification/executing/parallel | 2026-05-20 |
 
 ## 다음 작업
 
