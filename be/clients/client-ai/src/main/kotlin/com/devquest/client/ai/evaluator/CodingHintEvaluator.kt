@@ -18,7 +18,7 @@ class CodingHintEvaluator(
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/coding-hint-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/coding-hint-user.st"))
 
-    override fun getHint(problemId: String, title: String, description: String, hintLevel: Int): CodingHint {
+    override fun getHint(problemId: Long, title: String, description: String, hintLevel: Int): CodingHint {
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "problemId" to problemId,

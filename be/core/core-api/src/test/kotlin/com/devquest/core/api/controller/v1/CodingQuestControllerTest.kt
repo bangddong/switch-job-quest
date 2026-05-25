@@ -101,7 +101,7 @@ class CodingQuestControllerTest {
 
         mockMvc.post("/api/v1/coding/hint") {
             contentType = MediaType.APPLICATION_JSON
-            content = """{"problemId": "uuid-1", "title": "두 수의 합", "description": "두 정수를 더하세요", "hintLevel": 1}"""
+            content = """{"problemId": 1, "title": "두 수의 합", "description": "두 정수를 더하세요", "hintLevel": 1}"""
         }.andExpect {
             status { isOk() }
             jsonPath("$.result") { value("SUCCESS") }
@@ -113,7 +113,7 @@ class CodingQuestControllerTest {
     fun `POST hint - hintLevel 누락 시 400 반환`() {
         mockMvc.post("/api/v1/coding/hint") {
             contentType = MediaType.APPLICATION_JSON
-            content = """{"problemId": "uuid-1", "title": "두 수의 합", "description": "두 정수를 더하세요"}"""
+            content = """{"problemId": 1, "title": "두 수의 합", "description": "두 정수를 더하세요"}"""
         }.andExpect {
             status { isBadRequest() }
         }

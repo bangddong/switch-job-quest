@@ -65,7 +65,7 @@ class CodingQuestController(
 
     @PostMapping("/hint")
     fun getHint(
-        @AuthenticationPrincipal userId: String,
+        @AuthenticationPrincipal _userId: String,
         @Valid @RequestBody request: CodingHintRequestDto
     ): ApiResponse<*> {
         val result = codingQuestService.getHint(request.problemId, request.title, request.description, request.hintLevel)

@@ -132,7 +132,7 @@ class CodingQuestService(
         return userCodingLevelPort.getLevel(userId)
     }
 
-    fun getHint(problemId: String, title: String, description: String, hintLevel: Int): CodingHint {
+    fun getHint(problemId: Long, title: String, description: String, hintLevel: Int): CodingHint {
         require(hintLevel in 1..3) { "hintLevel은 1~3 사이여야 합니다: ${hintLevel}" }
         log.info("코딩 힌트 요청: problemId=$problemId, hintLevel=${hintLevel}")
         return codingHintPort.getHint(problemId, title, description, hintLevel)

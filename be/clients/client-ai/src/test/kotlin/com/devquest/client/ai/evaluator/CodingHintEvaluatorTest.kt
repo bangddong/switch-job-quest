@@ -28,7 +28,7 @@ class CodingHintEvaluatorTest {
                 .entity(CodingHint::class.java)
         ).thenReturn(null)
 
-        assertThatThrownBy { evaluator.getHint("uuid-1", "두 수의 합", "두 정수를 더하세요", 1) }
+        assertThatThrownBy { evaluator.getHint(1L, "두 수의 합", "두 정수를 더하세요", 1) }
             .isInstanceOf(AiEvaluationException::class.java)
             .hasMessageContaining("최종 실패")
     }
@@ -41,7 +41,7 @@ class CodingHintEvaluatorTest {
                 .entity(CodingHint::class.java)
         ).thenReturn(expected)
 
-        val result = evaluator.getHint("uuid-1", "두 수의 합", "두 정수를 더하세요", 1)
+        val result = evaluator.getHint(1L, "두 수의 합", "두 정수를 더하세요", 1)
 
         assertThat(result.hint).isEqualTo("두 값을 더하는 방향으로 생각해보세요.")
     }
@@ -54,7 +54,7 @@ class CodingHintEvaluatorTest {
                 .entity(CodingHint::class.java)
         ).thenReturn(expected)
 
-        val result = evaluator.getHint("uuid-1", "배열 합계", "배열의 합을 구하세요", 3)
+        val result = evaluator.getHint(1L, "배열 합계", "배열의 합을 구하세요", 3)
 
         assertThat(result.hint).isNotBlank()
     }
