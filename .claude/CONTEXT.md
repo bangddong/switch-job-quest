@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 (PR #148 머지 완료) |
+| 브랜치 | `feat/coding-hint` |
+| 열린 PR | #149 — 코딩 힌트 기능 추가 (머지 대기) |
 
 
 ## 최근 완료 (최근 3건)

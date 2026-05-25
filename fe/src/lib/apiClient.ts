@@ -149,6 +149,27 @@ export async function fetchCodingLevel(): Promise<CodingLevelResult> {
   return json.data
 }
 
+export interface HintResult {
+  hint: string
+}
+
+export async function fetchHint(
+  problemId: string,
+  title: string,
+  description: string,
+  hintLevel: 1 | 2 | 3,
+): Promise<HintResult> {
+  const res = await fetch(`${API_BASE}/coding/hint`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ problemId, title, description, hintLevel }),
+  })
+  assertOk(res)
+  const json: ApiResponse<HintResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('힌트 조회 실패')
+  return json.data
+}
+
 export async function callAiCheck<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${API_BASE}/ai-check/${endpoint}`, {
     method: 'POST',

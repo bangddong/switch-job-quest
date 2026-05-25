@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Editor from '@monaco-editor/react'
 import type { CodingProblem, CodingSubmissionResult, CodingLevelResult } from '@/types/api.types'
 import { fetchCodingProblem, submitCode, fetchCodingLevel } from '@/lib/apiClient'
+import { HintSection } from './HintSection'
 
 const JAVA_TEMPLATE = `public class Main {
     public static void main(String[] args) {
@@ -186,6 +187,7 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
               ))}
             </div>
           )}
+          <HintSection problem={problem} />
         </>
       ) : null}
     </div>

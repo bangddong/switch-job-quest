@@ -1,8 +1,10 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.model.coding.CodingHint
 import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingSubmissionResult
 import com.devquest.core.domain.support.AiEvaluationException
+import com.devquest.core.domain.port.CodingHintPort
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
 import com.devquest.core.domain.port.CodingSubmissionPort
@@ -18,7 +20,8 @@ class CodingQuestService(
     private val codingProblemPort: CodingProblemPort,
     private val userCodingLevelPort: UserCodingLevelPort,
     private val codingSubmissionPort: CodingSubmissionPort,
-    private val judge0Port: Judge0Port
+    private val judge0Port: Judge0Port,
+    private val codingHintPort: CodingHintPort
 ) {
     private val objectMapper = com.fasterxml.jackson.databind.ObjectMapper()
     private val log = LoggerFactory.getLogger(javaClass)
@@ -127,5 +130,11 @@ class CodingQuestService(
 
     fun getLevel(userId: String): Int {
         return userCodingLevelPort.getLevel(userId)
+    }
+
+    fun getHint(problemId: Long, title: String, description: String, hintLevel: Int): CodingHint {
+        require(hintLevel in 1..3) { "hintLevel은 1~3 사이여야 합니다: ${hintLevel}" }
+        log.info("코딩 힌트 요청: problemId=$problemId, hintLevel=${hintLevel}")
+        return codingHintPort.getHint(problemId, title, description, hintLevel)
     }
 }
