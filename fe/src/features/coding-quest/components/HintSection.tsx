@@ -17,7 +17,7 @@ export function HintSection({ problem, initialHints, onHintsChange }: HintSectio
     setHints(initialHints ?? [])
     setLoadingHint(false)
     setHintError(null)
-  }, [problem.id])
+  }, [problem.id, initialHints])
 
   const handleRequestHint = async () => {
     if (loadingHint || hints.length >= 3) return
@@ -31,9 +31,11 @@ export function HintSection({ problem, initialHints, onHintsChange }: HintSectio
         problem.description,
         nextLevel,
       )
-      const nextHints = [...hints, result.hint]
-      setHints(nextHints)
-      onHintsChange?.(nextHints)
+      setHints((prev) => {
+        const nextHints = [...prev, result.hint]
+        onHintsChange?.(nextHints)
+        return nextHints
+      })
     } catch {
       setHintError('힌트를 불러오는 데 실패했습니다.')
     } finally {

@@ -59,15 +59,20 @@ export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQue
   const loadProblem = (lang: Language) => {
     setLoadingProblem(true)
     setError(null)
+    setProblem(null)
     setResult(null)
     setShowResult(false)
+    notifyStateChange({ language: lang, problem: null, result: null, showResult: false, hints: [] })
     fetchCodingProblem(lang)
       .then((p) => {
         setProblem(p)
         setHints([])
         notifyStateChange({ language: lang, problem: p, result: null, showResult: false, hints: [] })
       })
-      .catch(() => setError('문제를 불러오는 데 실패했습니다.'))
+      .catch(() => {
+        setError('문제를 불러오는 데 실패했습니다.')
+        notifyStateChange({ language: lang, problem: null, result: null, showResult: false, hints: [] })
+      })
       .finally(() => setLoadingProblem(false))
   }
 
