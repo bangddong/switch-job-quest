@@ -188,3 +188,12 @@ export interface CodingSubmissionResult {
 export interface CodingLevelResult {
   level: number
 }
+
+export interface CodingQuestState {
+  language: 'JAVA' | 'KOTLIN'
+  problem: CodingProblem | null
+  code: string
+  result: CodingSubmissionResult | null
+  showResult: boolean
+  hints: string[]
+}
