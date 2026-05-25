@@ -4,18 +4,20 @@ import { fetchHint } from '../api/fetchHint'
 
 interface HintSectionProps {
   problem: CodingProblem
+  initialHints?: string[]
+  onHintsChange?: (hints: string[]) => void
 }
 
-export function HintSection({ problem }: HintSectionProps) {
-  const [hints, setHints] = useState<string[]>([])
+export function HintSection({ problem, initialHints, onHintsChange }: HintSectionProps) {
+  const [hints, setHints] = useState<string[]>(initialHints ?? [])
   const [loadingHint, setLoadingHint] = useState(false)
   const [hintError, setHintError] = useState<string | null>(null)
 
   useEffect(() => {
-    setHints([])
+    setHints(initialHints ?? [])
     setLoadingHint(false)
     setHintError(null)
-  }, [problem.id])
+  }, [problem.id, initialHints])
 
   const handleRequestHint = async () => {
     if (loadingHint || hints.length >= 3) return
@@ -29,7 +31,11 @@ export function HintSection({ problem }: HintSectionProps) {
         problem.description,
         nextLevel,
       )
-      setHints((prev) => [...prev, result.hint])
+      setHints((prev) => {
+        const nextHints = [...prev, result.hint]
+        onHintsChange?.(nextHints)
+        return nextHints
+      })
     } catch {
       setHintError('힌트를 불러오는 데 실패했습니다.')
     } finally {

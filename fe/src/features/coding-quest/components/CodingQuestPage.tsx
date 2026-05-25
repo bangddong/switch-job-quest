@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import Editor from '@monaco-editor/react'
-import type { CodingProblem, CodingSubmissionResult, CodingLevelResult } from '@/types/api.types'
+import type { CodingProblem, CodingSubmissionResult, CodingLevelResult, CodingQuestState } from '@/types/api.types'
 import { fetchCodingProblem, submitCode, fetchCodingLevel } from '@/lib/apiClient'
 import { HintSection } from './HintSection'
 
@@ -25,29 +25,54 @@ function difficultyColor(difficulty: string): string {
 
 interface CodingQuestPageProps {
   onBack: () => void
+  savedState?: CodingQuestState | null
+  onStateChange?: (state: CodingQuestState) => void
 }
 
-export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
-  const [language, setLanguage] = useState<Language>('JAVA')
-  const [problem, setProblem] = useState<CodingProblem | null>(null)
+export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQuestPageProps) {
+  const [language, setLanguage] = useState<Language>(savedState?.language ?? 'JAVA')
+  const [problem, setProblem] = useState<CodingProblem | null>(savedState?.problem ?? null)
   const [levelResult, setLevelResult] = useState<CodingLevelResult | null>(null)
-  const [code, setCode] = useState<string>(JAVA_TEMPLATE)
+  const [code, setCode] = useState<string>(savedState?.code ?? JAVA_TEMPLATE)
   const [submitting, setSubmitting] = useState(false)
-  const [result, setResult] = useState<CodingSubmissionResult | null>(null)
+  const [result, setResult] = useState<CodingSubmissionResult | null>(savedState?.result ?? null)
   const [loadingProblem, setLoadingProblem] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showResult, setShowResult] = useState(false)
+  const [showResult, setShowResult] = useState(savedState?.showResult ?? false)
+  const [hints, setHints] = useState<string[]>(savedState?.hints ?? [])
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [mobileTab, setMobileTab] = useState<MobileTab>('problem')
+
+  const notifyStateChange = (patch: Partial<CodingQuestState>) => {
+    if (!onStateChange) return
+    onStateChange({
+      language,
+      problem,
+      code,
+      result,
+      showResult,
+      hints,
+      ...patch,
+    })
+  }
 
   const loadProblem = (lang: Language) => {
     setLoadingProblem(true)
     setError(null)
+    setProblem(null)
     setResult(null)
     setShowResult(false)
+    notifyStateChange({ language: lang, problem: null, result: null, showResult: false, hints: [] })
     fetchCodingProblem(lang)
-      .then((p) => setProblem(p))
-      .catch(() => setError('문제를 불러오는 데 실패했습니다.'))
+      .then((p) => {
+        setProblem(p)
+        setHints([])
+        notifyStateChange({ language: lang, problem: p, result: null, showResult: false, hints: [] })
+      })
+      .catch(() => {
+        setError('문제를 불러오는 데 실패했습니다.')
+        notifyStateChange({ language: lang, problem: null, result: null, showResult: false, hints: [] })
+      })
       .finally(() => setLoadingProblem(false))
   }
 
@@ -55,7 +80,11 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
     fetchCodingLevel()
       .then((l) => setLevelResult(l))
       .catch(() => { /* 레벨 조회 실패 시 무시 */ })
-    loadProblem('JAVA')
+
+    // 저장된 문제가 없을 때만 새 문제 로드
+    if (!savedState?.problem) {
+      loadProblem('JAVA')
+    }
   }, [])
 
   useEffect(() => {
@@ -65,16 +94,32 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
   }, [])
 
   const handleLanguageChange = (lang: Language) => {
+    const newCode = lang === 'JAVA' ? JAVA_TEMPLATE : KOTLIN_TEMPLATE
     setLanguage(lang)
-    setCode(lang === 'JAVA' ? JAVA_TEMPLATE : KOTLIN_TEMPLATE)
+    setCode(newCode)
     setResult(null)
     setShowResult(false)
+    setHints([])
     loadProblem(lang)
+    notifyStateChange({ language: lang, code: newCode, result: null, showResult: false, hints: [] })
   }
 
   const handleNewProblem = () => {
-    setCode(language === 'JAVA' ? JAVA_TEMPLATE : KOTLIN_TEMPLATE)
+    const newCode = language === 'JAVA' ? JAVA_TEMPLATE : KOTLIN_TEMPLATE
+    setCode(newCode)
+    setHints([])
     loadProblem(language)
+    notifyStateChange({ code: newCode, hints: [] })
+  }
+
+  const handleCodeChange = (val: string) => {
+    setCode(val)
+    notifyStateChange({ code: val })
+  }
+
+  const handleHintsChange = (nextHints: string[]) => {
+    setHints(nextHints)
+    notifyStateChange({ hints: nextHints })
   }
 
   const handleSubmit = async () => {
@@ -83,9 +128,11 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
     setResult(null)
     setShowResult(true)
     if (isMobile) setMobileTab('code')
+    notifyStateChange({ result: null, showResult: true })
     try {
       const res = await submitCode(problem.id, language, code)
       setResult(res)
+      notifyStateChange({ result: res, showResult: true })
     } catch {
       setError('제출 중 오류가 발생했습니다.')
     } finally {
@@ -187,7 +234,11 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
               ))}
             </div>
           )}
-          <HintSection problem={problem} />
+          <HintSection
+            problem={problem}
+            initialHints={hints}
+            onHintsChange={handleHintsChange}
+          />
         </>
       ) : null}
     </div>
@@ -228,7 +279,7 @@ export function CodingQuestPage({ onBack }: CodingQuestPageProps) {
           height="100%"
           language={monacoLang}
           value={code}
-          onChange={(val) => setCode(val ?? '')}
+          onChange={(val) => handleCodeChange(val ?? '')}
           theme="vs-dark"
           options={{
             fontSize: 14,

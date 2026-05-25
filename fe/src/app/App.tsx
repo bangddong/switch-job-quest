@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ActClearReportResult, ResumeCheckResult } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ActClearReportResult, ResumeCheckResult, CodingQuestState } from '@/types/api.types'
 import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail, QuestBriefingView } from '@/features/quest-detail'
@@ -76,6 +76,7 @@ export function App() {
   const [aiResults, setAiResults] = useState<Record<string, AiEvaluationResult | BossPackageResult | DeveloperClassResult | JdAnalysisResult | ResumeCheckResult>>(
     INITIAL_PROGRESS_CACHE?.aiResults ?? {}
   )
+  const [codingQuestState, setCodingQuestState] = useState<CodingQuestState | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [showIntro, setShowIntro] = useState(true)
   const [progressLoading, setProgressLoading] = useState(false)
@@ -315,7 +316,13 @@ export function App() {
   }
 
   if (view.kind === 'coding-quest') {
-    return <CodingQuestPage onBack={() => setView({ kind: 'map' })} />
+    return (
+      <CodingQuestPage
+        onBack={() => setView({ kind: 'map' })}
+        savedState={codingQuestState}
+        onStateChange={setCodingQuestState}
+      />
+    )
   }
 
   return (
