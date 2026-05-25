@@ -18,6 +18,7 @@ export function HintSection({ problem }: HintSectionProps) {
   }, [problem.id])
 
   const handleRequestHint = async () => {
+    if (loadingHint || hints.length >= 3) return
     const nextLevel = (hints.length + 1) as 1 | 2 | 3
     setLoadingHint(true)
     setHintError(null)
