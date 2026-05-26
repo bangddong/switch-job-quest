@@ -58,13 +58,14 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 | 열린 PR | 없음 |
 
 
+
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #153 | .claude 구조 개편 — skills universal/project 분리, pair-programmer 에이전트 추가, orchestrator 브랜치 규칙 명시 | 2026-05-26 |
 | #151 | 코딩 퀘스트 뒤로가기 후 재진입 시 상태 유지 — code/problem/language/result/hints App.tsx로 lift | 2026-05-25 |
 | #149 | 코딩 힌트 기능 추가 — AI 힌트 3단계, HintSection, fetchHint, problemId Long 통일, 더블클릭 방지 | 2026-05-25 |
-| #148 | 코딩 퀘스트 페이지 모바일 반응형 대응 — 문제/코드 탭, TopBar 버튼 축소, aria 접근성 추가 | 2026-05-23 |
 
 ## 다음 작업
 
