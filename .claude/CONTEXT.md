@@ -64,7 +64,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
 | #155 | PR 절차 문서화 — git-strategy.md Copilot 리뷰 처리 절차 추가, orchestrator 9단계 git-strategy 참조로 교체 | 2026-05-27 |
-| #154 | orchestrator tools 와일드카드 변경 및 mcpServers 제거 | 2026-05-27 |
+| #154 | orchestrator tools 와일드카드 변경 및 mcpServers 제거 (머지 완료) | 2026-05-27 |
 | #153 | .claude 구조 개편 — skills universal/project 분리, pair-programmer 에이전트 추가, orchestrator 브랜치 규칙 명시 | 2026-05-26 |
 
 ## 다음 작업
