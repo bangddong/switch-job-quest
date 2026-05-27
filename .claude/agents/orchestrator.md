@@ -281,23 +281,18 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 
 ---
 
-## 9단계: PR 생성 + CONTEXT.md 업데이트
+## 9단계: PR 생성 + Copilot 리뷰 처리 + CONTEXT.md 업데이트
+
+> PR 생성·머지 전 절차는 `.claude/docs/git-strategy.md`를 반드시 참조한다.
 
 ```bash
 gh pr create \
   --title "<type>(<scope>): <message>" \
-  --body "$(cat <<'EOF'
-## Summary
-- <변경 내용 1-3줄 요약>
-
-## Why
-<!-- 변경 이유가 자명하지 않을 때만 작성 -->
-
-## Test plan
-- [ ] <수행한 테스트>
-EOF
-)"
+  --base main \
+  --body-file .github/pull_request_template.md
 ```
+
+PR 생성 후 **Copilot 리뷰 댓글 처리가 머지 필수 조건**이다. 처리 절차는 `git-strategy.md § Copilot 리뷰 처리` 참조.
 
 > **PR body는 한국어로 작성한다.** (title의 type/scope/message는 영어 컨벤션 유지)
 > **"🤖 Generated with Claude Code" 문구는 PR body에 포함하지 않는다.**
