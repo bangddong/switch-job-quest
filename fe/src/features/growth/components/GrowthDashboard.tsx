@@ -169,6 +169,7 @@ export function GrowthDashboard() {
           <section style={{ marginBottom: 28 }}>
             {/* 탭 바 */}
             <div
+              role="tablist"
               style={{
                 overflowX: 'auto',
                 whiteSpace: 'nowrap',
@@ -181,6 +182,8 @@ export function GrowthDashboard() {
                 return (
                   <button
                     key={tab.key}
+                    role="tab"
+                    aria-selected={isActive}
                     onClick={() => setSelectedChart(tab.key)}
                     style={{
                       display: 'inline-flex',
