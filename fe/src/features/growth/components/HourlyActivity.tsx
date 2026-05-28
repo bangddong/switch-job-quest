@@ -21,7 +21,7 @@ export function HourlyActivity({ history }: HourlyActivityProps) {
     if (hour !== null) hourCounts[hour] = (hourCounts[hour] ?? 0) + 1
   }
   const counts = Array.from({ length: 24 }, (_, hour) => ({
-    hour: `${String(hour).padStart(2, '0')}시`,
+    hour,
     count: hourCounts[hour] ?? 0,
   }))
 
@@ -34,10 +34,10 @@ export function HourlyActivity({ history }: HourlyActivityProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
           <XAxis
             dataKey="hour"
-            tick={{ fill: '#64748B', fontSize: 9, fontFamily: "'Courier New', monospace" }}
+            tickFormatter={(v: number) => v % 4 === 0 ? `${v}시` : ''}
+            tick={{ fill: '#64748B', fontSize: 11, fontFamily: "'Courier New', monospace" }}
             axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
             tickLine={false}
-            interval={2}
           />
           <YAxis
             allowDecimals={false}
@@ -56,6 +56,7 @@ export function HourlyActivity({ history }: HourlyActivityProps) {
               color: '#F8FAFC',
             }}
             formatter={(value) => [`${value}회`, '시도']}
+            labelFormatter={(label) => `${label}시`}
             labelStyle={{ color: '#94A3B8' }}
           />
           <Bar dataKey="count" fill="#60A5FA" radius={[2, 2, 0, 0]} />

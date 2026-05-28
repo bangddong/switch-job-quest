@@ -140,6 +140,15 @@ export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQue
     }
   }
 
+  const editorOptions = {
+    fontSize: isMobile ? 13 : 14,
+    wordWrap: isMobile ? ('on' as const) : ('off' as const),
+    lineNumbers: isMobile ? ('off' as const) : ('on' as const),
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    padding: { top: isMobile ? 12 : 8 },
+  }
+
   const levelLabel = levelResult ? `Lv.${levelResult.level}` : 'Lv.-'
   const diffLabel = problem?.difficulty ?? '...'
   const monacoLang = language === 'JAVA' ? 'java' : 'kotlin'
@@ -282,12 +291,8 @@ export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQue
           onChange={(val) => handleCodeChange(val ?? '')}
           theme="vs-dark"
           options={{
-            fontSize: 14,
+            ...editorOptions,
             fontFamily: 'Consolas, "Courier New", monospace',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            lineNumbers: 'on',
-            padding: { top: 12, bottom: 12 },
             automaticLayout: true,
           }}
         />

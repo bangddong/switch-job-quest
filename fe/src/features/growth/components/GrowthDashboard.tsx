@@ -10,6 +10,16 @@ import { StreakBadge } from './StreakBadge'
 import { HourlyActivity } from './HourlyActivity'
 import { QuestAttemptCount } from './QuestAttemptCount'
 
+type ChartTab = 'score' | 'act' | 'grade' | 'hourly' | 'quest'
+
+const CHART_TABS: { key: ChartTab; label: string }[] = [
+  { key: 'score', label: '점수 추이' },
+  { key: 'act', label: 'ACT 합격률' },
+  { key: 'grade', label: '등급 분포' },
+  { key: 'hourly', label: '시간대' },
+  { key: 'quest', label: '퀘스트' },
+]
+
 interface BestScoreEntry {
   questId: string
   score: number
@@ -35,6 +45,7 @@ export function GrowthDashboard() {
   const [history, setHistory] = useState<QuestHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedChart, setSelectedChart] = useState<ChartTab>('score')
 
   useEffect(() => {
     setLoading(true)
@@ -66,7 +77,7 @@ export function GrowthDashboard() {
             marginBottom: 4,
           }}
         >
-          ⚔️ 성장 기록
+          성장 기록
         </h2>
         {!loading && (
           <div style={{ fontSize: 12, color: '#94A3B8' }}>
@@ -81,31 +92,6 @@ export function GrowthDashboard() {
         </div>
       ) : (
         <>
-          {/* 전체 XP 성장 그래프 */}
-          <section style={{ marginBottom: 28 }}>
-            <div
-              style={{
-                fontSize: 12,
-                color: '#94A3B8',
-                marginBottom: 10,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              점수 변화 추이
-            </div>
-            <div
-              style={{
-                background: '#0F172A',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 10,
-                padding: '16px 8px 8px',
-              }}
-            >
-              <ScoreTimeline history={history} />
-            </div>
-          </section>
-
           {/* 퀘스트별 최고점 바 차트 */}
           <section style={{ marginBottom: 28 }}>
             <div
@@ -179,7 +165,63 @@ export function GrowthDashboard() {
             </div>
           </section>
 
-          {/* ACT별 합격률 */}
+          {/* 차트 탭 섹션 */}
+          <section style={{ marginBottom: 28 }}>
+            {/* 탭 바 */}
+            <div
+              style={{
+                overflowX: 'auto',
+                whiteSpace: 'nowrap',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                marginBottom: 12,
+              }}
+            >
+              {CHART_TABS.map((tab) => {
+                const isActive = selectedChart === tab.key
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setSelectedChart(tab.key)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: isActive ? '2px solid #4ECDC4' : '2px solid transparent',
+                      color: isActive ? '#4ECDC4' : '#64748B',
+                      fontSize: 12,
+                      fontFamily: "'Courier New', monospace",
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      marginBottom: -1,
+                      transition: 'color 0.15s ease',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* 선택된 차트 */}
+            <div
+              style={{
+                background: '#0F172A',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 10,
+                padding: '16px 8px 8px',
+              }}
+            >
+              {selectedChart === 'score' && <ScoreTimeline history={history} />}
+              {selectedChart === 'act' && <ActPassRate history={history} />}
+              {selectedChart === 'grade' && <GradeDistribution history={history} />}
+              {selectedChart === 'hourly' && <HourlyActivity history={history} />}
+              {selectedChart === 'quest' && <QuestAttemptCount history={history} />}
+            </div>
+          </section>
+
+          {/* 연속 스트릭 (항상 표시) */}
           <section style={{ marginBottom: 28 }}>
             <div
               style={{
@@ -190,125 +232,23 @@ export function GrowthDashboard() {
                 letterSpacing: '0.05em',
               }}
             >
-              ACT별 합격률
+              연속 학습 스트릭
             </div>
             <div
               style={{
                 background: '#0F172A',
                 border: '1px solid rgba(255,255,255,0.08)',
                 borderRadius: 10,
-                padding: '16px 8px 8px',
+                padding: '8px',
+                display: 'flex',
+                alignItems: 'center',
               }}
             >
-              <ActPassRate history={history} />
+              <StreakBadge history={history} />
             </div>
           </section>
 
-          {/* 등급 분포 + 연속 스트릭 */}
-          <section style={{ marginBottom: 28, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#94A3B8',
-                  marginBottom: 10,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                등급 분포
-              </div>
-              <div
-                style={{
-                  background: '#0F172A',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 10,
-                  padding: '16px 8px 8px',
-                  height: '100%',
-                }}
-              >
-                <GradeDistribution history={history} />
-              </div>
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#94A3B8',
-                  marginBottom: 10,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                연속 학습 스트릭
-              </div>
-              <div
-                style={{
-                  background: '#0F172A',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 10,
-                  padding: '8px',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <StreakBadge history={history} />
-              </div>
-            </div>
-          </section>
-
-          {/* 시간대별 활동 */}
-          <section style={{ marginBottom: 28 }}>
-            <div
-              style={{
-                fontSize: 12,
-                color: '#94A3B8',
-                marginBottom: 10,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              시간대별 활동
-            </div>
-            <div
-              style={{
-                background: '#0F172A',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 10,
-                padding: '16px 8px 8px',
-              }}
-            >
-              <HourlyActivity history={history} />
-            </div>
-          </section>
-
-          {/* 퀘스트별 시도 횟수 */}
-          <section style={{ marginBottom: 28 }}>
-            <div
-              style={{
-                fontSize: 12,
-                color: '#94A3B8',
-                marginBottom: 10,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              퀘스트별 시도 횟수 (많은 순)
-            </div>
-            <div
-              style={{
-                background: '#0F172A',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 10,
-                padding: '16px 8px 8px',
-              }}
-            >
-              <QuestAttemptCount history={history} />
-            </div>
-          </section>
-
-          {/* 최근 시도 목록 */}
+          {/* 최근 시도 목록 (항상 표시) */}
           <section>
             <div
               style={{
