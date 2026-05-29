@@ -23,5 +23,8 @@ class CodingProblemEntity(
     val solutionCode: String = "",
 
     @Column(nullable = false, columnDefinition = "TEXT")
-    val testCases: String = ""
+    val testCases: String = "",
+
+    @Column(nullable = true, length = 50)
+    val category: String? = null
 ) : BaseEntity()

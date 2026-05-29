@@ -29,7 +29,7 @@ class CodingProblemGeneratorEvaluatorTest {
                 .entity(CodingProblemGenerationResult::class.java)
         ).thenReturn(null)
 
-        assertThatThrownBy { evaluator.generate("EASY", "JAVA") }
+        assertThatThrownBy { evaluator.generate("EASY", "JAVA", "ARRAY") }
             .isInstanceOf(AiEvaluationException::class.java)
             .hasMessageContaining("최종 실패")
     }
@@ -47,7 +47,7 @@ class CodingProblemGeneratorEvaluatorTest {
                 .entity(CodingProblemGenerationResult::class.java)
         ).thenReturn(expected)
 
-        val result = evaluator.generate("EASY", "JAVA")
+        val result = evaluator.generate("EASY", "JAVA", "ARRAY")
 
         assertThat(result.title).isEqualTo("제곱 계산")
         assertThat(result.testCases).hasSize(2)

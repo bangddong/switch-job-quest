@@ -174,7 +174,16 @@ export interface CodingProblem {
   description: string
   difficulty: string
   language: string
+  category?: string
   testCases: TestCase[]
+}
+
+export interface CategoryProgress {
+  category: string
+  displayName: string
+  order: number
+  solvedCount: number
+  locked: boolean
 }
 
 export interface CodingSubmissionResult {
@@ -196,4 +205,5 @@ export interface CodingQuestState {
   result: CodingSubmissionResult | null
   showResult: boolean
   hints: string[]
+  selectedCategory: string | null
 }

@@ -7,6 +7,7 @@ import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.domain.port.CodingHintPort
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
+import com.devquest.core.domain.port.CodingRoadmapProgressPort
 import com.devquest.core.domain.port.CodingSubmissionPort
 import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.Judge0Result
@@ -32,6 +33,7 @@ class CodingQuestServiceTest {
     @Mock lateinit var codingSubmissionPort: CodingSubmissionPort
     @Mock lateinit var judge0Port: Judge0Port
     @Mock lateinit var codingHintPort: CodingHintPort
+    @Mock lateinit var codingRoadmapProgressPort: CodingRoadmapProgressPort
 
     @InjectMocks
     private lateinit var service: CodingQuestService
@@ -57,10 +59,10 @@ class CodingQuestServiceTest {
     @Test
     fun `generateProblem - 기존 문제가 있으면 AI 호출 없이 반환`() {
         whenever(userCodingLevelPort.getLevel("user1")).thenReturn(2)
-        whenever(codingProblemPort.findByDifficultyAndLanguage("EASY", "JAVA"))
+        whenever(codingProblemPort.findByCategoryAndLanguage("ARRAY", "JAVA"))
             .thenReturn(listOf(sampleProblem))
 
-        val result = service.generateProblem("user1", "JAVA")
+        val result = service.generateProblem("user1", "JAVA", "ARRAY")
 
         assertThat(result.title).isEqualTo("제곱 계산")
         verifyNoInteractions(codingProblemGeneratorPort)
@@ -75,18 +77,58 @@ class CodingQuestServiceTest {
             testCases = testCases
         )
         whenever(userCodingLevelPort.getLevel("user1")).thenReturn(2)
-        whenever(codingProblemPort.findByDifficultyAndLanguage("EASY", "JAVA")).thenReturn(emptyList())
-        whenever(codingProblemGeneratorPort.generate("EASY", "JAVA")).thenReturn(generationResult)
+        whenever(codingProblemPort.findByCategoryAndLanguage("ARRAY", "JAVA")).thenReturn(emptyList())
+        whenever(codingProblemGeneratorPort.generate("EASY", "JAVA", "ARRAY")).thenReturn(generationResult)
         // testCases: input="5"→"25", "3"→"9", "0"→"0"
         whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
         whenever(codingProblemPort.save(any())).thenReturn(sampleProblem.copy(title = "새 문제"))
 
-        val result = service.generateProblem("user1", "JAVA")
+        val result = service.generateProblem("user1", "JAVA", "ARRAY")
 
         assertThat(result.title).isEqualTo("새 문제")
         verify(codingProblemPort).save(any())
+    }
+
+    // ===== getRoadmapProgress 테스트 =====
+
+    @Test
+    fun `getRoadmapProgress - 첫 번째 카테고리는 항상 잠금 해제`() {
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "ARRAY")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "HASH_MAP")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "STACK_QUEUE")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "BINARY_SEARCH")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "RECURSION")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "TREE")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "GRAPH")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "GREEDY")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "DP")).thenReturn(0)
+
+        val result = service.getRoadmapProgress("user1")
+
+        assertThat(result).hasSize(9)
+        assertThat(result[0].locked).isFalse()
+        assertThat(result[1].locked).isTrue()
+    }
+
+    @Test
+    fun `getRoadmapProgress - 이전 카테고리 3문제 통과 시 다음 카테고리 잠금 해제`() {
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "ARRAY")).thenReturn(3)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "HASH_MAP")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "STACK_QUEUE")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "BINARY_SEARCH")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "RECURSION")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "TREE")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "GRAPH")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "GREEDY")).thenReturn(0)
+        whenever(codingRoadmapProgressPort.countSolvedByUserAndCategory("user1", "DP")).thenReturn(0)
+
+        val result = service.getRoadmapProgress("user1")
+
+        assertThat(result[0].locked).isFalse()
+        assertThat(result[1].locked).isFalse()
+        assertThat(result[2].locked).isTrue()
     }
 
     @Test
@@ -106,26 +148,26 @@ class CodingQuestServiceTest {
         whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
-        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any())).thenReturn(10L)
+        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(10L)
         // solveCount 1 → 레벨업 조건 불충족
         whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(1)
 
         val result = service.submitCode("user1", 1L, "JAVA", "class Main {}")
 
         assertThat(result.passed).isEqualTo(true)
-        verify(codingSubmissionPort).save(eq("user1"), eq(1L), eq("JAVA"), any(), eq(true), any())
+        verify(codingSubmissionPort).save(eq("user1"), eq(1L), eq("JAVA"), any(), eq(true), any(), any())
     }
 
     @Test
     fun `submitCode - 하나라도 실패 시 passed=false 반환`() {
         whenever(codingProblemPort.findById(1L)).thenReturn(sampleProblem)
         whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "wrong", status = "Wrong Answer", passed = false))
-        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any())).thenReturn(11L)
+        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(11L)
 
         val result = service.submitCode("user1", 1L, "JAVA", "class Main {}")
 
         assertThat(result.passed).isEqualTo(false)
-        verify(codingSubmissionPort).save(eq("user1"), eq(1L), eq("JAVA"), any(), eq(false), any())
+        verify(codingSubmissionPort).save(eq("user1"), eq(1L), eq("JAVA"), any(), eq(false), any(), any())
     }
 
     // ===== getHint 테스트 =====
@@ -155,7 +197,7 @@ class CodingQuestServiceTest {
         whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
-        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any())).thenReturn(12L)
+        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(12L)
         // solveCount가 2이면 incrementSolveCount 후 3 → 레벨업
         whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(2)
 

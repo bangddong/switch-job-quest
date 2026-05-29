@@ -18,11 +18,12 @@ class CodingProblemGeneratorEvaluator(
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/coding-problem-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/coding-problem-user.st"))
 
-    override fun generate(difficulty: String, language: String): CodingProblemGenerationResult {
+    override fun generate(difficulty: String, language: String, category: String): CodingProblemGenerationResult {
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "difficulty" to difficulty,
-            "language" to language
+            "language" to language,
+            "category" to category
         ))
 
         return aiCallExecutor.execute {

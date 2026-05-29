@@ -16,7 +16,8 @@ class CodingSubmissionAdapter(
         language: String,
         userCode: String,
         passed: Boolean,
-        judgeResult: String
+        judgeResult: String,
+        category: String
     ): Long {
         val entity = CodingSubmissionEntity(
             userId = userId,
@@ -24,7 +25,8 @@ class CodingSubmissionAdapter(
             language = language,
             userCode = userCode,
             passed = passed,
-            judgeResult = judgeResult
+            judgeResult = judgeResult,
+            category = category.ifBlank { null }
         )
         return repository.save(entity).id
     }

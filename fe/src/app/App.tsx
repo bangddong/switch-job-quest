@@ -10,7 +10,7 @@ import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
 import { SettingsPage } from '@/features/settings'
 import { TechInterviewPage } from '@/features/tech-interview'
-import { CodingQuestPage } from '@/features/coding-quest'
+import { CodingQuestPage, CodingRoadmapPage } from '@/features/coding-quest'
 import { useAuth } from '@/hooks/useAuth'
 import { LoginPage } from '@/features/auth/components/LoginPage'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
@@ -57,7 +57,8 @@ type View =
   | { kind: 'growth' }
   | { kind: 'settings' }
   | { kind: 'tech-interview' }
-  | { kind: 'coding-quest' }
+  | { kind: 'coding-roadmap' }
+  | { kind: 'coding-quest'; category: string }
 
 export function App() {
   const { isLoggedIn } = useAuth()
@@ -315,12 +316,22 @@ export function App() {
     )
   }
 
+  if (view.kind === 'coding-roadmap') {
+    return (
+      <CodingRoadmapPage
+        onBack={() => setView({ kind: 'map' })}
+        onSelectCategory={(category) => setView({ kind: 'coding-quest', category })}
+      />
+    )
+  }
+
   if (view.kind === 'coding-quest') {
     return (
       <CodingQuestPage
-        onBack={() => setView({ kind: 'map' })}
+        onBack={() => setView({ kind: 'coding-roadmap' })}
         savedState={codingQuestState}
         onStateChange={setCodingQuestState}
+        category={view.category}
       />
     )
   }
@@ -366,7 +377,7 @@ export function App() {
           />
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
-              onClick={() => setView({ kind: 'coding-quest' })}
+              onClick={() => setView({ kind: 'coding-roadmap' })}
               style={{
                 background: 'rgba(167,139,250,0.1)',
                 border: '1px solid rgba(167,139,250,0.3)',

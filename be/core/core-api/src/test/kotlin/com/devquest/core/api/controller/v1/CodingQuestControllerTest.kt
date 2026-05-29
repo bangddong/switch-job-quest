@@ -2,6 +2,7 @@ package com.devquest.core.api.controller.v1
 
 import com.devquest.core.api.controller.ApiControllerAdvice
 import com.devquest.core.domain.CodingQuestService
+import com.devquest.core.domain.model.coding.CategoryProgressResult
 import com.devquest.core.domain.model.coding.CodingHint
 import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingSubmissionResult
@@ -58,9 +59,9 @@ class CodingQuestControllerTest {
             language = "JAVA",
             testCases = listOf(TestCase("5", "25"))
         )
-        whenever(codingQuestService.generateProblem(any(), any())).thenReturn(problem)
+        whenever(codingQuestService.generateProblem(any(), any(), any())).thenReturn(problem)
 
-        mockMvc.get("/api/v1/coding/problem?language=JAVA")
+        mockMvc.get("/api/v1/coding/problem?language=JAVA&category=ARRAY")
             .andExpect {
                 status { isOk() }
                 jsonPath("$.result") { value("SUCCESS") }
@@ -107,6 +108,24 @@ class CodingQuestControllerTest {
             jsonPath("$.result") { value("SUCCESS") }
             jsonPath("$.data.hint") { value("문제를 다른 관점으로 바라보세요.") }
         }
+    }
+
+    @Test
+    fun `GET roadmap - 로드맵 진행 현황 반환`() {
+        val progress = listOf(
+            CategoryProgressResult(category = "ARRAY", displayName = "배열/투포인터/슬라이딩윈도우", order = 1, solvedCount = 2, locked = false),
+            CategoryProgressResult(category = "HASH_MAP", displayName = "해시맵/빈도카운팅", order = 2, solvedCount = 0, locked = true)
+        )
+        whenever(codingQuestService.getRoadmapProgress(any())).thenReturn(progress)
+
+        mockMvc.get("/api/v1/coding/roadmap")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.result") { value("SUCCESS") }
+                jsonPath("$.data[0].category") { value("ARRAY") }
+                jsonPath("$.data[0].locked") { value(false) }
+                jsonPath("$.data[1].locked") { value(true) }
+            }
     }
 
     @Test

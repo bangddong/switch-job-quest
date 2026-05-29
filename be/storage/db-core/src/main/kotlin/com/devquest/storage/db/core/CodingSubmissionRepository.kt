@@ -2,4 +2,6 @@ package com.devquest.storage.db.core
 
 import org.springframework.data.jpa.repository.JpaRepository
 
-interface CodingSubmissionRepository : JpaRepository<CodingSubmissionEntity, Long>
+interface CodingSubmissionRepository : JpaRepository<CodingSubmissionEntity, Long> {
+    fun countByUserIdAndCategoryAndPassed(userId: String, category: String, passed: Boolean): Int
+}

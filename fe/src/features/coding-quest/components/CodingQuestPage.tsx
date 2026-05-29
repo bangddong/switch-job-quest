@@ -27,9 +27,10 @@ interface CodingQuestPageProps {
   onBack: () => void
   savedState?: CodingQuestState | null
   onStateChange?: (state: CodingQuestState) => void
+  category?: string
 }
 
-export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQuestPageProps) {
+export function CodingQuestPage({ onBack, savedState, onStateChange, category }: CodingQuestPageProps) {
   const [language, setLanguage] = useState<Language>(savedState?.language ?? 'JAVA')
   const [problem, setProblem] = useState<CodingProblem | null>(savedState?.problem ?? null)
   const [levelResult, setLevelResult] = useState<CodingLevelResult | null>(null)
@@ -52,6 +53,7 @@ export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQue
       result,
       showResult,
       hints,
+      selectedCategory: category ?? null,
       ...patch,
     })
   }
@@ -63,7 +65,7 @@ export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQue
     setResult(null)
     setShowResult(false)
     notifyStateChange({ language: lang, problem: null, result: null, showResult: false, hints: [] })
-    fetchCodingProblem(lang)
+    fetchCodingProblem(lang, category)
       .then((p) => {
         setProblem(p)
         setHints([])
@@ -413,6 +415,21 @@ export function CodingQuestPage({ onBack, savedState, onStateChange }: CodingQue
         {!isMobile && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center', minWidth: 0 }}>
             <span style={{ fontSize: 13, color: '#4ECDC4', fontWeight: 700, whiteSpace: 'nowrap' }}>{levelLabel}</span>
+            {category && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: '#4ECDC4',
+                  background: 'rgba(78,205,196,0.1)',
+                  border: '1px solid rgba(78,205,196,0.3)',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {problem?.category ?? category}
+              </span>
+            )}
             {problem && (
               <>
                 <span style={{ fontSize: 14, fontWeight: 700, color: '#F8FAFC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

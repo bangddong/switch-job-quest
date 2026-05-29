@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult, CategoryProgress } from '@/types/api.types'
 import { getToken, clearToken } from '@/hooks/useAuth'
 import { STORAGE_KEYS } from '@/lib/storageKeys'
 
@@ -121,11 +121,22 @@ export async function evaluateTechInterview(techStack: string, questions: string
   return json.data
 }
 
-export async function fetchCodingProblem(language: string): Promise<CodingProblem> {
-  const res = await fetch(`${API_BASE}/coding/problem?language=${encodeURIComponent(language)}`, { headers: authHeaders() })
+export async function fetchCodingProblem(language: string, category?: string): Promise<CodingProblem> {
+  const url = category
+    ? `${API_BASE}/coding/problem?language=${encodeURIComponent(language)}&category=${encodeURIComponent(category)}`
+    : `${API_BASE}/coding/problem?language=${encodeURIComponent(language)}`
+  const res = await fetch(url, { headers: authHeaders() })
   assertOk(res)
   const json: ApiResponse<CodingProblem> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('코딩 문제 조회 실패')
+  return json.data
+}
+
+export async function fetchCodingRoadmap(): Promise<CategoryProgress[]> {
+  const res = await fetch(`${API_BASE}/coding/roadmap`, { headers: authHeaders() })
+  assertOk(res)
+  const json: ApiResponse<CategoryProgress[]> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('코딩 로드맵 조회 실패')
   return json.data
 }
 

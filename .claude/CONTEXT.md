@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `feat/coding-roadmap` |
+| 열린 PR | #157 — 코딩 문제 로드맵 (머지 대기) |
 
 
 
@@ -63,6 +63,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #157 | 코딩 문제 로드맵 — 카테고리별 단계적 문제 풀기 (9개 카테고리, 잠금/해금) | 2026-05-29 |
 | #156 | 모바일 UX 개선 — AI 폼 다단계화, 성장 차트 탭 네비게이션, 코딩 에디터 최적화 | 2026-05-28 |
 | #155 | PR 절차 문서화 — git-strategy.md Copilot 리뷰 처리 절차 추가, orchestrator 9단계 git-strategy 참조로 교체 | 2026-05-27 |
 | #154 | orchestrator tools 와일드카드 변경 및 mcpServers 제거 (머지 완료) | 2026-05-27 |

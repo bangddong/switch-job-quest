@@ -6,6 +6,7 @@ data class CodingProblem(
     val description: String = "",
     val difficulty: String = "",
     val language: String = "",
+    val category: String = "",
     val solutionCode: String = "",
     val testCases: List<TestCase> = emptyList()
 )
