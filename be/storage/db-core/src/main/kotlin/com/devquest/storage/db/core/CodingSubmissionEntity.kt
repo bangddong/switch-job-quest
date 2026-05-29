@@ -23,5 +23,8 @@ class CodingSubmissionEntity(
     var passed: Boolean = false,
 
     @Column(columnDefinition = "TEXT")
-    val judgeResult: String? = null
+    val judgeResult: String? = null,
+
+    @Column(nullable = true, length = 50)
+    val category: String? = null
 ) : BaseEntity()

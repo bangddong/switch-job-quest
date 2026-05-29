@@ -1,5 +1,6 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.model.coding.CategoryProgressResult
 import com.devquest.core.domain.model.coding.CodingHint
 import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingSubmissionResult
@@ -7,6 +8,7 @@ import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.port.CodingHintPort
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
+import com.devquest.core.domain.port.CodingRoadmapProgressPort
 import com.devquest.core.domain.port.CodingSubmissionPort
 import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.UserCodingLevelPort
@@ -21,7 +23,8 @@ class CodingQuestService(
     private val userCodingLevelPort: UserCodingLevelPort,
     private val codingSubmissionPort: CodingSubmissionPort,
     private val judge0Port: Judge0Port,
-    private val codingHintPort: CodingHintPort
+    private val codingHintPort: CodingHintPort,
+    private val codingRoadmapProgressPort: CodingRoadmapProgressPort
 ) {
     private val objectMapper = com.fasterxml.jackson.databind.ObjectMapper()
     private val log = LoggerFactory.getLogger(javaClass)
@@ -31,34 +34,67 @@ class CodingQuestService(
         private const val KOTLIN_LANGUAGE_ID = 78
         private const val MAX_RETRY = 2
         private const val LEVEL_UP_INTERVAL = 3
+        private const val ROADMAP_UNLOCK_THRESHOLD = 3
 
         fun difficultyForLevel(level: Int): String = when {
             level <= 3 -> "EASY"
             level <= 7 -> "MEDIUM"
             else -> "HARD"
         }
+
+        val ROADMAP_CATEGORIES = listOf(
+            Triple("ARRAY", "배열/투포인터/슬라이딩윈도우", 1),
+            Triple("HASH_MAP", "해시맵/빈도카운팅", 2),
+            Triple("STACK_QUEUE", "스택/큐/모노토닉스택", 3),
+            Triple("BINARY_SEARCH", "이진탐색", 4),
+            Triple("RECURSION", "재귀/백트래킹", 5),
+            Triple("TREE", "트리순회/BFS/DFS", 6),
+            Triple("GRAPH", "그래프/위상정렬", 7),
+            Triple("GREEDY", "그리디", 8),
+            Triple("DP", "동적프로그래밍", 9)
+        )
     }
 
     @Transactional
-    fun generateProblem(userId: String, language: String): CodingProblem {
+    fun generateProblem(userId: String, language: String, category: String): CodingProblem {
         require(language in listOf("JAVA", "KOTLIN")) { "지원하지 않는 언어입니다: $language" }
         val level = userCodingLevelPort.getLevel(userId)
         val difficulty = difficultyForLevel(level)
 
-        val existing = codingProblemPort.findByDifficultyAndLanguage(difficulty, language)
+        val existing = codingProblemPort.findByCategoryAndLanguage(category, language)
         if (existing.isNotEmpty()) {
             return existing.random()
         }
 
-        return generateAndVerify(difficulty, language)
+        return generateAndVerify(difficulty, language, category)
     }
 
-    private fun generateAndVerify(difficulty: String, language: String): CodingProblem {
+    fun getRoadmapProgress(userId: String): List<CategoryProgressResult> {
+        val solvedCounts = ROADMAP_CATEGORIES.associate { (cat, _, _) ->
+            cat to codingRoadmapProgressPort.countSolvedByUserAndCategory(userId, cat)
+        }
+
+        return ROADMAP_CATEGORIES.mapIndexed { index, (cat, displayName, order) ->
+            val locked = if (index == 0) false else {
+                val prevCat = ROADMAP_CATEGORIES[index - 1].first
+                (solvedCounts[prevCat] ?: 0) < ROADMAP_UNLOCK_THRESHOLD
+            }
+            CategoryProgressResult(
+                category = cat,
+                displayName = displayName,
+                order = order,
+                solvedCount = solvedCounts[cat] ?: 0,
+                locked = locked
+            )
+        }
+    }
+
+    private fun generateAndVerify(difficulty: String, language: String, category: String): CodingProblem {
         val languageId = if (language == "KOTLIN") KOTLIN_LANGUAGE_ID else JAVA_LANGUAGE_ID
 
         repeat(MAX_RETRY) { attempt ->
             try {
-                val generated = codingProblemGeneratorPort.generate(difficulty, language)
+                val generated = codingProblemGeneratorPort.generate(difficulty, language, category)
                 val allPassed = generated.testCases.all { tc ->
                     val result = judge0Port.execute(generated.solutionCode, languageId, tc.input, tc.expectedOutput)
                     result.passed
@@ -69,21 +105,24 @@ class CodingQuestService(
                         description = generated.description,
                         difficulty = difficulty,
                         language = language,
+                        category = category,
                         solutionCode = generated.solutionCode,
                         testCases = generated.testCases
                     )
                     return codingProblemPort.save(problem)
                 }
-                log.warn("AI 생성 문제 검증 실패 (시도 ${attempt + 1}/$MAX_RETRY): difficulty=$difficulty, language=$language")
+                log.warn("AI 생성 문제 검증 실패 (시도 ${attempt + 1}/$MAX_RETRY): difficulty=$difficulty, language=$language, category=$category")
             } catch (e: Exception) {
                 log.error("문제 생성 중 오류 (시도 ${attempt + 1}/$MAX_RETRY): ${e.message}", e)
             }
         }
 
-        // fallback: EASY 문제 조회
-        log.warn("모든 재시도 실패, EASY 문제로 fallback: language=$language")
-        val fallback = codingProblemPort.findByDifficultyAndLanguage("EASY", language)
+        // fallback: 같은 카테고리 또는 EASY 문제 조회
+        log.warn("모든 재시도 실패, fallback: language=$language, category=$category")
+        val fallback = codingProblemPort.findByCategoryAndLanguage(category, language)
         if (fallback.isNotEmpty()) return fallback.random()
+        val easyFallback = codingProblemPort.findByDifficultyAndLanguage("EASY", language)
+        if (easyFallback.isNotEmpty()) return easyFallback.random()
 
         throw AiEvaluationException("코딩 문제 생성에 실패했습니다. 잠시 후 다시 시도해주세요.")
     }
@@ -107,7 +146,7 @@ class CodingQuestService(
         val judgeResultJson = objectMapper.writeValueAsString(
             mapOf("passed" to passed, "stdout" to lastStdout, "stderr" to lastStderr)
         )
-        codingSubmissionPort.save(userId, problemId, language, userCode, passed, judgeResultJson)
+        codingSubmissionPort.save(userId, problemId, language, userCode, passed, judgeResultJson, problem.category)
 
         if (passed) {
             val currentSolveCount = userCodingLevelPort.getSolveCount(userId)

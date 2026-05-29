@@ -21,7 +21,16 @@ data class CodingProblemResponse(
     val description: String,
     val difficulty: String,
     val language: String,
+    val category: String,
     val testCases: List<TestCase>
+)
+
+data class CategoryProgressResponse(
+    val category: String,
+    val displayName: String,
+    val order: Int,
+    val solvedCount: Int,
+    val locked: Boolean
 )
 
 @RestController
@@ -34,17 +43,34 @@ class CodingQuestController(
     @GetMapping("/problem")
     fun generateProblem(
         @AuthenticationPrincipal userId: String,
-        @RequestParam(defaultValue = "JAVA") language: String
+        @RequestParam(defaultValue = "JAVA") language: String,
+        @RequestParam(defaultValue = "ARRAY") category: String
     ): ApiResponse<*> {
-        val problem = codingQuestService.generateProblem(userId, language)
+        val problem = codingQuestService.generateProblem(userId, language, category)
         val response = CodingProblemResponse(
             id = problem.id,
             title = problem.title,
             description = problem.description,
             difficulty = problem.difficulty,
             language = problem.language,
+            category = problem.category,
             testCases = problem.testCases
         )
+        return ApiResponse.success(response)
+    }
+
+    @GetMapping("/roadmap")
+    fun getRoadmap(@AuthenticationPrincipal userId: String): ApiResponse<*> {
+        val progress = codingQuestService.getRoadmapProgress(userId)
+        val response = progress.map { item ->
+            CategoryProgressResponse(
+                category = item.category,
+                displayName = item.displayName,
+                order = item.order,
+                solvedCount = item.solvedCount,
+                locked = item.locked
+            )
+        }
         return ApiResponse.success(response)
     }
 

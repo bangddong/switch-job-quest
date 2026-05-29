@@ -23,6 +23,7 @@ class CodingProblemAdapter(
             description = problem.description,
             difficulty = problem.difficulty,
             language = problem.language,
+            category = problem.category.ifBlank { null },
             solutionCode = problem.solutionCode,
             testCases = objectMapper.writeValueAsString(problem.testCases)
         )
@@ -37,6 +38,10 @@ class CodingProblemAdapter(
         return repository.findByDifficultyAndLanguage(difficulty, language).map { it.toDomain() }
     }
 
+    override fun findByCategoryAndLanguage(category: String, language: String): List<CodingProblem> {
+        return repository.findByCategoryAndLanguage(category, language).map { it.toDomain() }
+    }
+
     private fun CodingProblemEntity.toDomain(): CodingProblem {
         val testCaseList: List<TestCase> = runCatching {
             objectMapper.readValue(this.testCases, object : TypeReference<List<TestCase>>() {})
@@ -48,6 +53,7 @@ class CodingProblemAdapter(
             description = this.description,
             difficulty = this.difficulty,
             language = this.language,
+            category = this.category ?: "",
             solutionCode = this.solutionCode,
             testCases = testCaseList
         )
