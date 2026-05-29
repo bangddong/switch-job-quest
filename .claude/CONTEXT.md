@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/coding-roadmap` |
-| 열린 PR | #157 — 코딩 문제 로드맵 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
