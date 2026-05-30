@@ -3,15 +3,19 @@ package com.devquest.core.domain
 import com.devquest.core.domain.model.coding.CategoryProgressResult
 import com.devquest.core.domain.model.coding.CodingHint
 import com.devquest.core.domain.model.coding.CodingProblem
+import com.devquest.core.domain.model.coding.CodingRankResult
 import com.devquest.core.domain.model.coding.CodingSubmissionResult
 import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.port.CodingHintPort
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
+import com.devquest.core.domain.port.CodingRankPort
 import com.devquest.core.domain.port.CodingRoadmapProgressPort
 import com.devquest.core.domain.port.CodingSubmissionPort
 import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.UserCodingLevelPort
+import java.time.LocalDate
+import java.time.ZoneId
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -24,7 +28,8 @@ class CodingQuestService(
     private val codingSubmissionPort: CodingSubmissionPort,
     private val judge0Port: Judge0Port,
     private val codingHintPort: CodingHintPort,
-    private val codingRoadmapProgressPort: CodingRoadmapProgressPort
+    private val codingRoadmapProgressPort: CodingRoadmapProgressPort,
+    private val codingRankPort: CodingRankPort
 ) {
     private val objectMapper = com.fasterxml.jackson.databind.ObjectMapper()
     private val log = LoggerFactory.getLogger(javaClass)
@@ -35,6 +40,30 @@ class CodingQuestService(
         private const val MAX_RETRY = 2
         private const val LEVEL_UP_INTERVAL = 3
         private const val ROADMAP_UNLOCK_THRESHOLD = 3
+
+        private val TIER_THRESHOLDS = listOf(
+            0 to "아이언",
+            100 to "브론즈",
+            300 to "실버",
+            600 to "골드",
+            1000 to "플래티넘",
+            1500 to "다이아",
+            2500 to "마스터",
+            4000 to "챌린저"
+        )
+
+        fun tierOf(score: Int): String =
+            TIER_THRESHOLDS.lastOrNull { score >= it.first }?.second ?: "아이언"
+
+        fun nextTierInfo(score: Int): Pair<String?, Int?> {
+            val idx = TIER_THRESHOLDS.indexOfLast { score >= it.first }
+            return if (idx < TIER_THRESHOLDS.size - 1) {
+                val next = TIER_THRESHOLDS[idx + 1]
+                next.second to next.first
+            } else {
+                null to null
+            }
+        }
 
         fun difficultyForLevel(level: Int): String = when {
             level <= 3 -> "EASY"
@@ -169,6 +198,66 @@ class CodingQuestService(
 
     fun getLevel(userId: String): Int {
         return userCodingLevelPort.getLevel(userId)
+    }
+
+    fun getRank(userId: String): CodingRankResult {
+        val records = codingRankPort.findPassedRecords(userId)
+
+        // 고유 문제별 첫 통과 날짜로 집계
+        val uniqueByProblem = records
+            .groupBy { it.problemId }
+            .mapValues { (_, list) -> list.minByOrNull { it.passedDate } ?: list.first() }
+            .values.toList()
+
+        val easyCount = uniqueByProblem.count { it.difficulty == "EASY" }
+        val mediumCount = uniqueByProblem.count { it.difficulty == "MEDIUM" }
+        val hardCount = uniqueByProblem.count { it.difficulty == "HARD" }
+
+        // 난이도별 기본 점수
+        val baseScore = easyCount * 10 + mediumCount * 25 + hardCount * 50
+
+        // 날짜별 그룹화 → 각 날 첫 문제에 +5점 일일 보너스
+        val dailyBonus = uniqueByProblem
+            .groupBy { it.passedDate }
+            .size * 5
+
+        // 연속 스트릭 계산
+        val solvedDates = uniqueByProblem.map { it.passedDate }.toSortedSet()
+        val currentStreak = calculateStreak(solvedDates)
+
+        val streakBonus = currentStreak * 2
+        val totalScore = baseScore + dailyBonus + streakBonus
+
+        val tier = tierOf(totalScore)
+        val (nextTier, nextTierScore) = nextTierInfo(totalScore)
+
+        log.info("코딩 랭크 조회: userId=$userId, score=$totalScore, tier=$tier, streak=$currentStreak")
+        return CodingRankResult(
+            totalScore = totalScore,
+            tier = tier,
+            nextTier = nextTier,
+            nextTierScore = nextTierScore,
+            easyCount = easyCount,
+            mediumCount = mediumCount,
+            hardCount = hardCount,
+            currentStreak = currentStreak
+        )
+    }
+
+    private fun calculateStreak(solvedDates: Set<LocalDate>): Int {
+        if (solvedDates.isEmpty()) return 0
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
+        // 오늘 또는 어제부터 역산
+        val startDate = if (solvedDates.contains(today)) today else today.minusDays(1)
+        if (!solvedDates.contains(startDate)) return 0
+
+        var streak = 0
+        var current = startDate
+        while (solvedDates.contains(current)) {
+            streak++
+            current = current.minusDays(1)
+        }
+        return streak
     }
 
     fun getHint(problemId: Long, title: String, description: String, hintLevel: Int): CodingHint {

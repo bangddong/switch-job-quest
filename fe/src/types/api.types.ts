@@ -198,6 +198,17 @@ export interface CodingLevelResult {
   level: number
 }
 
+export interface CodingRankResult {
+  totalScore: number
+  tier: string
+  nextTier: string | null
+  nextTierScore: number | null
+  easyCount: number
+  mediumCount: number
+  hardCount: number
+  currentStreak: number
+}
+
 export interface CodingQuestState {
   language: 'JAVA' | 'KOTLIN'
   problem: CodingProblem | null

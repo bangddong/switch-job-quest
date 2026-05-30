@@ -8,4 +8,12 @@ interface CodingSubmissionRepository : JpaRepository<CodingSubmissionEntity, Lon
 
     @Query("SELECT COUNT(DISTINCT s.problemId) FROM CodingSubmissionEntity s WHERE s.userId = :userId AND s.category = :category AND s.passed = true")
     fun countDistinctSolvedProblemsByUserAndCategory(userId: String, category: String): Int
+
+    @Query("""
+        SELECT new com.devquest.storage.db.core.CodingPassRecordRow(s.problemId, p.difficulty, s.createdAt)
+        FROM CodingSubmissionEntity s
+        JOIN CodingProblemEntity p ON s.problemId = p.id
+        WHERE s.userId = :userId AND s.passed = true
+    """)
+    fun findPassedRecordsWithDifficulty(userId: String): List<CodingPassRecordRow>
 }

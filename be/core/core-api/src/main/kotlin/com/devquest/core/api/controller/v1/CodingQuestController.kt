@@ -89,6 +89,12 @@ class CodingQuestController(
         return ApiResponse.success(mapOf("level" to level))
     }
 
+    @GetMapping("/rank")
+    fun getRank(@AuthenticationPrincipal userId: String): ApiResponse<*> {
+        val rank = codingQuestService.getRank(userId)
+        return ApiResponse.success(rank)
+    }
+
     @PostMapping("/hint")
     fun getHint(
         @AuthenticationPrincipal _userId: String,
