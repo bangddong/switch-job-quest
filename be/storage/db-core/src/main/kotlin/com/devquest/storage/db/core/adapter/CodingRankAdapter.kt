@@ -15,7 +15,11 @@ class CodingRankAdapter(
         return submissionRepository.findPassedRecordsWithDifficulty(userId).map { row ->
             val problemId = (row[0] as Number).toLong()
             val difficulty = row[1] as String
-            val createdAt = row[2] as LocalDateTime
+            val createdAt = when (val raw = row[2]) {
+                is LocalDateTime -> raw
+                is java.sql.Timestamp -> raw.toLocalDateTime()
+                else -> LocalDateTime.parse(raw.toString())
+            }
             CodingPassRecord(
                 problemId = problemId,
                 difficulty = difficulty,

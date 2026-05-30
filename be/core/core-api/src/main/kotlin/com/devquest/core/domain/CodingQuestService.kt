@@ -15,6 +15,7 @@ import com.devquest.core.domain.port.CodingSubmissionPort
 import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.UserCodingLevelPort
 import java.time.LocalDate
+import java.time.ZoneId
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -245,7 +246,7 @@ class CodingQuestService(
 
     private fun calculateStreak(solvedDates: Set<LocalDate>): Int {
         if (solvedDates.isEmpty()) return 0
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         // 오늘 또는 어제부터 역산
         val startDate = if (solvedDates.contains(today)) today else today.minusDays(1)
         if (!solvedDates.contains(startDate)) return 0
