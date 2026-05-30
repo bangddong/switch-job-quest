@@ -1,12 +1,6 @@
 package com.devquest.core.domain.port
 
-import java.time.LocalDate
-
-data class CodingPassRecord(
-    val problemId: Long,
-    val difficulty: String,
-    val passedDate: LocalDate
-)
+import com.devquest.core.domain.model.coding.CodingPassRecord
 
 interface CodingRankPort {
     fun findPassedRecords(userId: String): List<CodingPassRecord>

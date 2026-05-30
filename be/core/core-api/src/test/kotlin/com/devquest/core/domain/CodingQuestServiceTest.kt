@@ -5,7 +5,7 @@ import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingProblemGenerationResult
 import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.domain.port.CodingHintPort
-import com.devquest.core.domain.port.CodingPassRecord
+import com.devquest.core.domain.model.coding.CodingPassRecord
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
 import com.devquest.core.domain.port.CodingRankPort
@@ -15,6 +15,7 @@ import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.Judge0Result
 import com.devquest.core.domain.port.UserCodingLevelPort
 import java.time.LocalDate
+import java.time.ZoneId
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -213,7 +214,7 @@ class CodingQuestServiceTest {
 
     @Test
     fun `getRank - EASY 1문제 통과 시 기본 점수 10점`() {
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
             listOf(CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = today))
         )
@@ -228,7 +229,7 @@ class CodingQuestServiceTest {
 
     @Test
     fun `getRank - 같은 문제 여러 번 통과해도 1회만 계산`() {
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
             listOf(
                 CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = today),
@@ -243,7 +244,7 @@ class CodingQuestServiceTest {
 
     @Test
     fun `getRank - 100점 이상이면 브론즈 티어`() {
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         // MEDIUM 4문제(고유) = 4 × 25 = 100점 + 일일 보너스 5점 + 스트릭 1일 × 2점 = 107점
         val records = (1L..4L).map {
             CodingPassRecord(problemId = it, difficulty = "MEDIUM", passedDate = today)
@@ -258,7 +259,7 @@ class CodingQuestServiceTest {
 
     @Test
     fun `getRank - 연속 2일 풀이 시 스트릭=2, 보너스 4점 추가`() {
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         val yesterday = today.minusDays(1)
         whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
             listOf(
@@ -276,8 +277,9 @@ class CodingQuestServiceTest {
 
     @Test
     fun `getRank - 오늘 풀이가 없고 어제까지 연속 풀었으면 스트릭 유지`() {
-        val yesterday = LocalDate.now().minusDays(1)
-        val dayBefore = LocalDate.now().minusDays(2)
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
+        val yesterday = today.minusDays(1)
+        val dayBefore = today.minusDays(2)
         whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
             listOf(
                 CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = dayBefore),
@@ -302,7 +304,7 @@ class CodingQuestServiceTest {
 
     @Test
     fun `getRank - 챌린저 티어는 nextTier가 null`() {
-        val today = LocalDate.now()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         // HARD 80문제(고유) = 80 × 50 = 4000점 이상 → 챌린저
         val records = (1L..80L).map {
             CodingPassRecord(problemId = it, difficulty = "HARD", passedDate = today)

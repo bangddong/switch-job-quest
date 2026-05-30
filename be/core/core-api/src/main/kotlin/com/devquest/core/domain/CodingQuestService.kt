@@ -206,7 +206,7 @@ class CodingQuestService(
         // 고유 문제별 첫 통과 날짜로 집계
         val uniqueByProblem = records
             .groupBy { it.problemId }
-            .mapValues { (_, list) -> list.minBy { it.passedDate } }
+            .mapValues { (_, list) -> list.minByOrNull { it.passedDate } ?: list.first() }
             .values.toList()
 
         val easyCount = uniqueByProblem.count { it.difficulty == "EASY" }
