@@ -5,13 +5,16 @@ import com.devquest.core.domain.model.coding.CodingProblem
 import com.devquest.core.domain.model.coding.CodingProblemGenerationResult
 import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.domain.port.CodingHintPort
+import com.devquest.core.domain.port.CodingPassRecord
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
+import com.devquest.core.domain.port.CodingRankPort
 import com.devquest.core.domain.port.CodingRoadmapProgressPort
 import com.devquest.core.domain.port.CodingSubmissionPort
 import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.Judge0Result
 import com.devquest.core.domain.port.UserCodingLevelPort
+import java.time.LocalDate
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -34,6 +37,7 @@ class CodingQuestServiceTest {
     @Mock lateinit var judge0Port: Judge0Port
     @Mock lateinit var codingHintPort: CodingHintPort
     @Mock lateinit var codingRoadmapProgressPort: CodingRoadmapProgressPort
+    @Mock lateinit var codingRankPort: CodingRankPort
 
     @InjectMocks
     private lateinit var service: CodingQuestService
@@ -189,6 +193,127 @@ class CodingQuestServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy {
             service.getHint(1L, "제목", "설명", 4)
         }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    // ===== getRank 테스트 =====
+
+    @Test
+    fun `getRank - 통과 기록이 없으면 totalScore=0, tier=아이언 반환`() {
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(emptyList())
+
+        val result = service.getRank("user1")
+
+        assertThat(result.totalScore).isEqualTo(0)
+        assertThat(result.tier).isEqualTo("아이언")
+        assertThat(result.easyCount).isEqualTo(0)
+        assertThat(result.mediumCount).isEqualTo(0)
+        assertThat(result.hardCount).isEqualTo(0)
+        assertThat(result.currentStreak).isEqualTo(0)
+    }
+
+    @Test
+    fun `getRank - EASY 1문제 통과 시 기본 점수 10점`() {
+        val today = LocalDate.now()
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
+            listOf(CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = today))
+        )
+
+        val result = service.getRank("user1")
+
+        // EASY 10점 + 일일 보너스 5점 + 스트릭 1일 × 2점 = 17점
+        assertThat(result.totalScore).isEqualTo(17)
+        assertThat(result.easyCount).isEqualTo(1)
+        assertThat(result.tier).isEqualTo("아이언")
+    }
+
+    @Test
+    fun `getRank - 같은 문제 여러 번 통과해도 1회만 계산`() {
+        val today = LocalDate.now()
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
+            listOf(
+                CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = today),
+                CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = today)
+            )
+        )
+
+        val result = service.getRank("user1")
+
+        assertThat(result.easyCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `getRank - 100점 이상이면 브론즈 티어`() {
+        val today = LocalDate.now()
+        // MEDIUM 4문제(고유) = 4 × 25 = 100점 + 일일 보너스 5점 + 스트릭 1일 × 2점 = 107점
+        val records = (1L..4L).map {
+            CodingPassRecord(problemId = it, difficulty = "MEDIUM", passedDate = today)
+        }
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(records)
+
+        val result = service.getRank("user1")
+
+        assertThat(result.tier).isEqualTo("브론즈")
+        assertThat(result.mediumCount).isEqualTo(4)
+    }
+
+    @Test
+    fun `getRank - 연속 2일 풀이 시 스트릭=2, 보너스 4점 추가`() {
+        val today = LocalDate.now()
+        val yesterday = today.minusDays(1)
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
+            listOf(
+                CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = yesterday),
+                CodingPassRecord(problemId = 2L, difficulty = "EASY", passedDate = today)
+            )
+        )
+
+        val result = service.getRank("user1")
+
+        assertThat(result.currentStreak).isEqualTo(2)
+        // EASY 2문제 × 10 = 20점 + 일일 보너스 2일 × 5 = 10점 + 스트릭 2 × 2 = 4점 = 34점
+        assertThat(result.totalScore).isEqualTo(34)
+    }
+
+    @Test
+    fun `getRank - 오늘 풀이가 없고 어제까지 연속 풀었으면 스트릭 유지`() {
+        val yesterday = LocalDate.now().minusDays(1)
+        val dayBefore = LocalDate.now().minusDays(2)
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(
+            listOf(
+                CodingPassRecord(problemId = 1L, difficulty = "EASY", passedDate = dayBefore),
+                CodingPassRecord(problemId = 2L, difficulty = "EASY", passedDate = yesterday)
+            )
+        )
+
+        val result = service.getRank("user1")
+
+        assertThat(result.currentStreak).isEqualTo(2)
+    }
+
+    @Test
+    fun `getRank - nextTier와 nextTierScore가 올바르게 반환`() {
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(emptyList())
+
+        val result = service.getRank("user1")
+
+        assertThat(result.nextTier).isEqualTo("브론즈")
+        assertThat(result.nextTierScore).isEqualTo(100)
+    }
+
+    @Test
+    fun `getRank - 챌린저 티어는 nextTier가 null`() {
+        val today = LocalDate.now()
+        // HARD 80문제(고유) = 80 × 50 = 4000점 이상 → 챌린저
+        val records = (1L..80L).map {
+            CodingPassRecord(problemId = it, difficulty = "HARD", passedDate = today)
+        }
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(records)
+
+        val result = service.getRank("user1")
+
+        assertThat(result.tier).isEqualTo("챌린저")
+        assertThat(result.nextTier).isNull()
+        assertThat(result.nextTierScore).isNull()
     }
 
     @Test
