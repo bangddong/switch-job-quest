@@ -55,7 +55,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 열린 PR | #159 — 코딩 랭크 시스템 (머지 대기) |
 
 
 
