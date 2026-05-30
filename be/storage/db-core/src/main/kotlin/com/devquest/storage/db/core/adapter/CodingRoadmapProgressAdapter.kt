@@ -10,5 +10,5 @@ class CodingRoadmapProgressAdapter(
 ) : CodingRoadmapProgressPort {
 
     override fun countSolvedByUserAndCategory(userId: String, category: String): Int =
-        codingSubmissionRepository.countByUserIdAndCategoryAndPassed(userId, category, true)
+        codingSubmissionRepository.countDistinctSolvedProblemsByUserAndCategory(userId, category)
 }
