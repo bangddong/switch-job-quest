@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult, CategoryProgress } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult, CategoryProgress, CodingRankResult } from '@/types/api.types'
 import { getToken, clearToken } from '@/hooks/useAuth'
 import { STORAGE_KEYS } from '@/lib/storageKeys'
 
@@ -149,6 +149,14 @@ export async function submitCode(problemId: number, language: string, userCode: 
   assertOk(res)
   const json: ApiResponse<CodingSubmissionResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('코드 제출 실패')
+  return json.data
+}
+
+export async function fetchCodingRank(): Promise<CodingRankResult> {
+  const res = await fetch(`${API_BASE}/coding/rank`, { headers: authHeaders() })
+  assertOk(res)
+  const json: ApiResponse<CodingRankResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('코딩 랭크 조회 실패')
   return json.data
 }
 

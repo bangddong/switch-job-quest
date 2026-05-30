@@ -1,5 +1,6 @@
 export { CodingQuestPage } from './components/CodingQuestPage'
 export { CodingRoadmapPage } from './components/CodingRoadmapPage'
+export { CodingRankCard } from './components/CodingRankCard'
 export { HintSection } from './components/HintSection'
 export { fetchHint } from './api/fetchHint'
 export type { HintResult } from './api/fetchHint'

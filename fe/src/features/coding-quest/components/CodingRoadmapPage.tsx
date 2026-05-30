@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import type { CategoryProgress } from '@/types/api.types'
 import { fetchCodingRoadmap } from '@/lib/apiClient'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { CodingRankCard } from './CodingRankCard'
 
 export interface CodingRoadmapPageProps {
   onBack: () => void
@@ -219,6 +220,7 @@ export function CodingRoadmapPage({ onBack, onSelectCategory }: CodingRoadmapPag
             gap: 10,
           }}
         >
+          <CodingRankCard />
           {loading ? (
             <p
               style={{
