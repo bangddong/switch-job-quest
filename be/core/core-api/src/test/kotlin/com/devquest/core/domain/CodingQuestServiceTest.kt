@@ -303,6 +303,28 @@ class CodingQuestServiceTest {
     }
 
     @Test
+    fun `getRank - categoryStats에 9개 카테고리별 풀이 수가 포함`() {
+        whenever(codingRankPort.findPassedRecords("user1")).thenReturn(emptyList())
+        whenever(codingRankPort.countSolvedByCategory("user1", "ARRAY")).thenReturn(3)
+        whenever(codingRankPort.countSolvedByCategory("user1", "HASH_MAP")).thenReturn(1)
+        whenever(codingRankPort.countSolvedByCategory("user1", "STACK_QUEUE")).thenReturn(0)
+        whenever(codingRankPort.countSolvedByCategory("user1", "BINARY_SEARCH")).thenReturn(0)
+        whenever(codingRankPort.countSolvedByCategory("user1", "RECURSION")).thenReturn(2)
+        whenever(codingRankPort.countSolvedByCategory("user1", "TREE")).thenReturn(0)
+        whenever(codingRankPort.countSolvedByCategory("user1", "GRAPH")).thenReturn(0)
+        whenever(codingRankPort.countSolvedByCategory("user1", "GREEDY")).thenReturn(0)
+        whenever(codingRankPort.countSolvedByCategory("user1", "DP")).thenReturn(0)
+
+        val result = service.getRank("user1")
+
+        assertThat(result.categoryStats).hasSize(9)
+        assertThat(result.categoryStats["ARRAY"]).isEqualTo(3)
+        assertThat(result.categoryStats["HASH_MAP"]).isEqualTo(1)
+        assertThat(result.categoryStats["RECURSION"]).isEqualTo(2)
+        assertThat(result.categoryStats["DP"]).isEqualTo(0)
+    }
+
+    @Test
     fun `getRank - 챌린저 티어는 nextTier가 null`() {
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         // HARD 80문제(고유) = 80 × 50 = 4000점 이상 → 챌린저

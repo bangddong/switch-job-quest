@@ -8,5 +8,6 @@ data class CodingRankResult(
     val easyCount: Int = 0,
     val mediumCount: Int = 0,
     val hardCount: Int = 0,
-    val currentStreak: Int = 0
+    val currentStreak: Int = 0,
+    val categoryStats: Map<String, Int> = emptyMap()
 )
