@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `feat/coding-rank-radar-chart` |
+| 열린 PR | #160 — 카테고리별 코딩 풀이 레이더 차트 (머지 대기) |
 
 
 
@@ -64,6 +64,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #160 | 카테고리별 코딩 풀이 레이더 차트 (SVG, 9축) | 2026-05-31 |
 | #159 | 코딩 랭크 시스템 — LoL 티어, 난이도별 점수, 스트릭 보너스 | 2026-05-30 |
 | #158 | 코딩 로드맵 해금 기준 — 고유 문제 수(DISTINCT) 기준으로 수정 | 2026-05-30 |
 | #157 | 코딩 문제 로드맵 — 카테고리별 단계적 문제 풀기 (9개 카테고리, 잠금/해금) | 2026-05-29 |
