@@ -32,6 +32,21 @@ class TechInterviewEvaluator(
         }
     }
 
+    private val dailyQuestionSystemTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-system.st"))
+    private val dailyQuestionUserTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-user.st"))
+
+    override fun generateDailyQuestion(techStack: String): String {
+        val systemPrompt = dailyQuestionSystemTemplate.render()
+        val userPrompt = dailyQuestionUserTemplate.render(mapOf("techStack" to techStack))
+        return aiCallExecutor.execute {
+            chatClient.prompt()
+                .system(systemPrompt)
+                .user(userPrompt)
+                .call()
+                .content()
+        }
+    }
+
     override fun evaluate(techStack: String, questions: List<String>, answers: List<String>): TechInterviewResult {
         val systemPrompt = evaluateSystemTemplate.render()
         val questionsAndAnswers = questions.zip(answers).joinToString("\n\n") { (q, a) ->

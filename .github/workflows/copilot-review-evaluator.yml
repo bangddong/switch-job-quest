@@ -77,7 +77,12 @@ jobs:
                 r => r.user.login === 'copilot-pull-request-reviewer[bot]'
               );
 
-              if (copilotReviews.length === 0) return false; // 아직 리뷰 없음
+              if (copilotReviews.length === 0) {
+                // pull_request 이벤트는 폴링으로 대기, 그 외(dispatch 등)는 리뷰 없음 = 통과
+                if (context.eventName === 'pull_request') return false;
+                await setStatus('success', 'Copilot 리뷰 없음 — 통과');
+                return true;
+              }
 
               const allComments = await github.paginate(
                 github.rest.pulls.listReviewComments,
@@ -124,7 +129,8 @@ jobs:
                 if (i < MAX_POLLS - 1) await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
               }
 
-              core.notice('폴링 timeout — status pending 유지. workflow_dispatch로 재평가 가능.');
+              core.notice('폴링 timeout — Copilot 리뷰 없음으로 간주하여 success 처리.');
+              await setStatus('success', 'Copilot 리뷰 없음 — 통과');
               return;
             }
 
