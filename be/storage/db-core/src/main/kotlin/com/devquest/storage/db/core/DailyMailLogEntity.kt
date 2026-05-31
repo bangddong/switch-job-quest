@@ -6,10 +6,6 @@ import java.time.LocalDateTime
 @Entity
 @Table(name = "daily_mail_log")
 class DailyMailLogEntity(
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long = 0L,
-
     @Column(name = "user_id", nullable = false)
     val userId: String = "",
 
@@ -20,5 +16,5 @@ class DailyMailLogEntity(
     val questionContent: String = "",
 
     @Column(name = "sent_at", nullable = false)
-    val sentAt: LocalDateTime,
-)
+    val sentAt: LocalDateTime = LocalDateTime.now(),
+) : BaseEntity()

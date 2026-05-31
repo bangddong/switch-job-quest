@@ -32,9 +32,12 @@ class TechInterviewEvaluator(
         }
     }
 
+    private val dailyQuestionSystemTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-system.st"))
+    private val dailyQuestionUserTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-user.st"))
+
     override fun generateDailyQuestion(techStack: String): String {
-        val systemPrompt = "당신은 백엔드 개발자 기술면접 전문가입니다. 질문 텍스트만 반환하세요. 다른 설명이나 번호를 포함하지 마세요."
-        val userPrompt = "다음 기술 스택을 사용하는 백엔드 개발자를 위한 기술면접 질문 1개를 생성해주세요. 질문 텍스트만 반환하세요.\n기술 스택: $techStack"
+        val systemPrompt = dailyQuestionSystemTemplate.render()
+        val userPrompt = dailyQuestionUserTemplate.render(mapOf("techStack" to techStack))
         return aiCallExecutor.execute {
             chatClient.prompt()
                 .system(systemPrompt)

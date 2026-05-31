@@ -39,12 +39,12 @@ class DailyMailSchedulerTest {
     @Test
     fun `오늘 이미 발송된 사용자는 메일을 skip한다`() {
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
-        whenever(techInterviewPort.generateDailyQuestion(any())).thenReturn("오늘의 질문")
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(true)
 
         scheduler.sendDailyTechInterviewMail()
 
+        verify(techInterviewPort, never()).generateDailyQuestion(any())
         verify(mailService, never()).sendDailyTechInterview(any(), any(), any())
     }
 
@@ -54,6 +54,7 @@ class DailyMailSchedulerTest {
         whenever(techInterviewPort.generateDailyQuestion(any())).thenReturn("오늘의 질문")
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(false)
+        whenever(mailService.sendDailyTechInterview(any(), any(), any())).thenReturn(true)
 
         scheduler.sendDailyTechInterviewMail()
 

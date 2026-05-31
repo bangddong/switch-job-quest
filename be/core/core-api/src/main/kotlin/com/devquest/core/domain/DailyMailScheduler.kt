@@ -28,18 +28,24 @@ class DailyMailScheduler(
         }
 
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
+        val targets = allUsers.filter { (userId, _) ->
+            !dailyMailLogPort.existsTodayLog(userId, "TECH_INTERVIEW", today)
+        }
+        if (targets.isEmpty()) {
+            log.info("발송 대상 없음 — 오늘 이미 모든 사용자에게 발송 완료")
+            return
+        }
+
         val question = techInterviewPort.generateDailyQuestion("Java,Spring Boot,JPA")
         val deepLink = "https://devquest.kr/tech-interview"
 
-        log.info("데일리 기술 면접 메일 발송 시작: 대상 수=${allUsers.size}")
-        allUsers.forEach { (userId, email) ->
-            if (dailyMailLogPort.existsTodayLog(userId, "TECH_INTERVIEW", today)) {
-                log.info("중복 발송 skip: userId=$userId")
-                return@forEach
-            }
+        log.info("데일리 기술 면접 메일 발송 시작: 대상 수=${targets.size}")
+        targets.forEach { (userId, email) ->
             runCatching {
-                mailService.sendDailyTechInterview(email, question, deepLink)
-                dailyMailLogPort.save(userId, "TECH_INTERVIEW", question, LocalDateTime.now())
+                val sent = mailService.sendDailyTechInterview(email, question, deepLink)
+                if (sent) {
+                    dailyMailLogPort.save(userId, "TECH_INTERVIEW", question, LocalDateTime.now())
+                }
             }.onFailure { e ->
                 log.warn("메일 발송 실패: userId=$userId, email=$email, error=${e.message}")
             }

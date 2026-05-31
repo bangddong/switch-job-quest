@@ -14,10 +14,10 @@ class MailService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun sendDailyTechInterview(to: String, questionPreview: String, deepLink: String) {
+    fun sendDailyTechInterview(to: String, questionPreview: String, deepLink: String): Boolean {
         if (!enabled) {
             log.info("메일 발송 skip (MAIL_ENABLED=false): to=$to, type=tech-interview")
-            return
+            return false
         }
         val message = SimpleMailMessage().apply {
             setFrom(from)
@@ -35,6 +35,7 @@ class MailService(
         }
         mailSender.send(message)
         log.info("기술 면접 메일 발송 완료: to=$to")
+        return true
     }
 
     fun sendDailyCodingProblem(to: String, problemTitle: String, deepLink: String) {
