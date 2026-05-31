@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/coding-rank-radar-chart` |
-| 열린 PR | #160 — 카테고리별 코딩 풀이 레이더 차트 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
