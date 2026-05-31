@@ -231,6 +231,10 @@ class CodingQuestService(
         val tier = tierOf(totalScore)
         val (nextTier, nextTierScore) = nextTierInfo(totalScore)
 
+        val categoryStats = ROADMAP_CATEGORIES.associate { (cat, _, _) ->
+            cat to codingRankPort.countSolvedByCategory(userId, cat)
+        }
+
         log.info("코딩 랭크 조회: userId=$userId, score=$totalScore, tier=$tier, streak=$currentStreak")
         return CodingRankResult(
             totalScore = totalScore,
@@ -240,7 +244,8 @@ class CodingQuestService(
             easyCount = easyCount,
             mediumCount = mediumCount,
             hardCount = hardCount,
-            currentStreak = currentStreak
+            currentStreak = currentStreak,
+            categoryStats = categoryStats
         )
     }
 

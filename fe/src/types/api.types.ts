@@ -207,6 +207,7 @@ export interface CodingRankResult {
   mediumCount: number
   hardCount: number
   currentStreak: number
+  categoryStats: Record<string, number>
 }
 
 export interface CodingQuestState {

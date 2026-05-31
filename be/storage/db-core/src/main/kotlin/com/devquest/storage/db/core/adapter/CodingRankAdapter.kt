@@ -19,4 +19,8 @@ class CodingRankAdapter(
             )
         }
     }
+
+    override fun countSolvedByCategory(userId: String, category: String): Int {
+        return submissionRepository.countDistinctSolvedProblemsByUserAndCategory(userId, category)
+    }
 }
