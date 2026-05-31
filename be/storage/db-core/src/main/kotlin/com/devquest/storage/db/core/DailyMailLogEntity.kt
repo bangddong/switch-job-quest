@@ -20,5 +20,5 @@ class DailyMailLogEntity(
     val questionContent: String = "",
 
     @Column(name = "sent_at", nullable = false)
-    val sentAt: LocalDateTime = LocalDateTime.now(),
+    val sentAt: LocalDateTime,
 )

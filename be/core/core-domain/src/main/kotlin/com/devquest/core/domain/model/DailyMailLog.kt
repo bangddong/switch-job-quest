@@ -7,5 +7,5 @@ data class DailyMailLog(
     val userId: String = "",
     val mailType: String = "",
     val questionContent: String = "",
-    val sentAt: LocalDateTime = LocalDateTime.now(),
+    val sentAt: LocalDateTime,
 )

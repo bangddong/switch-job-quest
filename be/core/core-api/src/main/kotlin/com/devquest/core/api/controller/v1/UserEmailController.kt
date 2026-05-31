@@ -1,7 +1,6 @@
 package com.devquest.core.api.controller.v1
 
 import com.devquest.core.api.controller.v1.request.UserEmailRequestDto
-import com.devquest.core.domain.DailyMailScheduler
 import com.devquest.core.domain.UserEmailService
 import com.devquest.core.support.response.ApiResponse
 import jakarta.validation.Valid
@@ -13,7 +12,6 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/v1/user")
 class UserEmailController(
     private val userEmailService: UserEmailService,
-    private val dailyMailScheduler: DailyMailScheduler,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -31,11 +29,5 @@ class UserEmailController(
         @AuthenticationPrincipal userId: String,
     ): ApiResponse<*> {
         return ApiResponse.success(mapOf("email" to userEmailService.getEmail(userId)))
-    }
-
-    @PostMapping("/email/test-mail")
-    fun testMail(@AuthenticationPrincipal userId: String): ApiResponse<*> {
-        dailyMailScheduler.sendDailyTechInterviewMail()
-        return ApiResponse.success(mapOf("message" to "발송 트리거 완료"))
     }
 }
