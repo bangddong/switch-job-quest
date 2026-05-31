@@ -62,6 +62,8 @@ export function CategoryRadarChart({ categoryStats, tierColor }: CategoryRadarCh
       width="100%"
       viewBox="0 0 280 240"
       style={{ display: 'block' }}
+      role="img"
+      aria-label={`카테고리별 풀이 수: ${AXES.map(({ key, label }) => `${label} ${categoryStats[key] ?? 0}문제`).join(', ')}`}
     >
       {/* 그리드 레벨 */}
       {gridLevels.map((ratio) => (
