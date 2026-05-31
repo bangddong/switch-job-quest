@@ -207,17 +207,7 @@ export interface CodingRankResult {
   mediumCount: number
   hardCount: number
   currentStreak: number
-  categoryStats: {
-    ARRAY: number
-    HASH_MAP: number
-    STACK_QUEUE: number
-    BINARY_SEARCH: number
-    RECURSION: number
-    TREE: number
-    GRAPH: number
-    GREEDY: number
-    DP: number
-  }
+  categoryStats: Record<string, number>
 }
 
 export interface CodingQuestState {
