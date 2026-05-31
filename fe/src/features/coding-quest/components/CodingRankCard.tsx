@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { CodingRankResult } from '@/types/api.types'
 import { fetchCodingRank } from '@/lib/apiClient'
+import { CategoryRadarChart } from './CategoryRadarChart'
 
 const TIER_COLORS: Record<string, string> = {
   아이언: '#9CA3AF',
@@ -209,6 +210,14 @@ export function CodingRankCard() {
           🔥 {rank.currentStreak}일 연속 풀이 중
         </div>
       )}
+
+      {/* 카테고리 레이더 차트 */}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ fontSize: 11, color: '#475569', fontFamily: "'Courier New', monospace", marginBottom: 4, letterSpacing: '0.05em' }}>
+          CATEGORY
+        </div>
+        <CategoryRadarChart categoryStats={rank.categoryStats} tierColor={tierColor} />
+      </div>
     </div>
   )
 }

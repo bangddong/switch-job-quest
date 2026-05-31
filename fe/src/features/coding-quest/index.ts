@@ -1,3 +1,4 @@
+export { CategoryRadarChart } from './components/CategoryRadarChart'
 export { CodingQuestPage } from './components/CodingQuestPage'
 export { CodingRoadmapPage } from './components/CodingRoadmapPage'
 export { CodingRankCard } from './components/CodingRankCard'
