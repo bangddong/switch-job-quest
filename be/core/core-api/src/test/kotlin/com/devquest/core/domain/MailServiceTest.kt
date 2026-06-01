@@ -88,4 +88,67 @@ class MailServiceTest {
             )
         }
     }
+
+    // sendDailyCodingProblem 테스트
+
+    @Test
+    fun `코딩 문제 - MAIL_ENABLED=false이면 mailSender를 호출하지 않는다`() {
+        val service = mailService(enabled = false)
+
+        service.sendDailyCodingProblem(
+            to = "user@test.com",
+            problemTitle = "두 수의 합",
+            deepLink = "https://devquest.kr/coding"
+        )
+
+        verify(mailSender, never()).send(any<SimpleMailMessage>())
+    }
+
+    @Test
+    fun `코딩 문제 - MAIL_ENABLED=true이면 mailSender를 호출한다`() {
+        val service = mailService(enabled = true)
+
+        service.sendDailyCodingProblem(
+            to = "user@test.com",
+            problemTitle = "두 수의 합",
+            deepLink = "https://devquest.kr/coding"
+        )
+
+        verify(mailSender).send(any<SimpleMailMessage>())
+    }
+
+    @Test
+    fun `코딩 문제 발송 메시지에 수신자, 발신자, 제목, 문제 제목이 포함된다`() {
+        val service = mailService(enabled = true)
+        val captor = argumentCaptor<SimpleMailMessage>()
+
+        service.sendDailyCodingProblem(
+            to = "user@test.com",
+            problemTitle = "두 수의 합",
+            deepLink = "https://devquest.kr/coding"
+        )
+
+        verify(mailSender).send(captor.capture())
+        val message = captor.firstValue
+
+        assertTrue(message.to?.contains("user@test.com") == true)
+        assertTrue(message.from == from)
+        assertTrue(message.subject?.contains("[DevQuest]") == true)
+        assertTrue(message.text?.contains("두 수의 합") == true)
+        assertTrue(message.text?.contains("https://devquest.kr/coding") == true)
+    }
+
+    @Test
+    fun `코딩 문제 - mailSender 예외 발생 시 호출자에게 예외를 전파한다`() {
+        val service = mailService(enabled = true)
+        doThrow(MailSendException("SMTP 연결 실패")).`when`(mailSender).send(any<SimpleMailMessage>())
+
+        assertThrows<MailSendException> {
+            service.sendDailyCodingProblem(
+                to = "user@test.com",
+                problemTitle = "두 수의 합",
+                deepLink = "https://devquest.kr/coding"
+            )
+        }
+    }
 }
