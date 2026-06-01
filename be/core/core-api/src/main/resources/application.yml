@@ -56,6 +56,6 @@ devquest:
     jwt-secret: ${JWT_SECRET}
     jwt-expiration-ms: ${JWT_EXPIRATION_MS:2592000000}
   mail:
-    from: noreply@devquest.kr
+    from: noreply@dhbang.co.kr
     enabled: ${MAIL_ENABLED:false}
 
