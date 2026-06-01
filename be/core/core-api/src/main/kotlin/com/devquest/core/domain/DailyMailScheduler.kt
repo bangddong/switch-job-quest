@@ -42,7 +42,7 @@ class DailyMailScheduler(
         log.info("데일리 기술 면접 메일 발송 시작: 대상 수=${targets.size}")
         targets.forEach { (userId, email) ->
             runCatching {
-                val sent = mailService.sendDailyTechInterview(email, question, deepLink)
+                val sent = mailService.sendDailyTechInterview(to = email, question = question, deepLink = deepLink)
                 if (sent) {
                     dailyMailLogPort.save(userId, "TECH_INTERVIEW", question, LocalDateTime.now())
                 }
