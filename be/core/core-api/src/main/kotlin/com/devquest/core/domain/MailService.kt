@@ -20,7 +20,7 @@ class MailService(
             return false
         }
         val message = SimpleMailMessage().apply {
-            setFrom(from)
+            setFrom(this@MailService.from)
             setTo(to)
             subject = "[DevQuest] 오늘의 기술 면접 질문이 도착했어요!"
             text = """
@@ -44,7 +44,7 @@ class MailService(
             return
         }
         val message = SimpleMailMessage().apply {
-            setFrom(from)
+            setFrom(this@MailService.from)
             setTo(to)
             subject = "[DevQuest] 오늘의 코딩 문제가 도착했어요!"
             text = """
