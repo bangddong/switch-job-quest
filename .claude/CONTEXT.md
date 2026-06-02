@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `fix/mobile-coding-editor-ux` |
-| 열린 PR | #163 — fix(fe): 모바일 코딩 에디터 스크롤·코드 잘림·키보드 미표시 수정 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
