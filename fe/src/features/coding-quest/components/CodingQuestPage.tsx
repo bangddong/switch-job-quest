@@ -295,6 +295,7 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
+            aria-label="코드 입력"
             style={{
               width: '100%',
               height: '100%',
