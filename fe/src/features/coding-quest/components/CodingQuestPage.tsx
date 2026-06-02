@@ -162,6 +162,7 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
         background: '#0F172A',
         overflowY: 'auto',
         padding: 24,
+        minHeight: 0,
         ...(isMobile ? { flex: 1 } : { width: '38%', flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.08)' }),
       }}
     >
@@ -235,11 +236,11 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
                     fontSize: 13,
                   }}
                 >
-                  <div style={{ color: '#475569', marginBottom: 4 }}>
-                    입력: <span style={{ color: '#F1F5F9', fontFamily: 'monospace' }}>{tc.input}</span>
+                  <div style={{ color: '#475569', marginBottom: 4, overflowX: 'auto' }}>
+                    입력: <span style={{ color: '#F1F5F9', fontFamily: 'monospace', display: 'inline-block', wordBreak: 'break-all' }}>{tc.input}</span>
                   </div>
-                  <div style={{ color: '#475569' }}>
-                    출력: <span style={{ color: '#4ECDC4', fontFamily: 'monospace' }}>{tc.expectedOutput}</span>
+                  <div style={{ color: '#475569', overflowX: 'auto' }}>
+                    출력: <span style={{ color: '#4ECDC4', fontFamily: 'monospace', display: 'inline-block', wordBreak: 'break-all' }}>{tc.expectedOutput}</span>
                   </div>
                 </div>
               ))}
@@ -284,20 +285,45 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
         </div>
       )}
 
-      {/* Monaco Editor */}
+      {/* Monaco Editor (데스크탑) / Textarea (모바일) */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <Editor
-          height="100%"
-          language={monacoLang}
-          value={code}
-          onChange={(val) => handleCodeChange(val ?? '')}
-          theme="vs-dark"
-          options={{
-            ...editorOptions,
-            fontFamily: 'Consolas, "Courier New", monospace',
-            automaticLayout: true,
-          }}
-        />
+        {isMobile ? (
+          <textarea
+            value={code}
+            onChange={(e) => handleCodeChange(e.target.value)}
+            spellCheck={false}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            style={{
+              width: '100%',
+              height: '100%',
+              background: '#1E293B',
+              color: '#F1F5F9',
+              fontFamily: 'Consolas, "Courier New", monospace',
+              fontSize: 13,
+              border: 'none',
+              outline: 'none',
+              padding: 12,
+              resize: 'none',
+              boxSizing: 'border-box',
+              lineHeight: 1.6,
+            }}
+          />
+        ) : (
+          <Editor
+            height="100%"
+            language={monacoLang}
+            value={code}
+            onChange={(val) => handleCodeChange(val ?? '')}
+            theme="vs-dark"
+            options={{
+              ...editorOptions,
+              fontFamily: 'Consolas, "Courier New", monospace',
+              automaticLayout: true,
+            }}
+          />
+        )}
       </div>
 
       {/* 결과 패널 */}
@@ -554,11 +580,11 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
 
       {/* 본문 영역 */}
       {isMobile ? (
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, overflow: 'hidden', display: mobileTab === 'problem' ? 'flex' : 'none', flexDirection: 'column' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ flex: 1, overflow: 'hidden', display: mobileTab === 'problem' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0 }}>
             {problemPanel}
           </div>
-          <div style={{ flex: 1, overflow: 'hidden', display: mobileTab === 'code' ? 'flex' : 'none', flexDirection: 'column' }}>
+          <div style={{ flex: 1, overflow: 'hidden', display: mobileTab === 'code' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0 }}>
             {editorPanel}
           </div>
         </div>
