@@ -29,7 +29,7 @@ class AiCallLogAdapter(
                 )
             )
         } catch (e: Exception) {
-            this.log.warn("AiCallLog 저장 실패 (무시): {}", e.message)
+            this.log.warn("AiCallLog 저장 실패 (무시)", e)
         }
     }
 }

@@ -74,13 +74,13 @@ class CacheMetricsAdvisor(
                     )
                 )
             }.onFailure { e ->
-                log.warn("AI call log 저장 실패 (무시): {}", e.message)
+                log.warn("AI 메트릭 DB 저장 실패", e)
             }
 
             meterRegistry.counter("ai.call.total", "evaluator", evaluatorName, "model", modelName).increment()
-            meterRegistry.timer("ai.call.duration", "evaluator", evaluatorName).record(latencyMs, TimeUnit.MILLISECONDS)
-            meterRegistry.counter("ai.tokens.input", "evaluator", evaluatorName).increment(inputTokens.toDouble())
-            meterRegistry.counter("ai.tokens.output", "evaluator", evaluatorName).increment(outputTokens.toDouble())
+            meterRegistry.timer("ai.call.duration", "evaluator", evaluatorName, "model", modelName).record(latencyMs, TimeUnit.MILLISECONDS)
+            meterRegistry.counter("ai.tokens.input", "evaluator", evaluatorName, "model", modelName).increment(inputTokens.toDouble())
+            meterRegistry.counter("ai.tokens.output", "evaluator", evaluatorName, "model", modelName).increment(outputTokens.toDouble())
 
         }.onFailure { e ->
             log.debug("Failed to extract cache metrics", e)
