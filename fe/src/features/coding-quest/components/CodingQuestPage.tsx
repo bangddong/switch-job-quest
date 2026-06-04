@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Editor from '@monaco-editor/react'
+import CodeMirror from '@uiw/react-codemirror'
+import { java } from '@codemirror/lang-java'
+import { closeBrackets } from '@codemirror/autocomplete'
+import { indentWithTab } from '@codemirror/commands'
+import { keymap } from '@codemirror/view'
 import type { CodingProblem, CodingSubmissionResult, CodingLevelResult, CodingQuestState } from '@/types/api.types'
 import { fetchCodingProblem, submitCode, fetchCodingLevel } from '@/lib/apiClient'
 import { HintSection } from './HintSection'
@@ -141,6 +146,12 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
       setSubmitting(false)
     }
   }
+
+  const cmExtensions = useMemo(() => [
+    ...(language === 'JAVA' ? [java()] : []),
+    closeBrackets(),
+    keymap.of([indentWithTab]),
+  ], [language])
 
   const editorOptions = {
     fontSize: isMobile ? 13 : 14,
@@ -285,32 +296,30 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
         </div>
       )}
 
-      {/* Monaco Editor (데스크탑) / Textarea (모바일) */}
+      {/* Monaco Editor (데스크탑) / CodeMirror (모바일) */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {isMobile ? (
-          <textarea
-            value={code}
-            onChange={(e) => handleCodeChange(e.target.value)}
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            aria-label="코드 입력"
-            style={{
-              width: '100%',
-              height: '100%',
-              background: '#1E293B',
-              color: '#F1F5F9',
-              fontFamily: 'Consolas, "Courier New", monospace',
-              fontSize: 13,
-              border: 'none',
-              outline: 'none',
-              padding: 12,
-              resize: 'none',
-              boxSizing: 'border-box',
-              lineHeight: 1.6,
-            }}
-          />
+          <div aria-label="코드 입력" role="region" style={{ height: '100%' }}>
+            <CodeMirror
+              value={code}
+              onChange={handleCodeChange}
+              extensions={cmExtensions}
+              theme="dark"
+              height="100%"
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLine: true,
+                bracketMatching: true,
+                autocompletion: false,
+                foldGutter: false,
+              }}
+              style={{
+                height: '100%',
+                fontSize: 13,
+                fontFamily: 'Consolas, "Courier New", monospace',
+              }}
+            />
+          </div>
         ) : (
           <Editor
             height="100%"
