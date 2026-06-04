@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Editor from '@monaco-editor/react'
+import CodeMirror from '@uiw/react-codemirror'
+import { java } from '@codemirror/lang-java'
+import { closeBrackets } from '@codemirror/autocomplete'
+import { indentWithTab } from '@codemirror/commands'
+import { keymap } from '@codemirror/view'
 import type { CodingProblem, CodingSubmissionResult, CodingLevelResult, CodingQuestState } from '@/types/api.types'
 import { fetchCodingProblem, submitCode, fetchCodingLevel } from '@/lib/apiClient'
 import { HintSection } from './HintSection'
@@ -141,6 +146,12 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
       setSubmitting(false)
     }
   }
+
+  const cmExtensions = useMemo(() => [
+    java(),
+    closeBrackets(),
+    keymap.of([indentWithTab]),
+  ], [])
 
   const editorOptions = {
     fontSize: isMobile ? 13 : 14,
@@ -285,30 +296,26 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
         </div>
       )}
 
-      {/* Monaco Editor (데스크탑) / Textarea (모바일) */}
+      {/* Monaco Editor (데스크탑) / CodeMirror (모바일) */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {isMobile ? (
-          <textarea
+          <CodeMirror
             value={code}
-            onChange={(e) => handleCodeChange(e.target.value)}
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            aria-label="코드 입력"
+            onChange={handleCodeChange}
+            extensions={cmExtensions}
+            theme="dark"
+            height="100%"
+            basicSetup={{
+              lineNumbers: true,
+              highlightActiveLine: true,
+              bracketMatching: true,
+              autocompletion: false,
+              foldGutter: false,
+            }}
             style={{
-              width: '100%',
               height: '100%',
-              background: '#1E293B',
-              color: '#F1F5F9',
-              fontFamily: 'Consolas, "Courier New", monospace',
               fontSize: 13,
-              border: 'none',
-              outline: 'none',
-              padding: 12,
-              resize: 'none',
-              boxSizing: 'border-box',
-              lineHeight: 1.6,
+              fontFamily: 'Consolas, "Courier New", monospace',
             }}
           />
         ) : (
