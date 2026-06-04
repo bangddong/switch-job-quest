@@ -27,7 +27,7 @@ class ResumeCheckEvaluator(
             "resumeContent" to resumeContent,
         ))
 
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(ResumeCheckResult::class.java)
                 ?.let { it.copy(passed = PassCriteriaPolicy.evaluate(it.overallScore)) }
         }

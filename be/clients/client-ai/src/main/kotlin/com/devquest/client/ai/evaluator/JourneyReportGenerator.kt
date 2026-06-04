@@ -44,7 +44,7 @@ class JourneyReportGenerator(
             "highestQuestId" to (highestEntry?.key ?: ""),
         ))
 
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JourneyReportResult::class.java)
         }
     }

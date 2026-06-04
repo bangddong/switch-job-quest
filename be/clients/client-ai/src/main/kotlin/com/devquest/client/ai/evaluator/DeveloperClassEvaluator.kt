@@ -26,7 +26,7 @@ class DeveloperClassEvaluator(
             "careerEssayJson" to careerEssayJson.ifBlank { "{}" },
         ))
 
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(DeveloperClassResult::class.java)
         }
     }

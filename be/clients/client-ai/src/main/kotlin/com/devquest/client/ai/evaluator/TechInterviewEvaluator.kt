@@ -23,7 +23,7 @@ class TechInterviewEvaluator(
     override fun generateQuestions(techStack: String): TechInterviewResult {
         val systemPrompt = questionsSystemTemplate.render()
         val userPrompt = questionsUserTemplate.render(mapOf("techStack" to techStack))
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
@@ -38,7 +38,7 @@ class TechInterviewEvaluator(
     override fun generateDailyQuestion(techStack: String): String {
         val systemPrompt = dailyQuestionSystemTemplate.render()
         val userPrompt = dailyQuestionUserTemplate.render(mapOf("techStack" to techStack))
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
@@ -56,7 +56,7 @@ class TechInterviewEvaluator(
             "techStack" to techStack,
             "questionsAndAnswers" to questionsAndAnswers,
         ))
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
