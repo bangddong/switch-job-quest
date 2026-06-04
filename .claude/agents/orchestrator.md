@@ -7,13 +7,13 @@ hooks:
   UserPromptSubmit:
     - hooks:
         - type: command
-          command: "python3 .claude/scripts/inject-clarify-gate.py || python .claude/scripts/inject-clarify-gate.py"
+          command: "python3 /e/development/switch-job-quest/.claude/scripts/inject-clarify-gate.py || python /e/development/switch-job-quest/.claude/scripts/inject-clarify-gate.py"
           timeout: 5
   PreToolUse:
     - matcher: "Write|Edit"
       hooks:
         - type: command
-          command: ".claude/scripts/assert-orchestrator-path.sh"
+          command: "/e/development/switch-job-quest/.claude/scripts/assert-orchestrator-path.sh"
   PostToolUse:
     - matcher: ".*"
       hooks:
