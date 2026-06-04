@@ -26,7 +26,7 @@ class SystemDesignEvaluator(
             "considerations" to considerations.mapIndexed { i, c -> "${i + 1}. $c" }.joinToString("\n"),
         ))
 
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(AiEvaluationResult::class.java)
         }
     }

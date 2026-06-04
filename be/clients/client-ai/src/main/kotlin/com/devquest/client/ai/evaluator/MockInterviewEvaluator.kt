@@ -48,7 +48,7 @@ class MockInterviewEvaluator(
             "yearsOfExperience" to yearsOfExperience,
         ))
 
-        return aiCallExecutor.execute {
+        return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(InterviewEvaluationResult::class.java)
         }
     }

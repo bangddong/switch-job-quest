@@ -40,7 +40,7 @@ class CompanyFitEvaluator(
             "companiesText" to companiesText,
         ))
 
-        val response = aiCallExecutor.execute {
+        val response = aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
         }
 

@@ -11,21 +11,26 @@ class AiCallExecutor(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    fun <T> execute(action: () -> T?): T {
-        var lastException: Exception? = null
-        repeat(maxRetry) { attempt ->
-            try {
-                val result = action()
-                if (result != null) return result
-                logger.warn("AI 응답 null — 재시도 {}/{}", attempt + 1, maxRetry)
-            } catch (e: Exception) {
-                lastException = e
-                logger.warn("AI 호출 실패 — 재시도 {}/{}: {}", attempt + 1, maxRetry, e.message)
+    fun <T> execute(evaluatorName: String = "Unknown", action: () -> T?): T {
+        AiCallContext.set(evaluatorName)
+        try {
+            var lastException: Exception? = null
+            repeat(maxRetry) { attempt ->
+                try {
+                    val result = action()
+                    if (result != null) return result
+                    logger.warn("AI 응답 null — 재시도 {}/{}", attempt + 1, maxRetry)
+                } catch (e: Exception) {
+                    lastException = e
+                    logger.warn("AI 호출 실패 — 재시도 {}/{}: {}", attempt + 1, maxRetry, e.message)
+                }
             }
+            throw AiEvaluationException(
+                "${maxRetry}회 시도 후 최종 실패",
+                lastException
+            )
+        } finally {
+            AiCallContext.clear()
         }
-        throw AiEvaluationException(
-            "${maxRetry}회 시도 후 최종 실패",
-            lastException
-        )
     }
 }
