@@ -148,10 +148,10 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
   }
 
   const cmExtensions = useMemo(() => [
-    java(),
+    ...(language === 'JAVA' ? [java()] : []),
     closeBrackets(),
     keymap.of([indentWithTab]),
-  ], [])
+  ], [language])
 
   const editorOptions = {
     fontSize: isMobile ? 13 : 14,
@@ -299,25 +299,27 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
       {/* Monaco Editor (데스크탑) / CodeMirror (모바일) */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {isMobile ? (
-          <CodeMirror
-            value={code}
-            onChange={handleCodeChange}
-            extensions={cmExtensions}
-            theme="dark"
-            height="100%"
-            basicSetup={{
-              lineNumbers: true,
-              highlightActiveLine: true,
-              bracketMatching: true,
-              autocompletion: false,
-              foldGutter: false,
-            }}
-            style={{
-              height: '100%',
-              fontSize: 13,
-              fontFamily: 'Consolas, "Courier New", monospace',
-            }}
-          />
+          <div aria-label="코드 입력" role="region" style={{ height: '100%' }}>
+            <CodeMirror
+              value={code}
+              onChange={handleCodeChange}
+              extensions={cmExtensions}
+              theme="dark"
+              height="100%"
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLine: true,
+                bracketMatching: true,
+                autocompletion: false,
+                foldGutter: false,
+              }}
+              style={{
+                height: '100%',
+                fontSize: 13,
+                fontFamily: 'Consolas, "Courier New", monospace',
+              }}
+            />
+          </div>
         ) : (
           <Editor
             height="100%"
