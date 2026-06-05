@@ -1,7 +1,6 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
-import com.devquest.core.domain.model.evaluation.ResumeCheckResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -23,7 +22,7 @@ class ResumeCheckEvaluatorTest {
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
-        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content())
             .thenReturn(null)
 
         assertThatThrownBy {
@@ -39,14 +38,9 @@ class ResumeCheckEvaluatorTest {
 
     @Test
     fun `AI가 정상 응답을 반환하면 결과를 그대로 반환한다`() {
-        val expected = ResumeCheckResult(
-            overallScore = 72,
-            starMethodScore = 28,
-            quantificationScore = 22,
-            keywordMatchScore = 22
-        )
-        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
-            .thenReturn(expected)
+        val json = """{"overallScore":72,"passed":true,"starMethodScore":28,"quantificationScore":22,"keywordMatchScore":22}"""
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content())
+            .thenReturn(json)
 
         val result = evaluator.evaluate(
             targetCompany = "토스",
@@ -62,9 +56,9 @@ class ResumeCheckEvaluatorTest {
 
     @Test
     fun `overallScore가 70 이상이면 passed가 true이다`() {
-        val expected = ResumeCheckResult(overallScore = 70)
-        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
-            .thenReturn(expected)
+        val json = """{"overallScore":70,"starMethodScore":28,"quantificationScore":21,"keywordMatchScore":21}"""
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content())
+            .thenReturn(json)
 
         val result = evaluator.evaluate(
             targetCompany = "토스",
@@ -77,9 +71,9 @@ class ResumeCheckEvaluatorTest {
 
     @Test
     fun `overallScore가 70 미만이면 passed가 false이다`() {
-        val expected = ResumeCheckResult(overallScore = 69)
-        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(ResumeCheckResult::class.java))
-            .thenReturn(expected)
+        val json = """{"overallScore":69,"starMethodScore":25,"quantificationScore":22,"keywordMatchScore":22}"""
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content())
+            .thenReturn(json)
 
         val result = evaluator.evaluate(
             targetCompany = "토스",
