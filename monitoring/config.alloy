@@ -1,0 +1,20 @@
+// Grafana Alloy 설정
+// devquest-api.internal:8080/actuator/prometheus 스크랩 → Grafana Cloud push
+
+prometheus.scrape "devquest" {
+  targets = [{"__address__" = "devquest-api.internal:8080"}]
+  metrics_path = "/actuator/prometheus"
+  scrape_interval = "30s"
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = env("GRAFANA_USERNAME")
+      password = env("GRAFANA_API_KEY")
+    }
+  }
+}

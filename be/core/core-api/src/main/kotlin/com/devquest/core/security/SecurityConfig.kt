@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
@@ -26,7 +27,12 @@ class SecurityConfig(
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .cors { it.configurationSource(corsConfigurationSource()) }
             .authorizeHttpRequests {
-                it.requestMatchers("/api/v1/auth/**", "/health", "/actuator/**").permitAll()
+                it.requestMatchers("/api/v1/auth/**", "/health", "/actuator/health").permitAll()
+                it.requestMatchers("/actuator/**").access(
+                    WebExpressionAuthorizationManager(
+                        "hasIpAddress('127.0.0.1') or hasIpAddress('::1') or hasIpAddress('fdaa:0:0:0:0:0:0:0/16')"
+                    )
+                )
                 it.anyRequest().authenticated()
             }
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter::class.java)
