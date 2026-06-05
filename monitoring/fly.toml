@@ -4,12 +4,8 @@ primary_region = "nrt"
 [build]
   dockerfile = "Dockerfile"
 
-[http_service]
-  internal_port = 12345
-  force_https = false
-  auto_stop_machines = "suspend"
-  auto_start_machines = true
-  min_machines_running = 1
+# http_service 미사용 — Alloy는 outbound scrape/push만 수행, inbound 불필요
+[checks]
 
 [[vm]]
   memory = "256mb"

@@ -30,7 +30,7 @@ class SecurityConfig(
                 it.requestMatchers("/api/v1/auth/**", "/health", "/actuator/health").permitAll()
                 it.requestMatchers("/actuator/**").access(
                     WebExpressionAuthorizationManager(
-                        "hasIpAddress('127.0.0.1') or hasIpAddress('::1') or hasIpAddress('fdaa:0:0:0:0:0:0:0/16')"
+                        "hasIpAddress('127.0.0.1') or hasIpAddress('::1') or hasIpAddress('fdaa::/16')"
                     )
                 )
                 it.anyRequest().authenticated()
