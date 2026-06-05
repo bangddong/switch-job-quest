@@ -1,0 +1,13 @@
+app = "devquest-metrics"
+primary_region = "nrt"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# http_service 미사용 — Alloy는 outbound scrape/push만 수행, inbound 불필요
+[checks]
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

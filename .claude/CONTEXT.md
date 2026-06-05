@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `feat/prometheus-security-grafana-cloud` |
+| 열린 PR | 진행 중 — Prometheus 보안 + Grafana Cloud 시각화 |
 
 
 

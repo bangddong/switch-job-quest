@@ -1,0 +1,21 @@
+// Grafana Alloy 설정
+// devquest-api.flycast/actuator/prometheus 스크랩 → Grafana Cloud push
+// .flycast = Fly 내부 proxy 경유 → suspended machine도 auto-start 가능
+
+prometheus.scrape "devquest" {
+  targets = [{"__address__" = "devquest-api.flycast"}]
+  metrics_path = "/actuator/prometheus"
+  scrape_interval = "60s"
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = "https://prometheus-prod-49-prod-ap-northeast-0.grafana.net/api/prom/push"
+
+    basic_auth {
+      username = "3284556"
+      password = env("GRAFANA_API_KEY")
+    }
+  }
+}

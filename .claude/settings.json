@@ -15,7 +15,8 @@
       "Bash(./gradlew *:dependencies *)",
       "Bash(./gradlew --version)",
       "Bash(curl -s https://devquest-api.fly.dev/*)",
-      "Bash(curl -s https://api.quest.dhbang.co.kr/*)"
+      "Bash(curl -s https://api.quest.dhbang.co.kr/*)",
+      "Bash(psql * -c *)"
     ]
   },
   "hooks": {
