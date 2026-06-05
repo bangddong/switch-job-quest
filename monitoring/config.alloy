@@ -1,22 +1,14 @@
 // Grafana Alloy 설정
-// devquest-api.flycast/actuator/prometheus 스크랩 → Grafana Cloud push
-// .flycast = Fly 내부 proxy 경유 → suspended machine도 auto-start 가능
-// scheme=https + insecure_skip_verify: force_https=true 설정 대응
-//   flycast는 Fly.io 사설 네트워크 내부 전용 — 외부에서 접근 불가
-//   TLS 인증서가 devquest-api.fly.dev용이라 flycast 호스트명으로 검증 실패
-//   → insecure_skip_verify=true로 인증서 검증만 건너뜀
-//   개선 방향: Fly.io 내부 CA(또는 자체 서명 인증서)로 전환하면 이 옵션 제거 가능
+// devquest-api.internal:8080/actuator/prometheus 스크랩 → Grafana Cloud push
+// .internal:8080 = Fly 6PN 직접 연결 (Fly proxy 우회)
+//   - flycast(.flycast) 대비 force_https redirect 없이 HTTP 직접 도달
+//   - suspended machine 미자동기동 → devquest-api의 min_machines_running=1로 보완
+//   - 요청 소스 IP = fdaa::/16 → SecurityConfig IP 화이트리스트 통과
 
 prometheus.scrape "devquest" {
-  targets = [{"__address__" = "devquest-api.flycast"}]
+  targets = [{"__address__" = "devquest-api.internal:8080"}]
   metrics_path = "/actuator/prometheus"
   scrape_interval = "60s"
-  scheme = "https"
-
-  tls_config {
-    insecure_skip_verify = true
-  }
-
   forward_to = [prometheus.remote_write.grafana_cloud.receiver]
 }
 
