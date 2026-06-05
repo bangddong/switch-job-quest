@@ -65,6 +65,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #169 | Alloy scrape HTTPS+TLS skip 수정 — flycast force_https 대응으로 up=0 버그 수정 | 2026-06-05 |
 | #168 | Prometheus 엔드포인트 IP 화이트리스트(fdaa::/16) + Grafana Alloy → Grafana Cloud 시각화 | 2026-06-05 |
 | #166 | AI 호출 메트릭 수집 — DB 저장(ai_call_log) + Prometheus (evaluator·모델·토큰·latency) | 2026-06-04 |
 | #165 | 모바일 코딩 에디터 CodeMirror 6 교체 (문법 강조·괄호 자동 닫기·Tab 들여쓰기) + orchestrator 훅 절대경로 수정 | 2026-06-04 |
