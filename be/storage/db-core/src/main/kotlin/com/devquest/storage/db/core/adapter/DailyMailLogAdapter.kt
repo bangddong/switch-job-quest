@@ -3,6 +3,7 @@ package com.devquest.storage.db.core.adapter
 import com.devquest.core.domain.port.DailyMailLogPort
 import com.devquest.storage.db.core.DailyMailLogEntity
 import com.devquest.storage.db.core.DailyMailLogRepository
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -28,4 +29,7 @@ class DailyMailLogAdapter(
         val end = date.plusDays(1).atStartOfDay()
         return repository.existsByUserIdAndMailTypeAndSentAtBetween(userId, mailType, start, end)
     }
+
+    override fun findRecentQuestions(mailType: String, limit: Int): List<String> =
+        repository.findRecentQuestionContents(mailType, PageRequest.of(0, limit))
 }

@@ -35,9 +35,13 @@ class TechInterviewEvaluator(
     private val dailyQuestionSystemTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-system.st"))
     private val dailyQuestionUserTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-user.st"))
 
-    override fun generateDailyQuestion(techStack: String): String {
+    override fun generateDailyQuestion(techStack: String, recentQuestions: List<String>): String {
         val systemPrompt = dailyQuestionSystemTemplate.render()
-        val userPrompt = dailyQuestionUserTemplate.render(mapOf("techStack" to techStack))
+        val userPrompt = dailyQuestionUserTemplate.render(mapOf(
+            "techStack" to techStack,
+            "recentQuestions" to if (recentQuestions.isEmpty()) "없음"
+                else recentQuestions.mapIndexed { i, q -> "${i + 1}. $q" }.joinToString("\n"),
+        ))
         return aiCallExecutor.execute(this.javaClass.simpleName) {
             chatClient.prompt()
                 .system(systemPrompt)
