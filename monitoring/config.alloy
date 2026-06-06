@@ -1,13 +1,13 @@
 // Grafana Alloy 설정
-// devquest-api.flycast/actuator/prometheus 스크랩 → Grafana Cloud push
-// .flycast = Fly 내부 proxy 경유
-//   - fly-proxy → app:8080 포워딩 (소스 IP = 127.0.0.1)
-//   - SecurityConfig: hasIpAddress('127.0.0.1') 이미 허용
-//   - flycast 내부 트래픽은 HTTP (force_https=true는 외부 요청에만 적용)
+// devquest-api.internal:9091/actuator/prometheus 스크랩 → Grafana Cloud push
+// 9091 = Spring Boot management port (6PN 직접 연결)
+//   - [http_service] internal_port(8080)는 fly-init nftables로 외부 차단
+//   - management port(9091)는 nftables 미적용 → 6PN 직접 접근 가능
+//   - server.address="::" 로 IPv6(fdaa::/16) 바인딩
 //   - min_machines_running=1로 suspended machine 문제 보완
 
 prometheus.scrape "devquest" {
-  targets = [{"__address__" = "devquest-api.flycast"}]
+  targets = [{"__address__" = "devquest-api.internal:9091"}]
   metrics_path = "/actuator/prometheus"
   scrape_interval = "60s"
   forward_to = [prometheus.remote_write.grafana_cloud.receiver]

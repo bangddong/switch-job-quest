@@ -19,6 +19,11 @@ server:
     include-stacktrace: never
     include-message: never
 
+management:
+  server:
+    port: 9091
+    address: "::"
+
 storage:
   datasource:
     core:
