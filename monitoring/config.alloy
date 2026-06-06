@@ -1,21 +1,15 @@
 // Grafana Alloy 설정
 // devquest-api.flycast/actuator/prometheus 스크랩 → Grafana Cloud push
 // .flycast = Fly 내부 proxy 경유
-//   - fly-proxy가 TLS 처리 후 app:8080으로 포워딩 (소스 IP = 127.0.0.1)
+//   - fly-proxy → app:8080 포워딩 (소스 IP = 127.0.0.1)
 //   - SecurityConfig: hasIpAddress('127.0.0.1') 이미 허용
-//   - force_https=true 대응: scheme=https + insecure_skip_verify
+//   - flycast 내부 트래픽은 HTTP (force_https=true는 외부 요청에만 적용)
 //   - min_machines_running=1로 suspended machine 문제 보완
 
 prometheus.scrape "devquest" {
   targets = [{"__address__" = "devquest-api.flycast"}]
   metrics_path = "/actuator/prometheus"
   scrape_interval = "60s"
-  scheme = "https"
-
-  tls_config {
-    insecure_skip_verify = true
-  }
-
   forward_to = [prometheus.remote_write.grafana_cloud.receiver]
 }
 
