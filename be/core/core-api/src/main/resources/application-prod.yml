@@ -14,15 +14,14 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 server:
-  address: "::"
   error:
     include-stacktrace: never
     include-message: never
 
-management:
-  server:
-    port: 9091
-    address: "::"
+grafana:
+  otlp:
+    enabled: true
+    instance-id: "3284556"
 
 storage:
   datasource:
