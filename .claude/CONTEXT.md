@@ -54,8 +54,26 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `fix/spring-ipv6-binding` |
+| 열린 PR | 진행 중 — Alloy 제거 + Micrometer OTLP push 전환 |
+
+### 진행 중 작업 상세 (fix/spring-ipv6-binding)
+
+**목표**: Grafana Alloy 완전 제거 → Spring Boot Micrometer OTLP로 직접 push
+
+**완료된 변경**:
+- `support/monitoring/build.gradle.kts`: `micrometer-registry-otlp` 추가
+- `support/monitoring/OtlpMetricsConfig.kt`: 신규 생성 (`@ConditionalOnProperty("grafana.otlp.enabled")`)
+- `support/monitoring/monitoring.yml`: grafana.otlp 기본값 추가
+- `application-prod.yml`: grafana.otlp.enabled=true, instance-id="3284556" 추가, management.server.port 제거
+- `monitoring/` 디렉토리 삭제 (Alloy Dockerfile/config.alloy/fly.toml)
+- `devquest-metrics` Fly.io 앱 destroy 완료
+
+**현재 블로커**:
+- `GRAFANA_API_KEY` Fly.io 시크릿이 목록에서 사라짐 (원인 불명)
+- 재설정했으나 키 값이 올바르지 않아 401 "invalid token" 응답
+- **사용자로부터 올바른 Grafana API Key 값 수령 필요**
+- Grafana Cloud → Administration → Service Accounts 또는 API Keys에서 확인 (`glc_`로 시작)
 
 
 

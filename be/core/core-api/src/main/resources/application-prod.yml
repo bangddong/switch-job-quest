@@ -18,6 +18,11 @@ server:
     include-stacktrace: never
     include-message: never
 
+grafana:
+  otlp:
+    enabled: true
+    instance-id: "3284556"
+
 storage:
   datasource:
     core:
