@@ -14,7 +14,7 @@
 
 passed 기준: overallScore >= 70
 
-반드시 아래 JSON 형식으로만 응답하세요:
+반드시 아래 JSON 형식으로만 응답하세요 (다른 텍스트 금지):
 \{
   "questions": ["평가한 질문 목록"],
   "overallScore": 0,

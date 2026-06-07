@@ -1,7 +1,6 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
-import com.devquest.core.domain.model.evaluation.InterviewEvaluationResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -23,7 +22,7 @@ class MockInterviewEvaluatorTest {
 
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException이 발생한다`() {
-        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(InterviewEvaluationResult::class.java))
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content())
             .thenReturn(null)
 
         assertThatThrownBy {
@@ -42,14 +41,9 @@ class MockInterviewEvaluatorTest {
 
     @Test
     fun `AI가 정상 응답을 반환하면 결과를 그대로 반환한다`() {
-        val expected = InterviewEvaluationResult(
-            questionId = "q-1",
-            question = "JVM이란?",
-            score = 80,
-            passed = true
-        )
-        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(InterviewEvaluationResult::class.java))
-            .thenReturn(expected)
+        val json = """{"questionId":"q-1","question":"JVM이란?","score":80,"passed":true}"""
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content())
+            .thenReturn(json)
 
         val result = evaluator.evaluate(
             category = "JVM",

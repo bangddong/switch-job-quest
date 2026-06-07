@@ -9,7 +9,7 @@
 
 passed 기준: overallScore >= 70이면 true
 
-반드시 다음 JSON 형식으로만 응답하세요:
+반드시 다음 JSON 형식으로만 응답하세요 (다른 텍스트 금지):
 \{
     "overallScore": 75,
     "passed": true,

@@ -49,7 +49,8 @@ class MockInterviewEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(InterviewEvaluationResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, InterviewEvaluationResult::class.java)
         }
     }
 
