@@ -61,35 +61,41 @@ jobs:
         if: steps.collect.outputs.has_issues == 'true'
         run: npm install -g @anthropic-ai/claude-code
 
-      - name: Generate prompt and run Claude
+      - name: Generate prompt
+        if: steps.collect.outputs.has_issues == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const issues = JSON.parse(fs.readFileSync('/tmp/issues.json', 'utf8'));
+            const items = issues.map(i =>
+              `### 이슈 #${i.number}: ${i.title}\n\n${i.body}`
+            ).join('\n\n---\n\n');
+
+            const prompt = [
+              '당신은 Spring Boot(Kotlin) + React(TypeScript) 풀스택 프로젝트의 코드 개선 담당자입니다.',
+              '',
+              '다음은 GitHub 이슈에서 수용된 코드 개선 제안들입니다.',
+              '각 제안에 대해 해당 파일을 읽고 개선 사항을 적용해주세요.',
+              '',
+              '## 규칙',
+              '- be/ 경로 파일: Kotlin/Spring Boot 컨벤션 (be/CLAUDE.md 참고)',
+              '- fe/ 경로 파일: React/TypeScript 컨벤션 (fe/CLAUDE.md 참고)',
+              '- 수정 범위는 제안된 부분만, 불필요한 리팩토링 금지',
+              '- 각 이슈 처리 후 git commit (메시지 형식: "fix: apply suggestion (#이슈번호)")',
+              '',
+              '## 수용된 제안 목록',
+              '',
+              items,
+            ].join('\n');
+
+            fs.writeFileSync('/tmp/prompt.txt', prompt);
+
+      - name: Run Claude
         if: steps.collect.outputs.has_issues == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          node << 'SCRIPT'
-          const issues = require('/tmp/issues.json');
-          const items = issues.map(issue =>
-            `### 이슈 #${issue.number}: ${issue.title}\n\n${issue.body}`
-          ).join('\n\n---\n\n');
-
-          const prompt = `당신은 Spring Boot(Kotlin) + React(TypeScript) 풀스택 프로젝트의 코드 개선 담당자입니다.
-
-다음은 GitHub Copilot 코드 리뷰에서 수용된 제안들입니다.
-각 제안에 대해 해당 파일을 읽고 제안된 개선 사항을 적용해주세요.
-
-## 규칙
-- be/ 경로 파일: Kotlin/Spring Boot 컨벤션 (be/CLAUDE.md 참고)
-- fe/ 경로 파일: React/TypeScript 컨벤션 (fe/CLAUDE.md 참고)
-- 수정 범위는 제안된 부분만, 불필요한 리팩토링 금지
-- 각 이슈 처리 후 git commit (메시지 형식: "fix: apply copilot suggestion (#이슈번호)")
-
-## 수용된 제안 목록
-
-${items}`;
-
-          require('fs').writeFileSync('/tmp/prompt.txt', prompt);
-          SCRIPT
-
           claude -p "$(cat /tmp/prompt.txt)" \
             --allowedTools "Read,Edit,Bash" \
             --model claude-sonnet-4-6
