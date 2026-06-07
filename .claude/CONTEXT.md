@@ -65,9 +65,9 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #174 | Copilot 리뷰 → Claude 리뷰 전환 — claude-review.yml 추가, Anthropic API 직접 호출 | 2026-06-07 |
+| #173 | 데일리 기술 질문 중복 발송 방지 — 최근 30일 질문 제외 로직 추가 (커밋 2026-06-06) | 2026-06-07 |
 | #172 | Grafana Alloy 제거 + Micrometer OTLP push 전환 — OtlpConfig headers() 오버라이드로 401 수정 | 2026-06-07 |
-| #167 | AI 통합 테스트 추가 + 프롬프트 JSON 출력 일관성 수정 + BaseAiEvaluator parseContent 정규식 개선 | 2026-06-07 |
-| #169 | Alloy scrape HTTPS+TLS skip 수정 — flycast force_https 대응으로 up=0 버그 수정 | 2026-06-05 |
 | #165 | 모바일 코딩 에디터 CodeMirror 6 교체 (문법 강조·괄호 자동 닫기·Tab 들여쓰기) + orchestrator 훅 절대경로 수정 | 2026-06-04 |
 | #163 | 모바일 코딩 에디터 스크롤·코드 잘림·키보드 미표시 수정 | 2026-06-02 |
 | #162 | 메일 HTML 템플릿 개선 + dhbang.co.kr 도메인 인증 + AI 질문 프롬프트 강화 | 2026-06-01 |
