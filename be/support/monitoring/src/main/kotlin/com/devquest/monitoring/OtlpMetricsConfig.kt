@@ -18,18 +18,17 @@ class OtlpMetricsConfig(
 
     @Bean
     fun otlpMeterRegistry(clock: Clock): OtlpMeterRegistry {
-        val config = OtlpConfig { key ->
-            when (key) {
+        val encoded = Base64.getEncoder()
+            .encodeToString("$instanceId:$apiKey".toByteArray())
+        val config = object : OtlpConfig {
+            override fun get(key: String): String? = when (key) {
                 "otlp.url" -> "https://otlp-gateway-prod-ap-northeast-0.grafana.net/otlp/v1/metrics"
-                "otlp.headers" -> {
-                    val encoded = Base64.getEncoder()
-                        .encodeToString("$instanceId:$apiKey".toByteArray())
-                    "Authorization=Basic $encoded"
-                }
                 "otlp.step" -> "PT60S"
                 "otlp.resourceAttributes" -> "service.name=devquest-api"
                 else -> null
             }
+            override fun headers(): Map<String, String> =
+                mapOf("Authorization" to "Basic $encoded")
         }
         return OtlpMeterRegistry(config, clock)
     }
