@@ -54,26 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `fix/spring-ipv6-binding` |
-| 열린 PR | 진행 중 — Alloy 제거 + Micrometer OTLP push 전환 |
-
-### 진행 중 작업 상세 (fix/spring-ipv6-binding)
-
-**목표**: Grafana Alloy 완전 제거 → Spring Boot Micrometer OTLP로 직접 push
-
-**완료된 변경**:
-- `support/monitoring/build.gradle.kts`: `micrometer-registry-otlp` 추가
-- `support/monitoring/OtlpMetricsConfig.kt`: 신규 생성 (`@ConditionalOnProperty("grafana.otlp.enabled")`)
-- `support/monitoring/monitoring.yml`: grafana.otlp 기본값 추가
-- `application-prod.yml`: grafana.otlp.enabled=true, instance-id="3284556" 추가, management.server.port 제거
-- `monitoring/` 디렉토리 삭제 (Alloy Dockerfile/config.alloy/fly.toml)
-- `devquest-metrics` Fly.io 앱 destroy 완료
-
-**현재 블로커**:
-- `GRAFANA_API_KEY` Fly.io 시크릿이 목록에서 사라짐 (원인 불명)
-- 재설정했으나 키 값이 올바르지 않아 401 "invalid token" 응답
-- **사용자로부터 올바른 Grafana API Key 값 수령 필요**
-- Grafana Cloud → Administration → Service Accounts 또는 API Keys에서 확인 (`glc_`로 시작)
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
@@ -83,9 +65,9 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #172 | Grafana Alloy 제거 + Micrometer OTLP push 전환 — OtlpConfig headers() 오버라이드로 401 수정 | 2026-06-07 |
+| #167 | AI 통합 테스트 추가 + 프롬프트 JSON 출력 일관성 수정 + BaseAiEvaluator parseContent 정규식 개선 | 2026-06-07 |
 | #169 | Alloy scrape HTTPS+TLS skip 수정 — flycast force_https 대응으로 up=0 버그 수정 | 2026-06-05 |
-| #168 | Prometheus 엔드포인트 IP 화이트리스트(fdaa::/16) + Grafana Alloy → Grafana Cloud 시각화 | 2026-06-05 |
-| #166 | AI 호출 메트릭 수집 — DB 저장(ai_call_log) + Prometheus (evaluator·모델·토큰·latency) | 2026-06-04 |
 | #165 | 모바일 코딩 에디터 CodeMirror 6 교체 (문법 강조·괄호 자동 닫기·Tab 들여쓰기) + orchestrator 훅 절대경로 수정 | 2026-06-04 |
 | #163 | 모바일 코딩 에디터 스크롤·코드 잘림·키보드 미표시 수정 | 2026-06-02 |
 | #162 | 메일 HTML 템플릿 개선 + dhbang.co.kr 도메인 인증 + AI 질문 프롬프트 강화 | 2026-06-01 |
