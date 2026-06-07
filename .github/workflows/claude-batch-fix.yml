@@ -1,4 +1,4 @@
-name: Copilot Batch Fix
+name: Claude Batch Fix
 
 on:
   workflow_dispatch:
