@@ -31,5 +31,4 @@ tasks.register<Test>("integrationTest") {
         events("passed", "skipped", "failed")
         showStandardStreams = true
     }
-    finalizedBy()
 }

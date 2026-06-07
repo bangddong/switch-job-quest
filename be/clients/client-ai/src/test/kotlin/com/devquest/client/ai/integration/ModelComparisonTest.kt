@@ -44,7 +44,7 @@ class ModelComparisonTest {
                 .anthropicClient(anthropicClient)
                 .options(
                     AnthropicChatOptions.builder()
-                        .model("claude-haiku-4-5")
+                        .model("claude-haiku-4-5-20251001")
                         .maxTokens(1500)
                         .temperature(0.3)
                         .build()

@@ -33,7 +33,7 @@ class AiIntegrationTest {
 
         val anthropicClient = AnthropicOkHttpClient.builder().apiKey(apiKey).build()
         val options = AnthropicChatOptions.builder()
-            .model("claude-haiku-4-5")
+            .model("claude-haiku-4-5-20251001")
             .maxTokens(3000)
             .temperature(0.3)
             .build()

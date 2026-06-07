@@ -15,11 +15,8 @@ abstract class BaseAiEvaluator(
      */
     protected fun <T> parseContent(content: String?, targetClass: Class<T>): T? {
         val raw = content?.trim() ?: return null
-        val json = raw
-            .removePrefix("```json")
-            .removePrefix("```")
-            .removeSuffix("```")
-            .trim()
+        val codeBlockRegex = Regex("```(?:json)?\\s*([\\s\\S]*?)```")
+        val json = codeBlockRegex.find(raw)?.groupValues?.get(1)?.trim() ?: raw
         return objectMapper.readValue(json, targetClass)
     }
 }
