@@ -32,7 +32,7 @@ class DailyMailSchedulerTest {
 
         scheduler.sendDailyTechInterviewMail()
 
-        verify(techInterviewPort, never()).generateDailyQuestion(any())
+        verify(techInterviewPort, never()).generateDailyQuestion(any(), any())
         verify(mailService, never()).sendDailyTechInterview(any(), any(), any())
     }
 
@@ -44,14 +44,15 @@ class DailyMailSchedulerTest {
 
         scheduler.sendDailyTechInterviewMail()
 
-        verify(techInterviewPort, never()).generateDailyQuestion(any())
+        verify(techInterviewPort, never()).generateDailyQuestion(any(), any())
         verify(mailService, never()).sendDailyTechInterview(any(), any(), any())
     }
 
     @Test
     fun `오늘 발송 이력이 없는 사용자에게 메일을 발송하고 로그를 저장한다`() {
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
-        whenever(techInterviewPort.generateDailyQuestion(any())).thenReturn("오늘의 질문")
+        whenever(dailyMailLogPort.findRecentQuestions(any(), any())).thenReturn(emptyList())
+        whenever(techInterviewPort.generateDailyQuestion(any(), any())).thenReturn("오늘의 질문")
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(false)
         whenever(mailService.sendDailyTechInterview(any(), any(), any())).thenReturn(true)
@@ -65,7 +66,8 @@ class DailyMailSchedulerTest {
     @Test
     fun `메일 발송 실패 시 로그 저장도 하지 않는다`() {
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
-        whenever(techInterviewPort.generateDailyQuestion(any())).thenReturn("오늘의 질문")
+        whenever(dailyMailLogPort.findRecentQuestions(any(), any())).thenReturn(emptyList())
+        whenever(techInterviewPort.generateDailyQuestion(any(), any())).thenReturn("오늘의 질문")
         whenever(dailyMailLogPort.existsTodayLog(any(), any(), any<LocalDate>())).thenReturn(false)
         whenever(mailService.sendDailyTechInterview(any(), any(), any()))
             .thenThrow(RuntimeException("SMTP error"))
