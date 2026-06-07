@@ -34,9 +34,6 @@ jobs:
               description: 'Claude 리뷰 진행 중',
             });
 
-      - name: Install Claude CLI
-        run: npm install -g @anthropic-ai/claude-code
-
       - name: Get PR diff
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,16 +88,45 @@ CRITICAL 여부: YES 또는 NO`;
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          RESULT=$(claude -p "$(cat /tmp/prompt.txt)" \
-            --dangerously-skip-permissions \
-            --model claude-haiku-4-5-20251001 2>&1)
-          echo "$RESULT" > /tmp/review.txt
+          node << 'SCRIPT'
+          const fs = require('fs');
+          const https = require('https');
 
-          if echo "$RESULT" | grep -q "CRITICAL 여부: YES"; then
-            echo "has_critical=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_critical=false" >> $GITHUB_OUTPUT
-          fi
+          const prompt = fs.readFileSync('/tmp/prompt.txt', 'utf8');
+
+          const body = JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 2000,
+            messages: [{ role: 'user', content: prompt }],
+          });
+
+          const options = {
+            hostname: 'api.anthropic.com',
+            path: '/v1/messages',
+            method: 'POST',
+            headers: {
+              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+              'content-type': 'application/json',
+            },
+          };
+
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+              const json = JSON.parse(data);
+              const result = json.content?.[0]?.text || '';
+              fs.writeFileSync('/tmp/review.txt', result);
+              const hasCritical = result.includes('CRITICAL 여부: YES');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_critical=${hasCritical}\n`);
+              process.exit(0);
+            });
+          });
+          req.on('error', (e) => { console.error(e); process.exit(1); });
+          req.write(body);
+          req.end();
+          SCRIPT
 
       - name: Post review comment
         uses: actions/github-script@v7
