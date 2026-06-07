@@ -44,49 +44,58 @@ jobs:
           gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr.diff
           echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
 
+      - name: Build review prompt
+        run: |
+          node << 'SCRIPT'
+          const fs = require('fs');
+          const diff = fs.readFileSync('/tmp/pr.diff', 'utf8');
+          const title = process.env.PR_TITLE || '';
+
+          const prompt = `당신은 Kotlin/Spring Boot + React/TypeScript 풀스택 프로젝트의 코드 리뷰어입니다.
+
+## 리뷰 대상 PR
+제목: ${title}
+
+## 변경 diff
+\`\`\`diff
+${diff}
+\`\`\`
+
+## 리뷰 규칙
+- BE: core-domain에 Spring 어노테이션 금지, db-core↔client-ai 직접 의존 금지, !! 사용 금지
+- FE: default export 금지, CSS모듈/Tailwind/styled-components 금지, Context/Redux/Zustand 금지
+- 테스트: Evaluator 테스트에 @Mock/@InjectMocks 금지 → RETURNS_DEEP_STUBS 패턴
+
+## 출력 형식 (반드시 준수)
+다음 마크다운 형식으로만 출력하세요:
+
+## 🤖 Claude 코드 리뷰
+
+### CRITICAL (머지 전 필수 수정)
+- 없음 (또는 발견된 항목)
+
+### WARNING (권장 수정)
+- 없음 (또는 발견된 항목)
+
+### PASSED
+- 확인된 긍정적 항목
+
+---
+CRITICAL 여부: YES 또는 NO`;
+
+          fs.writeFileSync('/tmp/prompt.txt', prompt);
+          SCRIPT
+
       - name: Run Claude review
         id: review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          DIFF=$(cat /tmp/pr.diff)
-
-          PROMPT="당신은 Kotlin/Spring Boot + React/TypeScript 풀스택 프로젝트의 코드 리뷰어입니다.
-
-          ## 리뷰 대상 PR
-          제목: ${PR_TITLE}
-
-          ## 변경 diff
-          \`\`\`diff
-          ${DIFF}
-          \`\`\`
-
-          ## 리뷰 규칙
-          - BE 규칙: core-domain에 Spring 어노테이션 금지, db-core↔client-ai 직접 의존 금지, !! 사용 금지
-          - FE 규칙: default export 금지, CSS모듈/Tailwind/styled-components 금지, Context/Redux/Zustand 금지
-          - 테스트 규칙: Evaluator 테스트에 @Mock/@InjectMocks 금지 → RETURNS_DEEP_STUBS 패턴
-
-          ## 출력 형식 (반드시 준수)
-          다음 마크다운 형식으로만 출력하세요:
-
-          ## 🤖 Claude 코드 리뷰
-
-          ### CRITICAL (머지 전 필수 수정)
-          - 없음 (또는 발견된 항목)
-
-          ### WARNING (권장 수정)
-          - 없음 (또는 발견된 항목)
-
-          ### PASSED
-          - 확인된 긍정적 항목
-
-          ---
-          CRITICAL 여부: YES 또는 NO"
-
-          RESULT=$(claude -p "$PROMPT" --model claude-haiku-4-5-20251001 2>&1)
+          RESULT=$(claude -p "$(cat /tmp/prompt.txt)" \
+            --dangerously-skip-permissions \
+            --model claude-haiku-4-5-20251001 2>&1)
           echo "$RESULT" > /tmp/review.txt
 
-          # CRITICAL 여부 추출
           if echo "$RESULT" | grep -q "CRITICAL 여부: YES"; then
             echo "has_critical=true" >> $GITHUB_OUTPUT
           else
