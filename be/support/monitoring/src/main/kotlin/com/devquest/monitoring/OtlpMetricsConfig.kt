@@ -18,6 +18,8 @@ class OtlpMetricsConfig(
 
     @Bean
     fun otlpMeterRegistry(clock: Clock): OtlpMeterRegistry {
+        require(instanceId.isNotBlank()) { "grafana.otlp.instance-id must not be blank" }
+        require(apiKey.isNotBlank()) { "GRAFANA_API_KEY must not be blank" }
         val encoded = Base64.getEncoder()
             .encodeToString("$instanceId:$apiKey".toByteArray())
         val config = object : OtlpConfig {
