@@ -271,7 +271,7 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 
 ## 8단계: CRITICAL 처리
 
-**CRITICAL 없음** → 9단계
+**CRITICAL 없음** → 9단계 (PR 생성 시 assert-pr-reviewed.sh가 자동으로 최종 검토 실행)
 
 **CRITICAL 있음**:
 - BE CRITICAL → be-feature-builder 재스폰 (수정 내용 명시)
@@ -279,9 +279,12 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 - 수정 후 qa-reviewer 재실행
 - 최대 2회 재시도. 실패 시 사용자에게 원인과 함께 보고
 
+> **강제 장치**: `gh pr create` 실행 시 PreToolUse 훅이 Anthropic API로 diff를 재검토한다.
+> CRITICAL 있으면 PR 생성 차단 → 반드시 수정 후 재시도.
+
 ---
 
-## 9단계: PR 생성 + Copilot 리뷰 처리 + CONTEXT.md 업데이트
+## 9단계: PR 생성 + CONTEXT.md 업데이트
 
 > PR 생성·머지 전 절차는 `.claude/docs/git-strategy.md`를 반드시 참조한다.
 
@@ -292,7 +295,7 @@ gh pr create \
   --body-file .github/pull_request_template.md
 ```
 
-PR 생성 후 **Copilot 리뷰 댓글 처리가 머지 필수 조건**이다. 처리 절차는 `git-strategy.md § Copilot 리뷰 처리` 참조.
+> PR 생성 시 PreToolUse 훅이 자동으로 사전 리뷰를 실행한다. CRITICAL 없으면 PR 생성 진행.
 
 > **PR body는 한국어로 작성한다.** (title의 type/scope/message는 영어 컨벤션 유지)
 > **"🤖 Generated with Claude Code" 문구는 PR body에 포함하지 않는다.**
