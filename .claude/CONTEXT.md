@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/ai-observability-metrics` |
-| 열린 PR | #183 — AI 호출 메트릭 수집 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
