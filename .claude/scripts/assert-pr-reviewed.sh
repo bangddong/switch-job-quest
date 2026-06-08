@@ -25,6 +25,8 @@ if [ -f "$CACHE_FILE" ]; then
 fi
 
 # ANTHROPIC_API_KEY 확인 — 없으면 application-local.yml에서 자동 추출
+# 보안 참고: application-local.yml은 .gitignore에 등록된 로컬 전용 파일로
+# 버전 관리되지 않음. 키가 외부로 노출될 위험 없음.
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   LOCAL_YML="$PROJECT_ROOT/be/core/core-api/src/main/resources/application-local.yml"
   if [ -f "$LOCAL_YML" ]; then
