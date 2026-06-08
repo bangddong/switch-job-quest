@@ -24,7 +24,14 @@ if [ -f "$CACHE_FILE" ]; then
   exit 0
 fi
 
-# ANTHROPIC_API_KEY 확인
+# ANTHROPIC_API_KEY 확인 — 없으면 application-local.yml에서 자동 추출
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+  LOCAL_YML="$PROJECT_ROOT/be/core/core-api/src/main/resources/application-local.yml"
+  if [ -f "$LOCAL_YML" ]; then
+    ANTHROPIC_API_KEY=$(grep -E "api-key:" "$LOCAL_YML" | grep "sk-ant" | head -1 | sed 's/.*api-key:[[:space:]]*//')
+  fi
+fi
+
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   echo "⛔ PR 사전 리뷰 실패: ANTHROPIC_API_KEY가 설정되지 않았습니다." >&2
   echo "   export ANTHROPIC_API_KEY=<your-key> 후 재시도하세요." >&2
