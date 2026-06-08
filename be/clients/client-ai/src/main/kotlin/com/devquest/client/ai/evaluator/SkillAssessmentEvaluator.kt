@@ -27,7 +27,7 @@ class SkillAssessmentEvaluator(
             "targetRole" to targetRole,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(SkillAssessmentResult::class.java)
         }
     }

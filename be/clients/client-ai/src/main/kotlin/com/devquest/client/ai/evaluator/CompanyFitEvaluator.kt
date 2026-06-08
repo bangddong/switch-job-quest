@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component
 class CompanyFitEvaluator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor), CompanyFitEvaluatorPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, "claude-sonnet-4-6"), CompanyFitEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()
 
@@ -40,7 +40,7 @@ class CompanyFitEvaluator(
             "companiesText" to companiesText,
         ))
 
-        val response = aiCallExecutor.execute(this.javaClass.simpleName) {
+        val response = aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
         }
 

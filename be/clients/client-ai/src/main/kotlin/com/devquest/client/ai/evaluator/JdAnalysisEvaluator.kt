@@ -28,7 +28,7 @@ class JdAnalysisEvaluator(
             "userExperiences" to userExperiences.joinToString("\n"),
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JdAnalysisResult::class.java)
                 ?.let { it.copy(passed = PassCriteriaPolicy.evaluate(it.overallMatchScore)) }
         }

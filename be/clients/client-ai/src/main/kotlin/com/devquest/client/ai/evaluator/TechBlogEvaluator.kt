@@ -26,7 +26,7 @@ class TechBlogEvaluator(
             "content" to content,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(AiEvaluationResult::class.java)
         }
     }

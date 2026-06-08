@@ -19,7 +19,8 @@ class AiCallExecutor(
     ): T {
         AiCallContext.set(evaluatorName)
         try {
-            val evaluator = AiCallContext.get() ?: "Unknown"
+            // AiCallContext.set() 직후이므로 evaluatorName과 동일 — 중간 수정 방지용 재조회
+            val evaluator = evaluatorName
             var lastException: Exception? = null
             repeat(maxRetry) { attempt ->
                 if (attempt > 0) {

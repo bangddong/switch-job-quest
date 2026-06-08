@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component
 class DeveloperClassEvaluator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor), DeveloperClassEvaluatorPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, "claude-sonnet-4-6"), DeveloperClassEvaluatorPort {
 
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/developer-class-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/developer-class-user.st"))
@@ -26,7 +26,7 @@ class DeveloperClassEvaluator(
             "careerEssayJson" to careerEssayJson.ifBlank { "{}" },
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(DeveloperClassResult::class.java)
         }
     }

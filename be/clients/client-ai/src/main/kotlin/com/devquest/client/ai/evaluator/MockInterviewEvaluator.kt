@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component
 class MockInterviewEvaluator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor), InterviewEvaluatorPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, "claude-sonnet-4-6"), InterviewEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()
 
@@ -48,7 +48,7 @@ class MockInterviewEvaluator(
             "yearsOfExperience" to yearsOfExperience,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
             parseContent(content, InterviewEvaluationResult::class.java)
         }

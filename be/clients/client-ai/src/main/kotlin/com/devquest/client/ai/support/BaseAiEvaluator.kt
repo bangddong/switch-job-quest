@@ -5,7 +5,8 @@ import org.springframework.ai.chat.client.ChatClient
 
 abstract class BaseAiEvaluator(
     protected val chatClient: ChatClient,
-    protected val aiCallExecutor: AiCallExecutor
+    protected val aiCallExecutor: AiCallExecutor,
+    protected val modelName: String = "claude-haiku-4-5-20251001",
 ) {
     private val objectMapper = jacksonObjectMapper()
 

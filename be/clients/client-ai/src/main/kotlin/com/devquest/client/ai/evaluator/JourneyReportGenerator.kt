@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component
 class JourneyReportGenerator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor), JourneyReportPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, "claude-sonnet-4-6"), JourneyReportPort {
 
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/journey-report-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/journey-report-user.st"))
@@ -44,7 +44,7 @@ class JourneyReportGenerator(
             "highestQuestId" to (highestEntry?.key ?: ""),
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JourneyReportResult::class.java)
         }
     }
