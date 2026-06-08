@@ -39,6 +39,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
         with:
           script: |
             const https = require('https');
@@ -51,10 +52,11 @@ jobs:
             let diff = '';
             try {
               diff = execSync(`gh pr diff ${prNumber}`, {
-                env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN },
+                env: { ...process.env, GH_TOKEN: process.env.GH_TOKEN || process.env.GITHUB_TOKEN },
                 maxBuffer: 1024 * 1024 * 5,
               }).toString();
             } catch (e) {
+              console.error('diff 조회 실패:', e.message);
               diff = '(diff 조회 실패)';
             }
 
@@ -116,7 +118,10 @@ jobs:
                 res.on('end', () => {
                   try {
                     const json = JSON.parse(data);
-                    resolve(json.content?.[0]?.text || '(응답 없음)');
+                    if (!json.content?.[0]?.text) {
+                      console.error('API 에러 응답:', JSON.stringify(json));
+                    }
+                    resolve(json.content?.[0]?.text || `(응답 없음: ${json.error?.message || JSON.stringify(json)})`);
                   } catch (e) { reject(e); }
                 });
               });
