@@ -7,7 +7,7 @@ on:
     types: [created]
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.event.comment.pull_request_url }}
+  group: claude-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -82,6 +82,7 @@ jobs:
               '- BE: core-domain에 Spring 어노테이션 금지, db-core↔client-ai 직접 의존 금지, !! 사용 금지',
               '- FE: default export 금지, CSS모듈/Tailwind/styled-components 금지, Context/Redux/Zustand 금지',
               '- 테스트: Evaluator 테스트에 @Mock/@InjectMocks 금지 → RETURNS_DEEP_STUBS 패턴',
+              '- CI/CD(.github/workflows): 보안 취약점(시크릿 노출, 권한 과다)만 CRITICAL. 모델명·설정값·버전 변경은 CRITICAL 금지.',
               '',
               '## 출력 형식 (반드시 준수)',
               '다음 마크다운 형식으로만 출력하세요:',
