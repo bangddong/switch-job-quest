@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gh pr create 실행 전 Claude qa-reviewer 사전 검토 강제화
+# gh pr create 실행 전 Claude 사전 검토 강제화
 # CRITICAL 항목 없는 경우만 PR 생성 허용
 
 INPUT=$(cat)
@@ -24,13 +24,15 @@ if [ -f "$CACHE_FILE" ]; then
   exit 0
 fi
 
+# API 키 추출 시 디버그 출력 방지 (키 노출 차단)
+set +x
+
 # ANTHROPIC_API_KEY 확인 — 없으면 application-local.yml에서 자동 추출
-# 보안 참고: application-local.yml은 .gitignore에 등록된 로컬 전용 파일로
-# 버전 관리되지 않음. 키가 외부로 노출될 위험 없음.
+# application-local.yml은 .gitignore 등록된 로컬 전용 파일 (버전 관리 제외)
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   LOCAL_YML="$PROJECT_ROOT/be/core/core-api/src/main/resources/application-local.yml"
   if [ -f "$LOCAL_YML" ]; then
-    ANTHROPIC_API_KEY=$(grep -E "api-key:" "$LOCAL_YML" | grep "sk-ant" | head -1 | sed 's/.*api-key:[[:space:]]*//')
+    ANTHROPIC_API_KEY=$(grep -A1 "anthropic:" "$LOCAL_YML" | grep "api-key:" | head -1 | sed 's/.*api-key:[[:space:]]*//' | tr -d '[:space:]')
   fi
 fi
 
@@ -82,8 +84,10 @@ $DIFF
 ---
 CRITICAL 여부: YES 또는 NO"
 
-# 임시 파일로 JSON body 생성 (인코딩 문제 방지)
+# 임시 파일로 JSON body 생성 (인코딩 문제 방지), 종료 시 자동 정리
 TMPFILE=$(mktemp)
+trap 'rm -f "$TMPFILE"' EXIT
+
 jq -n \
   --arg model "claude-haiku-4-5" \
   --arg content "$PROMPT" \
@@ -95,7 +99,6 @@ RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" \
   --data-binary "@$TMPFILE")
-rm -f "$TMPFILE"
 
 REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null)
 
