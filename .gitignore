@@ -44,6 +44,7 @@ desktop.ini
 .claude/settings.local.json
 .claude/launch.json
 .claude/worktrees/
+.claude/review-cache/
 
 # === Root npm (dev tool only) ===
 /package.json

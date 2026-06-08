@@ -42,31 +42,31 @@ gh pr create --title "feat(be): ..." --base main --body-file .github/pull_reques
 - **`fix` 타입**: Summary에 변경 내용, Why에 원인을 작성 (템플릿 주석 참고)
 - Attribution 줄(`🤖 Generated with ...`) **포함하지 않음**
 
-## Copilot 리뷰 처리 (머지 필수 조건)
+## 사전 코드 리뷰 (PR 생성 필수 조건)
 
-PR 생성 후 Copilot이 자동 리뷰 댓글을 남긴다. 브랜치 보호 규칙상 **모든 Copilot 댓글에 답글이 달려야** `check-copilot-review` status가 `success`로 전환되고 머지가 가능하다.
+`gh pr create` 실행 시 Claude Code PreToolUse 훅이 자동으로 diff를 리뷰한다.
+**CRITICAL 항목이 있으면 PR 생성이 차단**되며, 수정 후 재시도해야 한다.
 
-### 절차
+### 동작 방식
 
-```bash
-# 1. Copilot 리뷰 댓글 조회
-gh api repos/{owner}/{repo}/pulls/<PR번호>/comments \
-  --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]") | select(.in_reply_to_id == null) | {id: .id, path: .path, line: .line, body: .body}]'
-
-# 2. 각 댓글에 답글 달기 (comment_id는 위에서 조회한 id)
-gh api repos/{owner}/{repo}/pulls/<PR번호>/comments \
-  --method POST \
-  --field body="<답글 내용>" \
-  --field in_reply_to=<comment_id>
-
-# 3. 머지
-gh pr merge <PR번호> --squash --delete-branch
+```
+gh pr create 시도
+  → assert-pr-reviewed.sh 실행
+  → HEAD SHA 캐시 확인 (이미 통과한 커밋이면 skip)
+  → 없으면 Anthropic API로 diff 리뷰
+  → CRITICAL 있음 → ⛔ 차단
+  → CRITICAL 없음 → ✅ 캐시 저장 후 PR 생성 진행
 ```
 
-### 답글 작성 규칙
-- 수용: 반영했으면 `반영했습니다.` 또는 수정 내용 간략히
-- 불필요: 불필요하다고 판단되면 `이 케이스는 <이유>로 해당 없습니다.` 등 이유 명시
-- 답글만 달면 workflow가 자동 재평가하여 status 갱신
+### CRITICAL 발견 시
+
+리뷰 출력 확인 → 코드 수정 → 커밋 → `gh pr create` 재시도 (새 SHA로 재검토).
+
+### 머지
+
+```bash
+gh pr merge <PR번호> --squash --delete-branch
+```
 
 ## CI/CD 파이프라인
 
