@@ -63,10 +63,12 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 
 
+
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #180 | 데일리 메일 deepLink URL 오타 수정 (devquest.kr → quest.dhbang.co.kr) | 2026-06-08 |
 | #178 | fe-feature-builder·design-reviewer ultrathink 제거 + assert-pr-reviewed.sh 개선 | 2026-06-08 |
 | #176 | Grafana instance ID 수정 (3284556 → 1680166) | 2026-06-08 |
 | #177 | CI claude-review 폐기 → PreToolUse 훅 기반 사전 리뷰로 전환 (gh pr create 시 자동 차단) | 2026-06-08 |
