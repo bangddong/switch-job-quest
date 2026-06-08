@@ -3,6 +3,28 @@ management:
     web:
       exposure:
         include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        gen_ai.client.operation: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+        gen_ai.client.operation: 0.5,0.95,0.99
+    tags:
+      application: devquest-api
+
+spring:
+  ai:
+    chat:
+      observations:
+        include-prompt: false
+        include-completion: false
+    anthropic:
+      chat:
+        observations:
+          include-prompt: false
+          include-completion: false
 
 grafana:
   otlp:
