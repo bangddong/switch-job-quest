@@ -2,6 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.BaseAiEvaluator
+import com.devquest.client.ai.support.BaseAiEvaluator.Companion.AiModel
 import com.devquest.core.domain.support.AiEvaluationException
 import com.devquest.core.domain.model.evaluation.InterviewEvaluationResult
 import com.devquest.core.domain.port.InterviewEvaluatorPort
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component
 class MockInterviewEvaluator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor, "claude-sonnet-4-6"), InterviewEvaluatorPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, AiModel.SONNET), InterviewEvaluatorPort {
 
     private val objectMapper = jacksonObjectMapper()
 
