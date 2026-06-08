@@ -64,10 +64,13 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 
 
+
+
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #182 | 코딩 퀘스트 문제/에디터 패널 드래그 리사이즈 (PC 전용) | 2026-06-08 |
 | #180 | 데일리 메일 deepLink URL 오타 수정 (devquest.kr → quest.dhbang.co.kr) | 2026-06-08 |
 | #178 | fe-feature-builder·design-reviewer ultrathink 제거 + assert-pr-reviewed.sh 개선 | 2026-06-08 |
 | #176 | Grafana instance ID 수정 (3284556 → 1680166) | 2026-06-08 |
