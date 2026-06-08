@@ -67,6 +67,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #178 | fe-feature-builder·design-reviewer ultrathink 제거 + assert-pr-reviewed.sh 개선 | 2026-06-08 |
 | #177 | CI claude-review 폐기 → PreToolUse 훅 기반 사전 리뷰로 전환 (gh pr create 시 자동 차단) | 2026-06-08 |
 | #174 | Copilot 리뷰 → Claude 리뷰 전환 — claude-review.yml 추가, Anthropic API 직접 호출 | 2026-06-07 |
 | #173 | 데일리 기술 질문 중복 발송 방지 — 최근 30일 질문 제외 로직 추가 (커밋 2026-06-06) | 2026-06-07 |
