@@ -3,9 +3,11 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
+  group: claude-review-${{ github.event.pull_request.number || github.event.comment.pull_request_url }}
   cancel-in-progress: true
 
 jobs:
@@ -21,7 +23,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ── pull_request 트리거: Claude API 호출 후 PR review 생성 ──
       - name: Set pending status
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -34,7 +38,8 @@ jobs:
               description: 'Claude 리뷰 진행 중',
             });
 
-      - name: Run Claude review and post comment
+      - name: Run Claude review and post PR review
+        if: github.event_name == 'pull_request'
         id: review
         uses: actions/github-script@v7
         env:
@@ -45,14 +50,15 @@ jobs:
             const https = require('https');
             const { execSync } = require('child_process');
 
-            // PR diff 가져오기
             const prNumber = context.payload.pull_request.number;
             const prTitle = context.payload.pull_request.title;
+            const sha = context.payload.pull_request.head.sha;
 
+            // PR diff 가져오기
             let diff = '';
             try {
               diff = execSync(`gh pr diff ${prNumber}`, {
-                env: { ...process.env, GH_TOKEN: process.env.GH_TOKEN || process.env.GITHUB_TOKEN },
+                env: { ...process.env, GH_TOKEN: process.env.GH_TOKEN },
                 maxBuffer: 1024 * 1024 * 5,
               }).toString();
             } catch (e) {
@@ -130,40 +136,42 @@ jobs:
               req.end();
             });
 
-            // CRITICAL 여부
             const hasCritical = result.includes('CRITICAL 여부: YES');
             core.setOutput('has_critical', String(hasCritical));
+            core.setOutput('sha', sha);
 
-            // PR 코멘트 (기존 코멘트 업데이트 or 새로 작성)
-            const body = result.split('CRITICAL 여부:')[0].trim();
-            const comments = await github.paginate(github.rest.issues.listComments, {
+            const reviewBody = result.split('CRITICAL 여부:')[0].trim();
+
+            // 기존 봇 REQUEST_CHANGES 리뷰 dismiss
+            const reviews = await github.rest.pulls.listReviews({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: prNumber,
+              pull_number: prNumber,
             });
-
-            const existing = comments.find(c =>
-              c.user.login === 'github-actions[bot]' &&
-              c.body.includes('🤖 Claude 코드 리뷰')
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body,
-              });
+            for (const r of reviews.data) {
+              if (r.user.login === 'github-actions[bot]' && r.state === 'CHANGES_REQUESTED') {
+                await github.rest.pulls.dismissReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  review_id: r.id,
+                  message: '새 커밋으로 재검토합니다.',
+                });
+              }
             }
 
+            // PR review 생성 (REQUEST_CHANGES or APPROVE)
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              commit_id: sha,
+              body: reviewBody,
+              event: hasCritical ? 'REQUEST_CHANGES' : 'APPROVE',
+            });
+
       - name: Set final status
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         env:
           HAS_CRITICAL: ${{ steps.review.outputs.has_critical }}
@@ -177,6 +185,56 @@ jobs:
               state: hasCritical ? 'failure' : 'success',
               context: 'check-copilot-review',
               description: hasCritical
-                ? 'Claude 리뷰: CRITICAL 항목 있음 — 수정 필요'
+                ? 'Claude 리뷰: CRITICAL 항목 있음 — 댓글로 resolve 후 머지'
                 : 'Claude 리뷰: 통과',
             });
+
+      # ── pull_request_review_comment 트리거: 답글 감지 후 status 갱신 ──
+      - name: Check if all bot review comments are resolved
+        if: github.event_name == 'pull_request_review_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment;
+
+            // 봇 자신의 답글은 무시
+            if (comment.user.login === 'github-actions[bot]') return;
+
+            // 답글이 아니면 무시 (최상위 리뷰 댓글 작성 시)
+            if (!comment.in_reply_to_id) return;
+
+            const prNumber = context.payload.pull_request.number;
+            const sha = context.payload.pull_request.head.sha;
+
+            // 이 PR의 모든 리뷰 댓글 조회
+            const allComments = await github.paginate(github.rest.pulls.listReviewComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            // 봇의 최상위 리뷰 댓글 (in_reply_to_id 없는 것)
+            const botTopComments = allComments.filter(c =>
+              c.user.login === 'github-actions[bot]' && !c.in_reply_to_id
+            );
+
+            if (botTopComments.length === 0) return;
+
+            // 각 봇 댓글에 non-bot 답글이 달렸는지 확인
+            const allResolved = botTopComments.every(botComment =>
+              allComments.some(c =>
+                c.in_reply_to_id === botComment.id &&
+                c.user.login !== 'github-actions[bot]'
+              )
+            );
+
+            if (allResolved) {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha,
+                state: 'success',
+                context: 'check-copilot-review',
+                description: 'Claude 리뷰: 모든 지적사항 resolve 완료',
+              });
+            }
