@@ -21,6 +21,7 @@ const KOTLIN_TEMPLATE = `fun main() {
 
 const MIN_PROBLEM_WIDTH = 20
 const MAX_PROBLEM_WIDTH = 60
+const INITIAL_PROBLEM_WIDTH = 38
 
 type Language = 'JAVA' | 'KOTLIN'
 type MobileTab = 'problem' | 'code'
@@ -51,11 +52,10 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
   const [hints, setHints] = useState<string[]>(savedState?.hints ?? [])
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [mobileTab, setMobileTab] = useState<MobileTab>('problem')
-  const [problemWidth, setProblemWidth] = useState(38)
+  const [problemWidth, setProblemWidth] = useState(INITIAL_PROBLEM_WIDTH)
   const [dividerHovered, setDividerHovered] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStartXRef = useRef<number | null>(null)
-  const dragStartWidthRef = useRef<number>(38)
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -80,13 +80,13 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
       document.removeEventListener('mouseup', handleMouseUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
+      dragStartXRef.current = null
     }
   }, [])
 
   const handleDividerMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
     dragStartXRef.current = e.clientX
-    dragStartWidthRef.current = problemWidth
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
   }
