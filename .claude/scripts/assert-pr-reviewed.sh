@@ -80,15 +80,20 @@ $DIFF
 ---
 CRITICAL 여부: YES 또는 NO"
 
+# 임시 파일로 JSON body 생성 (인코딩 문제 방지)
+TMPFILE=$(mktemp)
+jq -n \
+  --arg model "claude-haiku-4-5" \
+  --arg content "$PROMPT" \
+  '{"model": $model, "max_tokens": 2000, "messages": [{"role": "user", "content": $content}]}' \
+  > "$TMPFILE"
+
 RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
   -H "x-api-key: $ANTHROPIC_API_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" \
-  -d "{
-    \"model\": \"claude-haiku-4-5\",
-    \"max_tokens\": 2000,
-    \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}]
-  }")
+  --data-binary "@$TMPFILE")
+rm -f "$TMPFILE"
 
 REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null)
 
