@@ -19,6 +19,9 @@ const KOTLIN_TEMPLATE = `fun main() {
     // 여기에 코드를 작성하세요
 }`
 
+const MIN_PROBLEM_WIDTH = 20
+const MAX_PROBLEM_WIDTH = 60
+
 type Language = 'JAVA' | 'KOTLIN'
 type MobileTab = 'problem' | 'code'
 
@@ -50,48 +53,40 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
   const [mobileTab, setMobileTab] = useState<MobileTab>('problem')
   const [problemWidth, setProblemWidth] = useState(38)
   const [dividerHovered, setDividerHovered] = useState(false)
-  const isDragging = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const cleanupDragRef = useRef<(() => void) | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     return () => {
-      cleanupDragRef.current?.()
+      abortControllerRef.current?.abort()
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
   }, [])
 
   const handleDividerMouseDown = (e: React.MouseEvent) => {
-    isDragging.current = true
     e.preventDefault()
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || !containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const newWidth = ((e.clientX - rect.left) / rect.width) * 100
-      setProblemWidth(Math.min(60, Math.max(20, newWidth)))
-    }
-
-    const onMouseUp = () => {
-      isDragging.current = false
-      cleanupDragRef.current = null
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup', onMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-
-    cleanupDragRef.current = () => {
-      isDragging.current = false
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup', onMouseUp)
-    }
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    const { signal } = controller
 
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
-    document.addEventListener('mousemove', onMouseMove)
-    document.addEventListener('mouseup', onMouseUp)
+
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const newWidth = ((e.clientX - rect.left) / rect.width) * 100
+      setProblemWidth(Math.min(MAX_PROBLEM_WIDTH, Math.max(MIN_PROBLEM_WIDTH, newWidth)))
+    }, { signal })
+
+    document.addEventListener('mouseup', () => {
+      controller.abort()
+      abortControllerRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }, { signal })
   }
 
   const notifyStateChange = (patch: Partial<CodingQuestState>) => {
