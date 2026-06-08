@@ -54,11 +54,30 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
   const [problemWidth, setProblemWidth] = useState(38)
   const [dividerHovered, setDividerHovered] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
+  const dragStartXRef = useRef<number | null>(null)
+  const dragStartWidthRef = useRef<number>(38)
 
   useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (dragStartXRef.current === null || !containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const newWidth = ((e.clientX - rect.left) / rect.width) * 100
+      setProblemWidth(Math.min(MAX_PROBLEM_WIDTH, Math.max(MIN_PROBLEM_WIDTH, newWidth)))
+    }
+
+    const handleMouseUp = () => {
+      if (dragStartXRef.current === null) return
+      dragStartXRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
     return () => {
-      abortControllerRef.current?.abort()
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -66,27 +85,10 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
 
   const handleDividerMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
-    abortControllerRef.current?.abort()
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-    const { signal } = controller
-
+    dragStartXRef.current = e.clientX
+    dragStartWidthRef.current = problemWidth
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
-
-    document.addEventListener('mousemove', (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const newWidth = ((e.clientX - rect.left) / rect.width) * 100
-      setProblemWidth(Math.min(MAX_PROBLEM_WIDTH, Math.max(MIN_PROBLEM_WIDTH, newWidth)))
-    }, { signal })
-
-    document.addEventListener('mouseup', () => {
-      controller.abort()
-      abortControllerRef.current = null
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }, { signal })
   }
 
   const notifyStateChange = (patch: Partial<CodingQuestState>) => {
