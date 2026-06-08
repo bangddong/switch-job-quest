@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
 import CodeMirror from '@uiw/react-codemirror'
 import { java } from '@codemirror/lang-java'
@@ -84,12 +84,12 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
     }
   }, [])
 
-  const handleDividerMouseDown = (e: React.MouseEvent) => {
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     dragStartXRef.current = e.clientX
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
-  }
+  }, [])
 
   const notifyStateChange = (patch: Partial<CodingQuestState>) => {
     if (!onStateChange) return
