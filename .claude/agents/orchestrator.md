@@ -190,8 +190,6 @@ Agent(subagent_type: "be-feature-builder", prompt: """
 
 ```
 Agent(subagent_type: "design-reviewer", prompt: """
-  ultrathink
-
   ## 설계할 기능
   <기능 설명>
 
@@ -221,8 +219,6 @@ Agent(subagent_type: "design-reviewer", prompt: """
 
 ```
 Agent(subagent_type: "fe-feature-builder", prompt: """
-  ultrathink
-
   ## 브랜치
   이미 생성됨: <브랜치명>
   git fetch origin && git checkout <브랜치명>
