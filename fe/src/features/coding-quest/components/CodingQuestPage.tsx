@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Editor from '@monaco-editor/react'
 import CodeMirror from '@uiw/react-codemirror'
 import { java } from '@codemirror/lang-java'
@@ -48,6 +48,34 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
   const [hints, setHints] = useState<string[]>(savedState?.hints ?? [])
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [mobileTab, setMobileTab] = useState<MobileTab>('problem')
+  const [problemWidth, setProblemWidth] = useState(38)
+  const isDragging = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const handleDividerMouseDown = (e: React.MouseEvent) => {
+    isDragging.current = true
+    e.preventDefault()
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current || !containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const newWidth = ((e.clientX - rect.left) / rect.width) * 100
+      setProblemWidth(Math.min(60, Math.max(20, newWidth)))
+    }
+
+    const onMouseUp = () => {
+      isDragging.current = false
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }
 
   const notifyStateChange = (patch: Partial<CodingQuestState>) => {
     if (!onStateChange) return
@@ -174,7 +202,7 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
         overflowY: 'auto',
         padding: 24,
         minHeight: 0,
-        ...(isMobile ? { flex: 1 } : { width: '38%', flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.08)' }),
+        ...(isMobile ? { flex: 1 } : { width: `${problemWidth}%`, flexShrink: 0 }),
       }}
     >
       {/* 모바일에서만 제목/난이도/레벨 표시 */}
@@ -599,8 +627,20 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
           </div>
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div ref={containerRef} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {problemPanel}
+          <div
+            onMouseDown={handleDividerMouseDown}
+            style={{
+              width: 5,
+              cursor: 'col-resize',
+              background: 'rgba(255,255,255,0.08)',
+              flexShrink: 0,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.6)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+          />
           {editorPanel}
         </div>
       )}
