@@ -4,6 +4,7 @@ import com.devquest.core.domain.support.AiEvaluationException
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -18,6 +19,11 @@ class AiCallExecutorTest {
         meterRegistry = SimpleMeterRegistry()
         metricsRecorder = AiMetricsRecorder(meterRegistry)
         executor = AiCallExecutor(maxRetry = 3, metricsRecorder = metricsRecorder)
+        AiCallContext.clear()
+    }
+
+    @AfterEach
+    fun teardown() {
         AiCallContext.clear()
     }
 

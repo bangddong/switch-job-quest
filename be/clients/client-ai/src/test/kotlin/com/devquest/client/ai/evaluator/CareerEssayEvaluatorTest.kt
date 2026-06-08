@@ -1,6 +1,8 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.AiMetricsRecorder
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.devquest.core.domain.model.evaluation.EssayCheckResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
@@ -19,7 +21,8 @@ class CareerEssayEvaluatorTest {
 
     // ChatClient의 fluent API 체인 전체를 deep stub으로 목킹
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val metricsRecorder = AiMetricsRecorder(SimpleMeterRegistry())
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1, metricsRecorder = metricsRecorder)
     private val evaluator = CareerEssayEvaluator(chatClient, aiCallExecutor)
 
     @Test

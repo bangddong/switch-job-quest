@@ -3,6 +3,8 @@ package com.devquest.client.ai.integration
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.devquest.client.ai.evaluator.*
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.AiMetricsRecorder
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeAll
@@ -43,7 +45,7 @@ class AiIntegrationTest {
             .build()
 
         chatClient = ChatClient.builder(model).build()
-        executor = AiCallExecutor(maxRetry = 2)
+        executor = AiCallExecutor(maxRetry = 2, metricsRecorder = AiMetricsRecorder(SimpleMeterRegistry()))
     }
 
     // ── CareerEssayEvaluator ───────────────────────────────────────────────

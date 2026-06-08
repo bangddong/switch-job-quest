@@ -1,6 +1,8 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.AiMetricsRecorder
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.devquest.core.domain.model.coding.CodingProblemGenerationResult
 import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.domain.support.AiEvaluationException
@@ -19,7 +21,8 @@ import org.springframework.ai.chat.client.ChatClient
 class CodingProblemGeneratorEvaluatorTest {
 
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val metricsRecorder = AiMetricsRecorder(SimpleMeterRegistry())
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1, metricsRecorder = metricsRecorder)
     private val evaluator = CodingProblemGeneratorEvaluator(chatClient, aiCallExecutor)
 
     @Test

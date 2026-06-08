@@ -1,6 +1,8 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.AiMetricsRecorder
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.devquest.core.domain.model.evaluation.CoachAnswerHistory
 import com.devquest.core.domain.model.evaluation.CoachAnswerResult
 import com.devquest.core.domain.model.evaluation.CoachReportResult
@@ -23,7 +25,8 @@ import org.mockito.kotlin.whenever
 class InterviewCoachEvaluatorTest {
 
     private val chatClient: org.springframework.ai.chat.client.ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val metricsRecorder = AiMetricsRecorder(SimpleMeterRegistry())
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1, metricsRecorder = metricsRecorder)
     private val evaluator = InterviewCoachEvaluator(chatClient, aiCallExecutor)
 
     // ── startSession ──────────────────────────────────────────────────────────

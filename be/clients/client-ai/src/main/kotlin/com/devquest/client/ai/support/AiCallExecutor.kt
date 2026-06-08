@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component
 @Component
 class AiCallExecutor(
     @Value("\${devquest.ai.max-retry:3}") private val maxRetry: Int,
-    private val metricsRecorder: AiMetricsRecorder? = null,
+    private val metricsRecorder: AiMetricsRecorder,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -19,16 +19,16 @@ class AiCallExecutor(
     ): T {
         AiCallContext.set(evaluatorName)
         try {
-            val evaluator = AiCallContext.get()
+            val evaluator = AiCallContext.get() ?: "Unknown"
             var lastException: Exception? = null
             repeat(maxRetry) { attempt ->
                 if (attempt > 0) {
-                    metricsRecorder?.recordRetry(evaluator, model)
+                    metricsRecorder.recordRetry(evaluator, model)
                 }
                 try {
                     val result = action()
                     if (result != null) {
-                        metricsRecorder?.recordCallSuccess(evaluator, model)
+                        metricsRecorder.recordCallSuccess(evaluator, model)
                         return result
                     }
                     logger.warn("AI 응답 null — 재시도 {}/{}", attempt + 1, maxRetry)
@@ -37,7 +37,7 @@ class AiCallExecutor(
                     logger.warn("AI 호출 실패 — 재시도 {}/{}: {}", attempt + 1, maxRetry, e.message)
                 }
             }
-            metricsRecorder?.recordCallFailure(evaluator, model)
+            metricsRecorder.recordCallFailure(evaluator, model)
             throw AiEvaluationException(
                 "${maxRetry}회 시도 후 최종 실패",
                 lastException

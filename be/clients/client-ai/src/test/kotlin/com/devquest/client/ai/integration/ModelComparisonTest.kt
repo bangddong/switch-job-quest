@@ -5,6 +5,8 @@ import com.devquest.client.ai.evaluator.CareerEssayEvaluator
 import com.devquest.client.ai.evaluator.MockInterviewEvaluator
 import com.devquest.client.ai.evaluator.SkillAssessmentEvaluator
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.AiMetricsRecorder
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
@@ -65,7 +67,7 @@ class ModelComparisonTest {
                 .build()
         ).build()
 
-        executor = AiCallExecutor(maxRetry = 1)
+        executor = AiCallExecutor(maxRetry = 1, metricsRecorder = AiMetricsRecorder(SimpleMeterRegistry()))
     }
 
     // ── 자기소개서 평가 비교 ───────────────────────────────────────────────
