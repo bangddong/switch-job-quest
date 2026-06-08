@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
 import CodeMirror from '@uiw/react-codemirror'
 import { java } from '@codemirror/lang-java'
@@ -18,6 +18,10 @@ const JAVA_TEMPLATE = `public class Main {
 const KOTLIN_TEMPLATE = `fun main() {
     // 여기에 코드를 작성하세요
 }`
+
+const MIN_PROBLEM_WIDTH = 20
+const MAX_PROBLEM_WIDTH = 60
+const INITIAL_PROBLEM_WIDTH = 38
 
 type Language = 'JAVA' | 'KOTLIN'
 type MobileTab = 'problem' | 'code'
@@ -48,6 +52,44 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
   const [hints, setHints] = useState<string[]>(savedState?.hints ?? [])
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [mobileTab, setMobileTab] = useState<MobileTab>('problem')
+  const [problemWidth, setProblemWidth] = useState(INITIAL_PROBLEM_WIDTH)
+  const [dividerHovered, setDividerHovered] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dragStartXRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (dragStartXRef.current === null || !containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const newWidth = ((e.clientX - rect.left) / rect.width) * 100
+      setProblemWidth(Math.min(MAX_PROBLEM_WIDTH, Math.max(MIN_PROBLEM_WIDTH, newWidth)))
+    }
+
+    const handleMouseUp = () => {
+      if (dragStartXRef.current === null) return
+      dragStartXRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      dragStartXRef.current = null
+    }
+  }, [])
+
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    dragStartXRef.current = e.clientX
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
 
   const notifyStateChange = (patch: Partial<CodingQuestState>) => {
     if (!onStateChange) return
@@ -174,7 +216,7 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
         overflowY: 'auto',
         padding: 24,
         minHeight: 0,
-        ...(isMobile ? { flex: 1 } : { width: '38%', flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.08)' }),
+        ...(isMobile ? { flex: 1 } : { width: `${problemWidth}%`, flexShrink: 0 }),
       }}
     >
       {/* 모바일에서만 제목/난이도/레벨 표시 */}
@@ -599,8 +641,20 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
           </div>
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div ref={containerRef} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {problemPanel}
+          <div
+            onMouseDown={handleDividerMouseDown}
+            onMouseEnter={() => setDividerHovered(true)}
+            onMouseLeave={() => setDividerHovered(false)}
+            style={{
+              width: 5,
+              cursor: 'col-resize',
+              background: dividerHovered ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.08)',
+              flexShrink: 0,
+              transition: 'background 0.15s',
+            }}
+          />
           {editorPanel}
         </div>
       )}
