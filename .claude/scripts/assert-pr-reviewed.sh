@@ -24,21 +24,11 @@ if [ -f "$CACHE_FILE" ]; then
   exit 0
 fi
 
-# API 키 추출 시 디버그 출력 방지 (키 노출 차단)
-set +x
-
-# ANTHROPIC_API_KEY 확인 — 없으면 application-local.yml에서 자동 추출
-# application-local.yml은 .gitignore 등록된 로컬 전용 파일 (버전 관리 제외)
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-  LOCAL_YML="$PROJECT_ROOT/be/core/core-api/src/main/resources/application-local.yml"
-  if [ -f "$LOCAL_YML" ]; then
-    ANTHROPIC_API_KEY=$(grep -A1 "anthropic:" "$LOCAL_YML" | grep "api-key:" | head -1 | sed 's/.*api-key:[[:space:]]*//' | tr -d '[:space:]')
-  fi
-fi
-
+# ANTHROPIC_API_KEY 필수 — 셸 프로필에 export 필요
+# 예: ~/.bashrc 또는 ~/.zshrc에 export ANTHROPIC_API_KEY=sk-ant-...
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   echo "⛔ PR 사전 리뷰 실패: ANTHROPIC_API_KEY가 설정되지 않았습니다." >&2
-  echo "   export ANTHROPIC_API_KEY=<your-key> 후 재시도하세요." >&2
+  echo "   ~/.bashrc 또는 ~/.zshrc에 export ANTHROPIC_API_KEY=<your-key> 추가 후 재시도하세요." >&2
   exit 2
 fi
 
