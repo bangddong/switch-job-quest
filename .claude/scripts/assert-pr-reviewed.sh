@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gh pr create 실행 전 Claude qa-reviewer 사전 검토 강제화
+# gh pr create 실행 전 Claude 사전 검토 강제화
 # CRITICAL 항목 없는 경우만 PR 생성 허용
 
 INPUT=$(cat)
@@ -24,10 +24,11 @@ if [ -f "$CACHE_FILE" ]; then
   exit 0
 fi
 
-# ANTHROPIC_API_KEY 확인
+# ANTHROPIC_API_KEY 필수 — 셸 프로필에 export 필요
+# 예: ~/.bashrc 또는 ~/.zshrc에 export ANTHROPIC_API_KEY=sk-ant-...
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   echo "⛔ PR 사전 리뷰 실패: ANTHROPIC_API_KEY가 설정되지 않았습니다." >&2
-  echo "   export ANTHROPIC_API_KEY=<your-key> 후 재시도하세요." >&2
+  echo "   ~/.bashrc 또는 ~/.zshrc에 export ANTHROPIC_API_KEY=<your-key> 추가 후 재시도하세요." >&2
   exit 2
 fi
 
@@ -73,15 +74,21 @@ $DIFF
 ---
 CRITICAL 여부: YES 또는 NO"
 
+# 임시 파일로 JSON body 생성 (인코딩 문제 방지), 종료 시 자동 정리
+TMPFILE=$(mktemp)
+trap 'rm -f "$TMPFILE"' EXIT
+
+jq -n \
+  --arg model "claude-haiku-4-5" \
+  --arg content "$PROMPT" \
+  '{"model": $model, "max_tokens": 2000, "messages": [{"role": "user", "content": $content}]}' \
+  > "$TMPFILE"
+
 RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
   -H "x-api-key: $ANTHROPIC_API_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" \
-  -d "{
-    \"model\": \"claude-haiku-4-5\",
-    \"max_tokens\": 2000,
-    \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}]
-  }")
+  --data-binary "@$TMPFILE")
 
 REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null)
 
