@@ -38,7 +38,7 @@ class DailyMailScheduler(
 
         val recentQuestions = dailyMailLogPort.findRecentQuestions("TECH_INTERVIEW", 30)
         val question = techInterviewPort.generateDailyQuestion("Java,Spring Boot,JPA", recentQuestions)
-        val deepLink = "https://devquest.kr/tech-interview"
+        val deepLink = "https://quest.dhbang.co.kr/tech-interview"
 
         log.info("데일리 기술 면접 메일 발송 시작: 대상 수=${targets.size}")
         targets.forEach { (userId, email) ->
