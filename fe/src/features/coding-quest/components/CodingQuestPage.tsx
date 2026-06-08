@@ -49,8 +49,18 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [mobileTab, setMobileTab] = useState<MobileTab>('problem')
   const [problemWidth, setProblemWidth] = useState(38)
+  const [dividerHovered, setDividerHovered] = useState(false)
   const isDragging = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const cleanupDragRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      cleanupDragRef.current?.()
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [])
 
   const handleDividerMouseDown = (e: React.MouseEvent) => {
     isDragging.current = true
@@ -65,10 +75,17 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
 
     const onMouseUp = () => {
       isDragging.current = false
+      cleanupDragRef.current = null
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
+    }
+
+    cleanupDragRef.current = () => {
+      isDragging.current = false
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
     }
 
     document.body.style.cursor = 'col-resize'
@@ -631,15 +648,15 @@ export function CodingQuestPage({ onBack, savedState, onStateChange, category }:
           {problemPanel}
           <div
             onMouseDown={handleDividerMouseDown}
+            onMouseEnter={() => setDividerHovered(true)}
+            onMouseLeave={() => setDividerHovered(false)}
             style={{
               width: 5,
               cursor: 'col-resize',
-              background: 'rgba(255,255,255,0.08)',
+              background: dividerHovered ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.08)',
               flexShrink: 0,
               transition: 'background 0.15s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.6)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
           />
           {editorPanel}
         </div>
