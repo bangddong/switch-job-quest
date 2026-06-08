@@ -193,6 +193,8 @@ jobs:
       - name: Check if all bot review comments are resolved
         if: github.event_name == 'pull_request_review_comment'
         uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           script: |
             const comment = context.payload.comment;
@@ -203,8 +205,9 @@ jobs:
             // 답글이 아니면 무시 (최상위 리뷰 댓글 작성 시)
             if (!comment.in_reply_to_id) return;
 
-            const prNumber = context.payload.pull_request.number;
-            const sha = context.payload.pull_request.head.sha;
+            const prNumber = context.payload.pull_request?.number;
+            const sha = context.payload.pull_request?.head?.sha;
+            if (!prNumber || !sha) return;
 
             // 이 PR의 모든 리뷰 댓글 조회
             const allComments = await github.paginate(github.rest.pulls.listReviewComments, {
