@@ -2,6 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.BaseAiEvaluator
+import com.devquest.client.ai.support.BaseAiEvaluator.Companion.AiModel
 import com.devquest.core.domain.model.evaluation.BossPackageResult
 import com.devquest.core.domain.port.BossPackageEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component
 class BossPackageEvaluator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor), BossPackageEvaluatorPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, AiModel.SONNET), BossPackageEvaluatorPort {
 
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/boss-package-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/boss-package-user.st"))
@@ -33,7 +34,7 @@ class BossPackageEvaluator(
             "resumeContent" to resumeContent,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(BossPackageResult::class.java)
         }
     }

@@ -26,7 +26,7 @@ class CareerEssayEvaluator(
             "fiveYearVision" to fiveYearVision,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(EssayCheckResult::class.java)
         }
     }

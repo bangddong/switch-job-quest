@@ -2,6 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.BaseAiEvaluator
+import com.devquest.client.ai.support.BaseAiEvaluator.Companion.AiModel
 import com.devquest.core.domain.model.evaluation.DeveloperClassResult
 import com.devquest.core.domain.port.DeveloperClassEvaluatorPort
 import org.springframework.ai.chat.client.ChatClient
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component
 class DeveloperClassEvaluator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor), DeveloperClassEvaluatorPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, AiModel.SONNET), DeveloperClassEvaluatorPort {
 
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/developer-class-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/developer-class-user.st"))
@@ -26,7 +27,7 @@ class DeveloperClassEvaluator(
             "careerEssayJson" to careerEssayJson.ifBlank { "{}" },
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(DeveloperClassResult::class.java)
         }
     }

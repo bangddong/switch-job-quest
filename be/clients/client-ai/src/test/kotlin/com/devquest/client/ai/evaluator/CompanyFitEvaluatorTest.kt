@@ -1,6 +1,8 @@
 package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
+import com.devquest.client.ai.support.AiMetricsRecorder
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.port.CompanyInfo
 import com.devquest.core.domain.support.AiEvaluationException
@@ -19,7 +21,8 @@ import org.springframework.ai.chat.client.ChatClient
 class CompanyFitEvaluatorTest {
 
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
-    private val aiCallExecutor = AiCallExecutor(maxRetry = 1)
+    private val metricsRecorder = AiMetricsRecorder(SimpleMeterRegistry())
+    private val aiCallExecutor = AiCallExecutor(maxRetry = 1, metricsRecorder = metricsRecorder)
     private val evaluator = CompanyFitEvaluator(chatClient, aiCallExecutor)
 
     private val preferences = mapOf("문화" to "수평적", "기술스택" to "Kotlin")

@@ -5,8 +5,16 @@ import org.springframework.ai.chat.client.ChatClient
 
 abstract class BaseAiEvaluator(
     protected val chatClient: ChatClient,
-    protected val aiCallExecutor: AiCallExecutor
+    protected val aiCallExecutor: AiCallExecutor,
+    protected val modelName: String = AiModel.HAIKU,
 ) {
+    companion object {
+        /** 메트릭 태그용 모델 이름 상수 — client-ai-anthropic.yml 설정과 동기화 필요 */
+        object AiModel {
+            const val HAIKU = "claude-haiku-4-5-20251001"
+            const val SONNET = "claude-sonnet-4-6"
+        }
+    }
     private val objectMapper = jacksonObjectMapper()
 
     /**

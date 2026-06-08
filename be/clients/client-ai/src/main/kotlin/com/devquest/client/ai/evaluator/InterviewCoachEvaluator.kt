@@ -32,7 +32,7 @@ class InterviewCoachEvaluator(
             "jdText" to jdText,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachSessionResult::class.java)
         }
     }
@@ -46,7 +46,7 @@ class InterviewCoachEvaluator(
             "answer" to answer,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachAnswerResult::class.java)
         }
     }
@@ -68,7 +68,7 @@ class InterviewCoachEvaluator(
             "answersText" to answersText,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachReportResult::class.java)
         }
     }

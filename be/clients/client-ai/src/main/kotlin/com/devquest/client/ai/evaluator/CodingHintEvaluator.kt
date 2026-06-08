@@ -27,7 +27,7 @@ class CodingHintEvaluator(
             "hintLevel" to hintLevel
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)

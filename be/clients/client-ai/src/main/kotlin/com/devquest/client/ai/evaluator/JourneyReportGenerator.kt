@@ -2,6 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.BaseAiEvaluator
+import com.devquest.client.ai.support.BaseAiEvaluator.Companion.AiModel
 import com.devquest.core.domain.model.evaluation.JourneyReportResult
 import com.devquest.core.domain.port.JourneyReportPort
 import org.springframework.ai.chat.client.ChatClient
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component
 class JourneyReportGenerator(
     @Qualifier("bossChatClient") chatClient: ChatClient,
     aiCallExecutor: AiCallExecutor
-) : BaseAiEvaluator(chatClient, aiCallExecutor), JourneyReportPort {
+) : BaseAiEvaluator(chatClient, aiCallExecutor, AiModel.SONNET), JourneyReportPort {
 
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/journey-report-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/journey-report-user.st"))
@@ -44,7 +45,7 @@ class JourneyReportGenerator(
             "highestQuestId" to (highestEntry?.key ?: ""),
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JourneyReportResult::class.java)
         }
     }

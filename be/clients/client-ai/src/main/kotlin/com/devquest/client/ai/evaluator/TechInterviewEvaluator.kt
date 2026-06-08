@@ -23,7 +23,7 @@ class TechInterviewEvaluator(
     override fun generateQuestions(techStack: String): TechInterviewResult {
         val systemPrompt = questionsSystemTemplate.render()
         val userPrompt = questionsUserTemplate.render(mapOf("techStack" to techStack))
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
@@ -42,7 +42,7 @@ class TechInterviewEvaluator(
             "recentQuestions" to if (recentQuestions.isEmpty()) "없음"
                 else recentQuestions.mapIndexed { i, q -> "${i + 1}. $q" }.joinToString("\n"),
         ))
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
@@ -60,7 +60,7 @@ class TechInterviewEvaluator(
             "techStack" to techStack,
             "questionsAndAnswers" to questionsAndAnswers,
         ))
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)

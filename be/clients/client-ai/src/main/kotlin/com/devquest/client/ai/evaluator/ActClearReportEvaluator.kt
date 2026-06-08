@@ -32,7 +32,7 @@ class ActClearReportEvaluator(
             "avgScore" to avgScore,
         ))
 
-        return aiCallExecutor.execute(this.javaClass.simpleName) {
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(ActClearReportResult::class.java)
         }
     }
