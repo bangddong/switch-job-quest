@@ -21,7 +21,7 @@ server:
 grafana:
   otlp:
     enabled: true
-    instance-id: "3284556"
+    instance-id: "1680166"
 
 storage:
   datasource:
