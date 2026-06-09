@@ -81,6 +81,8 @@ class CacheMetricsAdvisor(
             meterRegistry.timer("ai.call.duration", "evaluator", evaluatorName, "model", modelName).record(latencyMs, TimeUnit.MILLISECONDS)
             meterRegistry.counter("ai.tokens.input", "evaluator", evaluatorName, "model", modelName).increment(inputTokens.toDouble())
             meterRegistry.counter("ai.tokens.output", "evaluator", evaluatorName, "model", modelName).increment(outputTokens.toDouble())
+            meterRegistry.counter("ai.tokens.cache_read", "evaluator", evaluatorName, "model", modelName).increment(cacheRead.toDouble())
+            meterRegistry.counter("ai.tokens.cache_creation", "evaluator", evaluatorName, "model", modelName).increment(cacheCreation.toDouble())
 
         }.onFailure { e ->
             log.debug("Failed to extract cache metrics", e)
