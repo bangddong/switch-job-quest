@@ -13,7 +13,6 @@
     { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
     { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
     { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
-    { "type": "panel", "id": "gauge", "name": "Gauge", "version": "" },
     { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
     { "type": "panel", "id": "table", "name": "Table", "version": "" }
   ],
@@ -28,7 +27,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 100,
-      "title": "?�출 ?�황",
+      "title": "Overview",
       "type": "row"
     },
     {
@@ -36,12 +35,7 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "short"
         },
         "overrides": []
@@ -49,13 +43,13 @@
       "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
       "id": 1,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
-      "title": "�?AI ?�출 (1h)",
+      "title": "Total AI Calls (1h)",
       "type": "stat",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(increase(devquest_ai_call_total[1h]))",
-          "legendFormat": "�??�출",
+          "legendFormat": "calls",
           "refId": "A"
         }
       ]
@@ -82,13 +76,13 @@
       "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
       "id": 2,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "title": "?�공�?(1h)",
+      "title": "Success Rate (1h)",
       "type": "stat",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(increase(devquest_ai_call_total{status=\"success\"}[1h])) / sum(increase(devquest_ai_call_total[1h]))",
-          "legendFormat": "?�공�?,
+          "legendFormat": "success rate",
           "refId": "A"
         }
       ]
@@ -115,13 +109,13 @@
       "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
       "id": 3,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "title": "캐시 ?�트??(5m)",
+      "title": "Cache Hit Rate (5m)",
       "type": "stat",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(rate(ai_tokens_cache_read_total[5m])) / (sum(rate(ai_tokens_cache_read_total[5m])) + sum(rate(ai_tokens_input_total[5m])) + 0.0001)",
-          "legendFormat": "캐시 ?�트??,
+          "legendFormat": "cache hit rate",
           "refId": "A"
         }
       ]
@@ -146,7 +140,7 @@
       "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
       "id": 4,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "title": "P95 ?�이?�시 (5m)",
+      "title": "P95 Latency (5m)",
       "type": "stat",
       "targets": [
         {
@@ -162,12 +156,7 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "short"
         },
         "overrides": []
@@ -175,13 +164,13 @@
       "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
       "id": 5,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
-      "title": "?�시???�수 (1h)",
+      "title": "Retries (1h)",
       "type": "stat",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(increase(devquest_ai_retry_total[1h]))",
-          "legendFormat": "?�시??,
+          "legendFormat": "retries",
           "refId": "A"
         }
       ]
@@ -190,7 +179,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
       "id": 101,
-      "title": "?�큰 ?�용??,
+      "title": "Token Usage",
       "type": "row"
     },
     {
@@ -206,19 +195,19 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "id": 10,
       "options": { "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "?�력 ?�큰 / 출력 ?�큰 (evaluator�?",
+      "title": "Input / Output Tokens by Evaluator",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(rate(ai_tokens_input_total[5m])) by (evaluatorType)",
-          "legendFormat": "input · {{evaluatorType}}",
+          "legendFormat": "input - {{evaluatorType}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(rate(ai_tokens_output_total[5m])) by (evaluatorType)",
-          "legendFormat": "output · {{evaluatorType}}",
+          "legendFormat": "output - {{evaluatorType}}",
           "refId": "B"
         }
       ]
@@ -245,7 +234,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "id": 11,
       "options": { "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "캐시 ?�큰 (cache_read vs cache_creation)",
+      "title": "Cache Tokens (cache_read vs cache_creation)",
       "type": "timeseries",
       "targets": [
         {
@@ -266,7 +255,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
       "id": 102,
-      "title": "캐시 ?�율",
+      "title": "Cache Efficiency",
       "type": "row"
     },
     {
@@ -284,7 +273,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "id": 20,
       "options": { "legend": { "calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "캐시 ?�트??추이 (evaluator�?",
+      "title": "Cache Hit Rate by Evaluator",
       "type": "timeseries",
       "targets": [
         {
@@ -308,13 +297,13 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 21,
       "options": { "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "캐시 ?�약 ?�큰 (cache_read ?�적)",
+      "title": "Cache Saved Tokens by Evaluator (1h)",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(increase(ai_tokens_cache_read_total[1h])) by (evaluatorType)",
-          "legendFormat": "?�약 · {{evaluatorType}}",
+          "legendFormat": "saved - {{evaluatorType}}",
           "refId": "A"
         }
       ]
@@ -323,7 +312,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "id": 103,
-      "title": "?�이?�시",
+      "title": "Latency",
       "type": "row"
     },
     {
@@ -339,7 +328,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
       "id": 30,
       "options": { "legend": { "calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "AI ?�출 ?�이?�시 P50 / P95 / P99",
+      "title": "AI Call Latency P50 / P95 / P99",
       "type": "timeseries",
       "targets": [
         {
@@ -375,7 +364,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "id": 31,
       "options": { "legend": { "calcs": ["lastNotNull", "mean"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "Evaluator�?P95 ?�이?�시",
+      "title": "P95 Latency by Evaluator",
       "type": "timeseries",
       "targets": [
         {
@@ -390,7 +379,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
       "id": 104,
-      "title": "Evaluator ?�약",
+      "title": "Evaluator Summary",
       "type": "row"
     },
     {
@@ -403,7 +392,7 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "캐시 ?�트?? },
+            "matcher": { "id": "byName", "options": "Cache Hit Rate" },
             "properties": [
               { "id": "unit", "value": "percentunit" },
               { "id": "custom.displayMode", "value": "color-background" },
@@ -411,7 +400,7 @@
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "?�공�? },
+            "matcher": { "id": "byName", "options": "Success Rate" },
             "properties": [
               { "id": "unit", "value": "percentunit" },
               { "id": "custom.displayMode", "value": "color-background" },
@@ -422,8 +411,8 @@
       },
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 33 },
       "id": 40,
-      "options": { "footer": { "show": false }, "showHeader": true, "sortBy": [{ "displayName": "?�출 ??, "desc": true }] },
-      "title": "Evaluator�?종합 ?�황 (1h)",
+      "options": { "footer": { "show": false }, "showHeader": true, "sortBy": [{ "displayName": "Calls", "desc": true }] },
+      "title": "Evaluator Summary (1h)",
       "type": "table",
       "targets": [
         {
@@ -454,9 +443,9 @@
           "id": "organize",
           "options": {
             "renameByName": {
-              "Value #A": "?�출 ??,
-              "Value #B": "?�공�?,
-              "Value #C": "캐시 ?�트??
+              "Value #A": "Calls",
+              "Value #B": "Success Rate",
+              "Value #C": "Cache Hit Rate"
             }
           }
         }
@@ -484,7 +473,7 @@
   "time": { "from": "now-3h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "DevQuest ??AI 메트�?,
+  "title": "DevQuest - AI Metrics",
   "uid": "devquest-ai-metrics",
   "version": 1
 }
