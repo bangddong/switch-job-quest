@@ -14,8 +14,12 @@
     </springProfile>
 
     <springProfile name="prod">
-        <springProperty scope="context" name="logtailSourceToken"
-                        source="LOGTAIL_SOURCE_TOKEN" defaultValue=""/>
+        <springProperty scope="context" name="grafanaLokiUrl"
+                        source="GRAFANA_LOKI_URL" defaultValue=""/>
+        <springProperty scope="context" name="grafanaLokiInstanceId"
+                        source="GRAFANA_LOKI_INSTANCE_ID" defaultValue=""/>
+        <springProperty scope="context" name="grafanaApiKey"
+                        source="GRAFANA_API_KEY" defaultValue=""/>
 
         <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
@@ -31,13 +35,29 @@
             </encoder>
         </appender>
 
-        <appender name="LOGTAIL" class="com.devquest.support.logging.LogtailHttpAppender">
-            <sourceToken>${logtailSourceToken}</sourceToken>
+        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+            <http>
+                <url>${grafanaLokiUrl}</url>
+                <auth>
+                    <username>${grafanaLokiInstanceId}</username>
+                    <password>${grafanaApiKey}</password>
+                </auth>
+                <requestTimeoutMs>15000</requestTimeoutMs>
+            </http>
+            <batch>
+                <maxBytes>65536</maxBytes>
+            </batch>
+            <format>
+                <label>
+                    <pattern>app=devquest-api,level=%level</pattern>
+                </label>
+                <message class="com.github.loki4j.logback.JsonLayout"/>
+            </format>
         </appender>
 
         <root level="INFO">
             <appender-ref ref="STDOUT"/>
-            <appender-ref ref="LOGTAIL"/>
+            <appender-ref ref="LOKI"/>
         </root>
     </springProfile>
 

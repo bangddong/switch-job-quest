@@ -1,5 +1,16 @@
 # 미완료 작업
 
+## [ ] Fly.io secrets 업데이트 — Better Stack → Grafana Cloud Loki 전환
+
+```bash
+fly secrets set GRAFANA_LOKI_URL=https://logs-prod-ap-northeast-1.grafana.net/loki/v1/push \
+               GRAFANA_LOKI_INSTANCE_ID=<your-loki-instance-id>
+fly secrets unset LOGTAIL_SOURCE_TOKEN
+```
+
+Loki instance ID 확인: Grafana Cloud > Home > Stack > Loki > Details
+GRAFANA_API_KEY는 기존 값 그대로 유지 (메트릭과 공유)
+
 ---
 
 ## 완료된 항목
