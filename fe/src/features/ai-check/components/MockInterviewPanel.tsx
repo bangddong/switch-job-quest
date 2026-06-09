@@ -17,7 +17,7 @@ const PERSONALITY_FALLBACK: InterviewQuestion[] = [
 ]
 
 const ROLE_DEFAULTS: Record<string, string> = {
-  '백엔드': 'Kotlin,Spring Boot,JPA,MySQL,Redis',
+  '백엔드': 'Java,Spring Boot,JPA,MySQL,Redis',
   '프론트엔드': 'React,TypeScript,Next.js',
   '풀스택': 'React,TypeScript,Node.js,PostgreSQL',
   '데이터/ML': 'Python,Pandas,TensorFlow,SQL',
@@ -65,7 +65,7 @@ export function MockInterviewPanel({ character, onComplete }: MockInterviewPanel
         techStack: techStack.split(',').map(s => s.trim()).filter(Boolean),
         targetRole: roleToTargetRole[character.role] ?? '개발자',
         yearsOfExperience: character.years,
-        categories: 'DB,JVM,네트워크,운영체제,설계,Spring',
+        categories: 'Java,Spring,DB,JVM,인프라,네트워크,설계',
         techCount,
         personalityCount,
       })
