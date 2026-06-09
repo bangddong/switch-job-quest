@@ -54,8 +54,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `feat/mock-interview-java-diversity` |
+| 열린 PR | #184 — 모의면접 Java/인프라 카테고리 추가 및 질문 다양성 강화 (머지 대기) |
 
 
 
@@ -70,6 +70,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #184 | 모의면접 Java/인프라 카테고리 추가 및 질문 다양성 강화 + 모범 답안 상세화 | 2026-06-09 |
 | #183 | AI 호출 메트릭 수집 — AiMetricsRecorder + Spring AI Observation 활성화 | 2026-06-08 |
 | #182 | 코딩 퀘스트 문제/에디터 패널 드래그 리사이즈 (PC 전용) | 2026-06-08 |
 | #180 | 데일리 메일 deepLink URL 오타 수정 (devquest.kr → quest.dhbang.co.kr) | 2026-06-08 |
