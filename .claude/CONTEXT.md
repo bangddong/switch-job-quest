@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `feat/ai-token-metrics-dashboard` |
+| 열린 PR | #187 — AI 캐시 토큰 메트릭 + Grafana 대시보드 (머지 대기) |
 
 
 
@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #187 | AI 캐시 토큰 메트릭 추가 + Grafana 대시보드 (cache_read/creation 카운터, 5개 섹션 대시보드) | 2026-06-09 |
 | #186 | Better Stack 제거 — Grafana Cloud Loki 전환 (loki4j 1.6.0) | 2026-06-09 |
 | #185 | QA 강제화 훅 — gh pr create 전 qa-reviewer 실행 여부 차단 | 2026-06-09 |
 | #184 | 모의면접 Java/인프라 카테고리 추가 및 질문 다양성 강화 + 모범 답안 상세화 | 2026-06-09 |
