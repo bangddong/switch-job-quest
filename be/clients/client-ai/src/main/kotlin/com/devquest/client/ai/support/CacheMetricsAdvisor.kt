@@ -77,12 +77,11 @@ class CacheMetricsAdvisor(
                 log.warn("AI 메트릭 DB 저장 실패", e)
             }
 
-            meterRegistry.counter("ai.call.total", "evaluator", evaluatorName, "model", modelName).increment()
-            meterRegistry.timer("ai.call.duration", "evaluator", evaluatorName, "model", modelName).record(latencyMs, TimeUnit.MILLISECONDS)
-            meterRegistry.counter("ai.tokens.input", "evaluator", evaluatorName, "model", modelName).increment(inputTokens.toDouble())
-            meterRegistry.counter("ai.tokens.output", "evaluator", evaluatorName, "model", modelName).increment(outputTokens.toDouble())
-            meterRegistry.counter("ai.tokens.cache_read", "evaluator", evaluatorName, "model", modelName).increment(cacheRead.toDouble())
-            meterRegistry.counter("ai.tokens.cache_creation", "evaluator", evaluatorName, "model", modelName).increment(cacheCreation.toDouble())
+            meterRegistry.timer("ai.call.duration", "evaluatorType", evaluatorName, "model", modelName).record(latencyMs, TimeUnit.MILLISECONDS)
+            meterRegistry.counter("ai.tokens.input", "evaluatorType", evaluatorName, "model", modelName).increment(inputTokens.toDouble())
+            meterRegistry.counter("ai.tokens.output", "evaluatorType", evaluatorName, "model", modelName).increment(outputTokens.toDouble())
+            meterRegistry.counter("ai.tokens.cache_read", "evaluatorType", evaluatorName, "model", modelName).increment(cacheRead.toDouble())
+            meterRegistry.counter("ai.tokens.cache_creation", "evaluatorType", evaluatorName, "model", modelName).increment(cacheCreation.toDouble())
 
         }.onFailure { e ->
             log.debug("Failed to extract cache metrics", e)
