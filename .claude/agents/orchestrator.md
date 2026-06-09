@@ -263,11 +263,16 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 
 → CRITICAL 여부 확인
 
+**QA 완료 즉시 마커 파일 생성 (필수 — 없으면 PR 생성 훅이 차단)**:
+```bash
+mkdir -p .claude/qa-cache && echo "QA_PASSED" > ".claude/qa-cache/$(git branch --show-current)"
+```
+
 ---
 
 ## 8단계: CRITICAL 처리
 
-**CRITICAL 없음** → 9단계 (PR 생성 시 assert-pr-reviewed.sh가 자동으로 최종 검토 실행)
+**CRITICAL 없음** → 9단계 (PR 생성 시 assert-qa-run.sh + assert-pr-reviewed.sh가 자동으로 검토 실행)
 
 **CRITICAL 있음**:
 - BE CRITICAL → be-feature-builder 재스폰 (수정 내용 명시)
