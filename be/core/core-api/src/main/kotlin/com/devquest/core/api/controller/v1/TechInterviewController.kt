@@ -17,7 +17,7 @@ class TechInterviewController(
 
     @GetMapping("/question")
     fun generateQuestion(
-        @AuthenticationPrincipal userId: String,
+        @AuthenticationPrincipal(errorOnInvalidType = false) userId: String?,
         @RequestParam(defaultValue = "Java") techStack: String,
     ): ApiResponse<*> {
         return ApiResponse.success(techInterviewService.generateQuestion(userId, techStack))
@@ -25,7 +25,7 @@ class TechInterviewController(
 
     @PostMapping("/evaluate")
     fun evaluate(
-        @AuthenticationPrincipal userId: String,
+        @AuthenticationPrincipal(errorOnInvalidType = false) userId: String?,
         @Valid @RequestBody request: TechInterviewEvaluateRequestDto,
     ): ApiResponse<*> {
         return ApiResponse.success(

@@ -59,3 +59,7 @@ devquest:
     from: noreply@dhbang.co.kr
     enabled: ${MAIL_ENABLED:false}
 
+  rate-limit:
+    tech-interview:
+      capacity: 2
+      refill-days: 1

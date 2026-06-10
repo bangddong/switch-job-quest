@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -57,5 +58,16 @@ class TechInterviewServiceTest {
         verify(questProgressRecorder).record(
             eq("user1"), eq(QuestConstants.TECH_INTERVIEW), eq(1), eq(50), eq(false), any(), isNull()
         )
+    }
+
+    @Test
+    fun `evaluate - userId가 null이면 questProgressRecorder를 호출하지 않는다`() {
+        val result = TechInterviewResult(questions = listOf("Q1"), overallScore = 80, passed = true)
+        whenever(techInterviewPort.evaluate(any(), any(), any())).thenReturn(result)
+
+        val returned = service.evaluate(null, "Java", listOf("Q1"), listOf("A1"))
+
+        assertThat(returned.passed).isTrue()
+        verify(questProgressRecorder, never()).record(any(), any(), any(), any(), any(), any(), any())
     }
 }
