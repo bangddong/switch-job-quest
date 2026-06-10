@@ -40,8 +40,17 @@ class TechInterviewRateLimitInterceptorTest {
     }
 
     @Test
-    fun `같은 IP에서 두 번째 요청은 차단된다`() {
+    fun `같은 IP에서 두 번째 요청(평가)도 통과한다`() {
         val request = mockRequest("1.2.3.4")
+        interceptor.preHandle(request, mockResponse(), Any())
+        val result = interceptor.preHandle(request, mockResponse(), Any())
+        assertThat(result).isTrue()
+    }
+
+    @Test
+    fun `같은 IP에서 세 번째 요청은 차단된다`() {
+        val request = mockRequest("1.2.3.4")
+        interceptor.preHandle(request, mockResponse(), Any())
         interceptor.preHandle(request, mockResponse(), Any())
         val result = interceptor.preHandle(request, mockResponse(), Any())
         assertThat(result).isFalse()

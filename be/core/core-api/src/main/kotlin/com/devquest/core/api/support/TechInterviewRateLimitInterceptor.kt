@@ -52,8 +52,8 @@ class TechInterviewRateLimitInterceptor : HandlerInterceptor {
     private fun newBucket(): Bucket = Bucket.builder()
         .addLimit(
             Bandwidth.builder()
-                .capacity(1)
-                .refillIntervally(1, Duration.ofDays(1))
+                .capacity(2)
+                .refillIntervally(2, Duration.ofDays(1))
                 .build()
         )
         .build()
