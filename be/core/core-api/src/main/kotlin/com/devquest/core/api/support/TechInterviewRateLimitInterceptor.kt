@@ -8,23 +8,21 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
 import java.time.Duration
-import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 @Component
 class TechInterviewRateLimitInterceptor : HandlerInterceptor {
 
     private val objectMapper = ObjectMapper()
-    private val buckets: MutableMap<String, Bucket> = Collections.synchronizedMap(
-        object : LinkedHashMap<String, Bucket>(16, 0.75f, true) {
-            override fun removeEldestEntry(eldest: Map.Entry<String, Bucket>) = size > MAX_IP_COUNT
-        }
-    )
+    private val buckets = ConcurrentHashMap<String, Bucket>()
 
-    companion object {
-        private const val MAX_IP_COUNT = 5000
+    @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
+    fun clearBuckets() {
+        buckets.clear()
     }
 
     override fun preHandle(
@@ -33,7 +31,7 @@ class TechInterviewRateLimitInterceptor : HandlerInterceptor {
         handler: Any,
     ): Boolean {
         val ip = request.getHeader("Fly-Client-IP") ?: request.remoteAddr
-        val bucket = buckets.getOrPut(ip) { newBucket() }
+        val bucket = buckets.computeIfAbsent(ip) { newBucket() }
 
         return if (bucket.tryConsume(1)) {
             true
