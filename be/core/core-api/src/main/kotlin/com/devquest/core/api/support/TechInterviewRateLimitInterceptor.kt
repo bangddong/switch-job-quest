@@ -39,18 +39,21 @@ class TechInterviewRateLimitInterceptor : HandlerInterceptor {
             response.status = HttpStatus.TOO_MANY_REQUESTS.value()
             response.contentType = MediaType.APPLICATION_JSON_VALUE
             response.characterEncoding = "UTF-8"
-            response.writer.write(
-                objectMapper.writeValueAsString(
-                    mapOf(
-                        "result" to "ERROR",
-                        "data" to null,
-                        "error" to mapOf(
-                            "code" to ErrorCode.RATE_LIMIT_EXCEEDED.name,
-                            "message" to ErrorCode.RATE_LIMIT_EXCEEDED.message,
+            response.writer.apply {
+                write(
+                    objectMapper.writeValueAsString(
+                        mapOf(
+                            "result" to "ERROR",
+                            "data" to null,
+                            "error" to mapOf(
+                                "code" to ErrorCode.RATE_LIMIT_EXCEEDED.name,
+                                "message" to ErrorCode.RATE_LIMIT_EXCEEDED.message,
+                            )
                         )
                     )
                 )
-            )
+                flush()
+            }
             false
         }
     }
