@@ -1,6 +1,35 @@
 import { useState } from 'react'
-import { fetchTechInterviewQuestion, evaluateTechInterview } from '@/lib/apiClient'
-import type { TechInterviewResult } from '@/types/api.types'
+import type { ApiResponse, TechInterviewResult } from '@/types/api.types'
+
+async function fetchDemoQuestion(techStack: string): Promise<TechInterviewResult> {
+  const res = await fetch(`/api/v1/tech-interview/question?techStack=${encodeURIComponent(techStack)}`, {
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (res.status === 429) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error((json as { error?: { message?: string } })?.error?.message ?? '오늘 체험 횟수를 초과했습니다. 내일 다시 시도해주세요.')
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<TechInterviewResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('질문 조회 실패')
+  return json.data
+}
+
+async function submitDemoEvaluation(techStack: string, questions: string[], answers: string[]): Promise<TechInterviewResult> {
+  const res = await fetch('/api/v1/tech-interview/evaluate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ techStack, questions, answers }),
+  })
+  if (res.status === 429) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error((json as { error?: { message?: string } })?.error?.message ?? '오늘 체험 횟수를 초과했습니다. 내일 다시 시도해주세요.')
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<TechInterviewResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('평가 실패')
+  return json.data
+}
 
 const TECH_STACKS = ['Java', 'Kotlin']
 
@@ -23,11 +52,11 @@ export function TechInterviewDemoPage({ onLogin }: TechInterviewDemoPageProps) {
     setResult(null)
     setAnswers([])
     try {
-      const data = await fetchTechInterviewQuestion(techStack)
+      const data = await fetchDemoQuestion(techStack)
       setQuestions(data.questions)
       setAnswers(data.questions.map(() => ''))
-    } catch {
-      setError('질문을 불러오는 데 실패했습니다. 다시 시도해주세요.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '질문을 불러오는 데 실패했습니다. 다시 시도해주세요.')
     } finally {
       setLoading(false)
     }
@@ -45,10 +74,10 @@ export function TechInterviewDemoPage({ onLogin }: TechInterviewDemoPageProps) {
     setSubmitting(true)
     setError(null)
     try {
-      const data = await evaluateTechInterview(techStack, questions, answers)
+      const data = await submitDemoEvaluation(techStack, questions, answers)
       setResult(data)
-    } catch {
-      setError('평가 요청에 실패했습니다. 다시 시도해주세요.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '평가 요청에 실패했습니다. 다시 시도해주세요.')
     } finally {
       setSubmitting(false)
     }
