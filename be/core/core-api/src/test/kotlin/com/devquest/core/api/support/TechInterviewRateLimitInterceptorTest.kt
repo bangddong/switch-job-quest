@@ -12,24 +12,27 @@ import java.io.StringWriter
 
 class TechInterviewRateLimitInterceptorTest {
 
+    private lateinit var store: RateLimitBucketStore
     private lateinit var interceptor: TechInterviewRateLimitInterceptor
 
     @BeforeEach
     fun setUp() {
-        interceptor = TechInterviewRateLimitInterceptor()
+        store = RateLimitBucketStore()
+        interceptor = TechInterviewRateLimitInterceptor(store)
     }
 
-    private fun mockRequest(ip: String): HttpServletRequest {
+    private fun mockRequest(ip: String, flyClientIp: String? = null): HttpServletRequest {
         val request = mock<HttpServletRequest>()
-        whenever(request.getHeader("Fly-Client-IP")).thenReturn(null)
+        whenever(request.getHeader("Fly-Client-IP")).thenReturn(flyClientIp)
+        whenever(request.getHeader("X-Forwarded-For")).thenReturn(null)
         whenever(request.remoteAddr).thenReturn(ip)
         return request
     }
 
     private fun mockResponse(): HttpServletResponse {
         val response = mock<HttpServletResponse>()
-        val writer = StringWriter()
-        whenever(response.writer).thenReturn(PrintWriter(writer))
+        val writer = PrintWriter(StringWriter())
+        whenever(response.writer).thenReturn(writer)
         return response
     }
 
@@ -58,8 +61,27 @@ class TechInterviewRateLimitInterceptorTest {
 
     @Test
     fun `다른 IP는 독립적으로 카운트된다`() {
-        interceptor.preHandle(mockRequest("1.2.3.4"), mockResponse(), Any())  // IP-A 소진
-        val result = interceptor.preHandle(mockRequest("5.6.7.8"), mockResponse(), Any())  // IP-B 첫 시도
+        interceptor.preHandle(mockRequest("1.2.3.4"), mockResponse(), Any())
+        val result = interceptor.preHandle(mockRequest("5.6.7.8"), mockResponse(), Any())
+        assertThat(result).isTrue()
+    }
+
+    @Test
+    fun `Fly-Client-IP 헤더가 있으면 해당 IP로 식별된다`() {
+        // remoteAddr이 다르더라도 Fly-Client-IP 기준으로 동일 IP 취급
+        interceptor.preHandle(mockRequest("10.0.0.1", flyClientIp = "1.2.3.4"), mockResponse(), Any())
+        interceptor.preHandle(mockRequest("10.0.0.2", flyClientIp = "1.2.3.4"), mockResponse(), Any())
+        val result = interceptor.preHandle(mockRequest("10.0.0.3", flyClientIp = "1.2.3.4"), mockResponse(), Any())
+        assertThat(result).isFalse()
+    }
+
+    @Test
+    fun `store clear 후에는 다시 2회 허용된다`() {
+        val request = mockRequest("1.2.3.4")
+        interceptor.preHandle(request, mockResponse(), Any())
+        interceptor.preHandle(request, mockResponse(), Any())
+        store.clear()
+        val result = interceptor.preHandle(request, mockResponse(), Any())
         assertThat(result).isTrue()
     }
 }

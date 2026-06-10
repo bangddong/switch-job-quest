@@ -8,30 +8,23 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 @Component
-class TechInterviewRateLimitInterceptor : HandlerInterceptor {
-
-    private val objectMapper = ObjectMapper()
-    private val buckets = ConcurrentHashMap<String, Bucket>()
-
-    @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
-    fun clearBuckets() {
-        buckets.clear()
-    }
+class TechInterviewRateLimitInterceptor(
+    private val rateLimitBucketStore: RateLimitBucketStore,
+) : HandlerInterceptor {
 
     override fun preHandle(
         request: HttpServletRequest,
         response: HttpServletResponse,
         handler: Any,
     ): Boolean {
-        val ip = request.getHeader("Fly-Client-IP") ?: request.remoteAddr
-        val bucket = buckets.computeIfAbsent(ip) { newBucket() }
+        val ip = resolveClientIp(request)
+        val bucket = rateLimitBucketStore.getOrCreate(ip)
 
         return if (bucket.tryConsume(1)) {
             true
@@ -40,23 +33,42 @@ class TechInterviewRateLimitInterceptor : HandlerInterceptor {
             response.contentType = MediaType.APPLICATION_JSON_VALUE
             response.characterEncoding = "UTF-8"
             response.writer.apply {
-                write(
-                    objectMapper.writeValueAsString(
-                        mapOf(
-                            "result" to "ERROR",
-                            "data" to null,
-                            "error" to mapOf(
-                                "code" to ErrorCode.RATE_LIMIT_EXCEEDED.name,
-                                "message" to ErrorCode.RATE_LIMIT_EXCEEDED.message,
-                            )
-                        )
-                    )
-                )
+                write(RATE_LIMIT_RESPONSE_JSON)
                 flush()
             }
             false
         }
     }
+
+    private fun resolveClientIp(request: HttpServletRequest): String {
+        // Fly.io 전용 헤더 → X-Forwarded-For 첫 번째 IP → remoteAddr 순으로 폴백
+        return request.getHeader("Fly-Client-IP")
+            ?: request.getHeader("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
+            ?: request.remoteAddr
+    }
+
+    companion object {
+        private val RATE_LIMIT_RESPONSE_JSON: String = ObjectMapper().writeValueAsString(
+            mapOf(
+                "result" to "ERROR",
+                "data" to null,
+                "error" to mapOf(
+                    "code" to ErrorCode.RATE_LIMIT_EXCEEDED.name,
+                    "message" to ErrorCode.RATE_LIMIT_EXCEEDED.message,
+                )
+            )
+        )
+    }
+}
+
+@Component
+class RateLimitBucketStore {
+
+    private val buckets = ConcurrentHashMap<String, Bucket>()
+
+    fun getOrCreate(ip: String): Bucket = buckets.computeIfAbsent(ip) { newBucket() }
+
+    fun clear() = buckets.clear()
 
     private fun newBucket(): Bucket = Bucket.builder()
         .addLimit(
