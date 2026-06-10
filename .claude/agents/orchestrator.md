@@ -261,27 +261,31 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 """)
 ```
 
-→ CRITICAL 여부 확인
+→ HIGH 여부 확인
 
 **QA 완료 즉시 마커 파일 생성 (필수 — 없으면 PR 생성 훅이 차단)**:
 ```bash
 mkdir -p .claude/qa-cache && echo "QA_PASSED" > ".claude/qa-cache/$(git branch --show-current)"
 ```
 
+> **주의**: 마커 생성 후 코드 수정이 추가되면 QA를 재실행해야 한다. 마커는 최종 코드 확정 후 생성할 것.
+
 ---
 
-## 8단계: CRITICAL 처리
+## 8단계: HIGH 처리
 
-**CRITICAL 없음** → 9단계 (PR 생성 시 assert-qa-run.sh + assert-pr-reviewed.sh가 자동으로 검토 실행)
+**HIGH 없음** → 9단계 (PR 생성 시 assert-qa-run.sh + assert-pr-reviewed.sh가 자동으로 검토 실행)
 
-**CRITICAL 있음**:
-- BE CRITICAL → be-feature-builder 재스폰 (수정 내용 명시)
-- FE CRITICAL → fe-feature-builder 재스폰
+**HIGH 있음**:
+- BE HIGH → be-feature-builder 재스폰 (수정 내용 명시)
+- FE HIGH → fe-feature-builder 재스폰
 - 수정 후 qa-reviewer 재실행
 - 최대 2회 재시도. 실패 시 사용자에게 원인과 함께 보고
 
+**MEDIUM / LOW**: 오케스트레이터가 타당성 판단 후 처리 여부 결정. PR 생성 차단 안 함.
+
 > **강제 장치**: `gh pr create` 실행 시 PreToolUse 훅이 Anthropic API로 diff를 재검토한다.
-> CRITICAL 있으면 PR 생성 차단 → 반드시 수정 후 재시도.
+> HIGH 있으면 PR 생성 차단 → 반드시 수정 후 재시도.
 
 ---
 
@@ -296,7 +300,7 @@ gh pr create \
   --body-file .github/pull_request_template.md
 ```
 
-> PR 생성 시 PreToolUse 훅이 자동으로 사전 리뷰를 실행한다. CRITICAL 없으면 PR 생성 진행.
+> PR 생성 시 PreToolUse 훅이 자동으로 사전 리뷰를 실행한다. HIGH 없으면 PR 생성 진행.
 
 > **PR body는 한국어로 작성한다.** (title의 type/scope/message는 영어 컨벤션 유지)
 > **"🤖 Generated with Claude Code" 문구는 PR body에 포함하지 않는다.**
@@ -334,8 +338,9 @@ git push
 - FE: [변경 요약]
 
 ### QA
-- CRITICAL: 없음
-- WARNING: N건 — [항목]
+- HIGH: 없음
+- MEDIUM: N건 — [항목]
+- LOW: N건 — [항목]
 
 ### PR: #[번호]
 ```

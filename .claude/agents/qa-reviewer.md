@@ -127,7 +127,7 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 | 체크 | 기준 |
 |------|------|
 | 신규 Service 메서드 | 대응 테스트 케이스 존재 여부 |
-| 생성자 변경 | `@Mock` 목록에 새 의존성 추가 여부 (누락 시 CI 파괴 — **CRITICAL**) |
+| 생성자 변경 | `@Mock` 목록에 새 의존성 추가 여부 (누락 시 CI 파괴 — **HIGH**) |
 | AI 응답 `passed` 처리 | `overallScore`/`fitScore` 등 복합 점수 Result(Resume, DeveloperClass, BossPackage 등)에 한해 `PassCriteriaPolicy.evaluate*()` 정규화 여부 확인. 단순 `result.passed` 사용은 정상 패턴 |
 | `aiEvaluationJson` 보존 | `record()` null 전달 시 기존 JSON이 null로 덮어쓰이지 않는지 |
 | Evaluator 단위 테스트 | 새 `*Evaluator` 구현 시 `*EvaluatorTest.kt` 존재 여부 |
@@ -135,7 +135,20 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 | Controller 테스트 패턴 | `standaloneSetup` + `AuthenticationPrincipalArgumentResolver` 사용 여부 |
 | Evaluator 테스트 패턴 | `@Mock`/`@InjectMocks` 사용 금지 — `RETURNS_DEEP_STUBS` 패턴 사용 여부 |
 
-테스트 없음 → **WARNING** 처리 (CRITICAL 아님, tech-debt로 분류)
+테스트 없음 → **MEDIUM** 처리 (HIGH 아님, tech-debt로 분류)
+
+## Severity 기준
+
+| 등급 | 정의 | 오케스트레이터 처리 |
+|------|------|-------------------|
+| **HIGH** | 아키텍처 규칙 위반 / 시크릿 하드코딩 / 런타임 크래시 확실히 유발 / 즉각적 보안 취약점(SQL Injection·XSS) / BE↔FE 계약 불일치 | **수정 후 재QA 필수** |
+| **MEDIUM** | 명백한 로직 버그(즉각 크래시 아님) / 성능 anti-pattern / 테스트 커버리지 부족으로 회귀 위험 | 권장 수정, 오케스트레이터 판단 |
+| **LOW** | 코드 스타일·가독성 / 설정 외부화 권장 / "더 좋은 방법" / 확장성 고려 | tech-debt, 선택적 |
+
+**판단 원칙**:
+- "분산 환경 고려", "추후 확장성", "초기화 안전성 우려", "더 좋은 패턴 존재" → HIGH 금지
+- 실제로 현재 코드에서 피해가 발생하는지 확인 후에만 HIGH 판정
+- 같은 유형의 지적은 한 번만 (중복 나열 금지)
 
 ## 보고서 형식
 
@@ -143,10 +156,13 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 ## QA 리뷰 결과: [기능명]
 
 ### BE 리뷰
-**CRITICAL (즉시 수정 필요)**
+**HIGH (수정 필수)**
 - [내용] (file:line)
 
-**WARNING (권장 수정)**
+**MEDIUM (권장 수정)**
+- [내용] (file:line)
+
+**LOW (선택적 개선)**
 - [내용] (file:line)
 
 **이상 없음**: [체크한 항목 목록]
@@ -154,10 +170,13 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 ---
 
 ### FE 리뷰
-**CRITICAL**
+**HIGH**
 - [내용]
 
-**WARNING**
+**MEDIUM**
+- [내용]
+
+**LOW**
 - [내용]
 
 **이상 없음**: [체크한 항목 목록]
@@ -173,13 +192,9 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 ---
 
 ### 종합 판정
-- [ ] 머지 가능 (CRITICAL 없음)
-- [ ] 수정 후 재검토 필요 (CRITICAL N건)
+- [ ] 머지 가능 (HIGH 없음)
+- [ ] 수정 후 재검토 필요 (HIGH N건)
 ```
-
-심각도 기준:
-- **CRITICAL**: 런타임 오류, 아키텍처 위반, 보안 이슈, BE↔FE 불일치
-- **WARNING**: 잠재적 버그, 스타일 위반, 개선 권장
 
 > 보고서 작성 후 전체 검토 과정을 재현하지 않는다. 위 형식 그대로 반환하고 끝낸다.
 
