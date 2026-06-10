@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #191 | qa-reviewer + orchestrator severity HIGH/MEDIUM/LOW 기준 통일 | 2026-06-10 |
 | #190 | 기술면접 비로그인 체험 + IP rate limiting (Bucket4j, 하루 2회, 자정 reset) | 2026-06-10 |
 | #189 | PR 리뷰 훅 개선 — HIGH/MEDIUM/LOW 3단계 + 차단 기준 명확화 | 2026-06-10 |
 | #187 | AI 캐시 토큰 메트릭 추가 + Grafana 대시보드 (cache_read/creation 카운터, 5개 섹션 대시보드) | 2026-06-09 |
