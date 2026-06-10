@@ -6,8 +6,10 @@ import io.github.bucket4j.Bandwidth
 import io.github.bucket4j.Bucket
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
 import java.time.Duration
@@ -17,6 +19,19 @@ import java.util.concurrent.ConcurrentHashMap
 class TechInterviewRateLimitInterceptor(
     private val rateLimitBucketStore: RateLimitBucketStore,
 ) : HandlerInterceptor {
+
+    private val rateLimitResponseJson: String by lazy {
+        ObjectMapper().writeValueAsString(
+            mapOf(
+                "result" to "ERROR",
+                "data" to null,
+                "error" to mapOf(
+                    "code" to ErrorCode.RATE_LIMIT_EXCEEDED.name,
+                    "message" to ErrorCode.RATE_LIMIT_EXCEEDED.message,
+                )
+            )
+        )
+    }
 
     override fun preHandle(
         request: HttpServletRequest,
@@ -33,7 +48,7 @@ class TechInterviewRateLimitInterceptor(
             response.contentType = MediaType.APPLICATION_JSON_VALUE
             response.characterEncoding = "UTF-8"
             response.writer.apply {
-                write(RATE_LIMIT_RESPONSE_JSON)
+                write(rateLimitResponseJson)
                 flush()
             }
             false
@@ -46,23 +61,13 @@ class TechInterviewRateLimitInterceptor(
             ?: request.getHeader("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
             ?: request.remoteAddr
     }
-
-    companion object {
-        private val RATE_LIMIT_RESPONSE_JSON: String = ObjectMapper().writeValueAsString(
-            mapOf(
-                "result" to "ERROR",
-                "data" to null,
-                "error" to mapOf(
-                    "code" to ErrorCode.RATE_LIMIT_EXCEEDED.name,
-                    "message" to ErrorCode.RATE_LIMIT_EXCEEDED.message,
-                )
-            )
-        )
-    }
 }
 
 @Component
-class RateLimitBucketStore {
+class RateLimitBucketStore(
+    @Value("\${devquest.rate-limit.tech-interview.capacity:2}") private val capacity: Long,
+    @Value("\${devquest.rate-limit.tech-interview.refill-days:1}") private val refillDays: Long,
+) {
 
     private val buckets = ConcurrentHashMap<String, Bucket>()
 
@@ -73,8 +78,8 @@ class RateLimitBucketStore {
     private fun newBucket(): Bucket = Bucket.builder()
         .addLimit(
             Bandwidth.builder()
-                .capacity(2)
-                .refillIntervally(2, Duration.ofDays(1))
+                .capacity(capacity)
+                .refillIntervally(capacity, Duration.ofDays(refillDays))
                 .build()
         )
         .build()

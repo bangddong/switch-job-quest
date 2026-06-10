@@ -17,7 +17,7 @@ class TechInterviewRateLimitInterceptorTest {
 
     @BeforeEach
     fun setUp() {
-        store = RateLimitBucketStore()
+        store = RateLimitBucketStore(capacity = 2, refillDays = 1)
         interceptor = TechInterviewRateLimitInterceptor(store)
     }
 
