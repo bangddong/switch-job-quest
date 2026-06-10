@@ -13,16 +13,18 @@ class TechInterviewService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun generateQuestion(userId: String, techStack: String): TechInterviewResult {
+    fun generateQuestion(userId: String?, techStack: String): TechInterviewResult {
         log.info("기술 면접 질문 생성: userId=$userId, techStack=$techStack")
         return techInterviewPort.generateQuestions(techStack)
     }
 
     @Transactional
-    fun evaluate(userId: String, techStack: String, questions: List<String>, answers: List<String>): TechInterviewResult {
+    fun evaluate(userId: String?, techStack: String, questions: List<String>, answers: List<String>): TechInterviewResult {
         val result = techInterviewPort.evaluate(techStack, questions, answers)
-        val xp = QuestXpPolicy.calculate(QuestConstants.TECH_INTERVIEW, result.passed)
-        questProgressRecorder.record(userId, QuestConstants.TECH_INTERVIEW, 1, result.overallScore, result.passed, xp)
+        if (userId != null) {
+            val xp = QuestXpPolicy.calculate(QuestConstants.TECH_INTERVIEW, result.passed)
+            questProgressRecorder.record(userId, QuestConstants.TECH_INTERVIEW, 1, result.overallScore, result.passed, xp)
+        }
         log.info("기술 면접 평가 완료: userId=$userId, score=${result.overallScore}, passed=${result.passed}")
         return result
     }
