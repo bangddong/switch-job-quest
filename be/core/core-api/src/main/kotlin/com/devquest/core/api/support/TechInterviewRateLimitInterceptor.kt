@@ -11,13 +11,21 @@ import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
 import java.time.Duration
-import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
 
 @Component
 class TechInterviewRateLimitInterceptor : HandlerInterceptor {
 
     private val objectMapper = ObjectMapper()
-    private val buckets = ConcurrentHashMap<String, Bucket>()
+    private val buckets: MutableMap<String, Bucket> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, Bucket>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, Bucket>) = size > MAX_IP_COUNT
+        }
+    )
+
+    companion object {
+        private const val MAX_IP_COUNT = 5000
+    }
 
     override fun preHandle(
         request: HttpServletRequest,
@@ -36,7 +44,7 @@ class TechInterviewRateLimitInterceptor : HandlerInterceptor {
             response.writer.write(
                 objectMapper.writeValueAsString(
                     mapOf(
-                        "result" to "FAIL",
+                        "result" to "ERROR",
                         "data" to null,
                         "error" to mapOf(
                             "code" to ErrorCode.RATE_LIMIT_EXCEEDED.name,
