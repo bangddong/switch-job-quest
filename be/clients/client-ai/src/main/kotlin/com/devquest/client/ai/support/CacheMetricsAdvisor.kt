@@ -26,12 +26,21 @@ class CacheMetricsAdvisor(
     override fun getOrder(): Int = Ordered.LOWEST_PRECEDENCE
 
     override fun adviseCall(request: ChatClientRequest, chain: CallAdvisorChain): ChatClientResponse {
+        log.info("CacheMetricsAdvisor: adviseCall invoked, evaluator={}", AiCallContext.get())
         val startMs = System.currentTimeMillis()
         val response = chain.nextCall(request)
         val latencyMs = System.currentTimeMillis() - startMs
 
         runCatching {
-            val chatResponse = response.chatResponse() ?: return@runCatching
+            val chatResponse = response.chatResponse()
+            if (chatResponse == null) {
+                log.warn(
+                    "CacheMetricsAdvisor: chatResponse() is null — response type={}, evaluator={}",
+                    response.javaClass.name,
+                    AiCallContext.get(),
+                )
+                return@runCatching
+            }
             val springUsage = chatResponse.metadata?.usage ?: run {
                 log.warn("CacheMetricsAdvisor: usage is null in response metadata")
                 return@runCatching
