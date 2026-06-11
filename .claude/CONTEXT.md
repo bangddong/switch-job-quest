@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/pr-review-hook-domain-context` |
-| 열린 PR | #195 — OtlpMeterRegistry start() 누락 수정 (머지 대기), #196 — PR 리뷰 훅 Spring 컨텍스트 주입 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
