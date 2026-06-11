@@ -12,6 +12,6 @@ class WebMvcConfig(
 
     override fun addInterceptors(registry: InterceptorRegistry) {
         registry.addInterceptor(techInterviewRateLimitInterceptor)
-            .addPathPatterns("/api/v1/tech-interview/**")
+            .addPathPatterns("/api/v1/tech-interview/**", "/api/v1/daily-question/evaluate")
     }
 }

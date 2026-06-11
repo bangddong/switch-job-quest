@@ -9,7 +9,7 @@ import { CharacterCreate, OnboardingIntro } from '@/features/character'
 import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
 import { SettingsPage } from '@/features/settings'
-import { TechInterviewPage, TechInterviewDemoPage } from '@/features/tech-interview'
+import { TechInterviewPage, TechInterviewDemoPage, DailyQuestionPage } from '@/features/tech-interview'
 import { CodingQuestPage, CodingRoadmapPage } from '@/features/coding-quest'
 import { useAuth } from '@/hooks/useAuth'
 import { LoginPage } from '@/features/auth/components/LoginPage'
@@ -177,6 +177,17 @@ export function App() {
   // OAuth callback route
   if (window.location.pathname === '/auth/callback') {
     return <AuthCallback />
+  }
+
+  // Daily question route (no auth required)
+  if (window.location.pathname === '/daily-question') {
+    return (
+      <div style={{ background: '#060610', minHeight: '100vh' }}>
+        <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px 40px' }}>
+          <DailyQuestionPage onLogin={() => { window.location.href = '/' }} />
+        </div>
+      </div>
+    )
   }
 
   // Unauthenticated
