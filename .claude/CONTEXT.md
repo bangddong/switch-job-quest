@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `fix/otlp-registry-start` |
-| 열린 PR | #195 — OtlpMeterRegistry start() 누락 수정 (머지 대기) |
+| 브랜치 | `chore/pr-review-hook-domain-context` |
+| 열린 PR | #195 — OtlpMeterRegistry start() 누락 수정 (머지 대기), #196 — PR 리뷰 훅 Spring 컨텍스트 주입 (머지 대기) |
 
 
 
@@ -72,10 +72,9 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #196 | PR 리뷰 훅 Spring 도메인 컨텍스트 주입 + HIGH 기준 강화 | 2026-06-11 |
 | #195 | OtlpMeterRegistry start() 누락 수정 — Grafana 메트릭 미전송 해결 | 2026-06-11 |
 | #194 | 기술면접 평가에 모범 답안(modelAnswer) 추가 | 2026-06-11 |
-| #193 | 데일리 질문 답변 페이지 — 로그인 없이 AI 피드백 (/daily-question) | 2026-06-11 |
-| #192 | CacheMetricsAdvisor nativeUsage null 처리 — Grafana 메트릭 No data 수정 | 2026-06-11 |
 | #191 | qa-reviewer + orchestrator severity HIGH/MEDIUM/LOW 기준 통일 | 2026-06-10 |
 | #190 | 기술면접 비로그인 체험 + IP rate limiting (Bucket4j, 하루 2회, 자정 reset) | 2026-06-10 |
 | #189 | PR 리뷰 훅 개선 — HIGH/MEDIUM/LOW 3단계 + 차단 기준 명확화 | 2026-06-10 |

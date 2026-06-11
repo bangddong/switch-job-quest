@@ -68,28 +68,51 @@ $DIFF
 - FE: Context·Redux·Zustand 등 외부 상태관리 금지 (useState만)
 - 테스트: Evaluator 테스트에 @Mock/@InjectMocks 금지 → RETURNS_DEEP_STUBS 패턴
 
+## 프로젝트 도메인 컨텍스트 (판단 전 반드시 숙지)
+
+### Spring Boot 라이프사이클
+- 이 프로젝트는 Spring Boot 4.x 단일 인스턴스 앱이다.
+- ApplicationContext.refresh()가 완료되어야 앱이 시작된다. 즉, 모든 @Bean 초기화는 앱 시작 전에 직렬로 완료된다.
+- @PreDestroy는 ApplicationContext.close() 시점에 호출된다. 이는 refresh() 완료 후, 즉 모든 Bean이 이미 초기화된 후에만 발생한다.
+- 따라서 @Bean 메서드 실행 중 @PreDestroy가 동시에 호출되는 것은 Spring 싱글톤 모델에서 구조적으로 불가능하다.
+- @Configuration 클래스 내부 필드에 대해 \"Bean init ↔ destroy race condition\" 을 HIGH로 지적하는 것은 잘못된 판단이다.
+
+### Spring MeterRegistry 통합
+- MeterRegistryPostProcessor는 @Bean으로 등록된 MeterRegistry를 CompositeMeterRegistry에 추가한다.
+- PushMeterRegistry(OtlpMeterRegistry 포함)는 start(ThreadFactory) 호출 후 내부 ScheduledExecutorService를 생성한다. start() 자체는 동기 완료된다.
+- start() 후 Bean을 반환하는 것은 정상 패턴이다. \"비동기 초기화 미완료\" 라고 HIGH 지적하는 것은 잘못된 판단이다.
+
+### 일반 원칙
+- Spring 프레임워크가 보장하는 직렬 라이프사이클(init → use → destroy)은 일반 멀티스레드 코드와 다르다. 일반 동시성 규칙을 Spring 빈 라이프사이클에 그대로 적용하지 말 것.
+- @Volatile, synchronized 등 동시성 도구는 Spring 빈 라이프사이클 내부에서는 선택적 개선(LOW)이지 필수가 아니다.
+
 ## Severity 기준 (반드시 이 기준만 사용)
 
 ### HIGH — PR 생성 차단 (실제 피해 발생)
 다음 중 하나라도 해당하면 HIGH:
 1. 위 아키텍처 규칙 위반 (빌드 또는 테스트를 깨뜨림)
 2. 시크릿·API 키·비밀번호 하드코딩
-3. 런타임에 NPE·ClassCastException 등 크래시를 확실히 유발하는 코드
+3. 런타임에 NPE·ClassCastException 등 크래시를 **현재 코드에서 재현 가능한** 방식으로 확실히 유발하는 코드
 4. SQL Injection·XSS 등 즉각적인 보안 취약점
+
+HIGH 판정 전 자문: \"이 코드가 현재 프로덕션에서 실제로 크래시하거나 데이터를 손상시키는가?\" → NO이면 HIGH 금지.
 
 ### MEDIUM — 표시만, 차단 없음 (잠재적 문제)
 - 명백한 로직 버그지만 즉각 크래시는 아닌 것
 - 성능 anti-pattern (루프 내 DB 쿼리 등)
 - 테스트 커버리지 부족으로 회귀 위험
+- 이론적 동시성 위험 (Spring 라이프사이클 외부의 실제 멀티스레드 경쟁)
 
 ### LOW — 표시만, 차단 없음 (개선 권장)
 - 코드 스타일·가독성 개선
 - 설정값 외부화·하드코딩 개선 권장
 - \"더 좋은 방법\"·\"확장성 고려\" 등 선택적 개선
+- Spring 빈 라이프사이클 내 @Volatile·synchronized 등 방어적 동시성 도구 추가 권장
 
 ## 판단 원칙
 - \"분산 환경 고려\", \"추후 확장성\", \"초기화 안전성 우려\", \"더 좋은 패턴 존재\" → HIGH 금지
 - 실제로 현재 코드에서 피해가 발생하는지 확인 후에만 HIGH 판정
+- Spring 프레임워크 보장 사항(직렬 라이프사이클, DI 완료 보장 등)을 무시한 이론적 위험 → HIGH 금지
 - diff에 보이지 않는 코드는 존재하는 것으로 가정 (잘린 diff로 \"미구현\"이라 판단 금지)
 - 같은 유형의 지적은 한 번만 (중복 나열 금지)
 
