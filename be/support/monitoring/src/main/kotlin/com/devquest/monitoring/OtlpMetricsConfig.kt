@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import java.util.Base64
+import java.util.concurrent.Executors
 
 @Configuration
 @ConditionalOnProperty("grafana.otlp.enabled", havingValue = "true")
@@ -32,6 +33,8 @@ class OtlpMetricsConfig(
             override fun headers(): Map<String, String> =
                 mapOf("Authorization" to "Basic $encoded")
         }
-        return OtlpMeterRegistry(config, clock)
+        val registry = OtlpMeterRegistry(config, clock)
+        registry.start(Executors.defaultThreadFactory())
+        return registry
     }
 }
