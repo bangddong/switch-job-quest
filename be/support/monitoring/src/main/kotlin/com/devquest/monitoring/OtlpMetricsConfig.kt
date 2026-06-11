@@ -17,7 +17,7 @@ class OtlpMetricsConfig(
     @Value("\${GRAFANA_API_KEY}") private val apiKey: String,
 ) {
 
-    @Bean
+    @Bean(destroyMethod = "stop")
     fun otlpMeterRegistry(clock: Clock): OtlpMeterRegistry {
         require(instanceId.isNotBlank()) { "grafana.otlp.instance-id must not be blank" }
         require(apiKey.isNotBlank()) { "GRAFANA_API_KEY must not be blank" }
@@ -33,8 +33,16 @@ class OtlpMetricsConfig(
             override fun headers(): Map<String, String> =
                 mapOf("Authorization" to "Basic $encoded")
         }
+        val threadFactory = Executors.defaultThreadFactory().let { base ->
+            java.util.concurrent.ThreadFactory { runnable ->
+                base.newThread(runnable).apply {
+                    name = "otlp-metrics-exporter"
+                    isDaemon = true
+                }
+            }
+        }
         val registry = OtlpMeterRegistry(config, clock)
-        registry.start(Executors.defaultThreadFactory())
+        registry.start(threadFactory)
         return registry
     }
 }
