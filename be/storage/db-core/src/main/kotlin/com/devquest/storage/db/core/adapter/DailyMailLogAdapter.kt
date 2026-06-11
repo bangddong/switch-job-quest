@@ -32,4 +32,10 @@ class DailyMailLogAdapter(
 
     override fun findRecentQuestions(mailType: String, limit: Int): List<String> =
         repository.findRecentQuestionContents(mailType, PageRequest.of(0, limit))
+
+    override fun findTodayQuestion(mailType: String, date: LocalDate): String? {
+        val start = date.atStartOfDay()
+        val end = date.plusDays(1).atStartOfDay()
+        return repository.findTodayQuestionContent(mailType, start, end, PageRequest.of(0, 1)).firstOrNull()
+    }
 }
