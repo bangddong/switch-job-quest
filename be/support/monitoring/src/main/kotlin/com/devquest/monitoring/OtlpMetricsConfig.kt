@@ -45,11 +45,11 @@ class OtlpMetricsConfig(
                 isDaemon = true
             }
         }
-        registry = OtlpMeterRegistry(config, clock).also {
-            it.start(threadFactory)
+        return OtlpMeterRegistry(config, clock).also { created ->
+            created.start(threadFactory)
+            registry = created
             log.info("OtlpMeterRegistry started — pushing to Grafana Cloud every 60s")
         }
-        return registry!!
     }
 
     @PreDestroy
