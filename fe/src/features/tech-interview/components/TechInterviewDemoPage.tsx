@@ -266,6 +266,26 @@ export function TechInterviewDemoPage({ onLogin }: TechInterviewDemoPageProps) {
             </p>
           </div>
 
+          {/* 모범 답안 */}
+          {result.modelAnswer && (
+            <div
+              style={{
+                background: 'rgba(96,165,250,0.04)',
+                border: '1px solid rgba(96,165,250,0.25)',
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 16,
+              }}
+            >
+              <p style={{ color: '#60A5FA', fontSize: 13, fontFamily: "'Courier New', monospace", margin: '0 0 10px' }}>
+                💡 모범 답안
+              </p>
+              <p style={{ color: '#F1F5F9', fontSize: 13, fontFamily: "'Courier New', monospace", lineHeight: 1.7, margin: 0 }}>
+                {result.modelAnswer}
+              </p>
+            </div>
+          )}
+
           {/* 로그인 CTA */}
           <div
             style={{
