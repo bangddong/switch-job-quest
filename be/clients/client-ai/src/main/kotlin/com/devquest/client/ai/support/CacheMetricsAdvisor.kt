@@ -31,15 +31,39 @@ class CacheMetricsAdvisor(
         val latencyMs = System.currentTimeMillis() - startMs
 
         runCatching {
-            val nativeUsage = response.chatResponse()?.metadata?.usage?.nativeUsage
-            val usage = nativeUsage as? Usage ?: return@runCatching
+            val chatResponse = response.chatResponse() ?: return@runCatching
+            val springUsage = chatResponse.metadata?.usage ?: run {
+                log.warn("CacheMetricsAdvisor: usage is null in response metadata")
+                return@runCatching
+            }
 
-            val cacheRead = usage.cacheReadInputTokens().orElse(0L)
-            val cacheCreation = usage.cacheCreationInputTokens().orElse(0L)
-            val inputTokens = usage.inputTokens()
-            val outputTokens = usage.outputTokens()
             val evaluatorName = AiCallContext.get()
-            val modelName = response.chatResponse()?.metadata?.model ?: "unknown"
+            val modelName = chatResponse.metadata?.model ?: "unknown"
+
+            val nativeUsage = springUsage.nativeUsage
+            val anthropicUsage = nativeUsage as? Usage
+
+            if (anthropicUsage == null) {
+                log.warn(
+                    "CacheMetricsAdvisor: nativeUsage cast failed — type={}, evaluator={}. Recording basic token metrics only.",
+                    nativeUsage?.javaClass?.name ?: "null",
+                    evaluatorName,
+                )
+                // nativeUsage unavailable — record basic token metrics via Spring AI Usage interface
+                val inputTokens = springUsage.promptTokens?.toLong() ?: 0L
+                val outputTokens = springUsage.completionTokens?.toLong() ?: 0L
+                meterRegistry.timer("ai.call.duration", "evaluatorType", evaluatorName, "model", modelName).record(latencyMs, TimeUnit.MILLISECONDS)
+                meterRegistry.counter("ai.tokens.input", "evaluatorType", evaluatorName, "model", modelName).increment(inputTokens.toDouble())
+                meterRegistry.counter("ai.tokens.output", "evaluatorType", evaluatorName, "model", modelName).increment(outputTokens.toDouble())
+                meterRegistry.counter("ai.tokens.cache_read", "evaluatorType", evaluatorName, "model", modelName).increment(0.0)
+                meterRegistry.counter("ai.tokens.cache_creation", "evaluatorType", evaluatorName, "model", modelName).increment(0.0)
+                return@runCatching
+            }
+
+            val cacheRead = anthropicUsage.cacheReadInputTokens().orElse(0L)
+            val cacheCreation = anthropicUsage.cacheCreationInputTokens().orElse(0L)
+            val inputTokens = anthropicUsage.inputTokens()
+            val outputTokens = anthropicUsage.outputTokens()
 
             log.info(
                 "AI cache metrics — evaluator={}, model={}, latencyMs={}, cacheHit={}, cache_read_input_tokens={}, cache_creation_input_tokens={}, input_tokens={}, output_tokens={}",
@@ -84,7 +108,7 @@ class CacheMetricsAdvisor(
             meterRegistry.counter("ai.tokens.cache_creation", "evaluatorType", evaluatorName, "model", modelName).increment(cacheCreation.toDouble())
 
         }.onFailure { e ->
-            log.debug("Failed to extract cache metrics", e)
+            log.warn("CacheMetricsAdvisor: unexpected error extracting metrics", e)
         }
 
         return response
