@@ -21,6 +21,7 @@ class OtlpMetricsConfig(
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
+    @Volatile
     private var registry: OtlpMeterRegistry? = null
 
     @Bean
