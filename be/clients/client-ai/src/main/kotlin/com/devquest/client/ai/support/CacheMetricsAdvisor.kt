@@ -26,6 +26,7 @@ class CacheMetricsAdvisor(
     override fun getOrder(): Int = Ordered.LOWEST_PRECEDENCE
 
     override fun adviseCall(request: ChatClientRequest, chain: CallAdvisorChain): ChatClientResponse {
+        log.info("CacheMetricsAdvisor: adviseCall invoked, evaluator={}", AiCallContext.get())
         val startMs = System.currentTimeMillis()
         val response = chain.nextCall(request)
         val latencyMs = System.currentTimeMillis() - startMs
