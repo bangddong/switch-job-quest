@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #194 | 기술면접 평가에 모범 답안(modelAnswer) 추가 | 2026-06-11 |
 | #193 | 데일리 질문 답변 페이지 — 로그인 없이 AI 피드백 (/daily-question) | 2026-06-11 |
 | #192 | CacheMetricsAdvisor nativeUsage null 처리 — Grafana 메트릭 No data 수정 | 2026-06-11 |
 | #191 | qa-reviewer + orchestrator severity HIGH/MEDIUM/LOW 기준 통일 | 2026-06-10 |
