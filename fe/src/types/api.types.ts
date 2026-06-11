@@ -151,6 +151,7 @@ export interface TechInterviewResult {
   overallScore: number
   feedback: string
   passed: boolean
+  modelAnswer: string
 }
 
 export interface JdAnalysisResult {
