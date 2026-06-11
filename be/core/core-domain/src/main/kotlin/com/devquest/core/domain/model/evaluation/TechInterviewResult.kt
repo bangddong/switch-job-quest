@@ -5,4 +5,5 @@ data class TechInterviewResult(
     val overallScore: Int = 0,
     val feedback: String = "",
     val passed: Boolean = false,
+    val modelAnswer: String = "",
 )

@@ -9,6 +9,7 @@
 \{
   "questions": ["평가한 질문 목록"],
   "overallScore": 0,
-  "feedback": "전체적인 피드백",
-  "passed": false
+  "feedback": "답변의 강점과 약점 위주 피드백",
+  "passed": false,
+  "modelAnswer": "질문들에 대한 모범 답안 및 핵심 개념 상세 설명"
 \}
