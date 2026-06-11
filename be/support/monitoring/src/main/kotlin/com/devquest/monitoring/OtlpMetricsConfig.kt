@@ -3,11 +3,15 @@ package com.devquest.monitoring
 import io.micrometer.core.instrument.Clock
 import io.micrometer.registry.otlp.OtlpConfig
 import io.micrometer.registry.otlp.OtlpMeterRegistry
+import jakarta.annotation.PreDestroy
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import java.util.Base64
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 
 @Configuration
 @ConditionalOnProperty("grafana.otlp.enabled", havingValue = "true")
@@ -15,6 +19,10 @@ class OtlpMetricsConfig(
     @Value("\${grafana.otlp.instance-id}") private val instanceId: String,
     @Value("\${GRAFANA_API_KEY}") private val apiKey: String,
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+    @Volatile
+    private var registry: OtlpMeterRegistry? = null
 
     @Bean
     fun otlpMeterRegistry(clock: Clock): OtlpMeterRegistry {
@@ -32,6 +40,23 @@ class OtlpMetricsConfig(
             override fun headers(): Map<String, String> =
                 mapOf("Authorization" to "Basic $encoded")
         }
-        return OtlpMeterRegistry(config, clock)
+        val threadFactory = ThreadFactory { runnable ->
+            Executors.defaultThreadFactory().newThread(runnable).apply {
+                name = "otlp-metrics-exporter"
+                isDaemon = true
+            }
+        }
+        return OtlpMeterRegistry(config, clock).also { created ->
+            created.start(threadFactory)
+            registry = created
+            log.info("OtlpMeterRegistry started — pushing to Grafana Cloud every 60s")
+        }
+    }
+
+    @PreDestroy
+    fun stopRegistry() {
+        runCatching { registry?.stop() }
+            .onSuccess { log.info("OtlpMeterRegistry stopped") }
+            .onFailure { log.warn("OtlpMeterRegistry stop failed", it) }
     }
 }
