@@ -263,12 +263,9 @@ Agent(subagent_type: "qa-reviewer", prompt: """
 
 → HIGH 여부 확인
 
-**QA 완료 즉시 마커 파일 생성 (필수 — 없으면 PR 생성 훅이 차단)**:
-```bash
-mkdir -p .claude/qa-cache && echo "QA_PASSED" > ".claude/qa-cache/$(git branch --show-current)"
-```
-
-> **주의**: 마커 생성 후 코드 수정이 추가되면 QA를 재실행해야 한다. 마커는 최종 코드 확정 후 생성할 것.
+> **마커는 qa-reviewer가 자동 생성** — orchestrator가 직접 생성 금지.
+> qa-reviewer가 현재 HEAD SHA를 `.claude/qa-cache/<branch>`에 기록한다.
+> 리뷰 후 커밋이 추가되면 SHA 불일치 → PR 생성 훅이 차단 → qa-reviewer 재실행 필요.
 
 ---
 
