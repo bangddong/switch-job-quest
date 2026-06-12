@@ -72,9 +72,9 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #201 | qa-reviewer 스폰 시 구현 의도·설계 결정 컨텍스트 추가 | 2026-06-12 |
 | #200 | Grafana 대시보드 개선 — Latency histogram 활성화 + Loki 로그 패널 추가 | 2026-06-12 |
 | #199 | QA 마커 강제화 — 커밋 해시 기반 검증 + qa-reviewer 자동 생성 | 2026-06-12 |
-| #198 | Spring AI RC2 업그레이드 — CacheMetricsAdvisor 미동작 수정 | 2026-06-12 |
 | #191 | qa-reviewer + orchestrator severity HIGH/MEDIUM/LOW 기준 통일 | 2026-06-10 |
 | #190 | 기술면접 비로그인 체험 + IP rate limiting (Bucket4j, 하루 2회, 자정 reset) | 2026-06-10 |
 | #189 | PR 리뷰 훅 개선 — HIGH/MEDIUM/LOW 3단계 + 차단 기준 명확화 | 2026-06-10 |
