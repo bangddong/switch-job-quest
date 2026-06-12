@@ -57,7 +57,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `fix/cache-metrics-advisor` |
-| 열린 PR | 진행 중 — CacheMetricsAdvisor 미동작 수정 |
+| 열린 PR | #198 — CacheMetricsAdvisor 미동작 수정 (머지 대기) |
 
 
 
@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #198 | Spring AI RC2 업그레이드 — CacheMetricsAdvisor 미동작 수정 | 2026-06-12 |
 | #196 | PR 리뷰 훅 Spring 도메인 컨텍스트 주입 + HIGH 기준 강화 | 2026-06-11 |
 | #195 | OtlpMeterRegistry start() 누락 수정 — Grafana 메트릭 미전송 해결 | 2026-06-11 |
 | #194 | 기술면접 평가에 모범 답안(modelAnswer) 추가 | 2026-06-11 |
