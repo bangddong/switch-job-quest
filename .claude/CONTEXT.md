@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #199 | QA 마커 강제화 — 커밋 해시 기반 검증 + qa-reviewer 자동 생성 | 2026-06-12 |
 | #198 | Spring AI RC2 업그레이드 — CacheMetricsAdvisor 미동작 수정 | 2026-06-12 |
 | #196 | PR 리뷰 훅 Spring 도메인 컨텍스트 주입 + HIGH 기준 강화 | 2026-06-11 |
 | #195 | OtlpMeterRegistry start() 누락 수정 — Grafana 메트릭 미전송 해결 | 2026-06-11 |
