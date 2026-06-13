@@ -33,7 +33,8 @@ class InterviewCoachEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachSessionResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, CoachSessionResult::class.java)
         }
     }
 
@@ -47,7 +48,8 @@ class InterviewCoachEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachAnswerResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, CoachAnswerResult::class.java)
         }
     }
 
@@ -69,7 +71,8 @@ class InterviewCoachEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(CoachReportResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, CoachReportResult::class.java)
         }
     }
 }

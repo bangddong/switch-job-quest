@@ -3,7 +3,6 @@ package com.devquest.client.ai.evaluator
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.AiMetricsRecorder
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
-import com.devquest.core.domain.model.evaluation.SkillAssessmentResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -28,7 +27,7 @@ class SkillAssessmentEvaluatorTest {
     @Test
     fun `AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(SkillAssessmentResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -43,18 +42,10 @@ class SkillAssessmentEvaluatorTest {
 
     @Test
     fun `AI가 정상 응답을 반환하면 결과를 그대로 반환`() {
-        val expected = SkillAssessmentResult(
-            score = 78,
-            passed = true,
-            grade = "B",
-            developerType = "안정형 백엔드 스페셜리스트",
-            strengths = listOf("Java 장기 실무 경험", "Spring Boot 숙련도"),
-            improvements = listOf("Kubernetes 경험 부족", "클라우드 네이티브 전환 필요", "컨테이너 오케스트레이션 학습 우선"),
-            feedback = "백엔드 핵심 기술은 탄탄하나 클라우드 역량 보완 필요"
-        )
+        val json = """{"score":78,"passed":true,"grade":"B","developerType":"안정형 백엔드 스페셜리스트","strengths":["Java 장기 실무 경험","Spring Boot 숙련도"],"improvements":["Kubernetes 경험 부족","클라우드 네이티브 전환 필요","컨테이너 오케스트레이션 학습 우선"],"feedback":"백엔드 핵심 기술은 탄탄하나 클라우드 역량 보완 필요"}"""
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(SkillAssessmentResult::class.java)
-        ).thenReturn(expected)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(json)
 
         val result = evaluator.evaluate(
             skills = listOf("Java:5년", "Spring Boot:3년", "Kubernetes:6개월"),
@@ -71,10 +62,8 @@ class SkillAssessmentEvaluatorTest {
     fun `사용자 프롬프트에 기술 목록과 목표 포지션이 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(SkillAssessmentResult::class.java)
-        ).thenReturn(
-            SkillAssessmentResult(score = 70, passed = true, grade = "B")
-        )
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().content()
+        ).thenReturn("""{"score":70,"passed":true,"grade":"B"}""")
 
         evaluator.evaluate(
             skills = listOf("Java:5년", "Spring Boot:3년"),

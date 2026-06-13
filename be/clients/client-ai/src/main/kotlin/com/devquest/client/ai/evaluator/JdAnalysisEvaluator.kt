@@ -29,7 +29,8 @@ class JdAnalysisEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JdAnalysisResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, JdAnalysisResult::class.java)
                 ?.let { it.copy(passed = PassCriteriaPolicy.evaluate(it.overallMatchScore)) }
         }
     }

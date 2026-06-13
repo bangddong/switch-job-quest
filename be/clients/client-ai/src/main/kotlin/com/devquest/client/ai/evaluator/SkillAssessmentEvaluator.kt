@@ -28,7 +28,8 @@ class SkillAssessmentEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(SkillAssessmentResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, SkillAssessmentResult::class.java)
         }
     }
 }
