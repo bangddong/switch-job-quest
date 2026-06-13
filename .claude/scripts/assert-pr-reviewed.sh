@@ -137,11 +137,14 @@ HIGH 여부: YES 또는 NO"
 
 # 임시 파일로 JSON body 생성 (인코딩 문제 방지), 종료 시 자동 정리
 TMPFILE=$(mktemp)
-trap 'rm -f "$TMPFILE"' EXIT
+PROMPTFILE=$(mktemp)
+trap 'rm -f "$TMPFILE" "$PROMPTFILE"' EXIT
 
+# PROMPT를 파일로 저장 후 --rawfile로 읽기 — "Argument list too long" 방지
+printf '%s' "$PROMPT" > "$PROMPTFILE"
 jq -n \
   --arg model "claude-haiku-4-5" \
-  --arg content "$PROMPT" \
+  --rawfile content "$PROMPTFILE" \
   '{"model": $model, "max_tokens": 2000, "messages": [{"role": "user", "content": $content}]}' \
   > "$TMPFILE"
 
