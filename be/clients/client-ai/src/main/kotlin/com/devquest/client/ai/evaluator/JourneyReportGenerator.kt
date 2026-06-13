@@ -46,7 +46,8 @@ class JourneyReportGenerator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(JourneyReportResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, JourneyReportResult::class.java)
         }
     }
 }

@@ -26,7 +26,8 @@ class PersonalityInterviewEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().entity(AiEvaluationResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, AiEvaluationResult::class.java)
         }
     }
 }

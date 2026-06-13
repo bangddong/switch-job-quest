@@ -4,10 +4,6 @@ import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.AiMetricsRecorder
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.devquest.core.domain.model.evaluation.CoachAnswerHistory
-import com.devquest.core.domain.model.evaluation.CoachAnswerResult
-import com.devquest.core.domain.model.evaluation.CoachReportResult
-import com.devquest.core.domain.model.evaluation.CoachSessionResult
-import com.devquest.core.domain.model.evaluation.CoachQuestion
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -34,7 +30,7 @@ class InterviewCoachEvaluatorTest {
     @Test
     fun `startSession - AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachSessionResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -46,17 +42,10 @@ class InterviewCoachEvaluatorTest {
 
     @Test
     fun `startSession - AI가 정상 응답을 반환하면 결과를 그대로 반환`() {
-        val expected = CoachSessionResult(
-            jdSummary = "Spring Boot 기반 백엔드 개발자 모집",
-            keyCompetencies = listOf("Spring Boot", "JPA", "MSA"),
-            questions = listOf(
-                CoachQuestion(0, "JPA N+1 문제를 어떻게 해결하셨나요?", "JPA"),
-                CoachQuestion(1, "MSA 환경에서 트랜잭션 처리 경험을 공유해주세요.", "MSA"),
-            )
-        )
+        val json = """{"jdSummary":"Spring Boot 기반 백엔드 개발자 모집","keyCompetencies":["Spring Boot","JPA","MSA"],"questions":[{"index":0,"question":"JPA N+1 문제를 어떻게 해결하셨나요?","competency":"JPA"},{"index":1,"question":"MSA 환경에서 트랜잭션 처리 경험을 공유해주세요.","competency":"MSA"}]}"""
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachSessionResult::class.java)
-        ).thenReturn(expected)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(json)
 
         val result = evaluator.startSession(
             jdText = "Spring Boot 기반 백엔드 개발자를 모집합니다. JPA, MSA 경험 우대.",
@@ -72,8 +61,8 @@ class InterviewCoachEvaluatorTest {
     fun `startSession - 사용자 프롬프트에 JD 내용과 목표 포지션이 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(CoachSessionResult::class.java)
-        ).thenReturn(CoachSessionResult())
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().content()
+        ).thenReturn("""{"jdSummary":"","keyCompetencies":[],"questions":[]}""")
 
         evaluator.startSession(
             jdText = "Kotlin과 Spring Boot를 사용하는 팀입니다.",
@@ -90,7 +79,7 @@ class InterviewCoachEvaluatorTest {
     @Test
     fun `evaluateAnswer - AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachAnswerResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -107,15 +96,10 @@ class InterviewCoachEvaluatorTest {
 
     @Test
     fun `evaluateAnswer - AI가 정상 응답을 반환하면 결과를 그대로 반환`() {
-        val expected = CoachAnswerResult(
-            feedback = "STAR 기법을 잘 활용한 답변입니다.",
-            score = 82,
-            improvements = listOf("결과 수치를 더 구체적으로 제시하면 좋겠습니다."),
-            encouragement = "좋은 경험을 잘 전달하셨어요. 계속 화이팅!"
-        )
+        val json = """{"feedback":"STAR 기법을 잘 활용한 답변입니다.","score":82,"improvements":["결과 수치를 더 구체적으로 제시하면 좋겠습니다."],"encouragement":"좋은 경험을 잘 전달하셨어요. 계속 화이팅!"}"""
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachAnswerResult::class.java)
-        ).thenReturn(expected)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(json)
 
         val result = evaluator.evaluateAnswer(
             question = "JPA N+1 문제를 어떻게 해결하셨나요?",
@@ -133,8 +117,8 @@ class InterviewCoachEvaluatorTest {
     fun `evaluateAnswer - 사용자 프롬프트에 질문 번호와 전체 문제 수가 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(CoachAnswerResult::class.java)
-        ).thenReturn(CoachAnswerResult())
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().content()
+        ).thenReturn("""{"feedback":"","score":0,"improvements":[],"encouragement":""}""")
 
         evaluator.evaluateAnswer(
             question = "테스트 질문",
@@ -153,7 +137,7 @@ class InterviewCoachEvaluatorTest {
     @Test
     fun `generateReport - AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachReportResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
         ).thenReturn(null)
 
         assertThatThrownBy {
@@ -169,16 +153,10 @@ class InterviewCoachEvaluatorTest {
 
     @Test
     fun `generateReport - AI가 정상 응답을 반환하면 결과를 그대로 반환`() {
-        val expected = CoachReportResult(
-            overallScore = 78,
-            passLikelihood = 65,
-            strengths = listOf("기술적 깊이", "문제 해결 능력"),
-            weaknesses = listOf("결과 수치화 부족"),
-            finalAdvice = "STAR 기법 연습을 꾸준히 하면 합격 가능성이 높아집니다."
-        )
+        val json = """{"overallScore":78,"passLikelihood":65,"strengths":["기술적 깊이","문제 해결 능력"],"weaknesses":["결과 수치화 부족"],"finalAdvice":"STAR 기법 연습을 꾸준히 하면 합격 가능성이 높아집니다."}"""
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(CoachReportResult::class.java)
-        ).thenReturn(expected)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(json)
 
         val result = evaluator.generateReport(
             targetRole = "시니어 백엔드 개발자",
@@ -198,8 +176,8 @@ class InterviewCoachEvaluatorTest {
     fun `generateReport - 사용자 프롬프트에 목표 포지션과 JD 요약이 포함된다`() {
         val promptCaptor = ArgumentCaptor.forClass(String::class.java)
         whenever(
-            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().entity(CoachReportResult::class.java)
-        ).thenReturn(CoachReportResult())
+            chatClient.prompt().system(any<String>()).user(capture(promptCaptor)).call().content()
+        ).thenReturn("""{"overallScore":0,"passLikelihood":0,"strengths":[],"weaknesses":[],"finalAdvice":""}""")
 
         evaluator.generateReport(
             targetRole = "시니어 백엔드 개발자",

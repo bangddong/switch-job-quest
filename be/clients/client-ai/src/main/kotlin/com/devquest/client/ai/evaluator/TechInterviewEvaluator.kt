@@ -24,11 +24,12 @@ class TechInterviewEvaluator(
         val systemPrompt = questionsSystemTemplate.render()
         val userPrompt = questionsUserTemplate.render(mapOf("techStack" to techStack))
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt()
+            val content = chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
                 .call()
-                .entity(TechInterviewResult::class.java)
+                .content()
+            parseContent(content, TechInterviewResult::class.java)
         }
     }
 
@@ -61,11 +62,12 @@ class TechInterviewEvaluator(
             "questionsAndAnswers" to questionsAndAnswers,
         ))
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt()
+            val content = chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
                 .call()
-                .entity(TechInterviewResult::class.java)
+                .content()
+            parseContent(content, TechInterviewResult::class.java)
         }
     }
 }

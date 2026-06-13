@@ -27,11 +27,8 @@ class CodingProblemGeneratorEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt()
-                .system(systemPrompt)
-                .user(userPrompt)
-                .call()
-                .entity(CodingProblemGenerationResult::class.java)
+            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            parseContent(content, CodingProblemGenerationResult::class.java)
         }
     }
 }

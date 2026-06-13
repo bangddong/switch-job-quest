@@ -3,7 +3,6 @@ package com.devquest.client.ai.evaluator
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.AiMetricsRecorder
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
-import com.devquest.core.domain.model.evaluation.TechInterviewResult
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -50,7 +49,7 @@ class TechInterviewEvaluatorTest {
     @Test
     fun `generateQuestions — AI가 null을 반환하면 AiEvaluationException 발생`() {
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(TechInterviewResult::class.java)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
         ).thenReturn(null)
 
         assertThatThrownBy { evaluator.generateQuestions("Java,Spring Boot") }
@@ -60,10 +59,10 @@ class TechInterviewEvaluatorTest {
 
     @Test
     fun `generateQuestions — AI가 정상 응답을 반환하면 결과를 그대로 반환`() {
-        val expected = TechInterviewResult(questions = listOf("Q1", "Q2"))
+        val json = """{"questions":["Q1","Q2"],"overallScore":0,"feedback":"","passed":false,"modelAnswer":""}"""
         whenever(
-            chatClient.prompt().system(any<String>()).user(any<String>()).call().entity(TechInterviewResult::class.java)
-        ).thenReturn(expected)
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(json)
 
         val result = evaluator.generateQuestions("Java,Spring Boot")
 
