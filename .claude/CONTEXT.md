@@ -72,9 +72,9 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #204 | parseContent lazy regex 버그 수정 — 중첩 코드블록 포함 AI 응답 파싱 실패 (데일리 질문 답변 500 에러) | 2026-06-14 |
 | #203 | qa-reviewer 버전 업그레이드 작업 시 deprecated API 전수 확인 체크리스트 추가 | 2026-06-13 |
 | #202 | 전체 Evaluator .entity() → parseContent() 마이그레이션 — Spring AI RC2 500 에러 수정 | 2026-06-13 |
-| #201 | qa-reviewer 스폰 시 구현 의도·설계 결정 컨텍스트 추가 | 2026-06-12 |
 | #191 | qa-reviewer + orchestrator severity HIGH/MEDIUM/LOW 기준 통일 | 2026-06-10 |
 | #190 | 기술면접 비로그인 체험 + IP rate limiting (Bucket4j, 하루 2회, 자정 reset) | 2026-06-10 |
 | #189 | PR 리뷰 훅 개선 — HIGH/MEDIUM/LOW 3단계 + 차단 기준 명확화 | 2026-06-10 |
