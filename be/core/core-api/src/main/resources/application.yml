@@ -58,6 +58,8 @@ devquest:
   mail:
     from: noreply@dhbang.co.kr
     enabled: ${MAIL_ENABLED:false}
+  daily-question:
+    tech-stack: "Java,Spring Boot,JPA,데이터베이스(SQL/인덱스/트랜잭션),네트워크(HTTP/TCP/DNS),운영체제(프로세스/스레드/메모리),자료구조/알고리즘,시스템 설계,Redis/캐시,Docker/쿠버네티스,CI-CD/Git"
 
   rate-limit:
     tech-interview:
