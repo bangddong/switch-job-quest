@@ -1,9 +1,11 @@
-package com.devquest.core.domain
+package com.devquest.core.api.scheduler
 
+import com.devquest.core.domain.MailService
 import com.devquest.core.domain.port.DailyMailLogPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.domain.port.UserEmailPort
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.LocalDate
@@ -16,6 +18,7 @@ class DailyMailScheduler(
     private val mailService: MailService,
     private val techInterviewPort: TechInterviewPort,
     private val dailyMailLogPort: DailyMailLogPort,
+    @Value("\${devquest.daily-question.tech-stack}") private val techStack: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -37,7 +40,7 @@ class DailyMailScheduler(
         }
 
         val recentQuestions = dailyMailLogPort.findRecentQuestions("TECH_INTERVIEW", 30)
-        val question = techInterviewPort.generateDailyQuestion("Java,Spring Boot,JPA", recentQuestions)
+        val question = techInterviewPort.generateDailyQuestion(techStack, recentQuestions)
         val deepLink = "https://quest.dhbang.co.kr/daily-question"
 
         log.info("데일리 기술 면접 메일 발송 시작: 대상 수=${targets.size}")

@@ -1,11 +1,12 @@
-package com.devquest.core.domain
+package com.devquest.core.api.scheduler
 
+import com.devquest.core.domain.MailService
 import com.devquest.core.domain.port.DailyMailLogPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.domain.port.UserEmailPort
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
@@ -23,8 +24,18 @@ class DailyMailSchedulerTest {
     @Mock lateinit var techInterviewPort: TechInterviewPort
     @Mock lateinit var dailyMailLogPort: DailyMailLogPort
 
-    @InjectMocks
     private lateinit var scheduler: DailyMailScheduler
+
+    @BeforeEach
+    fun setUp() {
+        scheduler = DailyMailScheduler(
+            userEmailPort = userEmailPort,
+            mailService = mailService,
+            techInterviewPort = techInterviewPort,
+            dailyMailLogPort = dailyMailLogPort,
+            techStack = "Java,Spring Boot,JPA,네트워크,OS,자료구조,시스템 설계",
+        )
+    }
 
     @Test
     fun `발송 대상이 없으면 AI 질문 생성 및 메일 발송을 하지 않는다`() {
