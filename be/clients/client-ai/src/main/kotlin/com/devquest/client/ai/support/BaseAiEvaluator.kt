@@ -18,13 +18,17 @@ abstract class BaseAiEvaluator(
     private val objectMapper = jacksonObjectMapper()
 
     /**
-     * AI 응답에서 마크다운 코드 블록(```json ... ```)을 제거하고 Jackson으로 파싱.
-     * .entity() 대신 사용 — 중첩 객체가 많은 응답에서 AI가 마크다운으로 감싸는 경우 대응.
+     * AI 응답에서 JSON 객체를 추출하고 Jackson으로 파싱.
+     * 첫 번째 '{' ~ 마지막 '}' 범위를 추출하므로 코드블록 유무·중첩 여부와 무관하게 동작.
+     *
+     * 기존 lazy regex(```json ... ```)는 modelAnswer 내부에 중첩 코드블록(```java...```)이 포함되면
+     * 첫 ``` 에서 멈춰 JSON이 잘리는 버그가 있었음.
      */
     protected fun <T> parseContent(content: String?, targetClass: Class<T>): T? {
         val raw = content?.trim() ?: return null
-        val codeBlockRegex = Regex("```(?:json)?\\s*([\\s\\S]*?)```")
-        val json = codeBlockRegex.find(raw)?.groupValues?.get(1)?.trim() ?: raw
+        val start = raw.indexOf('{')
+        val end = raw.lastIndexOf('}')
+        val json = if (start != -1 && end != -1 && start < end) raw.substring(start, end + 1) else raw
         return objectMapper.readValue(json, targetClass)
     }
 }
