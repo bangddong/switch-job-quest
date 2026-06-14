@@ -1,5 +1,6 @@
 package com.devquest.core.domain
 
+import com.devquest.core.api.config.DailyQuestionProperties
 import com.devquest.core.domain.port.DailyMailLogPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.domain.port.UserEmailPort
@@ -32,7 +33,9 @@ class DailyMailSchedulerTest {
             mailService = mailService,
             techInterviewPort = techInterviewPort,
             dailyMailLogPort = dailyMailLogPort,
-            dailyQuestionTechStack = "Java,Spring Boot,JPA,네트워크,OS,자료구조,시스템 설계",
+            dailyQuestionProperties = DailyQuestionProperties(
+                techStack = "Java,Spring Boot,JPA,네트워크,OS,자료구조,시스템 설계"
+            ),
         )
     }
 
