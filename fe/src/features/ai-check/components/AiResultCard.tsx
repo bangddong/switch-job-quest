@@ -2,6 +2,7 @@ import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAna
 import { getGrade, PASS_THRESHOLD } from '../../../utils/gradeUtils'
 import { ResultHeader } from './ResultHeader'
 import { ResultSection } from './ResultSection'
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 
 interface AiResultCardProps {
   result: AiEvaluationResult
@@ -62,9 +63,7 @@ export function AiResultCard({ result }: AiResultCardProps) {
           <div style={{ fontSize: 10, color: '#4ECDC4', letterSpacing: 3, marginBottom: 8 }}>
             💬 AI FEEDBACK
           </div>
-          <p style={{ color: '#94A3B8', fontSize: 13, margin: 0, lineHeight: 1.7 }}>
-            {result.detailedFeedback ?? result.feedback}
-          </p>
+          <MarkdownRenderer content={result.detailedFeedback ?? result.feedback ?? ''} />
         </div>
       )}
 

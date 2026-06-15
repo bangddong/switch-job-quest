@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiResponse, TechInterviewResult } from '@/types/api.types'
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 
 async function fetchDemoQuestion(techStack: string): Promise<TechInterviewResult> {
   const res = await fetch(`/api/v1/tech-interview/question?techStack=${encodeURIComponent(techStack)}`, {
@@ -261,9 +262,7 @@ export function TechInterviewDemoPage({ onLogin }: TechInterviewDemoPageProps) {
             <p style={{ color: '#4ECDC4', fontSize: 28, fontFamily: "'Courier New', monospace", margin: '0 0 12px' }}>
               {result.overallScore}점
             </p>
-            <p style={{ color: '#F1F5F9', fontSize: 13, fontFamily: "'Courier New', monospace", lineHeight: 1.7, margin: 0 }}>
-              {result.feedback}
-            </p>
+            <MarkdownRenderer content={result.feedback} />
           </div>
 
           {/* 모범 답안 */}
@@ -280,9 +279,7 @@ export function TechInterviewDemoPage({ onLogin }: TechInterviewDemoPageProps) {
               <p style={{ color: '#60A5FA', fontSize: 13, fontFamily: "'Courier New', monospace", margin: '0 0 10px' }}>
                 💡 모범 답안
               </p>
-              <p style={{ color: '#F1F5F9', fontSize: 13, fontFamily: "'Courier New', monospace", lineHeight: 1.7, margin: 0 }}>
-                {result.modelAnswer}
-              </p>
+              <MarkdownRenderer content={result.modelAnswer} />
             </div>
           )}
 
