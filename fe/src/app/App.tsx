@@ -183,7 +183,7 @@ export function App() {
   if (window.location.pathname === '/daily-question') {
     return (
       <div style={{ background: '#060610', minHeight: '100vh' }}>
-        <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px 40px' }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 20px 40px' }}>
           <DailyQuestionPage onLogin={() => { window.location.href = '/' }} />
         </div>
       </div>
@@ -195,7 +195,7 @@ export function App() {
     if (view.kind === 'tech-interview-demo') {
       return (
         <div style={{ background: '#060610', minHeight: '100vh' }}>
-          <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px 40px' }}>
+          <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 20px 40px' }}>
             <button
               onClick={() => setView({ kind: 'map' })}
               style={{
@@ -313,7 +313,7 @@ export function App() {
 
   if (character === null) {
     return (
-      <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px', minHeight: '100vh', fontFamily: "'Courier New', monospace", color: '#F8FAFC' }}>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 20px', minHeight: '100vh', fontFamily: "'Courier New', monospace", color: '#F8FAFC' }}>
         {showIntro
           ? <OnboardingIntro onComplete={() => setShowIntro(false)} />
           : <CharacterCreate onComplete={handleCharacterComplete} />
@@ -330,7 +330,7 @@ export function App() {
         aria-live="polite"
         aria-busy="true"
         style={{
-          maxWidth: 480,
+          maxWidth: 640,
           margin: '0 auto',
           padding: '0 20px',
           minHeight: '100vh',
@@ -376,7 +376,7 @@ export function App() {
   return (
     <div
       style={{
-        maxWidth: 480,
+        maxWidth: 640,
         margin: '0 auto',
         padding: '0 20px 40px',
         minHeight: '100vh',

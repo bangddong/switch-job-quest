@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { fetchTechInterviewQuestion, evaluateTechInterview } from '@/lib/apiClient'
 import type { TechInterviewResult } from '@/types/api.types'
+import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 
 const TECH_STACKS = ['Java', 'Kotlin']
 
@@ -213,9 +214,7 @@ export function TechInterviewPage() {
             <p style={{ color: '#4ECDC4', fontSize: 28, fontFamily: "'Courier New', monospace", margin: '0 0 12px' }}>
               {result.overallScore}점
             </p>
-            <p style={{ color: '#F1F5F9', fontSize: 13, fontFamily: "'Courier New', monospace", lineHeight: 1.7, margin: 0 }}>
-              {result.feedback}
-            </p>
+            <MarkdownRenderer content={result.feedback} />
           </div>
 
           <button
