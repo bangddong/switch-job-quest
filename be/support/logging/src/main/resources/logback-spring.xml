@@ -44,9 +44,9 @@
                 </auth>
                 <requestTimeoutMs>15000</requestTimeoutMs>
             </http>
-            <batch>
-                <maxBytes>65536</maxBytes>
-            </batch>
+            <!-- loki4j 1.x: batchMaxBytes는 <batch> wrapper 없이 appender 최상위에 위치 -->
+            <!-- <batch> 섹션은 2.0.0에서 도입됨 — 1.6.0에서는 unknown property 오류 발생 -->
+            <batchMaxBytes>65536</batchMaxBytes>
             <format>
                 <label>
                     <pattern>app=devquest-api,level=%level</pattern>
