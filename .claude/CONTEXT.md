@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/markdown-rendering` |
-| 열린 PR | #206 — 평가 결과 마크다운 렌더링 + 모바일 가시성 개선 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #206 | 평가 결과 마크다운 렌더링 + 모바일 가시성 개선 — MarkdownRenderer 컴포넌트, maxWidth 640 | 2026-06-15 |
 | #205 | 데일리 기술면접 질문 토픽 다양성 확보 — tech stack 외부화, DailyMailScheduler 패키지 이동, 카테고리 순환 프롬프트 추가 | 2026-06-14 |
 | #204 | parseContent lazy regex 버그 수정 — 중첩 코드블록 포함 AI 응답 파싱 실패 (데일리 질문 답변 500 에러) | 2026-06-14 |
 | #203 | qa-reviewer 버전 업그레이드 작업 시 deprecated API 전수 확인 체크리스트 추가 | 2026-06-13 |
