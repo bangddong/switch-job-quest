@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/grafana-fix-self-critique-gate` |
-| 열린 PR | #207 — Grafana Loki 수정 + 레이턴시 메트릭 단위 수정 + Self-Critique Gate (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
