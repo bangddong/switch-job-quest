@@ -34,6 +34,9 @@ class OtlpMetricsConfig(
             override fun get(key: String): String? = when (key) {
                 "otlp.url" -> "https://otlp-gateway-prod-ap-northeast-0.grafana.net/otlp/v1/metrics"
                 "otlp.step" -> "PT60S"
+                // baseTimeUnit 기본값은 MILLISECONDS → Mimir에 _milliseconds_bucket으로 저장됨.
+                // 대시보드 쿼리가 _seconds_bucket을 사용하므로 seconds로 명시.
+                "otlp.baseTimeUnit" -> "seconds"
                 "otlp.resourceAttributes" -> "service.name=devquest-api"
                 else -> null
             }

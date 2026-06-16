@@ -23,6 +23,15 @@ grafana:
     enabled: true
     instance-id: "1680166"
 
+# micrometer-registry-otlp가 classpath에 있으면 Spring Boot autoconfiguration이
+# OtlpMeterRegistry를 자동 생성 → OtlpMetricsConfig 수동 bean과 중복 생성됨.
+# 수동 bean(OtlpMetricsConfig)만 사용하도록 autoconfiguration 비활성화.
+management:
+  otlp:
+    metrics:
+      export:
+        enabled: false
+
 storage:
   datasource:
     core:
