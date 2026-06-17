@@ -41,7 +41,12 @@ class OtlpMetricsConfig(
                 else -> null
             }
             override fun headers(): Map<String, String> =
-                mapOf("Authorization" to "Basic $encoded")
+                mapOf(
+                    "Authorization" to "Basic $encoded",
+                    // keep-alive stale connection 방지: Java HttpURLConnection이 idle connection을
+                    // 재사용하다 "Unexpected end of file from server" 오류 발생 → Connection: close로 강제 종료
+                    "Connection" to "close",
+                )
         }
         val threadFactory = ThreadFactory { runnable ->
             Executors.defaultThreadFactory().newThread(runnable).apply {
