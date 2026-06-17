@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `fix/otlp-auto-config` |
+| 열린 PR | #209 — OTLP auto-config 중복 bean 수정 (머지 대기) |
 
 
 
@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #209 | OTLP auto-config 중복 bean 수정 — spring.autoconfigure.exclude로 OtlpMetricsExportAutoConfiguration 직접 제외 | 2026-06-17 |
 | #208 | 기술면접 평가 면접관 페르소나 수정 — "10년 이상 경력" → "경험 많은 기술 면접관", 5년차 기준 피드백 명시 | 2026-06-16 |
 | #207 | Grafana Loki 로그 전송 수정 (loki4j 1.x batch API), 레이턴시 메트릭 단위 수정 (baseTimeUnit seconds), orchestrator Self-Critique Gate 추가 | 2026-06-15 |
 | #206 | 평가 결과 마크다운 렌더링 + 모바일 가시성 개선 — MarkdownRenderer 컴포넌트, maxWidth 640 | 2026-06-15 |
