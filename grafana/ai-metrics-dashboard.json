@@ -52,13 +52,13 @@
       },
       "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
       "id": 1,
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "title": "Total AI Calls (1h)",
       "type": "stat",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_call_total[1h]))",
+          "expr": "sum(sum_over_time(increase(devquest_ai_call_total[90s])[1h:60s]))",
           "legendFormat": "calls",
           "refId": "A"
         }
@@ -91,7 +91,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_call_total{status=\"success\"}[1h])) / sum(increase(devquest_ai_call_total[1h]))",
+          "expr": "sum(sum_over_time(increase(devquest_ai_call_total{status=\"success\"}[90s])[1h:60s])) / sum(sum_over_time(increase(devquest_ai_call_total[90s])[1h:60s]))",
           "legendFormat": "success rate",
           "refId": "A"
         }
@@ -173,13 +173,13 @@
       },
       "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
       "id": 5,
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }, "textMode": "auto" },
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "title": "Retries (1h)",
       "type": "stat",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_retry_total[1h]))",
+          "expr": "sum(sum_over_time(increase(devquest_ai_retry_total[90s])[1h:60s]))",
           "legendFormat": "retries",
           "refId": "A"
         }
@@ -210,13 +210,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(ai_tokens_input_total[5m])) by (evaluatorType)",
+          "expr": "sum by (evaluatorType) (sum_over_time(increase(ai_tokens_input_total[90s])[$__range:60s]))",
           "legendFormat": "input - {{evaluatorType}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(ai_tokens_output_total[5m])) by (evaluatorType)",
+          "expr": "sum by (evaluatorType) (sum_over_time(increase(ai_tokens_output_total[90s])[$__range:60s]))",
           "legendFormat": "output - {{evaluatorType}}",
           "refId": "B"
         }
@@ -249,13 +249,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(ai_tokens_cache_read_total[5m]))",
+          "expr": "sum(sum_over_time(increase(ai_tokens_cache_read_total[90s])[$__range:60s]))",
           "legendFormat": "cache_read",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(ai_tokens_cache_creation_total[5m]))",
+          "expr": "sum(sum_over_time(increase(ai_tokens_cache_creation_total[90s])[$__range:60s]))",
           "legendFormat": "cache_creation",
           "refId": "B"
         }
@@ -312,7 +312,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(ai_tokens_cache_read_total[1h])) by (evaluatorType)",
+          "expr": "sum by (evaluatorType) (sum_over_time(increase(ai_tokens_cache_read_total[90s])[1h:60s]))",
           "legendFormat": "saved - {{evaluatorType}}",
           "refId": "A"
         }
@@ -427,21 +427,21 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_call_total[1h])) by (evaluatorType)",
+          "expr": "sum by (evaluatorType) (sum_over_time(increase(devquest_ai_call_total[90s])[1h:60s]))",
           "legendFormat": "{{evaluatorType}}",
           "refId": "A",
           "instant": true
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_call_total{status=\"success\"}[1h])) by (evaluatorType) / sum(increase(devquest_ai_call_total[1h])) by (evaluatorType)",
+          "expr": "sum by (evaluatorType) (sum_over_time(increase(devquest_ai_call_total{status=\"success\"}[90s])[1h:60s])) / sum by (evaluatorType) (sum_over_time(increase(devquest_ai_call_total[90s])[1h:60s]))",
           "legendFormat": "{{evaluatorType}}",
           "refId": "B",
           "instant": true
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(ai_tokens_cache_read_total[1h])) by (evaluatorType) / (sum(increase(ai_tokens_cache_read_total[1h])) by (evaluatorType) + sum(increase(ai_tokens_input_total[1h])) by (evaluatorType) + 0.0001)",
+          "expr": "sum by (evaluatorType) (sum_over_time(increase(ai_tokens_cache_read_total[90s])[1h:60s])) / (sum by (evaluatorType) (sum_over_time(increase(ai_tokens_cache_read_total[90s])[1h:60s])) + sum by (evaluatorType) (sum_over_time(increase(ai_tokens_input_total[90s])[1h:60s])) + 0.0001)",
           "legendFormat": "{{evaluatorType}}",
           "refId": "C",
           "instant": true
