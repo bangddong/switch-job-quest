@@ -41,7 +41,12 @@ class OtlpMetricsConfig(
                 else -> null
             }
             override fun headers(): Map<String, String> =
-                mapOf("Authorization" to "Basic $encoded")
+                mapOf(
+                    "Authorization" to "Basic $encoded",
+                    // keep-alive stale connection 방지: Java HttpURLConnection이 idle connection을
+                    // 재사용하다 "Unexpected end of file from server" 오류 발생 → Connection: close로 강제 종료
+                    "Connection" to "close",
+                )
         }
         val threadFactory = ThreadFactory { runnable ->
             Executors.defaultThreadFactory().newThread(runnable).apply {
@@ -49,6 +54,11 @@ class OtlpMetricsConfig(
                 isDaemon = true
             }
         }
+        // HttpURLConnection keep-alive 비활성화: 60초 이상 유휴 상태인 connection을
+        // Grafana Cloud 서버가 닫은 후 재사용 시 "Unexpected end of file from server" 오류 발생.
+        // OTLP push는 60초 간격이므로 keep-alive 이점보다 stale connection 위험이 큼.
+        System.setProperty("http.keepAlive", "false")
+
         return OtlpMeterRegistry(config, clock).also { created ->
             created.start(threadFactory)
             registry = created
