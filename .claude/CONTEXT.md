@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `fix/otlp-auto-config` |
-| 열린 PR | #209 — OTLP auto-config 중복 bean 수정 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
@@ -72,9 +72,9 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| #209 | OTLP auto-config 중복 bean 수정 — spring.autoconfigure.exclude로 OtlpMetricsExportAutoConfiguration 직접 제외 | 2026-06-17 |
-| #208 | 기술면접 평가 면접관 페르소나 수정 — "10년 이상 경력" → "경험 많은 기술 면접관", 5년차 기준 피드백 명시 | 2026-06-16 |
-| #207 | Grafana Loki 로그 전송 수정 (loki4j 1.x batch API), 레이턴시 메트릭 단위 수정 (baseTimeUnit seconds), orchestrator Self-Critique Gate 추가 | 2026-06-15 |
+| #213 | OTLP 메트릭 push keep-alive stale connection 수정 — Connection:close 헤더 + http.keepAlive=false | 2026-06-17 |
+| #212 | OTLP auto-config @SpringBootApplication excludeName으로 제외 | 2026-06-17 |
+| #208 | 기술면접 평가 면접관 페르소나 수정 — 5년차 기준 피드백 명시 | 2026-06-16 |
 | #206 | 평가 결과 마크다운 렌더링 + 모바일 가시성 개선 — MarkdownRenderer 컴포넌트, maxWidth 640 | 2026-06-15 |
 | #203 | qa-reviewer 버전 업그레이드 작업 시 deprecated API 전수 확인 체크리스트 추가 | 2026-06-13 |
 | #202 | 전체 Evaluator .entity() → parseContent() 마이그레이션 — Spring AI RC2 500 에러 수정 | 2026-06-13 |
