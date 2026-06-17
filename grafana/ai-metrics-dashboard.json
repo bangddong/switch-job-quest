@@ -58,7 +58,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_call_total[1h]))",
+          "expr": "round(sum(increase(devquest_ai_call_total[1h])))",
           "legendFormat": "calls",
           "refId": "A"
         }
@@ -179,7 +179,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_retry_total[1h]))",
+          "expr": "round(sum(increase(devquest_ai_retry_total[1h])))",
           "legendFormat": "retries",
           "refId": "A"
         }
@@ -427,7 +427,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(devquest_ai_call_total[1h])) by (evaluatorType)",
+          "expr": "round(sum(increase(devquest_ai_call_total[1h])) by (evaluatorType))",
           "legendFormat": "{{evaluatorType}}",
           "refId": "A",
           "instant": true
