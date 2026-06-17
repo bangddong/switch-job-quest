@@ -4,6 +4,9 @@ logging:
     org.flywaydb: INFO
 
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.micrometer.metrics.autoconfigure.export.otlp.OtlpMetricsExportAutoConfiguration
   h2:
     console:
       enabled: false
@@ -25,12 +28,9 @@ grafana:
 
 # micrometer-registry-otlp가 classpath에 있으면 Spring Boot autoconfiguration이
 # OtlpMeterRegistry를 자동 생성 → OtlpMetricsConfig 수동 bean과 중복 생성됨.
-# 수동 bean(OtlpMetricsConfig)만 사용하도록 autoconfiguration 비활성화.
-management:
-  otlp:
-    metrics:
-      export:
-        enabled: false
+# Spring Boot 4.x에서 클래스가 spring-boot-micrometer-metrics 모듈로 이동됨.
+# management.otlp.metrics.export.enabled=false는 이 클래스에 적용 안 됨 → exclude로 직접 제거.
+# (spring.autoconfigure.exclude는 spring: 블록에 병합됨)
 
 storage:
   datasource:
