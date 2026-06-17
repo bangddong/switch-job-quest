@@ -5,13 +5,6 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
 
-  autoconfigure:
-    exclude:
-      # micrometer-registry-otlp가 classpath에 있으면 auto-configured OtlpMeterRegistry가 생성됨.
-      # 수동 bean(OtlpMetricsConfig)만 사용하도록 제외.
-      # application-prod.yml의 exclude는 auto-config 처리 타이밍 이후 로드되어 효과 없음 → 여기서 제외.
-      - org.springframework.boot.micrometer.metrics.autoconfigure.export.otlp.OtlpMetricsExportAutoConfiguration
-
   config:
     import:
       - classpath:db-core.yml
