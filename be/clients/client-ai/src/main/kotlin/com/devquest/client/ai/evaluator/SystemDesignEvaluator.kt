@@ -21,7 +21,7 @@ class SystemDesignEvaluator(
     override fun evaluate(problemStatement: String, architectureDescription: String, considerations: List<String>): AiEvaluationResult {
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
-            "problemStatement" to problemStatement,
+            "problemStatement" to wrapUserContent(problemStatement),
             "architectureDescription" to wrapUserContent(architectureDescription),
             "considerations" to wrapUserContent(
                 considerations.mapIndexed { i, c -> "${i + 1}. $c" }.joinToString("\n")

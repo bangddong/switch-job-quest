@@ -22,7 +22,7 @@ class TechInterviewEvaluator(
 
     override fun generateQuestions(techStack: String): TechInterviewResult {
         val systemPrompt = questionsSystemTemplate.render()
-        val userPrompt = questionsUserTemplate.render(mapOf("techStack" to techStack))
+        val userPrompt = questionsUserTemplate.render(mapOf("techStack" to wrapUserContent(techStack)))
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
             val content = callAi(systemPrompt, userPrompt)
             parseContent(content, TechInterviewResult::class.java)
@@ -35,7 +35,7 @@ class TechInterviewEvaluator(
     override fun generateDailyQuestion(techStack: String, recentQuestions: List<String>): String {
         val systemPrompt = dailyQuestionSystemTemplate.render()
         val userPrompt = dailyQuestionUserTemplate.render(mapOf(
-            "techStack" to techStack,
+            "techStack" to wrapUserContent(techStack),
             "recentQuestions" to if (recentQuestions.isEmpty()) "없음"
                 else recentQuestions.mapIndexed { i, q -> "${i + 1}. $q" }.joinToString("\n"),
         ))
