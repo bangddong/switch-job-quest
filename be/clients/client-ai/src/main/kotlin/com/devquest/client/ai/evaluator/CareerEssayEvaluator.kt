@@ -21,13 +21,17 @@ class CareerEssayEvaluator(
     override fun evaluate(dissatisfactions: List<String>, goals: List<String>, fiveYearVision: String): EssayCheckResult {
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
-            "dissatisfactions" to dissatisfactions.mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n"),
-            "goals" to goals.mapIndexed { i, g -> "${i + 1}. $g" }.joinToString("\n"),
-            "fiveYearVision" to fiveYearVision,
+            "dissatisfactions" to wrapUserContent(
+                dissatisfactions.mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n")
+            ),
+            "goals" to wrapUserContent(
+                goals.mapIndexed { i, g -> "${i + 1}. $g" }.joinToString("\n")
+            ),
+            "fiveYearVision" to wrapUserContent(fiveYearVision),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, EssayCheckResult::class.java)
         }
     }

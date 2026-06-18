@@ -22,12 +22,14 @@ class SystemDesignEvaluator(
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "problemStatement" to problemStatement,
-            "architectureDescription" to architectureDescription,
-            "considerations" to considerations.mapIndexed { i, c -> "${i + 1}. $c" }.joinToString("\n"),
+            "architectureDescription" to wrapUserContent(architectureDescription),
+            "considerations" to wrapUserContent(
+                considerations.mapIndexed { i, c -> "${i + 1}. $c" }.joinToString("\n")
+            ),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, AiEvaluationResult::class.java)
         }
     }

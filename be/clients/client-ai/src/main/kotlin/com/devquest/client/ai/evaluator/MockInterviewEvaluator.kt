@@ -42,7 +42,7 @@ class MockInterviewEvaluator(
         val userPrompt = evaluateUserTemplate.render(mapOf(
             "category" to category,
             "question" to question,
-            "answer" to answer,
+            "answer" to wrapUserContent(answer, maxLength = 2000),
             "questionId" to questionId,
             "answerPreview" to answer.take(100),
             "techStack" to techStack.joinToString(", "),
@@ -50,7 +50,7 @@ class MockInterviewEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, InterviewEvaluationResult::class.java)
         }
     }
@@ -74,11 +74,7 @@ class MockInterviewEvaluator(
             "totalCount" to (techCount + personalityCount),
         ))
 
-        val response = chatClient.prompt()
-            .system(systemPrompt)
-            .user(userPrompt)
-            .call()
-            .content() ?: "[]"
+        val response = callAi(systemPrompt, userPrompt) ?: "[]"
 
         return try {
             objectMapper.readValue<List<Map<String, String>>>(response)
