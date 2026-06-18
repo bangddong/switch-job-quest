@@ -37,12 +37,12 @@ class CompanyFitEvaluator(
 
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
-            "preferencesText" to preferencesText,
+            "preferencesText" to wrapUserContent(preferencesText),
             "companiesText" to companiesText,
         ))
 
         val response = aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            callAi(systemPrompt, userPrompt)
         }
 
         return try {

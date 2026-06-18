@@ -28,7 +28,7 @@ class DeveloperClassEvaluator(
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, DeveloperClassResult::class.java)
         }
     }

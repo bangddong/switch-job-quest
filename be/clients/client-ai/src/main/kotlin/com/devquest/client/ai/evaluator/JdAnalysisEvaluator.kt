@@ -23,13 +23,13 @@ class JdAnalysisEvaluator(
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "companyName" to companyName,
-            "jobDescription" to jobDescription,
+            "jobDescription" to wrapUserContent(jobDescription),
             "userSkills" to userSkills.joinToString(", "),
-            "userExperiences" to userExperiences.joinToString("\n"),
+            "userExperiences" to wrapUserContent(userExperiences.joinToString("\n")),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, JdAnalysisResult::class.java)
                 ?.let { it.copy(passed = PassCriteriaPolicy.evaluate(it.overallMatchScore)) }
         }

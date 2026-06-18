@@ -22,12 +22,12 @@ class TechBlogEvaluator(
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "techTopic" to techTopic,
-            "title" to title,
-            "content" to content,
+            "title" to wrapUserContent(title),
+            "content" to wrapUserContent(content),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, AiEvaluationResult::class.java)
         }
     }

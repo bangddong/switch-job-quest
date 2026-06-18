@@ -22,13 +22,9 @@ class TechInterviewEvaluator(
 
     override fun generateQuestions(techStack: String): TechInterviewResult {
         val systemPrompt = questionsSystemTemplate.render()
-        val userPrompt = questionsUserTemplate.render(mapOf("techStack" to techStack))
+        val userPrompt = questionsUserTemplate.render(mapOf("techStack" to wrapUserContent(techStack)))
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt()
-                .system(systemPrompt)
-                .user(userPrompt)
-                .call()
-                .content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, TechInterviewResult::class.java)
         }
     }
@@ -39,34 +35,26 @@ class TechInterviewEvaluator(
     override fun generateDailyQuestion(techStack: String, recentQuestions: List<String>): String {
         val systemPrompt = dailyQuestionSystemTemplate.render()
         val userPrompt = dailyQuestionUserTemplate.render(mapOf(
-            "techStack" to techStack,
+            "techStack" to wrapUserContent(techStack),
             "recentQuestions" to if (recentQuestions.isEmpty()) "없음"
                 else recentQuestions.mapIndexed { i, q -> "${i + 1}. $q" }.joinToString("\n"),
         ))
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            chatClient.prompt()
-                .system(systemPrompt)
-                .user(userPrompt)
-                .call()
-                .content()
+            callAi(systemPrompt, userPrompt)
         }
     }
 
     override fun evaluate(techStack: String, questions: List<String>, answers: List<String>): TechInterviewResult {
         val systemPrompt = evaluateSystemTemplate.render()
         val questionsAndAnswers = questions.zip(answers).joinToString("\n\n") { (q, a) ->
-            "Q: $q\nA: $a"
+            "Q: $q\nA: ${a.take(1000)}"
         }
         val userPrompt = evaluateUserTemplate.render(mapOf(
             "techStack" to techStack,
-            "questionsAndAnswers" to questionsAndAnswers,
+            "questionsAndAnswers" to wrapUserContent(questionsAndAnswers),
         ))
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt()
-                .system(systemPrompt)
-                .user(userPrompt)
-                .call()
-                .content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, TechInterviewResult::class.java)
         }
     }

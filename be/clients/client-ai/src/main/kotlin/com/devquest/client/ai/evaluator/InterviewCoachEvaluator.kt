@@ -29,11 +29,11 @@ class InterviewCoachEvaluator(
         val systemPrompt = startSystemTemplate.render()
         val userPrompt = startUserTemplate.render(mapOf(
             "targetRole" to targetRole,
-            "jdText" to jdText,
+            "jdText" to wrapUserContent(jdText),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, CoachSessionResult::class.java)
         }
     }
@@ -44,11 +44,11 @@ class InterviewCoachEvaluator(
             "questionNumber" to (questionIndex + 1),
             "totalQuestions" to totalQuestions,
             "question" to question,
-            "answer" to answer,
+            "answer" to wrapUserContent(answer, maxLength = 2000),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, CoachAnswerResult::class.java)
         }
     }
@@ -58,7 +58,7 @@ class InterviewCoachEvaluator(
             """
             [질문 ${idx + 1}]
             질문: ${it.question}
-            답변: ${it.answer}
+            답변: ${it.answer.take(1000)}
             피드백: ${it.feedback}
             """.trimIndent()
         }.joinToString("\n\n")
@@ -67,11 +67,11 @@ class InterviewCoachEvaluator(
         val userPrompt = reportUserTemplate.render(mapOf(
             "targetRole" to targetRole,
             "jdSummary" to jdSummary,
-            "answersText" to answersText,
+            "answersText" to wrapUserContent(answersText),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, CoachReportResult::class.java)
         }
     }

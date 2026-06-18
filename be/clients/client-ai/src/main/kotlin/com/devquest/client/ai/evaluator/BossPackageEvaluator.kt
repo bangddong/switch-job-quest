@@ -31,11 +31,11 @@ class BossPackageEvaluator(
             "targetPosition" to targetPosition,
             "githubUrl" to githubUrl,
             "blogUrl" to blogUrl.ifBlank { "미제공" },
-            "resumeContent" to resumeContent,
+            "resumeContent" to wrapUserContent(resumeContent),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, BossPackageResult::class.java)
         }
     }

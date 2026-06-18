@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `fix/prompt-injection-defense` |
+| 열린 PR | #215 — prompt injection 방어 (머지 대기) |
 
 
 
@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #215 | prompt injection 방어 — BaseAiEvaluator callAi/wrapUserContent, 전체 17개 Evaluator 적용 | 2026-06-18 |
 | #214 | TechInterview max-tokens 4000→8000 (JSON 잘림 수정) + 대시보드 카운터 round() 추가 | 2026-06-17 |
 | #213 | OTLP 메트릭 push keep-alive stale connection 수정 — Connection:close 헤더 + http.keepAlive=false | 2026-06-17 |
 | #212 | OTLP auto-config @SpringBootApplication excludeName으로 제외 | 2026-06-17 |

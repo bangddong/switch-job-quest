@@ -22,13 +22,13 @@ class ResumeCheckEvaluator(
     override fun evaluate(targetCompany: String, targetJd: String, resumeContent: String): ResumeCheckResult {
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
-            "targetCompany" to targetCompany,
-            "targetJd" to targetJd.take(500),
-            "resumeContent" to resumeContent,
+            "targetCompany" to wrapUserContent(targetCompany),
+            "targetJd" to wrapUserContent(targetJd, maxLength = 2000),
+            "resumeContent" to wrapUserContent(resumeContent),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, ResumeCheckResult::class.java)
                 ?.let { it.copy(passed = PassCriteriaPolicy.evaluate(it.overallScore)) }
         }

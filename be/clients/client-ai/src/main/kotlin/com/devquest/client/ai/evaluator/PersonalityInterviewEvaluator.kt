@@ -22,11 +22,11 @@ class PersonalityInterviewEvaluator(
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "question" to question,
-            "answer" to answer,
+            "answer" to wrapUserContent(answer, maxLength = 2000),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
-            val content = chatClient.prompt().system(systemPrompt).user(userPrompt).call().content()
+            val content = callAi(systemPrompt, userPrompt)
             parseContent(content, AiEvaluationResult::class.java)
         }
     }
