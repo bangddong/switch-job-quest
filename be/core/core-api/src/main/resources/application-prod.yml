@@ -23,6 +23,14 @@ grafana:
     enabled: true
     instance-id: "1680166"
 
+management:
+  otlp:
+    metrics:
+      export:
+        # Spring Boot auto-config OtlpMeterRegistry 비활성화.
+        # 수동 Bean(OtlpMetricsConfig)만 사용. 두 개 동시 기동 시 429 rate limit 발생.
+        enabled: false
+
 
 storage:
   datasource:
