@@ -72,6 +72,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #217 | OtlpMeterRegistry 중복 start() 제거 + push 성공 로그 추가 (3-arg 생성자 + publish() 오버라이드) | 2026-06-20 |
+| #216 | OTLP auto-config 명시 비활성화 — management.otlp.metrics.export.enabled: false | 2026-06-20 |
 | #215 | prompt injection 방어 — BaseAiEvaluator callAi/wrapUserContent, 전체 17개 Evaluator 적용 | 2026-06-18 |
 | #214 | TechInterview max-tokens 4000→8000 (JSON 잘림 수정) + 대시보드 카운터 round() 추가 | 2026-06-17 |
 | #213 | OTLP 메트릭 push keep-alive stale connection 수정 — Connection:close 헤더 + http.keepAlive=false | 2026-06-17 |
