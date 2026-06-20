@@ -59,11 +59,19 @@ class OtlpMetricsConfig(
         // OTLP push는 60초 간격이므로 keep-alive 이점보다 stale connection 위험이 큼.
         System.setProperty("http.keepAlive", "false")
 
-        return OtlpMeterRegistry(config, clock).also { created ->
-            created.start(threadFactory)
-            registry = created
-            log.info("OtlpMeterRegistry started — pushing to Grafana Cloud every 60s")
+        // 3-arg 생성자 사용: 내부 private 4-arg 생성자가 threadFactory로 start() 를 1회 호출.
+        // 기존: OtlpMeterRegistry(config, clock) → DEFAULT_THREAD_FACTORY로 start() 자동 호출
+        //       + created.start(threadFactory) 명시 호출 → 총 2회 → "Publishing metrics" 2줄 로그.
+        // publish() 오버라이드: 60초 push 성공 시 INFO 로그. 실패 시 Micrometer 내부 WARN 로그 유지.
+        val created = object : OtlpMeterRegistry(config, clock, threadFactory) {
+            override fun publish() {
+                super.publish()
+                log.info("OTLP metrics pushed to Grafana Cloud successfully")
+            }
         }
+        registry = created
+        log.info("OtlpMeterRegistry started — pushing to Grafana Cloud every 60s")
+        return created
     }
 
     @PreDestroy
