@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `chore/fix-grafana-dashboard-queries` |
+| 열린 PR | #218 — Grafana 대시보드 nested subquery 수정 (머지 대기) |
 
 
 
