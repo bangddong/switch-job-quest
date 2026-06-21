@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/fix-grafana-dashboard-queries` |
-| 열린 PR | #218 — Grafana 대시보드 nested subquery 수정 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 
 
@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #218 | Grafana 대시보드 nested subquery → max_over_time/increase 패턴 교체 (AI 메트릭 no data 수정) | 2026-06-21 |
 | #217 | OtlpMeterRegistry 중복 start() 제거 + push 성공 로그 추가 (3-arg 생성자 + publish() 오버라이드) | 2026-06-20 |
 | #216 | OTLP auto-config 명시 비활성화 — management.otlp.metrics.export.enabled: false | 2026-06-20 |
 | #215 | prompt injection 방어 — BaseAiEvaluator callAi/wrapUserContent, 전체 17개 Evaluator 적용 | 2026-06-18 |
