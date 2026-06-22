@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `fix/model-answer-length` |
+| 열린 PR | #220 — modelAnswer 길이 축소 (머지 대기) |
 
 
 
@@ -72,6 +72,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #220 | modelAnswer 길이 축소 — 핵심 서술 + 참고 링크 구조 (output 토큰 ~6000 → ~2000 목표) | 2026-06-22 |
 | #219 | Grafana 토큰 패널 increase([90s]) → increase([$__rate_interval]) — step 불일치 no data 수정 | 2026-06-21 |
 | #218 | Grafana 대시보드 nested subquery → max_over_time/increase 패턴 교체 (AI 메트릭 no data 수정) | 2026-06-21 |
 | #217 | OtlpMeterRegistry 중복 start() 제거 + push 성공 로그 추가 (3-arg 생성자 + publish() 오버라이드) | 2026-06-20 |
