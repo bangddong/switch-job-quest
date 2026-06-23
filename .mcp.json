@@ -3,6 +3,10 @@
     "playwright": {
       "command": "npx",
       "args": ["@playwright/mcp"]
+    },
+    "hermes": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
     }
   }
 }
