@@ -61,11 +61,14 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 ### K8s 학습 진행 상태
 
-- Stage 1: kind 클러스터 생성 ✅, Docker 이미지 빌드 ✅, Deployment/Service 매니페스트 작성 ✅
-- **다음**: `kubectl create secret generic devquest-secrets` → `kubectl apply` → Pod Running 확인 (Stage 1 완료)
-- WSL 클론 위치: `~/switch-job-quest` (Linux 네이티브 경로, Gradle 빌드 fast)
-- 이미지: `devquest-be:local` (kind 클러스터에 `kind load docker-image`로 로드됨)
-- local 프로파일 필수 env 3개: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `JWT_SECRET`
+- **Stage 1 완료 ✅** — Pod Running + Service→Pod end-to-end 검증(`curl /health` 성공)
+- 학습 기록: `k8s/docs/stage1-learning.md` (단계별 명령어 + 용어 심화)
+- **다음: Stage 2** — ConfigMap + Secret 패턴 정리 (설정/비밀 분리)
+- 이후: Stage 3 (H2 → PostgreSQL StatefulSet), Stage 4 (Ingress)
+- WSL 클론 위치: `~/switch-job-quest` (Linux 네이티브, Gradle fast)
+- 이미지: `devquest-be:local` (`kind load docker-image`로 로드)
+- local 프로파일 필수 env 3개: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `JWT_SECRET` (Secret `devquest-secrets`로 주입)
+- 헬스 엔드포인트: `/health` (actuator 아님, 자체 HealthController)
 - 참고: `k8s/docs/env-requirements.md`
 
 
@@ -81,6 +84,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #223 | K8s Stage 1 학습 기록 — 단계별 명령어 + 용어 심화 설명 | 2026-06-24 |
 | #222 | 데일리 질문 꼬리질문 제거 → 모범답안 실무 포인트 섹션 추가 | 2026-06-24 |
 | #221 | K8s 초기 매니페스트 — BE Deployment(local 프로파일), Service, env-requirements.md | 2026-06-24 |
 | #220 | modelAnswer 길이 축소 — 핵심 서술 + 참고 링크 구조 (output 토큰 ~6000 → ~2000 목표) | 2026-06-22 |
