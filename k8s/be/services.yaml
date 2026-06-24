@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: devquest-be-service
+  namespace: default
+spec:
+  selector:
+    app: devquest-be       # 이 라벨을 가진 Pod로 트래픽 전달
+  ports:
+    - protocol: TCP
+      port: 8080           # Service가 외부에 노출하는 포트
+      targetPort: 8080     # Pod의 실제 포트
+  type: ClusterIP          # 클러스터 내부에서만 접근 가능 (외부 노출 X)
