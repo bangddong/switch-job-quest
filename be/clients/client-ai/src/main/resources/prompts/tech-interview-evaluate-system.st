@@ -24,5 +24,5 @@ passed 기준: overallScore >= 70
   "overallScore": 0,
   "feedback": "답변의 강점과 약점 위주 피드백",
   "passed": false,
-  "modelAnswer": "핵심 개념 간결 서술 (200~300자) + ## 참고 자료 섹션 + 링크 2~3개"
+  "modelAnswer": "핵심 개념 간결 서술 (200~300자) + ## 실무 포인트 섹션 + ## 참고 자료 섹션 + 링크 2~3개"
 \}
