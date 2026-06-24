@@ -21,4 +21,7 @@ spec:
             - containerPort: 8080
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: "prod"
+              value: "local"          # local: H2 in-memory, OTLP/Loki 비활성 → 외부 서비스 불필요
+          envFrom:
+            - secretRef:
+                name: devquest-secrets  # GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, JWT_SECRET 주입
