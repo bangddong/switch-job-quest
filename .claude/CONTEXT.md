@@ -56,14 +56,16 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 (PR #222 머지 완료) |
+| 브랜치 | `feat/k8s-stage2-configmap` |
+| 열린 PR | #225 — docs(k8s): Stage 2 학습 기록 — ConfigMap + Secret 패턴 (머지 대기) |
 
 ### K8s 학습 진행 상태
 
 - **Stage 1 완료 ✅** — Pod Running + Service→Pod end-to-end 검증(`curl /health` 성공)
 - 학습 기록: `k8s/docs/stage1-learning.md` (단계별 명령어 + 용어 심화)
-- **다음: Stage 2** — ConfigMap + Secret 패턴 정리 (설정/비밀 분리)
+- **Stage 2 완료 ✅** — ConfigMap + Secret 분리, `envFrom` 병용 구조
+- 학습 기록: `k8s/docs/stage2-learning.md` (PR #225 머지 대기)
+- **다음: Stage 3** — H2 → PostgreSQL StatefulSet
 - 이후: Stage 3 (H2 → PostgreSQL StatefulSet), Stage 4 (Ingress)
 - WSL 클론 위치: `~/switch-job-quest` (Linux 네이티브, Gradle fast)
 - 이미지: `devquest-be:local` (`kind load docker-image`로 로드)
@@ -84,6 +86,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #225 | K8s Stage 2 학습 기록 — ConfigMap + Secret 패턴 분리 | 2026-06-25 |
+| #224 | K8s Stage 2 학습 인덱스 — ConfigMap/Secret 패턴 예습 노트 | 2026-06-24 |
 | #223 | K8s Stage 1 학습 기록 — 단계별 명령어 + 용어 심화 설명 | 2026-06-24 |
 | #222 | 데일리 질문 꼬리질문 제거 → 모범답안 실무 포인트 섹션 추가 | 2026-06-24 |
 | #221 | K8s 초기 매니페스트 — BE Deployment(local 프로파일), Service, env-requirements.md | 2026-06-24 |
