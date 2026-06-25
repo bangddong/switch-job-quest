@@ -19,9 +19,8 @@ spec:
           imagePullPolicy: Never        # 레지스트리에서 pull하지 말고 로컬 이미지 사용
           ports:
             - containerPort: 8080
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "local"          # local: H2 in-memory, OTLP/Loki 비활성 → 외부 서비스 불필요
           envFrom:
+            - configMapRef:
+                name: devquest-config   # SPRING_PROFILES_ACTIVE 등 일반 설정
             - secretRef:
                 name: devquest-secrets  # GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, JWT_SECRET 주입
