@@ -56,15 +56,15 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/k8s-stage2-configmap` |
-| 열린 PR | #225 — docs(k8s): Stage 2 학습 기록 — ConfigMap + Secret 패턴 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 (PR #225 머지 완료) |
 
 ### K8s 학습 진행 상태
 
 - **Stage 1 완료 ✅** — Pod Running + Service→Pod end-to-end 검증(`curl /health` 성공)
 - 학습 기록: `k8s/docs/stage1-learning.md` (단계별 명령어 + 용어 심화)
 - **Stage 2 완료 ✅** — ConfigMap + Secret 분리, `envFrom` 병용 구조
-- 학습 기록: `k8s/docs/stage2-learning.md` (PR #225 머지 대기)
+- 학습 기록: `k8s/docs/stage2-learning.md` (PR #225 머지 완료)
 - **다음: Stage 3** — H2 → PostgreSQL StatefulSet
 - 이후: Stage 3 (H2 → PostgreSQL StatefulSet), Stage 4 (Ingress)
 - WSL 클론 위치: `~/switch-job-quest` (Linux 네이티브, Gradle fast)
