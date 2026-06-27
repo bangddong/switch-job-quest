@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/conference-refs-injection` |
-| 열린 PR | #226 — 데일리 기술면접 참고자료 국내 컨퍼런스 발표 주입 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 (PR #226 머지 완료) |
 
 ### K8s 학습 진행 상태
 
