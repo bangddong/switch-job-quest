@@ -2,6 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.AiMetricsRecorder
+import com.devquest.client.ai.support.ConferenceReferenceLoader
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.devquest.core.domain.support.AiEvaluationException
 import org.assertj.core.api.Assertions.assertThat
@@ -21,7 +22,8 @@ class TechInterviewEvaluatorTest {
     private val chatClient: ChatClient = mock(defaultAnswer = RETURNS_DEEP_STUBS)
     private val metricsRecorder = AiMetricsRecorder(SimpleMeterRegistry())
     private val aiCallExecutor = AiCallExecutor(maxRetry = 1, metricsRecorder = metricsRecorder)
-    private val evaluator = TechInterviewEvaluator(chatClient, aiCallExecutor)
+    private val conferenceReferenceLoader = ConferenceReferenceLoader()
+    private val evaluator = TechInterviewEvaluator(chatClient, aiCallExecutor, conferenceReferenceLoader)
 
     @Test
     fun `generateDailyQuestion — AI가 null을 반환하면 AiEvaluationException 발생`() {
@@ -67,5 +69,39 @@ class TechInterviewEvaluatorTest {
         val result = evaluator.generateQuestions("Java,Spring Boot")
 
         assertThat(result.questions).hasSize(2)
+    }
+
+    @Test
+    fun `evaluate — Kafka 관련 질문 시 컨퍼런스 참고자료가 시스템 프롬프트에 주입됨`() {
+        val json = """{"questions":["Kafka 컨슈머 그룹이란?"],"overallScore":80,"feedback":"좋음","passed":true,"modelAnswer":"답변"}"""
+        whenever(
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(json)
+
+        val result = evaluator.evaluate(
+            techStack = "Kafka",
+            questions = listOf("Kafka 컨슈머 그룹이란?"),
+            answers = listOf("컨슈머 그룹은...")
+        )
+
+        assertThat(result.overallScore).isEqualTo(80)
+        assertThat(result.passed).isTrue()
+    }
+
+    @Test
+    fun `evaluate — AI가 null을 반환하면 AiEvaluationException 발생`() {
+        whenever(
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(null)
+
+        assertThatThrownBy {
+            evaluator.evaluate(
+                techStack = "Java",
+                questions = listOf("JVM이란?"),
+                answers = listOf("JVM은...")
+            )
+        }
+            .isInstanceOf(AiEvaluationException::class.java)
+            .hasMessageContaining("최종 실패")
     }
 }
