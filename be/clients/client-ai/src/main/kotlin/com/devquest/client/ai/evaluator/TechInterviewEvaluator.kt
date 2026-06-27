@@ -2,6 +2,7 @@ package com.devquest.client.ai.evaluator
 
 import com.devquest.client.ai.support.AiCallExecutor
 import com.devquest.client.ai.support.BaseAiEvaluator
+import com.devquest.client.ai.support.ConferenceReferenceLoader
 import com.devquest.core.domain.model.evaluation.TechInterviewResult
 import com.devquest.core.domain.port.TechInterviewPort
 import org.springframework.ai.chat.client.ChatClient
@@ -12,7 +13,8 @@ import org.springframework.stereotype.Component
 @Component
 class TechInterviewEvaluator(
     chatClient: ChatClient,
-    aiCallExecutor: AiCallExecutor
+    aiCallExecutor: AiCallExecutor,
+    private val conferenceReferenceLoader: ConferenceReferenceLoader,
 ) : BaseAiEvaluator(chatClient, aiCallExecutor), TechInterviewPort {
 
     private val questionsSystemTemplate = PromptTemplate(ClassPathResource("prompts/tech-interview-questions-system.st"))
@@ -45,7 +47,9 @@ class TechInterviewEvaluator(
     }
 
     override fun evaluate(techStack: String, questions: List<String>, answers: List<String>): TechInterviewResult {
-        val systemPrompt = evaluateSystemTemplate.render()
+        val questionText = questions.joinToString(" ")
+        val refs = conferenceReferenceLoader.findByQuestion(questionText)
+        val systemPrompt = evaluateSystemTemplate.render(mapOf("conferenceReferences" to refs))
         val questionsAndAnswers = questions.zip(answers).joinToString("\n\n") { (q, a) ->
             "Q: $q\nA: ${a.take(1000)}"
         }
