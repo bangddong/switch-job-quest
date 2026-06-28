@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `feat/company-pipeline` |
-| 열린 PR | #227 — 회사별 지원 파이프라인 Phase 1 (머지 대기) |
+| 브랜치 | `main` |
+| 열린 PR | 없음 |
 
 ### K8s 학습 진행 상태
 
