@@ -220,3 +220,26 @@ export interface CodingQuestState {
   hints: string[]
   selectedCategory: string | null
 }
+
+export type ApplicationStatus =
+  | 'INTERESTED'
+  | 'APPLIED'
+  | 'SCREENING_PASS'
+  | 'SCREENING_FAIL'
+  | 'TECH_INTERVIEW'
+  | 'HR_INTERVIEW'
+  | 'OFFERED'
+  | 'REJECTED'
+  | 'WITHDRAWN'
+
+export interface AppliedCompany {
+  id: number
+  userId: string
+  companyName: string
+  position: string
+  jdUrl?: string
+  status: ApplicationStatus
+  notes?: string
+  appliedAt?: string
+  createdAt: string
+}

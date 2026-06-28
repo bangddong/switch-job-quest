@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Act, Quest } from '@/types/quest.types'
-import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ActClearReportResult, ResumeCheckResult, CodingQuestState } from '@/types/api.types'
+import type { AiEvaluationResult, BossPackageResult, DeveloperClassResult, JdAnalysisResult, ActClearReportResult, ResumeCheckResult, CodingQuestState, AppliedCompany, ApplicationStatus } from '@/types/api.types'
 import type { Character } from '@/types/character.types'
 import { QuestMap } from '@/features/quest-map'
 import { QuestDetail, QuestBriefingView } from '@/features/quest-detail'
@@ -16,6 +16,7 @@ import { LoginPage } from '@/features/auth/components/LoginPage'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
 import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
+import { getCompanies, createCompany, updateCompanyStatus, deleteCompany } from '@/features/company-pipeline'
 import { STORAGE_KEYS } from '@/lib/storageKeys'
 import { ACTS } from '@/features/quest-map/constants/questData'
 
@@ -79,6 +80,7 @@ export function App() {
     INITIAL_PROGRESS_CACHE?.aiResults ?? {}
   )
   const [codingQuestState, setCodingQuestState] = useState<CodingQuestState | null>(null)
+  const [companies, setCompanies] = useState<AppliedCompany[]>([])
   const [showForm, setShowForm] = useState(false)
   const [showIntro, setShowIntro] = useState(true)
   const [progressLoading, setProgressLoading] = useState(false)
@@ -157,7 +159,15 @@ export function App() {
   useEffect(() => {
     if (!isLoggedIn) {
       localStorage.removeItem(PROGRESS_CACHE_KEY)
+      setCompanies([])
     }
+  }, [isLoggedIn])
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    getCompanies()
+      .then(setCompanies)
+      .catch(() => { /* 조회 실패 시 빈 배열 유지 */ })
   }, [isLoggedIn])
 
   useEffect(() => {
@@ -217,6 +227,21 @@ export function App() {
   const handleCharacterComplete = (c: Character) => {
     setCharacter(c)
     setView({ kind: 'map' })
+  }
+
+  const handleAddCompany = async (data: { companyName: string; position: string; jdUrl?: string }) => {
+    const added = await createCompany(data)
+    setCompanies((prev) => [added, ...prev])
+  }
+
+  const handleCompanyStatusChange = async (id: number, status: ApplicationStatus) => {
+    const updated = await updateCompanyStatus(id, status)
+    setCompanies((prev) => prev.map((c) => (c.id === id ? updated : c)))
+  }
+
+  const handleDeleteCompany = async (id: number) => {
+    await deleteCompany(id)
+    setCompanies((prev) => prev.filter((c) => c.id !== id))
   }
 
   const handleSelectAct = (act: Act) => {
@@ -411,6 +436,10 @@ export function App() {
             getActProgress={getActProgress}
             character={character}
             lastCompletedAt={lastCompletedAt}
+            companies={companies}
+            onAddCompany={handleAddCompany}
+            onCompanyStatusChange={handleCompanyStatusChange}
+            onDeleteCompany={handleDeleteCompany}
           />
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button

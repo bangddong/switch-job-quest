@@ -1,10 +1,12 @@
 import type { Act, Quest } from '@/types/quest.types'
 import type { Character } from '@/types/character.types'
+import type { AppliedCompany, ApplicationStatus } from '@/types/api.types'
 import { ACTS, ACT_UNLOCK_THRESHOLD } from '../constants/questData'
 import { ActCard } from './ActCard'
 import { StatsPanel } from './StatsPanel'
 import { TodayMissionBanner } from './TodayMissionBanner'
 import { ReturnBanner } from './ReturnBanner'
+import { CompanyPipelinePanel } from '@/features/company-pipeline'
 
 interface QuestMapProps {
   onSelectAct: (act: Act) => void
@@ -14,9 +16,13 @@ interface QuestMapProps {
   getActProgress: (act: Act) => number
   character: Character
   lastCompletedAt?: string | null
+  companies: AppliedCompany[]
+  onAddCompany: (data: { companyName: string; position: string; jdUrl?: string }) => Promise<void>
+  onCompanyStatusChange: (id: number, status: ApplicationStatus) => Promise<void>
+  onDeleteCompany: (id: number) => Promise<void>
 }
 
-export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character, lastCompletedAt }: QuestMapProps) {
+export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character, lastCompletedAt, companies, onAddCompany, onCompanyStatusChange, onDeleteCompany }: QuestMapProps) {
   const completedCount = Object.keys(completed).length
 
   return (
@@ -88,6 +94,13 @@ export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, g
       </button>
 
       <StatsPanel completedCount={completedCount} />
+
+      <CompanyPipelinePanel
+        companies={companies}
+        onAdd={onAddCompany}
+        onStatusChange={onCompanyStatusChange}
+        onDelete={onDeleteCompany}
+      />
     </div>
   )
 }
