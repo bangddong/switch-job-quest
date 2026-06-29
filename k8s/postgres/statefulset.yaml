@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  serviceName: postgres-svc   # Headless Service 이름과 일치 필수 — Pod DNS 생성에 사용
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: devquest
+            - name: POSTGRES_USER
+              value: devquest
+            - name: POSTGRES_PASSWORD
+              value: devquest-local    # 로컬 학습용 — 운영에서는 Secret으로 분리
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data   # PostgreSQL 데이터 저장 경로
+  volumeClaimTemplates:         # StatefulSet 전용 — Pod마다 PVC를 자동 생성
+    - metadata:
+        name: postgres-data     # → PVC 이름: postgres-data-postgres-0
+      spec:
+        accessModes: ["ReadWriteOnce"]   # 한 노드에서만 읽기/쓰기
+        resources:
+          requests:
+            storage: 1Gi
