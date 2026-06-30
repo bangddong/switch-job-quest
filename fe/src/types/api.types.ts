@@ -238,6 +238,7 @@ export interface AppliedCompany {
   companyName: string
   position: string
   jdUrl?: string
+  jobDescription?: string
   status: ApplicationStatus
   notes?: string
   appliedAt?: string

@@ -1,5 +1,6 @@
 package com.devquest.core.api.controller.v1
 
+import com.devquest.core.api.controller.v1.request.AnalyzeCompanyRequestDto
 import com.devquest.core.api.controller.v1.request.CreateCompanyRequestDto
 import com.devquest.core.api.controller.v1.request.UpdateCompanyStatusRequestDto
 import com.devquest.core.domain.CompanyService
@@ -23,7 +24,7 @@ class CompanyController(
         @AuthenticationPrincipal userId: String,
         @Valid @RequestBody request: CreateCompanyRequestDto,
     ): ApiResponse<*> {
-        val result = companyService.createCompany(userId, request.companyName, request.position, request.jdUrl)
+        val result = companyService.createCompany(userId, request.companyName, request.position, request.jdUrl, request.jobDescription)
         return ApiResponse.success(result)
     }
 
@@ -51,5 +52,15 @@ class CompanyController(
         @PathVariable id: Long,
     ) {
         companyService.deleteCompany(userId, id)
+    }
+
+    @PostMapping("/{id}/analyze")
+    fun analyzeCompany(
+        @AuthenticationPrincipal userId: String,
+        @PathVariable id: Long,
+        @Valid @RequestBody request: AnalyzeCompanyRequestDto,
+    ): ApiResponse<*> {
+        val result = companyService.analyzeCompany(userId, id, request.userSkills, request.userExperiences)
+        return ApiResponse.success(result)
     }
 }

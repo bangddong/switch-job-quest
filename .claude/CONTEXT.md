@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `docs/k8s-stage3-index` |
-| 열린 PR | #228 — K8s Stage 3 학습 인덱스 (머지 대기) |
+| 브랜치 | `feat/company-pipeline-phase2` |
+| 열린 PR | #228 — K8s Stage 3 학습 인덱스 (머지 대기), #229 — JD 분석 코칭 Phase 2 (머지 대기) |
 
 ### K8s 학습 진행 상태
 
@@ -86,6 +86,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #229 | 지원 파이프라인 Phase 2 — JD 분석 코칭 연동 (company_activity 연결, AI 분석 endpoint, CoachPanel UI) | 2026-06-30 |
 | #228 | K8s Stage 3 학습 인덱스 — PostgreSQL StatefulSet + PV/PVC 예습 | 2026-06-29 |
 | #227 | 회사별 지원 파이프라인 Phase 1 — AppliedCompany CRUD + 지원 현황 UI | 2026-06-28 |
 | #226 | 데일리 기술면접 참고자료 — 국내 컨퍼런스 발표 카테고리 주입 | 2026-06-27 |

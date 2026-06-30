@@ -19,6 +19,9 @@ class AppliedCompanyEntity(
     @Column(length = 2048)
     var jdUrl: String? = null,
 
+    @Column(columnDefinition = "TEXT")
+    var jobDescription: String? = null,
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     var status: ApplicationStatus = ApplicationStatus.INTERESTED,

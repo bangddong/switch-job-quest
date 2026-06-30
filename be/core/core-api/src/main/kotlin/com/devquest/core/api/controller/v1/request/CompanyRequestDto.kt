@@ -9,6 +9,7 @@ data class CreateCompanyRequestDto(
     @field:NotBlank val companyName: String = "",
     val position: String = "",
     val jdUrl: String? = null,
+    val jobDescription: String? = null,
 )
 
 data class UpdateCompanyStatusRequestDto(

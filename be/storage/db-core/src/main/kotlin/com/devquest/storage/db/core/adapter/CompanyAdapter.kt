@@ -16,6 +16,7 @@ class CompanyAdapter(
             repository.findById(company.id).orElse(null)?.apply {
                 position = company.position
                 jdUrl = company.jdUrl
+                jobDescription = company.jobDescription
                 status = company.status
                 notes = company.notes
                 appliedAt = company.appliedAt
@@ -45,6 +46,7 @@ class CompanyAdapter(
             companyName = this.companyName,
             position = this.position,
             jdUrl = this.jdUrl,
+            jobDescription = this.jobDescription,
             status = this.status,
             notes = this.notes,
             appliedAt = this.appliedAt,
@@ -58,6 +60,7 @@ class CompanyAdapter(
             companyName = company.companyName,
             position = company.position,
             jdUrl = company.jdUrl,
+            jobDescription = company.jobDescription,
             status = company.status,
             notes = company.notes,
             appliedAt = company.appliedAt,

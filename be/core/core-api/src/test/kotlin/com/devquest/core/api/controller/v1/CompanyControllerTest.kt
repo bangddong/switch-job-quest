@@ -4,6 +4,7 @@ import com.devquest.core.api.controller.ApiControllerAdvice
 import com.devquest.core.domain.CompanyService
 import com.devquest.core.domain.model.AppliedCompany
 import com.devquest.core.domain.model.ApplicationStatus
+import com.devquest.core.domain.model.evaluation.JdAnalysisResult
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
 import org.junit.jupiter.api.AfterEach
@@ -53,7 +54,7 @@ class CompanyControllerTest {
 
     @Test
     fun `POST companies - 정상 요청이면 201과 SUCCESS 반환`() {
-        whenever(companyService.createCompany(any(), any(), any(), anyOrNull())).thenReturn(
+        whenever(companyService.createCompany(any(), any(), any(), anyOrNull(), anyOrNull())).thenReturn(
             AppliedCompany(id = 1L, userId = "user-1", companyName = "카카오", position = "백엔드")
         )
 
@@ -66,7 +67,7 @@ class CompanyControllerTest {
             jsonPath("$.data.companyName") { value("카카오") }
         }
 
-        verify(companyService).createCompany("user-1", "카카오", "백엔드", null)
+        verify(companyService).createCompany("user-1", "카카오", "백엔드", null, null)
     }
 
     @Test
@@ -160,5 +161,62 @@ class CompanyControllerTest {
                 status { isNotFound() }
                 jsonPath("$.result") { value("ERROR") }
             }
+    }
+
+    // ===== analyzeCompany 테스트 =====
+
+    @Test
+    fun `POST companies id analyze - 정상 요청이면 200과 분석 결과 반환`() {
+        whenever(companyService.analyzeCompany(any(), any(), any(), any()))
+            .thenReturn(JdAnalysisResult(companyName = "카카오", overallMatchScore = 85, passed = true))
+
+        mockMvc.post("/api/v1/companies/1/analyze") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"userSkills":["Java","Spring"],"userExperiences":["3년 백엔드"]}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.result") { value("SUCCESS") }
+            jsonPath("$.data.companyName") { value("카카오") }
+            jsonPath("$.data.overallMatchScore") { value(85) }
+        }
+    }
+
+    @Test
+    fun `POST companies id analyze - JD 없는 회사면 400 반환`() {
+        whenever(companyService.analyzeCompany(any(), any(), any(), any()))
+            .thenThrow(CoreException(ErrorType.INVALID_REQUEST))
+
+        mockMvc.post("/api/v1/companies/1/analyze") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"userSkills":["Java"],"userExperiences":["3년 백엔드"]}"""
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.result") { value("ERROR") }
+        }
+    }
+
+    @Test
+    fun `POST companies id analyze - 없는 회사면 404 반환`() {
+        whenever(companyService.analyzeCompany(any(), any(), any(), any()))
+            .thenThrow(CoreException(ErrorType.COMPANY_NOT_FOUND))
+
+        mockMvc.post("/api/v1/companies/999/analyze") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"userSkills":["Java"],"userExperiences":["3년 백엔드"]}"""
+        }.andExpect {
+            status { isNotFound() }
+            jsonPath("$.result") { value("ERROR") }
+        }
+    }
+
+    @Test
+    fun `POST companies id analyze - userSkills 빈 배열이면 400 반환`() {
+        mockMvc.post("/api/v1/companies/1/analyze") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"userSkills":[],"userExperiences":["3년 백엔드"]}"""
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.result") { value("ERROR") }
+        }
     }
 }
