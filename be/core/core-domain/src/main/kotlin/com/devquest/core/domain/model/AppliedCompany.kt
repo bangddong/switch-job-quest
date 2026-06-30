@@ -8,6 +8,7 @@ data class AppliedCompany(
     val companyName: String = "",
     val position: String = "",
     val jdUrl: String? = null,
+    val jobDescription: String? = null,
     val status: ApplicationStatus = ApplicationStatus.INTERESTED,
     val notes: String? = null,
     val appliedAt: LocalDateTime? = null,
