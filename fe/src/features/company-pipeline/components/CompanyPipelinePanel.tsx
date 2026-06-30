@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import type { AppliedCompany, ApplicationStatus } from '@/types/api.types'
+import type { AppliedCompany, ApplicationStatus, JdAnalysisResult } from '@/types/api.types'
 import { CompanyCard } from './CompanyCard'
 import { AddCompanyModal } from './AddCompanyModal'
 
 interface CompanyPipelinePanelProps {
   companies: AppliedCompany[]
-  onAdd: (data: { companyName: string; position: string; jdUrl?: string }) => Promise<void>
+  onAdd: (data: { companyName: string; position: string; jdUrl?: string; jobDescription?: string }) => Promise<void>
   onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>
   onDelete: (id: number) => Promise<void>
+  onAnalyzeCompany: (id: number, skills: string[], experiences: string[]) => Promise<JdAnalysisResult>
 }
 
 export function CompanyPipelinePanel({
@@ -15,8 +16,16 @@ export function CompanyPipelinePanel({
   onAdd,
   onStatusChange,
   onDelete,
+  onAnalyzeCompany,
 }: CompanyPipelinePanelProps) {
   const [showModal, setShowModal] = useState(false)
+  const [analysisResults, setAnalysisResults] = useState<Record<number, JdAnalysisResult>>({})
+
+  const handleAnalyze = async (id: number, skills: string[], experiences: string[]): Promise<JdAnalysisResult> => {
+    const result = await onAnalyzeCompany(id, skills, experiences)
+    setAnalysisResults((prev) => ({ ...prev, [id]: result }))
+    return result
+  }
 
   return (
     <div
@@ -76,6 +85,8 @@ export function CompanyPipelinePanel({
               company={company}
               onStatusChange={(id, status) => { onStatusChange(id, status).catch(() => {}) }}
               onDelete={(id) => { onDelete(id).catch(() => {}) }}
+              analysisResult={analysisResults[company.id]}
+              onAnalyze={handleAnalyze}
             />
           ))}
         </div>

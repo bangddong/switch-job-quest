@@ -1,4 +1,4 @@
-import type { ApiResponse, AppliedCompany, ApplicationStatus } from '@/types/api.types'
+import type { ApiResponse, AppliedCompany, ApplicationStatus, JdAnalysisResult } from '@/types/api.types'
 import { getToken } from '@/hooks/useAuth'
 
 const API_BASE = '/api/v1'
@@ -19,6 +19,7 @@ export async function createCompany(body: {
   companyName: string
   position: string
   jdUrl?: string
+  jobDescription?: string
 }): Promise<AppliedCompany> {
   const res = await fetch(`${API_BASE}/companies`, {
     method: 'POST',
@@ -61,4 +62,19 @@ export async function deleteCompany(id: number): Promise<void> {
     headers: authHeaders(),
   })
   assertOk(res)
+}
+
+export async function analyzeCompany(
+  id: number,
+  body: { userSkills: string[]; userExperiences: string[] },
+): Promise<JdAnalysisResult> {
+  const res = await fetch(`${API_BASE}/companies/${id}/analyze`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  assertOk(res)
+  const json: ApiResponse<JdAnalysisResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('JD 분석 실패')
+  return json.data
 }

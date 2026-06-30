@@ -1,6 +1,6 @@
 import type { Act, Quest } from '@/types/quest.types'
 import type { Character } from '@/types/character.types'
-import type { AppliedCompany, ApplicationStatus } from '@/types/api.types'
+import type { AppliedCompany, ApplicationStatus, JdAnalysisResult } from '@/types/api.types'
 import { ACTS, ACT_UNLOCK_THRESHOLD } from '../constants/questData'
 import { ActCard } from './ActCard'
 import { StatsPanel } from './StatsPanel'
@@ -17,12 +17,13 @@ interface QuestMapProps {
   character: Character
   lastCompletedAt?: string | null
   companies: AppliedCompany[]
-  onAddCompany: (data: { companyName: string; position: string; jdUrl?: string }) => Promise<void>
+  onAddCompany: (data: { companyName: string; position: string; jdUrl?: string; jobDescription?: string }) => Promise<void>
   onCompanyStatusChange: (id: number, status: ApplicationStatus) => Promise<void>
   onDeleteCompany: (id: number) => Promise<void>
+  onAnalyzeCompany: (id: number, skills: string[], experiences: string[]) => Promise<JdAnalysisResult>
 }
 
-export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character, lastCompletedAt, companies, onAddCompany, onCompanyStatusChange, onDeleteCompany }: QuestMapProps) {
+export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character, lastCompletedAt, companies, onAddCompany, onCompanyStatusChange, onDeleteCompany, onAnalyzeCompany }: QuestMapProps) {
   const completedCount = Object.keys(completed).length
 
   return (
@@ -100,6 +101,7 @@ export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, g
         onAdd={onAddCompany}
         onStatusChange={onCompanyStatusChange}
         onDelete={onDeleteCompany}
+        onAnalyzeCompany={onAnalyzeCompany}
       />
     </div>
   )

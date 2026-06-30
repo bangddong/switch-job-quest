@@ -16,7 +16,7 @@ import { LoginPage } from '@/features/auth/components/LoginPage'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
 import { useCharacter } from '@/hooks/useCharacter'
 import { fetchProgress, completeQuest, fetchActClearReport } from '@/lib/apiClient'
-import { getCompanies, createCompany, updateCompanyStatus, deleteCompany } from '@/features/company-pipeline'
+import { getCompanies, createCompany, updateCompanyStatus, deleteCompany, analyzeCompany } from '@/features/company-pipeline'
 import { STORAGE_KEYS } from '@/lib/storageKeys'
 import { ACTS } from '@/features/quest-map/constants/questData'
 
@@ -229,9 +229,13 @@ export function App() {
     setView({ kind: 'map' })
   }
 
-  const handleAddCompany = async (data: { companyName: string; position: string; jdUrl?: string }) => {
+  const handleAddCompany = async (data: { companyName: string; position: string; jdUrl?: string; jobDescription?: string }) => {
     const added = await createCompany(data)
     setCompanies((prev) => [added, ...prev])
+  }
+
+  const handleAnalyzeCompany = async (id: number, skills: string[], experiences: string[]) => {
+    return analyzeCompany(id, { userSkills: skills, userExperiences: experiences })
   }
 
   const handleCompanyStatusChange = async (id: number, status: ApplicationStatus) => {
@@ -440,6 +444,7 @@ export function App() {
             onAddCompany={handleAddCompany}
             onCompanyStatusChange={handleCompanyStatusChange}
             onDeleteCompany={handleDeleteCompany}
+            onAnalyzeCompany={handleAnalyzeCompany}
           />
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button

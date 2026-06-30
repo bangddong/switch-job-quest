@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 interface AddCompanyModalProps {
-  onAdd: (data: { companyName: string; position: string; jdUrl?: string }) => Promise<void>
+  onAdd: (data: { companyName: string; position: string; jdUrl?: string; jobDescription?: string }) => Promise<void>
   onClose: () => void
 }
 
@@ -9,6 +9,7 @@ export function AddCompanyModal({ onAdd, onClose }: AddCompanyModalProps) {
   const [companyName, setCompanyName] = useState('')
   const [position, setPosition] = useState('')
   const [jdUrl, setJdUrl] = useState('')
+  const [jobDescription, setJobDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,6 +26,7 @@ export function AddCompanyModal({ onAdd, onClose }: AddCompanyModalProps) {
         companyName: companyName.trim(),
         position: position.trim(),
         ...(jdUrl.trim() ? { jdUrl: jdUrl.trim() } : {}),
+        ...(jobDescription.trim() ? { jobDescription: jobDescription.trim() } : {}),
       })
       onClose()
     } catch {
@@ -115,6 +117,20 @@ export function AddCompanyModal({ onAdd, onClose }: AddCompanyModalProps) {
               onChange={(e) => setJdUrl(e.target.value)}
               placeholder="https://..."
               style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>JD 내용 (선택 — AI 분석용)</label>
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              placeholder="채용공고 본문을 붙여넣으세요"
+              style={{
+                ...inputStyle,
+                height: 120,
+                resize: 'vertical',
+              }}
             />
           </div>
 
