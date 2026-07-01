@@ -5,6 +5,14 @@
 
 ## 알아둬야 할 비자명적 결정
 
+### hermes wiki ↔ 앱 데이터 관계 (런타임 연동 아님)
+`E:/development/wiki/`(hermes LLM wiki)는 로컬 개발머신 전용(localhost:8080 MCP, SQLite) —
+Fly.io 배포 앱에서 직접 조회 불가, 멀티테넌시 없음(개발자 개인 지식 저장소).
+→ 앱 기능에 반영할 때는 **빌드타임 시드**로만 연계한다 (wiki 콘텐츠를 사람이 큐레이션 →
+Flyway 마이그레이션/정적 리소스로 앱 DB에 넣음). 런타임에 앱이 hermes를 호출하는 구조 금지.
+기존 유사 패턴: `client-ai/support/ConferenceReferenceLoader` + `conference-references.json`
+(정적 classpath 리소스, 키워드 매칭 후 AI 프롬프트 주입).
+
 ### Controller 테스트 패턴
 `standaloneSetup` + `@AuthenticationPrincipal` 조합 시 반드시:
 ```kotlin
@@ -56,8 +64,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `feat/tech-question-bank` |
+| 열린 PR | #231 — 기술면접 질문 뱅크 DB (뱅크 우선 조회 + AI 폴백, 머지 대기) |
 
 ### K8s 학습 진행 상태
 
@@ -86,6 +94,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #231 | 기술면접 질문 뱅크 DB — TechQuestionBank 테이블(V8 마이그레이션, 시드 5건) + DailyMailScheduler 뱅크 우선 조회(랜덤)→AI 폴백 | 2026-07-01 |
 | #230 | repo 정리 — daily 로그 24건 커밋, be/.claude/qa-cache gitignore 보강, 스트레이 스크린샷 제거 | 2026-07-01 |
 | #229 | 지원 파이프라인 Phase 2 — JD 분석 코칭 연동 (company_activity 연결, AI 분석 endpoint, CoachPanel UI) | 2026-06-30 |
 | #228 | K8s Stage 3 학습 인덱스 — PostgreSQL StatefulSet + PV/PVC 예습 | 2026-06-29 |
@@ -138,6 +147,12 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 ### 코드 작업
 - [ ] client-ai Jackson 2/3 혼재 정리 (CompanyFitEvaluator, MockInterviewEvaluator → tools.jackson 마이그레이션)
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
+- [ ] 기술면접 질문 뱅크(#231) 콘텐츠 확충 — hermes wiki `tech/`, `ai-llm/` 카테고리 지식 쌓이는 대로
+      사람이 큐레이션해 Flyway 마이그레이션으로 추가 시드 (런타임 연동 아님, 빌드타임 시드만)
+- [ ] 질문 뱅크 category 파라미터 — 현재 DailyMailScheduler가 항상 null로 호출해 카테고리 분기가
+      죽은 경로 (QA MEDIUM, 의도적 보류). 향후 카테고리별 배분 쓸 계획 생기면 활성화
+- [ ] 질문 뱅크 규모 확대 시(수백 건↑) `findAllBy...` 전체 로드 방식 재검토 — `ORDER BY RANDOM() LIMIT 1`
+      native query 전환 고려 (단, `@DataJpaTest` 등 native query 검증 인프라 먼저 필요)
 
 ### 사용자 확인 필요
 - [x] **RESEND_API_KEY** 발급 완료 → application-local.yml 기입, Fly.io secret 세팅 완료
