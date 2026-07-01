@@ -5,6 +5,14 @@
 
 ## 알아둬야 할 비자명적 결정
 
+### hermes wiki ↔ 앱 데이터 관계 (런타임 연동 아님)
+`E:/development/wiki/`(hermes LLM wiki)는 로컬 개발머신 전용(localhost:8080 MCP, SQLite) —
+Fly.io 배포 앱에서 직접 조회 불가, 멀티테넌시 없음(개발자 개인 지식 저장소).
+→ 앱 기능에 반영할 때는 **빌드타임 시드**로만 연계한다 (wiki 콘텐츠를 사람이 큐레이션 →
+Flyway 마이그레이션/정적 리소스로 앱 DB에 넣음). 런타임에 앱이 hermes를 호출하는 구조 금지.
+기존 유사 패턴: `client-ai/support/ConferenceReferenceLoader` + `conference-references.json`
+(정적 classpath 리소스, 키워드 매칭 후 AI 프롬프트 주입).
+
 ### Controller 테스트 패턴
 `standaloneSetup` + `@AuthenticationPrincipal` 조합 시 반드시:
 ```kotlin
@@ -56,8 +64,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | 없음 |
+| 브랜치 | `feat/tech-question-bank` |
+| 열린 PR | 진행 중 — 기술면접 질문 뱅크 DB (hermes wiki 시드 연계) |
 
 ### K8s 학습 진행 상태
 
