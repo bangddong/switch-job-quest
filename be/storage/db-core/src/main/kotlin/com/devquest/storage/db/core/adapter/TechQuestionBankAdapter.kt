@@ -12,17 +12,17 @@ class TechQuestionBankAdapter(
 ) : TechQuestionBankPort {
 
     override fun findUnused(excludeQuestions: List<String>, category: String?): TechQuestionBank? {
-        val entity = when {
+        val candidates = when {
             category != null && excludeQuestions.isNotEmpty() ->
-                repository.findFirstByCategoryAndQuestionNotInOrderByIdAsc(category, excludeQuestions)
+                repository.findAllByCategoryAndQuestionNotIn(category, excludeQuestions)
             category != null ->
-                repository.findFirstByCategoryOrderByIdAsc(category)
+                repository.findAllByCategory(category)
             excludeQuestions.isNotEmpty() ->
-                repository.findFirstByQuestionNotInOrderByIdAsc(excludeQuestions)
+                repository.findAllByQuestionNotIn(excludeQuestions)
             else ->
-                repository.findFirstByOrderByIdAsc()
+                repository.findAll()
         }
-        return entity?.toDomain()
+        return candidates.randomOrNull()?.toDomain()
     }
 }
 

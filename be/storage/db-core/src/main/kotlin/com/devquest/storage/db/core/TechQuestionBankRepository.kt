@@ -3,14 +3,12 @@ package com.devquest.storage.db.core
 import org.springframework.data.jpa.repository.JpaRepository
 
 interface TechQuestionBankRepository : JpaRepository<TechQuestionBankEntity, Long> {
-    fun findFirstByCategoryAndQuestionNotInOrderByIdAsc(
+    fun findAllByCategoryAndQuestionNotIn(
         category: String,
         excludeQuestions: List<String>,
-    ): TechQuestionBankEntity?
+    ): List<TechQuestionBankEntity>
 
-    fun findFirstByQuestionNotInOrderByIdAsc(excludeQuestions: List<String>): TechQuestionBankEntity?
+    fun findAllByQuestionNotIn(excludeQuestions: List<String>): List<TechQuestionBankEntity>
 
-    fun findFirstByCategoryOrderByIdAsc(category: String): TechQuestionBankEntity?
-
-    fun findFirstByOrderByIdAsc(): TechQuestionBankEntity?
+    fun findAllByCategory(category: String): List<TechQuestionBankEntity>
 }
