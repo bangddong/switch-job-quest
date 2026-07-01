@@ -56,8 +56,8 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` |
-| 열린 PR | #228 — K8s Stage 3 학습 인덱스 (머지 대기) |
+| 브랜치 | `chore/repo-cleanup` |
+| 열린 PR | 진행 중 — repo 정리 (untracked 파일 정돈) |
 
 ### K8s 학습 진행 상태
 

@@ -46,6 +46,7 @@ desktop.ini
 .claude/worktrees/
 .claude/review-cache/
 .claude/qa-cache/
+be/.claude/qa-cache/
 .claude/docs/ai-interview-notes.md
 # === Root npm (dev tool only) ===
 /package.json
