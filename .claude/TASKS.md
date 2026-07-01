@@ -1,5 +1,20 @@
 # 미완료 작업
 
+### TASK-3: BE 서버 다운 — PR #231 배포 실패 후 헬스체크 미통과 (2026-07-01)
+`https://api.quest.dhbang.co.kr/health` 503 → 완전 타임아웃으로 악화 중. FE(`quest.dhbang.co.kr`)는 정상.
+GH Actions `BE CD` 워크플로우(run 28488126339)가 "timeout reached waiting for health checks to pass"로
+실패(빌드/이미지 push는 성공, 머신이 6분간 헬스체크 미통과 → rollback). flyctl 로컬 인증 토큰이 없어
+이 세션에서 실제 런타임 로그 확인 불가.
+
+**필요 작업 (사용자 직접 실행)**:
+```bash
+cd be
+fly auth login
+fly status
+fly logs                  # 크래시 원인 확인 — V8 마이그레이션 이슈 / cold-start 지연 / Fly API 일시 장애 중 판별
+fly machine restart <id>  # 필요시
+fly deploy                # 원인 파악 후 필요시 재배포
+```
 
 ## 완료된 항목
 
