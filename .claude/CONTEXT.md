@@ -57,7 +57,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `chore/repo-cleanup` |
-| 열린 PR | 진행 중 — repo 정리 (untracked 파일 정돈) |
+| 열린 PR | #230 — repo 정리 (untracked 파일 정돈, 머지 대기) |
 
 ### K8s 학습 진행 상태
 
@@ -86,6 +86,7 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #230 | repo 정리 — daily 로그 24건 커밋, be/.claude/qa-cache gitignore 보강, 스트레이 스크린샷 제거 | 2026-07-01 |
 | #229 | 지원 파이프라인 Phase 2 — JD 분석 코칭 연동 (company_activity 연결, AI 분석 endpoint, CoachPanel UI) | 2026-06-30 |
 | #228 | K8s Stage 3 학습 인덱스 — PostgreSQL StatefulSet + PV/PVC 예습 | 2026-06-29 |
 | #227 | 회사별 지원 파이프라인 Phase 1 — AppliedCompany CRUD + 지원 현황 UI | 2026-06-28 |
