@@ -60,6 +60,15 @@ Spring Boot 4.x에서 Flyway auto-configuration 제거됨 (spring-boot-autoconfi
 - `EntityManagerFactoryDependsOnPostProcessor("flyway")`로 JPA가 Flyway 완료 후 초기화되도록 설정
 - 패키지: `org.springframework.boot.jpa.autoconfigure` (Spring Boot 4.x 변경)
 
+### Flyway 마이그레이션 디렉토리 분산 — V8 버전 충돌로 prod 다운 사고 (2026-07-01)
+마이그레이션 파일이 `be/core/core-api/.../db/migration/`과 `be/storage/db-core/.../db/migration/`
+두 곳에 나뉘어 있고 런타임 클래스패스에서 합쳐짐. PR #231에서 `db-core`만 보고 V8을 새로
+만들었는데 `core-api`에 이미 V8(company_pipeline)·V9(company_jd_analysis)가 있어 버전 중복 →
+Flyway가 부팅 단계에서 예외 던지고 앱 전체 크래시(prod BE 완전 다운, `BE CD` 배포 실패).
+- 수정: `V8__create_tech_question_bank.sql` → `V10__create_tech_question_bank.sql`로 rename (fix/flyway-v8-version-collision)
+- 재발 방지: `be-ci.yml`에 두 디렉토리 합산 버전 중복 검사 린트 스텝 추가 — PR 단계에서 자동 차단
+- `systematic-debugging.md` 스킬에 "마이그레이션 작성 전 두 디렉토리 전부 확인" 규칙 추가
+
 ## 현재 상태
 
 | 항목 | 내용 |

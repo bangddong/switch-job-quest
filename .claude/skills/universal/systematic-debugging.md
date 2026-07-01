@@ -50,3 +50,12 @@
 - 생성자 변경 시 → `@Mock` 누락 여부 즉시 확인
 - `verify()` 실패 시 → 파라미터 타입 불일치 확인 (Kotlin null 포함)
 - Flyway 오류 시 → V* 버전 번호 중복, `repair()` 선행 여부 확인
+- **Flyway 마이그레이션 신규 작성 전 필수**: 이 프로젝트는 마이그레이션이 `be/core/core-api/.../db/migration/`
+  와 `be/storage/db-core/.../db/migration/` 두 디렉토리에 분산되어 있고 런타임 클래스패스에서 합쳐진다
+  (2026-07-01 PR #231에서 한쪽만 보고 V8을 중복 생성 → prod 부팅 실패로 서버 전체 다운 사고 발생).
+  새 버전 번호를 정하기 전 반드시 아래 명령으로 두 디렉토리 전체를 확인할 것:
+  ```bash
+  find be -path '*/db/migration/V*.sql' | grep -v '/build/' | sort -V
+  ```
+  BE CI에 이 중복을 자동 차단하는 린트가 추가되어 있으나(`be-ci.yml`), PR 병합 후 배포 실패로
+  이어지는 것보다 작성 시점에 직접 확인하는 편이 훨씬 저렴하다.
