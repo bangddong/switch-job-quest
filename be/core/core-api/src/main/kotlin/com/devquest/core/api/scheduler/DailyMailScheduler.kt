@@ -3,6 +3,7 @@ package com.devquest.core.api.scheduler
 import com.devquest.core.domain.MailService
 import com.devquest.core.domain.port.DailyMailLogPort
 import com.devquest.core.domain.port.TechInterviewPort
+import com.devquest.core.domain.port.TechQuestionBankPort
 import com.devquest.core.domain.port.UserEmailPort
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -17,6 +18,7 @@ class DailyMailScheduler(
     private val userEmailPort: UserEmailPort,
     private val mailService: MailService,
     private val techInterviewPort: TechInterviewPort,
+    private val techQuestionBankPort: TechQuestionBankPort,
     private val dailyMailLogPort: DailyMailLogPort,
     @Value("\${devquest.daily-question.tech-stack}") private val techStack: String,
 ) {
@@ -40,7 +42,14 @@ class DailyMailScheduler(
         }
 
         val recentQuestions = dailyMailLogPort.findRecentQuestions("TECH_INTERVIEW", 30)
-        val question = techInterviewPort.generateDailyQuestion(techStack, recentQuestions)
+        val bankQuestion = techQuestionBankPort.findUnused(recentQuestions)
+        val question = if (bankQuestion != null) {
+            log.info("질문 뱅크에서 질문 채택: category=${bankQuestion.category}")
+            bankQuestion.question
+        } else {
+            log.info("질문 뱅크 소진 — AI로 질문 생성")
+            techInterviewPort.generateDailyQuestion(techStack, recentQuestions)
+        }
         val deepLink = "https://quest.dhbang.co.kr/daily-question"
 
         log.info("데일리 기술 면접 메일 발송 시작: 대상 수=${targets.size}")
