@@ -51,6 +51,22 @@ jobs:
           fi
           echo "✅ No unsafe !! operator found."
 
+      - name: Lint — Flyway 마이그레이션 버전 중복 검사
+        working-directory: ${{ github.workspace }}
+        run: |
+          # 마이그레이션이 core-api / db-core 두 모듈에 분산되어 있고 런타임 클래스패스에서
+          # 합쳐진다 — 버전 번호(V숫자)가 모듈 경계를 넘어 유일해야 함. (2026-07-01 prod 다운 사고,
+          # PR #231에서 V8이 core-api·db-core 양쪽에 중복 생성되어 Flyway 부팅 실패)
+          dup=$(find be -path '*/db/migration/V*.sql' | grep -v '/build/' \
+            | sed -E 's#.*/(V[0-9]+)__.*#\1#' | sort | uniq -d)
+          if [ -n "$dup" ]; then
+            echo "❌ Flyway 마이그레이션 버전 번호 중복 발견: $dup"
+            echo "core-api와 db-core 양쪽 db/migration 디렉토리를 모두 확인해 유일한 다음 버전을 사용하세요."
+            find be -path '*/db/migration/V*.sql' | grep -v '/build/' | sort -V
+            exit 1
+          fi
+          echo "✅ Flyway 마이그레이션 버전 번호 중복 없음."
+
       - name: Build & Test
         run: ./gradlew :core:core-api:bootJar test --no-daemon
 
