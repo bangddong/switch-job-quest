@@ -15,7 +15,7 @@
 | 사용자 직접 실행 필요한 작업 | `.claude/TASKS.md` ← 파일이 존재하면 미완료 작업 있음 |
 | 현재 작업 상태 / PR / 최근 결정 | `.claude/CONTEXT.md` ← 새 대화 시작 시 **먼저 읽기** |
 
-## hermes (외부 성장 두뇌) 사용 규칙
+## mneme (외부 성장 두뇌) 사용 규칙
 
 `http://localhost:8080/mcp`에 상시 가동되는 공유 두뇌 MCP. 매 세션 초기화되지 않고
 경험·지식이 누적된다. 작업 흐름에 다음을 끼워 넣는다.
@@ -27,8 +27,8 @@
 | 작업 종료 후 | `episode_reflect(task, outcome, success, score, skills_used, session_id)` | 결과 반성 제출 → 성향 학습 |
 | 지식 검색/축적 | `wiki_search` / `wiki_inject` | 위키 카테고리 `switch-job-quest/` 사용 |
 
-- hermes 서버가 꺼져 있으면 도구가 안 보인다 — 무시하고 평소대로 진행하면 된다(선택적 의존).
-- 자세한 동작 원리는 `E:/development/hermes-mcp/docs/` 참고.
+- mneme 서버가 꺼져 있으면 도구가 안 보인다 — 무시하고 평소대로 진행하면 된다(선택적 의존).
+- 자세한 동작 원리는 `E:/development/mneme-mcp/docs/` 참고.
 
 ## 브랜치 규칙
 

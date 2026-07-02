@@ -4,7 +4,7 @@
       "command": "npx",
       "args": ["@playwright/mcp"]
     },
-    "hermes": {
+    "mneme": {
       "type": "http",
       "url": "http://localhost:8080/mcp"
     }
