@@ -61,3 +61,5 @@ fe/tsconfig.tsbuildinfo
 out/
 .claude/logs/activity.jsonl
 # daily 리포트는 선택적으로 커밋 가능 (.claude/logs/daily/*.md)
+# daily 리포트는 로컬 전용 (Stop 훅 자동 생성 — repo 노이즈 방지)
+.claude/logs/daily/
