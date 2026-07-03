@@ -17,6 +17,10 @@ server:
   error:
     include-stacktrace: never
     include-message: never
+  tomcat:
+    threads:
+      max: 25   # fly.toml hard_limit=25 커넥션과 정합
+      min-spare: 5
 
 grafana:
   otlp:
