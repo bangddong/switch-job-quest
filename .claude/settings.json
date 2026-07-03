@@ -23,7 +23,8 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": ".claude/scripts/caveman-activate.sh" }
+          { "type": "command", "command": ".claude/scripts/caveman-activate.sh" },
+          { "type": "command", "command": ".claude/scripts/check-wiki-question-candidates.sh" }
         ]
       }
     ],
