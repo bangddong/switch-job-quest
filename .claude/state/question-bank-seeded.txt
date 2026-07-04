@@ -1,1 +1,14 @@
+E:/development/wiki/ai-llm/pages/patterns/llm-wiki-pattern.md
+E:/development/wiki/tech/pages/database/btree-index.md
+E:/development/wiki/tech/pages/database/mvcc.md
+E:/development/wiki/tech/pages/database/transaction-isolation-levels.md
+E:/development/wiki/tech/pages/infra/cache-strategies.md
+E:/development/wiki/tech/pages/infra/distributed-lock.md
+E:/development/wiki/tech/pages/infra/message-queue.md
 E:/development/wiki/tech/pages/java-spring/concurrent-hashmap.md
+E:/development/wiki/tech/pages/java-spring/jpa-n-plus-one.md
+E:/development/wiki/tech/pages/java-spring/jpa-persistence-context.md
+E:/development/wiki/tech/pages/java-spring/spring-transaction-propagation.md
+E:/development/wiki/tech/pages/jvm/garbage-collection.md
+E:/development/wiki/tech/pages/jvm/java-memory-model.md
+E:/development/wiki/tech/pages/jvm/virtual-threads.md
