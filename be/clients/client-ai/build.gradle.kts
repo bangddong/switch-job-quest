@@ -7,6 +7,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-jackson")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("tools.jackson.module:jackson-module-kotlin")
 
     // RC2에서 anthropic-java-client-okhttp가 transitive에서 제거됨 — 통합 테스트에서 직접 사용
     testImplementation("com.anthropic:anthropic-java-client-okhttp:2.35.0")
