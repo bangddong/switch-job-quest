@@ -1,6 +1,6 @@
 package com.devquest.client.ai.support
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import org.springframework.ai.chat.client.ChatClient
 
 abstract class BaseAiEvaluator(
