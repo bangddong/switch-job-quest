@@ -7,6 +7,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-jackson")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+    // tools.jackson 코어(jackson-databind 등)는 Spring Boot 4 관리 의존성(jackson-bom 3.x)으로 클래스패스에 이미 존재
+    // (core-api가 tools.jackson.databind.ObjectMapper 사용 중). 여기서는 Kotlin 모듈만 추가하면 됨.
+    // 버전은 BOM이 관리하므로 명시하지 않음.
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     // RC2에서 anthropic-java-client-okhttp가 transitive에서 제거됨 — 통합 테스트에서 직접 사용
