@@ -14,16 +14,21 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| #250 | 원클릭 이력서 점검 Phase 3b — resume-check/activities API + analyze 이력서 자동 사용 + CompanyCard 점검 패널·이력. 배포 완료(health 200), **사용자 일괄 테스트 대기** | 2026-07-07 |
+| #253 | 지원 상태 전환 이력 Phase 4-1 — STATUS_CHANGE activity 기록 + 이력 타임라인(관심→지원). 배포 완료 | 2026-07-07 |
+| #252 | 점검 결과 표시 fix — 세부 점수 32/40 배점 표기·비율 색상 + 저장 시각 포맷 (prod 실사용 테스트 발견분) | 2026-07-07 |
+| #250 | 원클릭 이력서 점검 Phase 3b — resume-check/activities API + analyze 이력서 자동 사용 + CompanyCard 점검 패널·이력. Claude가 prod 실사용 테스트 완료(시나리오 0~4 전부 통과) | 2026-07-07 |
 | #248 | 이력서 프로필 Phase 3a — user_resume(V12) + GET/PUT /api/v1/resume upsert + ResumeProfilePage(마크다운 미리보기, Amber). BE·FE CD 성공, health 200 | 2026-07-07 |
 | #245 | fly.toml swap 256MB — OOM 조사 최종 결론(누적형 RSS 포화, kill 수위 409MB) 및 1차 완화. 배포 완료 | 2026-07-07 |
 
 ## 다음 작업
 
 ### 코드 작업
-- [ ] **Phase 3b 후속** (#250 머지 후): 사용자 일괄 실사용 테스트 (이력서 등록 → JD 등록 →
-      원클릭 점검 → 이력 확인). 백로그: JD 수정 UI 없음 (AddCompanyModal에서만 입력 가능 —
-      나중에 JD 등록/수정 모달 필요 시 추가), Phase 3c(JD URL 파싱)는 실사용 후 판단
+- [ ] **파이프라인 후속 (사용자 확인 대기)**: ① 모바일 실기기 확인 (데스크톱 시나리오는 Claude가
+      prod 테스트 완료) ② 테스트 데이터 정리 — 회사 "테스트-토스" 삭제, 임시 이력서를 실제로 교체
+- [ ] **Phase 4 후보 (실사용 후 판단)**: 면접 회고 메모(activity NOTE 타입), 같은 회사 카드
+      그룹핑 뷰, JD 등록/수정 모달(현재 AddCompanyModal에서만 입력 가능), Phase 3c(JD URL 파싱)
+- [ ] tech-debt(LOW): CompanyCard handleStatusChange 주석 보완, onDelete/onStatusChange 에러
+      패턴 통일, formatSavedAt invalid date 방어
 - [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
       사용 필요해지면 DB ON CONFLICT 전환
 - [ ] **OOM 후속 관찰** (#245 swap 배포 후): ① 업타임 4~5일째 `fly_instance_memory_swap_free`
