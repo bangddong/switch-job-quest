@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | (없음 — main 최신) |
-| 열린 PR | 없음 |
+| 브랜치 | feat/resume-profile |
+| 열린 PR | #248 — 이력서 프로필 Phase 3a (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
@@ -21,6 +21,12 @@
 ## 다음 작업
 
 ### 코드 작업
+- [ ] **지원 파이프라인 Phase 3b — 회사 카드 원클릭 이력서 점검** (#248 머지 후):
+      `POST /api/v1/companies/{id}/resume-check` — 저장된 JD + 저장된 이력서 → ResumeCheckEvaluator
+      재사용, 결과 company_activity 저장. FE 회사 카드 버튼 + 이력 표시.
+      + analyzeCompany의 userSkills/userExperiences 수동 입력도 이력서 자동 추출로 대체
+- [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
+      사용 필요해지면 DB ON CONFLICT 전환
 - [ ] **OOM 후속 관찰** (#245 swap 배포 후): ① 업타임 4~5일째 `fly_instance_memory_swap_free`
       감소 추이 ② exit 137 재발 여부 ③ 스왑 사용 중 응답 지연 체감
 - [ ] **JVM 메모리 다이어트 PR** (스왑 관찰 후 진행): 힙 상한 50%→35% + `ReservedCodeCacheSize=96m`
