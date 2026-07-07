@@ -262,14 +262,14 @@ function ResumeCheckPanel({ result }: ResumeCheckPanelProps) {
         </span>
       </div>
 
-      {/* 세부 점수 3종 */}
+      {/* 세부 점수 3종 (배점제: STAR /40, 정량화 /30, 키워드매칭 /30) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
         {([
-          { label: 'STAR', value: result.starMethodScore },
-          { label: '정량화', value: result.quantificationScore },
-          { label: '키워드매칭', value: result.keywordMatchScore },
+          { label: 'STAR', value: result.starMethodScore, max: 40 },
+          { label: '정량화', value: result.quantificationScore, max: 30 },
+          { label: '키워드매칭', value: result.keywordMatchScore, max: 30 },
         ] as const).map((item) => {
-          const style = getScoreStyle(item.value)
+          const style = getScoreStyle((item.value / item.max) * 100)
           return (
             <div
               key={item.label}
@@ -282,7 +282,9 @@ function ResumeCheckPanel({ result }: ResumeCheckPanelProps) {
               }}
             >
               <p style={{ fontSize: 10, color: '#475569', margin: '0 0 4px' }}>{item.label}</p>
-              <p style={{ fontSize: 14, fontWeight: 700, color: style.color, margin: 0 }}>{item.value}</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: style.color, margin: 0 }}>
+                {item.value}/{item.max}
+              </p>
             </div>
           )
         })}
