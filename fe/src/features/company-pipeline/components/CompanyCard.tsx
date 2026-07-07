@@ -485,9 +485,28 @@ export function CompanyCard({
   const [activitiesExpanded, setActivitiesExpanded] = useState(false)
   const [activities, setActivities] = useState<CompanyActivity[] | null>(null)
   const [activitiesLoading, setActivitiesLoading] = useState(false)
-  const [noActivities, setNoActivities] = useState(false)
 
   const busy = analyzing || checkingResume
+
+  const loadActivities = async () => {
+    setActivitiesLoading(true)
+    try {
+      const result = await onFetchActivities(company.id)
+      setActivities(result)
+    } catch {
+      setActivities([])
+    } finally {
+      setActivitiesLoading(false)
+    }
+  }
+
+  // 새 점검/분석 성공 시 캐시 무효화 — 펼쳐진 상태면 즉시 refetch, 아니면 다음 펼침 시 재조회
+  const invalidateActivities = () => {
+    setActivities(null)
+    if (activitiesExpanded) {
+      loadActivities()
+    }
+  }
 
   const handleAnalysisButtonClick = async () => {
     if (analysisResult) {
@@ -500,6 +519,7 @@ export function CompanyCard({
       try {
         await onAnalyze(company.id, [], [])
         setShowResultPanel(true)
+        invalidateActivities()
       } catch (e) {
         setApiError(e instanceof Error ? e.message : 'ANALYZE_FAILED')
       } finally {
@@ -524,6 +544,7 @@ export function CompanyCard({
       await onAnalyze(company.id, skills, experiences)
       setShowAnalysisForm(false)
       setShowResultPanel(true)
+      invalidateActivities()
     } catch {
       setAnalysisError('분석에 실패했습니다. 다시 시도해주세요.')
     } finally {
@@ -541,6 +562,7 @@ export function CompanyCard({
     try {
       await onResumeCheck(company.id)
       setShowResumePanel(true)
+      invalidateActivities()
     } catch (e) {
       setApiError(e instanceof Error ? e.message : 'RESUME_CHECK_FAILED')
     } finally {
@@ -548,20 +570,11 @@ export function CompanyCard({
     }
   }
 
-  const handleToggleActivities = async () => {
+  const handleToggleActivities = () => {
     const next = !activitiesExpanded
     setActivitiesExpanded(next)
     if (next && activities == null && !activitiesLoading) {
-      setActivitiesLoading(true)
-      try {
-        const result = await onFetchActivities(company.id)
-        setActivities(result)
-        if (result.length === 0) setNoActivities(true)
-      } catch {
-        setActivities([])
-      } finally {
-        setActivitiesLoading(false)
-      }
+      loadActivities()
     }
   }
 
@@ -908,32 +921,32 @@ export function CompanyCard({
       )}
 
       {/* 점검 이력 */}
-      {!noActivities && (
-        <div>
-          <button
-            onClick={handleToggleActivities}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              fontFamily: "'Courier New', monospace",
-              fontSize: 10,
-              letterSpacing: 2,
-              color: '#475569',
-            }}
-          >
-            점검 이력 {activitiesExpanded ? '▲' : '▼'}
-          </button>
-          {activitiesExpanded && (
-            activitiesLoading ? (
-              <p style={{ fontSize: 11, color: '#475569', margin: '6px 0 0' }}>불러오는 중...</p>
-            ) : activities && activities.length > 0 ? (
-              <ActivityHistoryList activities={activities} />
-            ) : null
-          )}
-        </div>
-      )}
+      <div>
+        <button
+          onClick={handleToggleActivities}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            fontFamily: "'Courier New', monospace",
+            fontSize: 10,
+            letterSpacing: 2,
+            color: '#475569',
+          }}
+        >
+          점검 이력 {activitiesExpanded ? '▲' : '▼'}
+        </button>
+        {activitiesExpanded && (
+          activitiesLoading ? (
+            <p style={{ fontSize: 11, color: '#475569', margin: '6px 0 0' }}>불러오는 중...</p>
+          ) : activities && activities.length > 0 ? (
+            <ActivityHistoryList activities={activities} />
+          ) : (
+            <p style={{ fontSize: 11, color: '#475569', margin: '6px 0 0' }}>아직 점검 이력이 없어요</p>
+          )
+        )}
+      </div>
     </div>
   )
 }
