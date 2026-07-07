@@ -1,6 +1,10 @@
 app = 'devquest-api'
 primary_region = 'nrt'
 
+# OOM 완화: RSS가 512MB 한계 근접 시 스왑으로 흡수 (2026-07-07, OOM 조사 결과)
+# 근본 원인: 부팅 직후 가용 마진 ~44MB + 시간당 ~3MB RSS 증가 → 장시간 가동 시 OOM kill
+swap_size_mb = 256
+
 
 [build]
 
