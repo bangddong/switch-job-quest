@@ -3,6 +3,7 @@ package com.devquest.core.api.controller.v1
 import com.devquest.core.api.controller.v1.request.AnalyzeCompanyRequestDto
 import com.devquest.core.api.controller.v1.request.CreateCompanyRequestDto
 import com.devquest.core.api.controller.v1.request.UpdateCompanyStatusRequestDto
+import com.devquest.core.api.controller.v1.response.ResumeCheckResponseDto
 import com.devquest.core.domain.CompanyService
 import com.devquest.core.support.response.ApiResponse
 import jakarta.validation.Valid
@@ -62,5 +63,22 @@ class CompanyController(
     ): ApiResponse<*> {
         val result = companyService.analyzeCompany(userId, id, request.userSkills, request.userExperiences)
         return ApiResponse.success(result)
+    }
+
+    @PostMapping("/{id}/resume-check")
+    fun checkResume(
+        @AuthenticationPrincipal userId: String,
+        @PathVariable id: Long,
+    ): ApiResponse<*> {
+        val (result, checkedAt) = companyService.checkResume(userId, id)
+        return ApiResponse.success(ResumeCheckResponseDto.from(result, checkedAt))
+    }
+
+    @GetMapping("/{id}/activities")
+    fun getActivities(
+        @AuthenticationPrincipal userId: String,
+        @PathVariable id: Long,
+    ): ApiResponse<*> {
+        return ApiResponse.success(companyService.getActivities(userId, id))
     }
 }

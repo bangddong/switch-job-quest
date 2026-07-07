@@ -2,11 +2,15 @@ package com.devquest.core.api.controller.v1
 
 import com.devquest.core.api.controller.ApiControllerAdvice
 import com.devquest.core.domain.CompanyService
+import com.devquest.core.domain.model.ActivityType
 import com.devquest.core.domain.model.AppliedCompany
 import com.devquest.core.domain.model.ApplicationStatus
+import com.devquest.core.domain.model.CompanyActivity
 import com.devquest.core.domain.model.evaluation.JdAnalysisResult
+import com.devquest.core.domain.model.evaluation.ResumeCheckResult
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
+import java.time.LocalDateTime
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -210,13 +214,115 @@ class CompanyControllerTest {
     }
 
     @Test
-    fun `POST companies id analyze - userSkills 빈 배열이면 400 반환`() {
+    fun `POST companies id analyze - userSkills 빈 배열이면 이력서 기반으로 분석한다`() {
+        whenever(companyService.analyzeCompany(any(), any(), any(), any()))
+            .thenReturn(JdAnalysisResult(companyName = "카카오", overallMatchScore = 88, passed = true))
+
         mockMvc.post("/api/v1/companies/1/analyze") {
             contentType = MediaType.APPLICATION_JSON
-            content = """{"userSkills":[],"userExperiences":["3년 백엔드"]}"""
+            content = """{"userSkills":[],"userExperiences":[]}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.result") { value("SUCCESS") }
+            jsonPath("$.data.overallMatchScore") { value(88) }
+        }
+    }
+
+    @Test
+    fun `POST companies id analyze - 리스트가 비어있고 이력서도 없으면 400 반환`() {
+        whenever(companyService.analyzeCompany(any(), any(), any(), any()))
+            .thenThrow(CoreException(ErrorType.RESUME_NOT_REGISTERED))
+
+        mockMvc.post("/api/v1/companies/1/analyze") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"userSkills":[],"userExperiences":[]}"""
         }.andExpect {
             status { isBadRequest() }
             jsonPath("$.result") { value("ERROR") }
         }
+    }
+
+    // ===== checkResume 테스트 =====
+
+    @Test
+    fun `POST companies id resume-check - 정상 요청이면 200과 점검 결과 반환`() {
+        val checkedAt = LocalDateTime.of(2026, 7, 7, 12, 0)
+        whenever(companyService.checkResume(any(), any()))
+            .thenReturn(ResumeCheckResult(overallScore = 90, passed = true) to checkedAt)
+
+        mockMvc.post("/api/v1/companies/1/resume-check")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.result") { value("SUCCESS") }
+                jsonPath("$.data.overallScore") { value(90) }
+                jsonPath("$.data.passed") { value(true) }
+            }
+    }
+
+    @Test
+    fun `POST companies id resume-check - JD 미등록이면 400 반환`() {
+        whenever(companyService.checkResume(any(), any()))
+            .thenThrow(CoreException(ErrorType.COMPANY_JD_NOT_REGISTERED))
+
+        mockMvc.post("/api/v1/companies/1/resume-check")
+            .andExpect {
+                status { isBadRequest() }
+                jsonPath("$.result") { value("ERROR") }
+            }
+    }
+
+    @Test
+    fun `POST companies id resume-check - 이력서 미등록이면 400 반환`() {
+        whenever(companyService.checkResume(any(), any()))
+            .thenThrow(CoreException(ErrorType.RESUME_NOT_REGISTERED))
+
+        mockMvc.post("/api/v1/companies/1/resume-check")
+            .andExpect {
+                status { isBadRequest() }
+                jsonPath("$.result") { value("ERROR") }
+            }
+    }
+
+    @Test
+    fun `POST companies id resume-check - 없는 회사면 404 반환`() {
+        whenever(companyService.checkResume(any(), any()))
+            .thenThrow(CoreException(ErrorType.COMPANY_NOT_FOUND))
+
+        mockMvc.post("/api/v1/companies/999/resume-check")
+            .andExpect {
+                status { isNotFound() }
+                jsonPath("$.result") { value("ERROR") }
+            }
+    }
+
+    // ===== getActivities 테스트 =====
+
+    @Test
+    fun `GET companies id activities - 정상 요청이면 200과 활동 목록 반환`() {
+        whenever(companyService.getActivities(any(), any())).thenReturn(
+            listOf(
+                CompanyActivity(id = 2L, companyId = 1L, userId = "user-1", activityType = ActivityType.RESUME_CHECK),
+                CompanyActivity(id = 1L, companyId = 1L, userId = "user-1", activityType = ActivityType.JD_ANALYSIS),
+            )
+        )
+
+        mockMvc.get("/api/v1/companies/1/activities")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.result") { value("SUCCESS") }
+                jsonPath("$.data.length()") { value(2) }
+            }
+    }
+
+    @Test
+    fun `GET companies id activities - 없는 회사면 404 반환`() {
+        whenever(companyService.getActivities(any(), any()))
+            .thenThrow(CoreException(ErrorType.COMPANY_NOT_FOUND))
+
+        mockMvc.get("/api/v1/companies/999/activities")
+            .andExpect {
+                status { isNotFound() }
+                jsonPath("$.result") { value("ERROR") }
+            }
     }
 }

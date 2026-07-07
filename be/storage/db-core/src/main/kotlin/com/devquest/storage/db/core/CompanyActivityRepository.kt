@@ -8,4 +8,6 @@ interface CompanyActivityRepository : JpaRepository<CompanyActivityEntity, Long>
         companyId: Long,
         activityType: ActivityType,
     ): CompanyActivityEntity?
+
+    fun findAllByCompanyIdOrderByCreatedAtDesc(companyId: Long): List<CompanyActivityEntity>
 }

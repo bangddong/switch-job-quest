@@ -4,10 +4,14 @@ import com.devquest.core.domain.model.ActivityType
 import com.devquest.core.domain.model.AppliedCompany
 import com.devquest.core.domain.model.ApplicationStatus
 import com.devquest.core.domain.model.CompanyActivity
+import com.devquest.core.domain.model.UserResume
 import com.devquest.core.domain.model.evaluation.JdAnalysisResult
+import com.devquest.core.domain.model.evaluation.ResumeCheckResult
 import com.devquest.core.domain.port.CompanyActivityPort
 import com.devquest.core.domain.port.CompanyPort
 import com.devquest.core.domain.port.JdAnalysisEvaluatorPort
+import com.devquest.core.domain.port.ResumeEvaluatorPort
+import com.devquest.core.domain.port.UserResumePort
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
 import org.assertj.core.api.Assertions.assertThat
@@ -32,6 +36,12 @@ class CompanyServiceTest {
 
     @Mock
     private lateinit var jdAnalysisEvaluatorPort: JdAnalysisEvaluatorPort
+
+    @Mock
+    private lateinit var resumeEvaluatorPort: ResumeEvaluatorPort
+
+    @Mock
+    private lateinit var userResumePort: UserResumePort
 
     @Mock
     private lateinit var companyActivityPort: CompanyActivityPort
@@ -134,7 +144,7 @@ class CompanyServiceTest {
         val expected = JdAnalysisResult(companyName = "카카오", overallMatchScore = 80, passed = true)
         val savedActivity = CompanyActivity(id = 1L, companyId = 1L, userId = "user-1")
         whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithJd)
-        whenever(jdAnalysisEvaluatorPort.analyze(any(), any(), any(), any())).thenReturn(expected)
+        whenever(jdAnalysisEvaluatorPort.analyze(any(), any(), any(), any(), any())).thenReturn(expected)
         whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
         whenever(companyActivityPort.save(any())).thenReturn(savedActivity)
 
@@ -143,6 +153,41 @@ class CompanyServiceTest {
         assertThat(result.companyName).isEqualTo("카카오")
         assertThat(result.overallMatchScore).isEqualTo(80)
         verify(companyActivityPort).save(any())
+    }
+
+    @Test
+    fun `analyzeCompany - userSkills와 userExperiences가 비어있으면 저장된 이력서를 활용한다`() {
+        val companyWithJd = company(id = 1L, companyName = "카카오", jobDescription = "Java 백엔드 개발자 모집")
+        val expected = JdAnalysisResult(companyName = "카카오", overallMatchScore = 88, passed = true)
+        val savedActivity = CompanyActivity(id = 1L, companyId = 1L, userId = "user-1")
+        val resume = UserResume(id = 1L, userId = "user-1", content = "5년차 백엔드 개발자")
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithJd)
+        whenever(userResumePort.findByUserId("user-1")).thenReturn(resume)
+        whenever(jdAnalysisEvaluatorPort.analyze(any(), any(), any(), any(), any())).thenReturn(expected)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
+        whenever(companyActivityPort.save(any())).thenReturn(savedActivity)
+
+        val result = service.analyzeCompany("user-1", 1L, emptyList(), emptyList())
+
+        assertThat(result.overallMatchScore).isEqualTo(88)
+        verify(jdAnalysisEvaluatorPort).analyze("카카오", "Java 백엔드 개발자 모집", emptyList(), emptyList(), "5년차 백엔드 개발자")
+    }
+
+    @Test
+    fun `analyzeCompany - 리스트가 비어있고 이력서도 없으면 RESUME_NOT_REGISTERED 예외가 발생한다`() {
+        val companyWithJd = company(id = 1L, jobDescription = "Java 백엔드 개발자 모집")
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithJd)
+        whenever(userResumePort.findByUserId("user-1")).thenReturn(null)
+
+        assertThatThrownBy {
+            service.analyzeCompany("user-1", 1L, emptyList(), emptyList())
+        }
+            .isInstanceOf(CoreException::class.java)
+            .satisfies({ ex ->
+                assertThat((ex as CoreException).errorType).isEqualTo(ErrorType.RESUME_NOT_REGISTERED)
+            })
+
+        verify(companyActivityPort, never()).save(any())
     }
 
     @Test
@@ -173,8 +218,101 @@ class CompanyServiceTest {
                 assertThat((ex as CoreException).errorType).isEqualTo(ErrorType.COMPANY_NOT_FOUND)
             })
 
-        verify(jdAnalysisEvaluatorPort, never()).analyze(any(), any(), any(), any())
+        verify(jdAnalysisEvaluatorPort, never()).analyze(any(), any(), any(), any(), any())
         verify(companyActivityPort, never()).save(any())
+    }
+
+    // ===== checkResume 테스트 =====
+
+    @Test
+    fun `checkResume - 성공 시 결과와 점검시각을 반환하고 activity가 저장된다`() {
+        val companyWithJd = company(id = 1L, companyName = "카카오", jobDescription = "Java 백엔드 개발자 모집")
+        val resume = UserResume(id = 1L, userId = "user-1", content = "5년차 백엔드 개발자")
+        val expected = ResumeCheckResult(overallScore = 90, passed = true)
+        val checkedAt = LocalDateTime.of(2026, 7, 7, 12, 0)
+        val savedActivity = CompanyActivity(id = 1L, companyId = 1L, userId = "user-1", createdAt = checkedAt)
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithJd)
+        whenever(userResumePort.findByUserId("user-1")).thenReturn(resume)
+        whenever(resumeEvaluatorPort.evaluate(any(), any(), any())).thenReturn(expected)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
+        whenever(companyActivityPort.save(any())).thenReturn(savedActivity)
+
+        val (result, resultCheckedAt) = service.checkResume("user-1", 1L)
+
+        assertThat(result.overallScore).isEqualTo(90)
+        assertThat(resultCheckedAt).isEqualTo(checkedAt)
+        verify(companyActivityPort).save(any())
+    }
+
+    @Test
+    fun `checkResume - 회사가 없으면 COMPANY_NOT_FOUND 예외가 발생한다`() {
+        whenever(companyPort.findByIdAndUserId(999L, "user-1")).thenReturn(null)
+
+        assertThatThrownBy { service.checkResume("user-1", 999L) }
+            .isInstanceOf(CoreException::class.java)
+            .satisfies({ ex ->
+                assertThat((ex as CoreException).errorType).isEqualTo(ErrorType.COMPANY_NOT_FOUND)
+            })
+
+        verify(companyActivityPort, never()).save(any())
+    }
+
+    @Test
+    fun `checkResume - JD가 없으면 COMPANY_JD_NOT_REGISTERED 예외가 발생한다`() {
+        val companyWithoutJd = company(id = 1L, jobDescription = null)
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithoutJd)
+
+        assertThatThrownBy { service.checkResume("user-1", 1L) }
+            .isInstanceOf(CoreException::class.java)
+            .satisfies({ ex ->
+                assertThat((ex as CoreException).errorType).isEqualTo(ErrorType.COMPANY_JD_NOT_REGISTERED)
+            })
+
+        verify(companyActivityPort, never()).save(any())
+    }
+
+    @Test
+    fun `checkResume - 이력서가 없으면 RESUME_NOT_REGISTERED 예외가 발생한다`() {
+        val companyWithJd = company(id = 1L, jobDescription = "Java 백엔드 개발자 모집")
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithJd)
+        whenever(userResumePort.findByUserId("user-1")).thenReturn(null)
+
+        assertThatThrownBy { service.checkResume("user-1", 1L) }
+            .isInstanceOf(CoreException::class.java)
+            .satisfies({ ex ->
+                assertThat((ex as CoreException).errorType).isEqualTo(ErrorType.RESUME_NOT_REGISTERED)
+            })
+
+        verify(companyActivityPort, never()).save(any())
+        verify(resumeEvaluatorPort, never()).evaluate(any(), any(), any())
+    }
+
+    // ===== getActivities 테스트 =====
+
+    @Test
+    fun `getActivities - 회사의 활동 목록을 반환한다`() {
+        val existing = company(id = 1L)
+        val activities = listOf(
+            CompanyActivity(id = 2L, companyId = 1L, userId = "user-1", activityType = ActivityType.RESUME_CHECK),
+            CompanyActivity(id = 1L, companyId = 1L, userId = "user-1", activityType = ActivityType.JD_ANALYSIS),
+        )
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(existing)
+        whenever(companyActivityPort.findAllByCompanyId(1L)).thenReturn(activities)
+
+        val result = service.getActivities("user-1", 1L)
+
+        assertThat(result).hasSize(2)
+    }
+
+    @Test
+    fun `getActivities - 회사가 없으면 COMPANY_NOT_FOUND 예외가 발생한다`() {
+        whenever(companyPort.findByIdAndUserId(999L, "user-1")).thenReturn(null)
+
+        assertThatThrownBy { service.getActivities("user-1", 999L) }
+            .isInstanceOf(CoreException::class.java)
+            .satisfies({ ex ->
+                assertThat((ex as CoreException).errorType).isEqualTo(ErrorType.COMPANY_NOT_FOUND)
+            })
     }
 
     private fun company(

@@ -7,3 +7,5 @@
 {userSkills}
 ## 후보자 경력 요약
 {userExperiences}
+## 후보자 이력서 원문 (제공된 경우에만 참고)
+{resumeContent}

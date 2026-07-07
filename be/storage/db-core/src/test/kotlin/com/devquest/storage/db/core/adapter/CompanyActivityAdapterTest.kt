@@ -78,4 +78,27 @@ class CompanyActivityAdapterTest {
 
         assertThat(result).isNull()
     }
+
+    @Test
+    fun `findAllByCompanyId - 최신순으로 도메인 목록을 반환한다`() {
+        val entities = listOf(
+            CompanyActivityEntity(companyId = 1L, userId = "user-1", activityType = ActivityType.RESUME_CHECK, aiScore = 90, aiResultJson = "{}"),
+            CompanyActivityEntity(companyId = 1L, userId = "user-1", activityType = ActivityType.JD_ANALYSIS, aiScore = 80, aiResultJson = "{}"),
+        )
+        whenever(repository.findAllByCompanyIdOrderByCreatedAtDesc(1L)).thenReturn(entities)
+
+        val result = adapter.findAllByCompanyId(1L)
+
+        assertThat(result).hasSize(2)
+        assertThat(result[0].activityType).isEqualTo(ActivityType.RESUME_CHECK)
+    }
+
+    @Test
+    fun `findAllByCompanyId - 활동이 없으면 빈 목록을 반환한다`() {
+        whenever(repository.findAllByCompanyIdOrderByCreatedAtDesc(999L)).thenReturn(emptyList())
+
+        val result = adapter.findAllByCompanyId(999L)
+
+        assertThat(result).isEmpty()
+    }
 }
