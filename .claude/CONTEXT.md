@@ -7,16 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | feat/resume-profile |
-| 열린 PR | #248 — 이력서 프로필 Phase 3a (머지 대기) |
+| 브랜치 | (없음 — main 최신) |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #248 | 이력서 프로필 Phase 3a — user_resume(V12) + GET/PUT /api/v1/resume upsert + ResumeProfilePage(마크다운 미리보기, Amber). BE·FE CD 성공, health 200 | 2026-07-07 |
 | #245 | fly.toml swap 256MB — OOM 조사 최종 결론(누적형 RSS 포화, kill 수위 409MB) 및 1차 완화. 배포 완료 | 2026-07-07 |
 | #243 | client-ai Jackson 2/3 혼재 정리 — tools.jackson 통일 (4파일 + kotlin 모듈 의존성, 백로그 청산) | 2026-07-05 |
-| #242 | GitHub Actions 버전 bump — Node 20 deprecation 대응 (checkout v7, setup-java v5, setup-node v6, cache v6) | 2026-07-05 |
 
 ## 다음 작업
 
