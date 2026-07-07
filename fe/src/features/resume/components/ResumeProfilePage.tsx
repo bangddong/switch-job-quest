@@ -5,6 +5,13 @@ import { loadResume, updateResume } from '../api/resumeApi'
 const MAX_LENGTH = 50000
 const PLACEHOLDER = '## 경력 요약\n- ...\n\n## 기술 스택\n- ...\n\n## 프로젝트 경험\n### 프로젝트명\n- 역할:\n- 성과:'
 
+function formatSavedAt(iso: string): string {
+  const d = new Date(iso)
+  const datePart = d.toLocaleDateString('ko-KR')
+  const timePart = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${datePart} ${timePart}`
+}
+
 export function ResumeProfilePage() {
   const [content, setContent] = useState('')
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
@@ -71,7 +78,7 @@ export function ResumeProfilePage() {
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ color: '#475569', fontSize: 12, fontFamily: "'Courier New', monospace" }}>
-                {registered && updatedAt ? `마지막 저장: ${updatedAt}` : '아직 등록된 이력서가 없습니다'}
+                {registered && updatedAt ? `마지막 저장: ${formatSavedAt(updatedAt)}` : '아직 등록된 이력서가 없습니다'}
               </span>
               <span style={{ color: countColor, fontSize: 12, fontFamily: "'Courier New', monospace" }}>
                 {length} / {MAX_LENGTH}
