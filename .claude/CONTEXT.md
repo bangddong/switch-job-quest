@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | (없음 — main 최신) |
-| 열린 PR | 없음 |
+| 브랜치 | feat/company-resume-check |
+| 열린 PR | #250 — 원클릭 이력서 점검 Phase 3b (머지 대기, 사용자 일괄 테스트 예정) |
 
 ## 최근 완료 (최근 3건)
 
@@ -21,10 +21,9 @@
 ## 다음 작업
 
 ### 코드 작업
-- [ ] **지원 파이프라인 Phase 3b — 회사 카드 원클릭 이력서 점검** (#248 머지 후):
-      `POST /api/v1/companies/{id}/resume-check` — 저장된 JD + 저장된 이력서 → ResumeCheckEvaluator
-      재사용, 결과 company_activity 저장. FE 회사 카드 버튼 + 이력 표시.
-      + analyzeCompany의 userSkills/userExperiences 수동 입력도 이력서 자동 추출로 대체
+- [ ] **Phase 3b 후속** (#250 머지 후): 사용자 일괄 실사용 테스트 (이력서 등록 → JD 등록 →
+      원클릭 점검 → 이력 확인). 백로그: JD 수정 UI 없음 (AddCompanyModal에서만 입력 가능 —
+      나중에 JD 등록/수정 모달 필요 시 추가), Phase 3c(JD URL 파싱)는 실사용 후 판단
 - [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
       사용 필요해지면 DB ON CONFLICT 전환
 - [ ] **OOM 후속 관찰** (#245 swap 배포 후): ① 업타임 4~5일째 `fly_instance_memory_swap_free`
