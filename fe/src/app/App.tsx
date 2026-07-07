@@ -447,6 +447,7 @@ export function App() {
             onCompanyStatusChange={handleCompanyStatusChange}
             onDeleteCompany={handleDeleteCompany}
             onAnalyzeCompany={handleAnalyzeCompany}
+            onNavigateToResume={() => setView({ kind: 'resume' })}
           />
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button

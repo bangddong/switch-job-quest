@@ -33,7 +33,8 @@ class JdAnalysisEvaluatorTest {
                 companyName = "토스",
                 jobDescription = "백엔드 개발자",
                 userSkills = listOf("Kotlin", "Spring"),
-                userExperiences = listOf("3년 경력")
+                userExperiences = listOf("3년 경력"),
+                resumeContent = ""
             )
         }
             .isInstanceOf(AiEvaluationException::class.java)
@@ -50,7 +51,8 @@ class JdAnalysisEvaluatorTest {
             companyName = "토스",
             jobDescription = "백엔드 개발자",
             userSkills = listOf("Kotlin"),
-            userExperiences = listOf("3년 경력")
+            userExperiences = listOf("3년 경력"),
+            resumeContent = ""
         )
 
         assertThat(result.companyName).isEqualTo("토스")
@@ -68,7 +70,8 @@ class JdAnalysisEvaluatorTest {
             companyName = "토스",
             jobDescription = "백엔드 개발자",
             userSkills = listOf("Kotlin"),
-            userExperiences = listOf("3년 경력")
+            userExperiences = listOf("3년 경력"),
+            resumeContent = ""
         )
 
         assertThat(result.passed).isTrue()
@@ -84,9 +87,28 @@ class JdAnalysisEvaluatorTest {
             companyName = "토스",
             jobDescription = "백엔드 개발자",
             userSkills = listOf("Kotlin"),
-            userExperiences = listOf("3년 경력")
+            userExperiences = listOf("3년 경력"),
+            resumeContent = ""
         )
 
         assertThat(result.passed).isFalse()
+    }
+
+    @Test
+    fun `resumeContent가 제공되면 정상적으로 분석 결과를 반환한다`() {
+        val json = """{"companyName":"토스","overallMatchScore":75}"""
+        whenever(chatClient.prompt().system(any<String>()).user(any<String>()).call().content())
+            .thenReturn(json)
+
+        val result = evaluator.analyze(
+            companyName = "토스",
+            jobDescription = "백엔드 개발자",
+            userSkills = emptyList(),
+            userExperiences = emptyList(),
+            resumeContent = "5년차 백엔드 개발자, Kotlin/Spring 전문"
+        )
+
+        assertThat(result.companyName).isEqualTo("토스")
+        assertThat(result.overallMatchScore).isEqualTo(75)
     }
 }

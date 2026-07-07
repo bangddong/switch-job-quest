@@ -193,7 +193,7 @@ class AiCheckServiceTest {
 
     @Test
     fun `analyzeJd - 점수 70 이상이면 passed=true, xp=350으로 저장`() {
-        whenever(jdAnalysisEvaluator.analyze(any(), any(), any(), any()))
+        whenever(jdAnalysisEvaluator.analyze(any(), any(), any(), any(), any()))
             .thenReturn(JdAnalysisResult(companyName = "카카오", overallMatchScore = 75))
 
         service.analyzeJd("user1", "카카오", "JD 내용", listOf("Kotlin"), listOf("3년 경력"))
@@ -203,7 +203,7 @@ class AiCheckServiceTest {
 
     @Test
     fun `analyzeJd - 점수 69 이하이면 passed=false, xp=0으로 저장`() {
-        whenever(jdAnalysisEvaluator.analyze(any(), any(), any(), any()))
+        whenever(jdAnalysisEvaluator.analyze(any(), any(), any(), any(), any()))
             .thenReturn(JdAnalysisResult(companyName = "카카오", overallMatchScore = 60))
 
         service.analyzeJd("user1", "카카오", "JD 내용", listOf("Kotlin"), listOf("3년 경력"))

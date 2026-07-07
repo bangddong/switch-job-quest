@@ -19,13 +19,20 @@ class JdAnalysisEvaluator(
     private val systemTemplate = PromptTemplate(ClassPathResource("prompts/jd-analysis-system.st"))
     private val userTemplate = PromptTemplate(ClassPathResource("prompts/jd-analysis-user.st"))
 
-    override fun analyze(companyName: String, jobDescription: String, userSkills: List<String>, userExperiences: List<String>): JdAnalysisResult {
+    override fun analyze(
+        companyName: String,
+        jobDescription: String,
+        userSkills: List<String>,
+        userExperiences: List<String>,
+        resumeContent: String,
+    ): JdAnalysisResult {
         val systemPrompt = systemTemplate.render()
         val userPrompt = userTemplate.render(mapOf(
             "companyName" to companyName,
             "jobDescription" to wrapUserContent(jobDescription),
             "userSkills" to userSkills.joinToString(", "),
             "userExperiences" to wrapUserContent(userExperiences.joinToString("\n")),
+            "resumeContent" to wrapUserContent(resumeContent),
         ))
 
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {

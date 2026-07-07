@@ -252,3 +252,26 @@ export interface AppliedCompany {
   appliedAt?: string
   createdAt: string
 }
+
+export interface CompanyResumeCheckResult {
+  overallScore: number
+  passed: boolean
+  starMethodScore: number
+  quantificationScore: number
+  keywordMatchScore: number
+  improvements: ResumeImprovement[]
+  rewrittenExamples: ResumeRewrite[]
+  checkedAt: string
+}
+
+export type CompanyActivityType = 'RESUME_CHECK' | 'JD_ANALYSIS'
+
+export interface CompanyActivity {
+  id: number
+  companyId: number
+  userId: string
+  activityType: CompanyActivityType
+  aiScore: number
+  aiResultJson: string
+  createdAt: string
+}

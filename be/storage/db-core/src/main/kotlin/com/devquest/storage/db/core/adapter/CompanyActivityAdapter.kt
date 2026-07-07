@@ -20,6 +20,10 @@ class CompanyActivityAdapter(
         return repository.findTopByCompanyIdAndActivityTypeOrderByCreatedAtDesc(companyId, type)?.toDomain()
     }
 
+    override fun findAllByCompanyId(companyId: Long): List<CompanyActivity> {
+        return repository.findAllByCompanyIdOrderByCreatedAtDesc(companyId).map { it.toDomain() }
+    }
+
     private fun CompanyActivityEntity.toDomain(): CompanyActivity {
         return CompanyActivity(
             id = this.id,
