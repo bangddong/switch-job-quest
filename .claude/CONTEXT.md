@@ -7,16 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | feat/company-resume-check |
-| 열린 PR | #250 — 원클릭 이력서 점검 Phase 3b (머지 대기, 사용자 일괄 테스트 예정) |
+| 브랜치 | (없음 — main 최신) |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #250 | 원클릭 이력서 점검 Phase 3b — resume-check/activities API + analyze 이력서 자동 사용 + CompanyCard 점검 패널·이력. 배포 완료(health 200), **사용자 일괄 테스트 대기** | 2026-07-07 |
 | #248 | 이력서 프로필 Phase 3a — user_resume(V12) + GET/PUT /api/v1/resume upsert + ResumeProfilePage(마크다운 미리보기, Amber). BE·FE CD 성공, health 200 | 2026-07-07 |
 | #245 | fly.toml swap 256MB — OOM 조사 최종 결론(누적형 RSS 포화, kill 수위 409MB) 및 1차 완화. 배포 완료 | 2026-07-07 |
-| #243 | client-ai Jackson 2/3 혼재 정리 — tools.jackson 통일 (4파일 + kotlin 모듈 의존성, 백로그 청산) | 2026-07-05 |
 
 ## 다음 작업
 
