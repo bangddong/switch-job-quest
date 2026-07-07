@@ -7,7 +7,7 @@ import type {
   CompanyActivity,
 } from '@/types/api.types'
 
-const STATUS_LABELS: Record<ApplicationStatus, string> = {
+export const STATUS_LABELS: Record<ApplicationStatus, string> = {
   INTERESTED: '관심',
   APPLIED: '지원',
   SCREENING_PASS: '서류 통과',
@@ -397,6 +397,19 @@ function ResumeCheckPanel({ result }: ResumeCheckPanelProps) {
 const ACTIVITY_TYPE_STYLE: Record<CompanyActivity['activityType'], { label: string; color: string; background: string; border: string }> = {
   JD_ANALYSIS: { label: 'JD', color: '#A78BFA', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)' },
   RESUME_CHECK: { label: '이력서', color: '#F59E0B', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' },
+  STATUS_CHANGE: { label: '상태', color: '#94A3B8', background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.3)' },
+}
+
+function parseStatusChange(aiResultJson: string): { from: ApplicationStatus; to: ApplicationStatus } | null {
+  try {
+    const parsed = JSON.parse(aiResultJson) as { from?: string; to?: string }
+    if (parsed.from && parsed.to && parsed.from in STATUS_LABELS && parsed.to in STATUS_LABELS) {
+      return { from: parsed.from as ApplicationStatus, to: parsed.to as ApplicationStatus }
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 interface ActivityHistoryListProps {
@@ -406,13 +419,15 @@ interface ActivityHistoryListProps {
 function ActivityHistoryList({ activities }: ActivityHistoryListProps) {
   const recent = [...activities]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 3)
+    .slice(0, 5)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
       {recent.map((activity) => {
         const typeStyle = ACTIVITY_TYPE_STYLE[activity.activityType]
+        const isStatusChange = activity.activityType === 'STATUS_CHANGE'
         const scoreStyle = getScoreStyle(activity.aiScore)
+        const statusChange = isStatusChange ? parseStatusChange(activity.aiResultJson) : null
         return (
           <div
             key={activity.id}
@@ -422,25 +437,36 @@ function ActivityHistoryList({ activities }: ActivityHistoryListProps) {
               justifyContent: 'space-between',
               padding: '6px 0',
               borderBottom: '1px solid rgba(255,255,255,0.04)',
+              gap: 8,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span
                 style={{
                   fontSize: 10,
                   fontWeight: 600,
                   padding: '2px 6px',
                   borderRadius: 3,
+                  flexShrink: 0,
                   ...typeStyle,
                 }}
               >
                 {typeStyle.label}
               </span>
-              <span style={{ fontSize: 11, color: '#475569' }}>
+              {isStatusChange && (
+                <span style={{ fontSize: 11, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {statusChange
+                    ? `${STATUS_LABELS[statusChange.from]} → ${STATUS_LABELS[statusChange.to]}`
+                    : '상태 변경'}
+                </span>
+              )}
+              <span style={{ fontSize: 11, color: '#475569', flexShrink: 0 }}>
                 {new Date(activity.createdAt).toLocaleDateString('ko-KR')}
               </span>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 700, color: scoreStyle.color }}>{activity.aiScore}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: isStatusChange ? '#475569' : scoreStyle.color, flexShrink: 0 }}>
+              {isStatusChange ? '-' : activity.aiScore}
+            </span>
           </div>
         )
       })}
@@ -450,7 +476,7 @@ function ActivityHistoryList({ activities }: ActivityHistoryListProps) {
 
 interface CompanyCardProps {
   company: AppliedCompany
-  onStatusChange: (id: number, status: ApplicationStatus) => void
+  onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>
   onDelete: (id: number) => void
   analysisResult?: JdAnalysisResult
   onAnalyze: (id: number, skills: string[], experiences: string[]) => Promise<JdAnalysisResult>
@@ -569,6 +595,15 @@ export function CompanyCard({
       setApiError(e instanceof Error ? e.message : 'RESUME_CHECK_FAILED')
     } finally {
       setCheckingResume(false)
+    }
+  }
+
+  const handleStatusChange = async (status: ApplicationStatus) => {
+    try {
+      await onStatusChange(company.id, status)
+      invalidateActivities()
+    } catch {
+      // 상태 변경 실패는 상위(select 값 롤백 등)에서 별도 처리
     }
   }
 
@@ -717,7 +752,7 @@ export function CompanyCard({
       {/* 1행: 상태 select */}
       <select
         value={company.status}
-        onChange={(e) => onStatusChange(company.id, e.target.value as ApplicationStatus)}
+        onChange={(e) => { handleStatusChange(e.target.value as ApplicationStatus) }}
         disabled={busy}
         style={{
           background: '#0A0E1A',
