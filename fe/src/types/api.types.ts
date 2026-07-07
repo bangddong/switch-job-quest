@@ -232,6 +232,14 @@ export type ApplicationStatus =
   | 'REJECTED'
   | 'WITHDRAWN'
 
+export interface Resume {
+  id: number
+  userId: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface AppliedCompany {
   id: number
   userId: string
