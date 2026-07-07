@@ -64,11 +64,26 @@ class CompanyService(
         val existing = companyPort.findByIdAndUserId(companyId, userId)
             ?: throw CoreException(ErrorType.COMPANY_NOT_FOUND)
 
+        val fromStatus = existing.status
         val updated = existing.copy(
             status = status,
             appliedAt = appliedAt ?: existing.appliedAt,
         )
         val saved = companyPort.save(updated)
+
+        if (fromStatus != status) {
+            val json = objectMapper.writeValueAsString(mapOf("from" to fromStatus.name, "to" to status.name))
+            companyActivityPort.save(
+                CompanyActivity(
+                    companyId = companyId,
+                    userId = userId,
+                    activityType = ActivityType.STATUS_CHANGE,
+                    aiScore = 0,
+                    aiResultJson = json,
+                )
+            )
+        }
+
         log.info("회사 상태 변경: userId=${userId}, companyId=${companyId}, status=${status}")
         return saved
     }
