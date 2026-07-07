@@ -4,6 +4,89 @@
 
 ---
 
+## 아카이브된 비자명적 결정 (2026-07-07 정리)
+
+### Flyway 마이그레이션 디렉토리 분산 — V8 버전 충돌로 prod 다운 사고 (2026-07-01)
+마이그레이션 파일이 `be/core/core-api/.../db/migration/`과 `be/storage/db-core/.../db/migration/`
+두 곳에 나뉘어 있고 런타임 클래스패스에서 합쳐짐. PR #231에서 `db-core`만 보고 V8을 새로
+만들었는데 `core-api`에 이미 V8·V9가 있어 버전 중복 → Flyway 부팅 예외로 prod BE 완전 다운.
+- 수정: `V8__create_tech_question_bank.sql` → `V10__...`로 rename
+- 재발 방지(자동화됨): `be-ci.yml` 두 디렉토리 합산 버전 중복 린트 + `systematic-debugging.md` 규칙
+
+### AI 메트릭 소멸 원인 — 반복 OOM 재시작 (2026-07-03, #239)
+- Fly 512MB 머신 OOM 킬 → JVM 재시작 → 카운터 리셋 (근본 원인·최종 결론은 CONTEXT.md OOM 섹션)
+- #239 대응: `MaxRAMPercentage 75→50`, Metaspace 160m, Xss512k — **재발함** (튜닝으로 불충분)
+- `spring.threads.virtual.enabled=true`라서 `server.tomcat.threads.max`는 죽은 설정
+
+## 완료 PR 이력 (2026-05-26 ~ 2026-07-01, 2026-07-07 이동)
+
+| PR/커밋 | 내용 | 날짜 |
+|---------|------|------|
+| #240 | 질문 뱅크 wiki 시드 2026-07 — concept 12건 + V11 질문 21건 (뱅크 총 26건) | 2026-07-05 |
+| #239 | OOM 대응 JVM 메모리 예산 튜닝 (힙 50%, Metaspace 160m, Xss512k) — 이후 재발, #245로 이어짐 | 2026-07-04 |
+| #237 | 질문 뱅크 wiki 시드 반자동화 — /question-bank-seed 스킬 + SessionStart 훅 | 2026-07-03 |
+| #236 | Grafana AI Metrics 토큰 패널 table 전환 + 대시보드 v2 스키마 IaC 동기화 | 2026-07-02 |
+| #231 | 기술면접 질문 뱅크 DB — TechQuestionBank + DailyMailScheduler 뱅크 우선 조회→AI 폴백 | 2026-07-01 |
+| #230 | repo 정리 — daily 로그 24건 커밋, qa-cache gitignore 보강 | 2026-07-01 |
+| #229 | 지원 파이프라인 Phase 2 — JD 분석 코칭 연동 | 2026-06-30 |
+| #228 | K8s Stage 3 학습 인덱스 — PostgreSQL StatefulSet + PV/PVC 예습 | 2026-06-29 |
+| #227 | 회사별 지원 파이프라인 Phase 1 — AppliedCompany CRUD + 지원 현황 UI | 2026-06-28 |
+| #226 | 데일리 기술면접 참고자료 — 국내 컨퍼런스 발표 카테고리 주입 | 2026-06-27 |
+| #224 | K8s Stage 2 학습 인덱스 — ConfigMap/Secret 패턴 예습 노트 | 2026-06-24 |
+| #223 | K8s Stage 1 학습 기록 — 단계별 명령어 + 용어 심화 설명 | 2026-06-24 |
+| #222 | 데일리 질문 꼬리질문 제거 → 모범답안 실무 포인트 섹션 추가 | 2026-06-24 |
+| #221 | K8s 초기 매니페스트 — BE Deployment, Service, env-requirements.md | 2026-06-24 |
+| #220 | modelAnswer 길이 축소 — output 토큰 ~6000 → ~2000 목표 | 2026-06-22 |
+| #217 | OtlpMeterRegistry 중복 start() 제거 + push 성공 로그 추가 | 2026-06-20 |
+| #216 | OTLP auto-config 명시 비활성화 | 2026-06-20 |
+| #215 | prompt injection 방어 — BaseAiEvaluator callAi/wrapUserContent, 17개 Evaluator | 2026-06-18 |
+| #214 | TechInterview max-tokens 4000→8000 + 대시보드 카운터 round() | 2026-06-17 |
+| #213 | OTLP push keep-alive stale connection 수정 | 2026-06-17 |
+| #212 | OTLP auto-config @SpringBootApplication excludeName 제외 | 2026-06-17 |
+| #208 | 기술면접 평가 면접관 페르소나 수정 — 5년차 기준 | 2026-06-16 |
+| #206 | 평가 결과 마크다운 렌더링 + 모바일 가시성 개선 | 2026-06-15 |
+| #203 | qa-reviewer deprecated API 전수 확인 체크리스트 추가 | 2026-06-13 |
+| #202 | 전체 Evaluator .entity() → parseContent() — Spring AI RC2 500 수정 | 2026-06-13 |
+| #191 | qa-reviewer + orchestrator severity 기준 통일 | 2026-06-10 |
+| #190 | 기술면접 비로그인 체험 + IP rate limiting (Bucket4j) | 2026-06-10 |
+| #189 | PR 리뷰 훅 HIGH/MEDIUM/LOW 3단계 | 2026-06-10 |
+| #187 | AI 캐시 토큰 메트릭 + Grafana 대시보드 | 2026-06-09 |
+| #186 | Better Stack 제거 — Grafana Cloud Loki 전환 | 2026-06-09 |
+| #185 | QA 강제화 훅 — gh pr create 전 차단 | 2026-06-09 |
+| #184 | 모의면접 Java/인프라 카테고리 추가 + 모범 답안 상세화 | 2026-06-09 |
+| #183 | AI 호출 메트릭 수집 — AiMetricsRecorder | 2026-06-08 |
+| #180 | 데일리 메일 deepLink URL 오타 수정 | 2026-06-08 |
+| #178 | fe-feature-builder·design-reviewer ultrathink 제거 | 2026-06-08 |
+| #176 | Grafana instance ID 수정 | 2026-06-08 |
+| #177 | CI claude-review 폐기 → PreToolUse 훅 사전 리뷰 | 2026-06-08 |
+| #174 | Copilot 리뷰 → Claude 리뷰 전환 | 2026-06-07 |
+| #173 | 데일리 질문 중복 발송 방지 — 최근 30일 제외 | 2026-06-07 |
+| #172 | Grafana Alloy 제거 + Micrometer OTLP push 전환 | 2026-06-07 |
+| #165 | 모바일 코딩 에디터 CodeMirror 6 교체 | 2026-06-04 |
+| #163 | 모바일 코딩 에디터 스크롤·잘림·키보드 수정 | 2026-06-02 |
+| #162 | 메일 HTML 템플릿 개선 + dhbang.co.kr 도메인 인증 | 2026-06-01 |
+| #161 | 데일리 메일 AI 질문 생성 + 발송 이력 중복 방지 | 2026-05-31 |
+| #160 | 카테고리별 코딩 풀이 레이더 차트 (SVG, 9축) | 2026-05-31 |
+| #158 | 코딩 로드맵 해금 기준 DISTINCT 수정 | 2026-05-30 |
+| #157 | 코딩 문제 로드맵 — 9개 카테고리 잠금/해금 | 2026-05-29 |
+| #156 | 모바일 UX 개선 — AI 폼 다단계화 등 | 2026-05-28 |
+| #155 | PR 절차 문서화 — git-strategy.md | 2026-05-27 |
+| #154 | orchestrator tools 와일드카드 변경 | 2026-05-27 |
+| #153 | .claude 구조 개편 — skills 분리, pair-programmer 추가 | 2026-05-26 |
+
+## 완료된 다음 작업 항목 (2026-07-07 이동)
+
+- [x] Grafana AI Metrics 토큰 패널 table 전환 (#236) — instant 쿼리 + merge/organize transform.
+      Overview stat 패널 `$__range` 연동은 보류 (필요 시 별도 작업)
+- [x] client-ai Jackson 2/3 혼재 정리 (#243) — root 전역 Jackson 2 kotlin 모듈은 유지
+      (victools transitive 필요, SB4 병행 패턴) — 전체 교체는 별도 범위
+- [x] 기술면접 질문 뱅크 1차 확충 (#240) — 이후 SessionStart 훅 알림 따라 `/question-bank-seed` 반복
+- [x] RESEND_API_KEY / JUDGE0_API_KEY 발급 → local yml + Fly secret 세팅 완료
+- [x] devquest-log-shipper 제거 — 커스텀 Logback HTTP 어펜더로 대체
+- [x] Disambiguation Gate + Closing Summary 에이전트 패턴 도입 (#127)
+
+---
+
 ## 인증/정책 분리 시리즈 (2026-04-05)
 
 | Sprint | PR | 내용 |
