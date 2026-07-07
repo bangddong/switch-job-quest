@@ -21,9 +21,10 @@ interface QuestMapProps {
   onCompanyStatusChange: (id: number, status: ApplicationStatus) => Promise<void>
   onDeleteCompany: (id: number) => Promise<void>
   onAnalyzeCompany: (id: number, skills: string[], experiences: string[]) => Promise<JdAnalysisResult>
+  onNavigateToResume: () => void
 }
 
-export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character, lastCompletedAt, companies, onAddCompany, onCompanyStatusChange, onDeleteCompany, onAnalyzeCompany }: QuestMapProps) {
+export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, getActProgress, character, lastCompletedAt, companies, onAddCompany, onCompanyStatusChange, onDeleteCompany, onAnalyzeCompany, onNavigateToResume }: QuestMapProps) {
   const completedCount = Object.keys(completed).length
 
   return (
@@ -102,6 +103,7 @@ export function QuestMap({ onSelectAct, onSelectQuest, onOpenCoach, completed, g
         onStatusChange={onCompanyStatusChange}
         onDelete={onDeleteCompany}
         onAnalyzeCompany={onAnalyzeCompany}
+        onNavigateToResume={onNavigateToResume}
       />
     </div>
   )

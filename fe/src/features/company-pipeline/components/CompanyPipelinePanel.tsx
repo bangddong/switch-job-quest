@@ -1,7 +1,15 @@
-import { useState } from 'react'
-import type { AppliedCompany, ApplicationStatus, JdAnalysisResult } from '@/types/api.types'
+import { useEffect, useState } from 'react'
+import type {
+  AppliedCompany,
+  ApplicationStatus,
+  JdAnalysisResult,
+  CompanyResumeCheckResult,
+  CompanyActivity,
+} from '@/types/api.types'
 import { CompanyCard } from './CompanyCard'
 import { AddCompanyModal } from './AddCompanyModal'
+import { fetchResume } from '@/lib/apiClient'
+import { resumeCheck, getActivities } from '../api/companyApi'
 
 interface CompanyPipelinePanelProps {
   companies: AppliedCompany[]
@@ -9,6 +17,7 @@ interface CompanyPipelinePanelProps {
   onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>
   onDelete: (id: number) => Promise<void>
   onAnalyzeCompany: (id: number, skills: string[], experiences: string[]) => Promise<JdAnalysisResult>
+  onNavigateToResume: () => void
 }
 
 export function CompanyPipelinePanel({
@@ -17,14 +26,33 @@ export function CompanyPipelinePanel({
   onStatusChange,
   onDelete,
   onAnalyzeCompany,
+  onNavigateToResume,
 }: CompanyPipelinePanelProps) {
   const [showModal, setShowModal] = useState(false)
   const [analysisResults, setAnalysisResults] = useState<Record<number, JdAnalysisResult>>({})
+  const [resumeCheckResults, setResumeCheckResults] = useState<Record<number, CompanyResumeCheckResult>>({})
+  const [hasResume, setHasResume] = useState(false)
+
+  useEffect(() => {
+    fetchResume()
+      .then((resume) => setHasResume(resume != null))
+      .catch(() => setHasResume(false))
+  }, [])
 
   const handleAnalyze = async (id: number, skills: string[], experiences: string[]): Promise<JdAnalysisResult> => {
     const result = await onAnalyzeCompany(id, skills, experiences)
     setAnalysisResults((prev) => ({ ...prev, [id]: result }))
     return result
+  }
+
+  const handleResumeCheck = async (id: number): Promise<CompanyResumeCheckResult> => {
+    const result = await resumeCheck(id)
+    setResumeCheckResults((prev) => ({ ...prev, [id]: result }))
+    return result
+  }
+
+  const handleFetchActivities = async (id: number): Promise<CompanyActivity[]> => {
+    return getActivities(id)
   }
 
   return (
@@ -87,6 +115,11 @@ export function CompanyPipelinePanel({
               onDelete={(id) => { onDelete(id).catch(() => {}) }}
               analysisResult={analysisResults[company.id]}
               onAnalyze={handleAnalyze}
+              hasResume={hasResume}
+              resumeCheckResult={resumeCheckResults[company.id]}
+              onResumeCheck={handleResumeCheck}
+              onNavigateToResume={onNavigateToResume}
+              onFetchActivities={handleFetchActivities}
             />
           ))}
         </div>
