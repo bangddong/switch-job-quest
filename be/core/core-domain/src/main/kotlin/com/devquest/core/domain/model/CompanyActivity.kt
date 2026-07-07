@@ -18,4 +18,5 @@ enum class ActivityType {
     TECH_INTERVIEW,
     HR_INTERVIEW,
     BOSS_PACKAGE,
+    STATUS_CHANGE,
 }

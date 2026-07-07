@@ -264,7 +264,7 @@ export interface CompanyResumeCheckResult {
   checkedAt: string
 }
 
-export type CompanyActivityType = 'RESUME_CHECK' | 'JD_ANALYSIS'
+export type CompanyActivityType = 'RESUME_CHECK' | 'JD_ANALYSIS' | 'STATUS_CHANGE'
 
 export interface CompanyActivity {
   id: number

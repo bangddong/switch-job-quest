@@ -84,10 +84,48 @@ class CompanyServiceTest {
         val updated = existing.copy(status = ApplicationStatus.APPLIED, appliedAt = LocalDateTime.now())
         whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(existing)
         whenever(companyPort.save(any())).thenReturn(updated)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("""{"from":"INTERESTED","to":"APPLIED"}""")
+        whenever(companyActivityPort.save(any())).thenReturn(
+            CompanyActivity(id = 1L, companyId = 1L, userId = "user-1", activityType = ActivityType.STATUS_CHANGE)
+        )
 
         val result = service.updateStatus("user-1", 1L, ApplicationStatus.APPLIED, null)
 
         assertThat(result.status).isEqualTo(ApplicationStatus.APPLIED)
+    }
+
+    @Test
+    fun `상태 변경 시 STATUS_CHANGE 활동이 기록된다`() {
+        val existing = company(id = 1L, status = ApplicationStatus.INTERESTED)
+        val updated = existing.copy(status = ApplicationStatus.APPLIED, appliedAt = LocalDateTime.now())
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(existing)
+        whenever(companyPort.save(any())).thenReturn(updated)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("""{"from":"INTERESTED","to":"APPLIED"}""")
+        whenever(companyActivityPort.save(any())).thenReturn(
+            CompanyActivity(id = 1L, companyId = 1L, userId = "user-1", activityType = ActivityType.STATUS_CHANGE)
+        )
+
+        service.updateStatus("user-1", 1L, ApplicationStatus.APPLIED, null)
+
+        val captor = org.mockito.kotlin.argumentCaptor<CompanyActivity>()
+        verify(companyActivityPort).save(captor.capture())
+        val saved = captor.firstValue
+        assertThat(saved.activityType).isEqualTo(ActivityType.STATUS_CHANGE)
+        assertThat(saved.aiScore).isEqualTo(0)
+        assertThat(saved.aiResultJson).isEqualTo("""{"from":"INTERESTED","to":"APPLIED"}""")
+    }
+
+    @Test
+    fun `상태 변경 시 from과 to가 같으면 활동을 기록하지 않는다`() {
+        val existing = company(id = 1L, status = ApplicationStatus.INTERESTED)
+        val updated = existing.copy()
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(existing)
+        whenever(companyPort.save(any())).thenReturn(updated)
+
+        val result = service.updateStatus("user-1", 1L, ApplicationStatus.INTERESTED, null)
+
+        assertThat(result.status).isEqualTo(ApplicationStatus.INTERESTED)
+        verify(companyActivityPort, never()).save(any())
     }
 
     @Test

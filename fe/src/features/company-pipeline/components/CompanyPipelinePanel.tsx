@@ -111,7 +111,7 @@ export function CompanyPipelinePanel({
             <CompanyCard
               key={company.id}
               company={company}
-              onStatusChange={(id, status) => { onStatusChange(id, status).catch(() => {}) }}
+              onStatusChange={onStatusChange}
               onDelete={(id) => { onDelete(id).catch(() => {}) }}
               analysisResult={analysisResults[company.id]}
               onAnalyze={handleAnalyze}
