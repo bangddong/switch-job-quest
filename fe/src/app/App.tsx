@@ -9,6 +9,7 @@ import { CharacterCreate, OnboardingIntro } from '@/features/character'
 import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
 import { SettingsPage } from '@/features/settings'
+import { ResumeProfilePage } from '@/features/resume'
 import { TechInterviewPage, TechInterviewDemoPage, DailyQuestionPage } from '@/features/tech-interview'
 import { CodingQuestPage, CodingRoadmapPage } from '@/features/coding-quest'
 import { useAuth } from '@/hooks/useAuth'
@@ -57,6 +58,7 @@ type View =
   | { kind: 'interview-coach' }
   | { kind: 'growth' }
   | { kind: 'settings' }
+  | { kind: 'resume' }
   | { kind: 'tech-interview' }
   | { kind: 'tech-interview-demo' }
   | { kind: 'coding-roadmap' }
@@ -413,7 +415,7 @@ export function App() {
         color: '#F8FAFC',
       }}
     >
-      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing' || view.kind === 'settings' || view.kind === 'tech-interview') && (
+      {(view.kind === 'detail' || view.kind === 'act-clear' || view.kind === 'interview-coach' || view.kind === 'growth' || view.kind === 'briefing' || view.kind === 'settings' || view.kind === 'tech-interview' || view.kind === 'resume') && (
         <button
           onClick={() => setView({ kind: 'map' })}
           style={{
@@ -511,6 +513,22 @@ export function App() {
             >
               ⚙️ 설정
             </button>
+            <button
+              onClick={() => setView({ kind: 'resume' })}
+              style={{
+                background: 'rgba(245,158,11,0.1)',
+                border: '1px solid rgba(245,158,11,0.3)',
+                color: '#F59E0B',
+                cursor: 'pointer',
+                fontSize: 13,
+                padding: '10px 20px',
+                borderRadius: 8,
+                fontFamily: "'Courier New', monospace",
+                width: '100%',
+              }}
+            >
+              📄 이력서 관리
+            </button>
           </div>
         </>
       )}
@@ -563,6 +581,10 @@ export function App() {
 
       {view.kind === 'tech-interview' && (
         <TechInterviewPage />
+      )}
+
+      {view.kind === 'resume' && (
+        <ResumeProfilePage />
       )}
 
     </div>

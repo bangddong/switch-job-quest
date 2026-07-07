@@ -1,4 +1,4 @@
-import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult, CategoryProgress, CodingRankResult } from '@/types/api.types'
+import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult, CategoryProgress, CodingRankResult, Resume } from '@/types/api.types'
 import { getToken, clearToken } from '@/hooks/useAuth'
 import { STORAGE_KEYS } from '@/lib/storageKeys'
 
@@ -186,6 +186,26 @@ export async function fetchHint(
   assertOk(res)
   const json: ApiResponse<HintResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('힌트 조회 실패')
+  return json.data
+}
+
+export async function fetchResume(): Promise<Resume | null> {
+  const res = await fetch(`${API_BASE}/resume`, { headers: authHeaders() })
+  assertOk(res)
+  const json: ApiResponse<Resume> = await res.json()
+  if (json.result !== 'SUCCESS') throw new Error('이력서 조회 실패')
+  return json.data
+}
+
+export async function saveResume(content: string): Promise<Resume> {
+  const res = await fetch(`${API_BASE}/resume`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ content }),
+  })
+  assertOk(res)
+  const json: ApiResponse<Resume> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('이력서 저장 실패')
   return json.data
 }
 
