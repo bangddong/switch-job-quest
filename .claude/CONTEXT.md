@@ -7,18 +7,18 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/prompt-unknowns` |
-| 열린 PR | #255 — 프롬프트 체계에 Finding Your Unknowns 기법 적용 (머지 대기) |
+| 브랜치 | (없음 — main 최신) |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #255 | 프롬프트 체계에 Finding Your Unknowns 기법 적용 — Deviations 로그(builder→QA 주입), Blindspot Pass(3.5단계), Design 다방향 모드, Gate 결정 테이블, Merge Quiz 스킬 | 2026-07-08 |
 | #253 | 지원 상태 전환 이력 Phase 4-1 — STATUS_CHANGE activity 기록 + 이력 타임라인(관심→지원). 배포 완료 | 2026-07-07 |
 | #252 | 점검 결과 표시 fix — 세부 점수 32/40 배점 표기·비율 색상 + 저장 시각 포맷 (prod 실사용 테스트 발견분) | 2026-07-07 |
 | #250 | 원클릭 이력서 점검 Phase 3b — resume-check/activities API + analyze 이력서 자동 사용 + CompanyCard 점검 패널·이력. Claude가 prod 실사용 테스트 완료(시나리오 0~4 전부 통과) | 2026-07-07 |
 | #248 | 이력서 프로필 Phase 3a — user_resume(V12) + GET/PUT /api/v1/resume upsert + ResumeProfilePage(마크다운 미리보기, Amber). BE·FE CD 성공, health 200 | 2026-07-07 |
-| #245 | fly.toml swap 256MB — OOM 조사 최종 결론(누적형 RSS 포화, kill 수위 409MB) 및 1차 완화. 배포 완료 | 2026-07-07 |
 
 ## 다음 작업
 
@@ -37,6 +37,8 @@
       + `MALLOC_ARENA_MAX=2` + `G1PeriodicGCInterval=300000` → RSS 천장 ~409→~300MB (512MB 내 근본 해결)
       리스크: 힙 피크 90MB 관측이 대표적이지 않으면(대형 AI 응답) JVM OOME — 단 컨테이너 kill보다 양성
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
+- [ ] **#255 후속**: ① 다음 기능 작업에서 Deviations·Blindspot Pass 실효성 확인 ② `E:/development/.claude/template/`에
+      orchestrator·clarify·quiz 동기화 (별도 저장소, 이 레포 밖)
 - [ ] 질문 뱅크 category 파라미터 — 현재 DailyMailScheduler가 항상 null로 호출해 카테고리 분기가
       죽은 경로 (QA MEDIUM, 의도적 보류). 향후 카테고리별 배분 쓸 계획 생기면 활성화
 - [ ] 질문 뱅크 규모 확대 시(수백 건↑) `findAllBy...` 전체 로드 방식 재검토 — `ORDER BY RANDOM() LIMIT 1`
