@@ -28,4 +28,10 @@ class DailyQuestionService(
         log.info("데일리 질문 평가 완료: score=${result.overallScore}")
         return result
     }
+
+    fun explain(question: String, answer: String, feedback: String, userQuestion: String, modelAnswer: String?): String {
+        val explanation = techInterviewPort.explainFollowup(question, answer, feedback, userQuestion, modelAnswer)
+        log.info("데일리 질문 후속 설명 완료")
+        return explanation
+    }
 }

@@ -60,4 +60,23 @@ class DailyQuestionServiceTest {
         assertThat(result.overallScore).isEqualTo(85)
         verify(techInterviewPort).evaluate("Java,Spring Boot,JPA", listOf(question), listOf(answer))
     }
+
+    @Test
+    fun `explain - TechInterviewPort에 올바른 파라미터로 위임한다`() {
+        val question = "OSIV란 무엇인가요?"
+        val answer = "영속성 컨텍스트를 뷰까지 열어두는 전략입니다."
+        val feedback = "핵심은 맞지만 트랜잭션 범위 설명이 부족합니다."
+        val userQuestion = "트랜잭션 범위가 정확히 뭔가요?"
+        val expected = "트랜잭션 범위는 @Transactional 메서드의 시작과 끝 구간을 의미합니다."
+        whenever(
+            techInterviewPort.explainFollowup(
+                eq(question), eq(answer), eq(feedback), eq(userQuestion), eq(null),
+            )
+        ).thenReturn(expected)
+
+        val result = service.explain(question, answer, feedback, userQuestion, null)
+
+        assertThat(result).isEqualTo(expected)
+        verify(techInterviewPort).explainFollowup(question, answer, feedback, userQuestion, null)
+    }
 }

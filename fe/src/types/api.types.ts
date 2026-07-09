@@ -154,6 +154,10 @@ export interface TechInterviewResult {
   modelAnswer: string
 }
 
+export interface DailyQuestionExplainResult {
+  explanation: string
+}
+
 export interface JdAnalysisResult {
   companyName: string
   requiredSkills: SkillRequirement[]

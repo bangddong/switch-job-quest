@@ -62,4 +62,27 @@ class TechInterviewEvaluator(
             parseContent(content, TechInterviewResult::class.java)
         }
     }
+
+    private val explainSystemTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-explain-system.st"))
+    private val explainUserTemplate = PromptTemplate(ClassPathResource("prompts/daily-question-explain-user.st"))
+
+    override fun explainFollowup(
+        question: String,
+        answer: String,
+        feedback: String,
+        userQuestion: String,
+        modelAnswer: String?,
+    ): String {
+        val systemPrompt = explainSystemTemplate.render()
+        val userPrompt = explainUserTemplate.render(mapOf(
+            "question" to wrapUserContent(question),
+            "answer" to wrapUserContent(answer),
+            "feedback" to wrapUserContent(feedback),
+            "modelAnswer" to wrapUserContent(modelAnswer.takeUnless { it.isNullOrBlank() } ?: "없음"),
+            "userQuestion" to wrapUserContent(userQuestion),
+        ))
+        return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {
+            callAi(systemPrompt, userPrompt)
+        }
+    }
 }
