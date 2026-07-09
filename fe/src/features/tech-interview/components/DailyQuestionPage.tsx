@@ -296,6 +296,7 @@ export function DailyQuestionPage({ onLogin }: DailyQuestionPageProps) {
               onChange={(e) => setUserQuestion(e.target.value)}
               placeholder="이해 안 되는 부분을 물어보세요..."
               rows={3}
+              maxLength={1000}
               style={{
                 width: '100%',
                 background: '#0A0E1A',
@@ -309,9 +310,13 @@ export function DailyQuestionPage({ onLogin }: DailyQuestionPageProps) {
                 resize: 'vertical',
                 outline: 'none',
                 lineHeight: 1.6,
-                marginBottom: 12,
+                marginBottom: 4,
               }}
             />
+
+            <p style={{ color: '#475569', fontSize: 11, fontFamily: "'Courier New', monospace", margin: '0 0 12px', textAlign: 'right' }}>
+              {userQuestion.length}/1000
+            </p>
 
             {explainError && (
               <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12, fontFamily: "'Courier New', monospace" }}>
