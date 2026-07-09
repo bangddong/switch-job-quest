@@ -7,18 +7,17 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | feat/daily-question-followup-learning |
-| 열린 PR | #257 — 데일리 질문 휘발형 학습(후속 질문) Phase A (머지 대기) |
+| 브랜치 | (없음 — main 최신) |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #257 | 데일리 질문 휘발형 학습(후속 질문) Phase A — POST /daily-question/explain(원본 Q/답변/피드백 컨텍스트, 단발·순수텍스트), explain 전용 레이트리밋(IP당 5회/일, 기존 2회/일 버킷과 분리 신설), DailyQuestionPage 후속질문 섹션. 게스트 허용. QA HIGH 0, MEDIUM 2 수정. CD 배포 트리거됨 | 2026-07-09 |
 | #255 | 프롬프트 체계에 Finding Your Unknowns 기법 적용 — Deviations 로그(builder→QA 주입), Blindspot Pass(3.5단계), Design 다방향 모드, Gate 결정 테이블, Merge Quiz 스킬 | 2026-07-08 |
 | #253 | 지원 상태 전환 이력 Phase 4-1 — STATUS_CHANGE activity 기록 + 이력 타임라인(관심→지원). 배포 완료 | 2026-07-07 |
 | #252 | 점검 결과 표시 fix — 세부 점수 32/40 배점 표기·비율 색상 + 저장 시각 포맷 (prod 실사용 테스트 발견분) | 2026-07-07 |
-| #250 | 원클릭 이력서 점검 Phase 3b — resume-check/activities API + analyze 이력서 자동 사용 + CompanyCard 점검 패널·이력. Claude가 prod 실사용 테스트 완료(시나리오 0~4 전부 통과) | 2026-07-07 |
-| #248 | 이력서 프로필 Phase 3a — user_resume(V12) + GET/PUT /api/v1/resume upsert + ResumeProfilePage(마크다운 미리보기, Amber). BE·FE CD 성공, health 200 | 2026-07-07 |
 
 ## 다음 작업
 
