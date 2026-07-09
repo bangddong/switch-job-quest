@@ -78,7 +78,7 @@ class TechInterviewEvaluator(
             "question" to wrapUserContent(question),
             "answer" to wrapUserContent(answer),
             "feedback" to wrapUserContent(feedback),
-            "modelAnswer" to wrapUserContent(modelAnswer ?: "없음"),
+            "modelAnswer" to wrapUserContent(modelAnswer.takeUnless { it.isNullOrBlank() } ?: "없음"),
             "userQuestion" to wrapUserContent(userQuestion),
         ))
         return aiCallExecutor.execute(this.javaClass.simpleName, modelName) {

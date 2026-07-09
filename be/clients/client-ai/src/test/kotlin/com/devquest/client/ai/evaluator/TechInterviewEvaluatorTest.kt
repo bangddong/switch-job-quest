@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mockito.RETURNS_DEEP_STUBS
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.ai.chat.client.ChatClient
@@ -139,5 +140,43 @@ class TechInterviewEvaluatorTest {
         )
 
         assertThat(result).isEqualTo(expected)
+    }
+
+    @Test
+    fun `explainFollowup — modelAnswer가 빈 문자열이면 프롬프트에 없음으로 대체된다`() {
+        val userPromptCaptor = argumentCaptor<String>()
+        whenever(
+            chatClient.prompt().system(any<String>()).user(userPromptCaptor.capture()).call().content()
+        ).thenReturn("설명")
+
+        evaluator.explainFollowup(
+            question = "OSIV란 무엇인가요?",
+            answer = "OSIV는 영속성 컨텍스트를 뷰까지 열어두는 전략입니다.",
+            feedback = "핵심은 맞지만 트랜잭션 범위 설명이 부족합니다.",
+            userQuestion = "트랜잭션 범위가 정확히 뭔가요?",
+            modelAnswer = "",
+        )
+
+        assertThat(userPromptCaptor.firstValue.replace("\r\n", "\n"))
+            .contains("<user_content>\n없음\n</user_content>")
+    }
+
+    @Test
+    fun `explainFollowup — modelAnswer가 공백만 있으면 프롬프트에 없음으로 대체된다`() {
+        val userPromptCaptor = argumentCaptor<String>()
+        whenever(
+            chatClient.prompt().system(any<String>()).user(userPromptCaptor.capture()).call().content()
+        ).thenReturn("설명")
+
+        evaluator.explainFollowup(
+            question = "OSIV란 무엇인가요?",
+            answer = "OSIV는 영속성 컨텍스트를 뷰까지 열어두는 전략입니다.",
+            feedback = "핵심은 맞지만 트랜잭션 범위 설명이 부족합니다.",
+            userQuestion = "트랜잭션 범위가 정확히 뭔가요?",
+            modelAnswer = "   ",
+        )
+
+        assertThat(userPromptCaptor.firstValue.replace("\r\n", "\n"))
+            .contains("<user_content>\n없음\n</user_content>")
     }
 }
