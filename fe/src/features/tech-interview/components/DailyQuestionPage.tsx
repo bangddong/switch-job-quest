@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { ApiResponse, TechInterviewResult } from '@/types/api.types'
+import type { ApiResponse, DailyQuestionExplainResult, TechInterviewResult } from '@/types/api.types'
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 
 async function fetchDailyQuestion(): Promise<string> {
@@ -33,6 +33,28 @@ async function submitDailyEvaluation(question: string, answer: string): Promise<
   return json.data
 }
 
+async function submitExplain(
+  question: string,
+  answer: string,
+  feedback: string,
+  userQuestion: string,
+  modelAnswer: string | null,
+): Promise<DailyQuestionExplainResult> {
+  const res = await fetch('/api/v1/daily-question/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, answer, feedback, userQuestion, modelAnswer }),
+  })
+  if (res.status === 429) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error((json as { error?: { message?: string } })?.error?.message ?? '오늘 체험 횟수를 초과했습니다. 내일 다시 시도해주세요.')
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: ApiResponse<DailyQuestionExplainResult> = await res.json()
+  if (json.result !== 'SUCCESS' || json.data == null) throw new Error('설명 요청 실패')
+  return json.data
+}
+
 interface DailyQuestionPageProps {
   onLogin: () => void
 }
@@ -40,10 +62,16 @@ interface DailyQuestionPageProps {
 export function DailyQuestionPage({ onLogin }: DailyQuestionPageProps) {
   const [question, setQuestion] = useState<string | null>(null)
   const [answer, setAnswer] = useState('')
+  const [submittedAnswer, setSubmittedAnswer] = useState('')
   const [result, setResult] = useState<TechInterviewResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [userQuestion, setUserQuestion] = useState('')
+  const [explanation, setExplanation] = useState<string | null>(null)
+  const [explainLoading, setExplainLoading] = useState(false)
+  const [explainError, setExplainError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDailyQuestion()
@@ -58,6 +86,7 @@ export function DailyQuestionPage({ onLogin }: DailyQuestionPageProps) {
     setError(null)
     try {
       const data = await submitDailyEvaluation(question, answer)
+      setSubmittedAnswer(answer)
       setResult(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : '평가 요청에 실패했습니다. 다시 시도해주세요.')
@@ -68,8 +97,27 @@ export function DailyQuestionPage({ onLogin }: DailyQuestionPageProps) {
 
   const handleReset = () => {
     setAnswer('')
+    setSubmittedAnswer('')
     setResult(null)
     setError(null)
+    setUserQuestion('')
+    setExplanation(null)
+    setExplainError(null)
+  }
+
+  const handleExplain = async () => {
+    if (!question || !result || userQuestion.trim().length === 0) return
+    setExplainLoading(true)
+    setExplainError(null)
+    try {
+      const data = await submitExplain(question, submittedAnswer, result.feedback, userQuestion, result.modelAnswer ?? null)
+      setExplanation(data.explanation)
+      setUserQuestion('')
+    } catch (e) {
+      setExplainError(e instanceof Error ? e.message : '설명 요청에 실패했습니다. 다시 시도해주세요.')
+    } finally {
+      setExplainLoading(false)
+    }
   }
 
   return (
@@ -228,6 +276,79 @@ export function DailyQuestionPage({ onLogin }: DailyQuestionPageProps) {
               <MarkdownRenderer content={result.modelAnswer} />
             </div>
           )}
+
+          {/* 이해 안 되는 부분 물어보기 */}
+          <div
+            style={{
+              background: 'rgba(96,165,250,0.04)',
+              border: '1px solid rgba(96,165,250,0.25)',
+              borderRadius: 12,
+              padding: 20,
+              marginBottom: 16,
+            }}
+          >
+            <p style={{ color: '#60A5FA', fontSize: 13, fontFamily: "'Courier New', monospace", margin: '0 0 10px' }}>
+              💬 이해 안 되는 부분 물어보기
+            </p>
+
+            <textarea
+              value={userQuestion}
+              onChange={(e) => setUserQuestion(e.target.value)}
+              placeholder="이해 안 되는 부분을 물어보세요..."
+              rows={3}
+              style={{
+                width: '100%',
+                background: '#0A0E1A',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 8,
+                padding: '10px 12px',
+                color: '#F8FAFC',
+                fontSize: 13,
+                fontFamily: "'Courier New', monospace",
+                boxSizing: 'border-box',
+                resize: 'vertical',
+                outline: 'none',
+                lineHeight: 1.6,
+                marginBottom: 12,
+              }}
+            />
+
+            {explainError && (
+              <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12, fontFamily: "'Courier New', monospace" }}>
+                {explainError}
+              </p>
+            )}
+
+            <button
+              onClick={handleExplain}
+              disabled={explainLoading || userQuestion.trim().length === 0}
+              style={{
+                width: '100%',
+                background: explainLoading || userQuestion.trim().length === 0 ? 'rgba(96,165,250,0.05)' : 'rgba(96,165,250,0.1)',
+                border: '1px solid rgba(96,165,250,0.3)',
+                color: '#60A5FA',
+                cursor: explainLoading || userQuestion.trim().length === 0 ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                padding: '12px 0',
+                borderRadius: 8,
+                fontFamily: "'Courier New', monospace",
+              }}
+            >
+              {explainLoading ? '답변 생성 중...' : '질문하기'}
+            </button>
+
+            {explanation && (
+              <div
+                style={{
+                  marginTop: 16,
+                  paddingTop: 16,
+                  borderTop: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <MarkdownRenderer content={explanation} />
+              </div>
+            )}
+          </div>
 
           {/* 로그인 CTA */}
           <div
