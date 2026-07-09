@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component
 @Component
 class RateLimitResetScheduler(
     private val rateLimitBucketStore: RateLimitBucketStore,
+    private val dailyExplainRateLimitBucketStore: DailyExplainRateLimitBucketStore,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -14,6 +15,7 @@ class RateLimitResetScheduler(
     @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
     fun resetDailyLimits() {
         rateLimitBucketStore.clear()
+        dailyExplainRateLimitBucketStore.clear()
         log.info("Rate limit buckets cleared (daily reset)")
     }
 }

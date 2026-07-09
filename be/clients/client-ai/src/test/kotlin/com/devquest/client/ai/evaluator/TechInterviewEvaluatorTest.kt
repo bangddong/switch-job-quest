@@ -104,4 +104,40 @@ class TechInterviewEvaluatorTest {
             .isInstanceOf(AiEvaluationException::class.java)
             .hasMessageContaining("최종 실패")
     }
+
+    @Test
+    fun `explainFollowup — AI가 null을 반환하면 AiEvaluationException 발생`() {
+        whenever(
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(null)
+
+        assertThatThrownBy {
+            evaluator.explainFollowup(
+                question = "OSIV란 무엇인가요?",
+                answer = "OSIV는 영속성 컨텍스트를 뷰까지 열어두는 전략입니다.",
+                feedback = "핵심은 맞지만 트랜잭션 범위 설명이 부족합니다.",
+                userQuestion = "트랜잭션 범위가 정확히 뭔가요?",
+            )
+        }
+            .isInstanceOf(AiEvaluationException::class.java)
+            .hasMessageContaining("최종 실패")
+    }
+
+    @Test
+    fun `explainFollowup — AI가 정상 응답을 반환하면 설명 텍스트를 그대로 반환`() {
+        val expected = "트랜잭션 범위는 @Transactional이 적용된 메서드가 시작되고 끝나는 구간을 의미합니다."
+        whenever(
+            chatClient.prompt().system(any<String>()).user(any<String>()).call().content()
+        ).thenReturn(expected)
+
+        val result = evaluator.explainFollowup(
+            question = "OSIV란 무엇인가요?",
+            answer = "OSIV는 영속성 컨텍스트를 뷰까지 열어두는 전략입니다.",
+            feedback = "핵심은 맞지만 트랜잭션 범위 설명이 부족합니다.",
+            userQuestion = "트랜잭션 범위가 정확히 뭔가요?",
+            modelAnswer = "OSIV는...(모범 답안)",
+        )
+
+        assertThat(result).isEqualTo(expected)
+    }
 }

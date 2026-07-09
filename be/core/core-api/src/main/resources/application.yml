@@ -65,3 +65,6 @@ devquest:
     tech-interview:
       capacity: 2
       refill-days: 1
+    daily-explain:
+      capacity: 5
+      refill-days: 1
