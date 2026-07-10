@@ -7,14 +7,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | fix/fe-tech-debt-low |
-| 열린 PR | #259 — FE tech-debt LOW 3건 정리 (머지 대기) |
+| 브랜치 | (없음 — main 최신) |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0 | 2026-07-10 |
+| #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
 | #257 | 데일리 질문 휘발형 학습(후속 질문) Phase A — POST /daily-question/explain(원본 Q/답변/피드백 컨텍스트, 단발·순수텍스트), explain 전용 레이트리밋(IP당 5회/일, 기존 2회/일 버킷과 분리 신설), DailyQuestionPage 후속질문 섹션. 게스트 허용. QA HIGH 0, MEDIUM 2 수정. CD 배포 트리거됨 | 2026-07-09 |
 | #255 | 프롬프트 체계에 Finding Your Unknowns 기법 적용 — Deviations 로그(builder→QA 주입), Blindspot Pass(3.5단계), Design 다방향 모드, Gate 결정 테이블, Merge Quiz 스킬 | 2026-07-08 |
 | #253 | 지원 상태 전환 이력 Phase 4-1 — STATUS_CHANGE activity 기록 + 이력 타임라인(관심→지원). 배포 완료 | 2026-07-07 |
@@ -30,8 +30,10 @@
       FE 테스트 러너 미도입(vitest 등 — 인프라 도입 여부 별도 결정 필요, #259에서 확인)
 - [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
       사용 필요해지면 DB ON CONFLICT 전환
-- [ ] **OOM 후속 관찰** (#245 swap 배포 후): ① 업타임 4~5일째 `fly_instance_memory_swap_free`
-      감소 추이 ② exit 137 재발 여부 ③ 스왑 사용 중 응답 지연 체감
+- [ ] **OOM 후속 관찰** (#245 swap 배포 후) — 07-10 3.3일차 실측: kill 0건(마지막 kill 07-07 00:01
+      = 스왑 배포 직전, anon-rss 409MB), 스왑 소비 22~32MB/일 선형(배포 재시작 시 리셋),
+      mem_available 12~47MB 바닥권 지속 → 무배포 8~10일 시 스왑 소진·재발 가능성 🟡.
+      남은 확인: 4~5일차(07-11~12) creep 둔화 여부 → JVM 다이어트 조정폭 확정 후 PR 착수
 - [ ] **JVM 메모리 다이어트 PR** (스왑 관찰 후 진행): 힙 상한 50%→35% + `ReservedCodeCacheSize=96m`
       + `MALLOC_ARENA_MAX=2` + `G1PeriodicGCInterval=300000` → RSS 천장 ~409→~300MB (512MB 내 근본 해결)
       리스크: 힙 피크 90MB 관측이 대표적이지 않으면(대형 AI 응답) JVM OOME — 단 컨테이너 kill보다 양성
