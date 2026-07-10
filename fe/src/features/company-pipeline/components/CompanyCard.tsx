@@ -477,7 +477,7 @@ function ActivityHistoryList({ activities }: ActivityHistoryListProps) {
 interface CompanyCardProps {
   company: AppliedCompany
   onStatusChange: (id: number, status: ApplicationStatus) => Promise<void>
-  onDelete: (id: number) => void
+  onDelete: (id: number) => Promise<void>
   analysisResult?: JdAnalysisResult
   onAnalyze: (id: number, skills: string[], experiences: string[]) => Promise<JdAnalysisResult>
   hasResume: boolean
@@ -509,6 +509,7 @@ export function CompanyCard({
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [checkingResume, setCheckingResume] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const [activitiesExpanded, setActivitiesExpanded] = useState(false)
   const [activities, setActivities] = useState<CompanyActivity[] | null>(null)
@@ -599,11 +600,23 @@ export function CompanyCard({
   }
 
   const handleStatusChange = async (status: ApplicationStatus) => {
+    setActionError(null)
     try {
       await onStatusChange(company.id, status)
       invalidateActivities()
     } catch {
-      // 상태 변경 실패는 상위(select 값 롤백 등)에서 별도 처리
+      // select는 company.status(상위 상태)로 다시 렌더링되어 실패 시 자동으로 이전 값으로 되돌아간다.
+      // 사용자에게는 아래 actionError 배너로 실패 사실만 안내한다.
+      setActionError('상태 변경에 실패했습니다. 다시 시도해주세요.')
+    }
+  }
+
+  const handleDelete = async () => {
+    setActionError(null)
+    try {
+      await onDelete(company.id)
+    } catch {
+      setActionError('삭제에 실패했습니다. 다시 시도해주세요.')
     }
   }
 
@@ -821,7 +834,7 @@ export function CompanyCard({
         )}
 
         <button
-          onClick={() => onDelete(company.id)}
+          onClick={handleDelete}
           disabled={busy}
           style={{
             flex: '1 1 80px',
@@ -839,6 +852,10 @@ export function CompanyCard({
           삭제
         </button>
       </div>
+
+      {actionError && (
+        <p style={{ fontSize: 11, color: '#EF4444', margin: 0 }}>{actionError}</p>
+      )}
 
       {checkingResume && (
         <p style={{ fontSize: 11, color: '#475569', margin: '6px 0 0' }}>

@@ -7,6 +7,7 @@ const PLACEHOLDER = '## 경력 요약\n- ...\n\n## 기술 스택\n- ...\n\n## �
 
 function formatSavedAt(iso: string): string {
   const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '알 수 없음'
   const datePart = d.toLocaleDateString('ko-KR')
   const timePart = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
   return `${datePart} ${timePart}`
