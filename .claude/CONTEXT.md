@@ -7,17 +7,17 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | (없음 — main 최신) |
-| 열린 PR | 없음 |
+| 브랜치 | fix/fe-tech-debt-low |
+| 열린 PR | #259 — FE tech-debt LOW 3건 정리 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0 | 2026-07-10 |
 | #257 | 데일리 질문 휘발형 학습(후속 질문) Phase A — POST /daily-question/explain(원본 Q/답변/피드백 컨텍스트, 단발·순수텍스트), explain 전용 레이트리밋(IP당 5회/일, 기존 2회/일 버킷과 분리 신설), DailyQuestionPage 후속질문 섹션. 게스트 허용. QA HIGH 0, MEDIUM 2 수정. CD 배포 트리거됨 | 2026-07-09 |
 | #255 | 프롬프트 체계에 Finding Your Unknowns 기법 적용 — Deviations 로그(builder→QA 주입), Blindspot Pass(3.5단계), Design 다방향 모드, Gate 결정 테이블, Merge Quiz 스킬 | 2026-07-08 |
 | #253 | 지원 상태 전환 이력 Phase 4-1 — STATUS_CHANGE activity 기록 + 이력 타임라인(관심→지원). 배포 완료 | 2026-07-07 |
-| #252 | 점검 결과 표시 fix — 세부 점수 32/40 배점 표기·비율 색상 + 저장 시각 포맷 (prod 실사용 테스트 발견분) | 2026-07-07 |
 
 ## 다음 작업
 
@@ -26,8 +26,8 @@
       prod 테스트 완료) ② 테스트 데이터 정리 — 회사 "테스트-토스" 삭제, 임시 이력서를 실제로 교체
 - [ ] **Phase 4 후보 (실사용 후 판단)**: 면접 회고 메모(activity NOTE 타입), 같은 회사 카드
       그룹핑 뷰, JD 등록/수정 모달(현재 AddCompanyModal에서만 입력 가능), Phase 3c(JD URL 파싱)
-- [ ] tech-debt(LOW): CompanyCard handleStatusChange 주석 보완, onDelete/onStatusChange 에러
-      패턴 통일, formatSavedAt invalid date 방어
+- [ ] tech-debt(LOW): CompanyCard 삭제/상태변경 진행 중 busy 플래그(연타 중복 요청 가드, #259 QA LOW),
+      FE 테스트 러너 미도입(vitest 등 — 인프라 도입 여부 별도 결정 필요, #259에서 확인)
 - [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
       사용 필요해지면 DB ON CONFLICT 전환
 - [ ] **OOM 후속 관찰** (#245 swap 배포 후): ① 업타임 4~5일째 `fly_instance_memory_swap_free`
@@ -36,8 +36,8 @@
       + `MALLOC_ARENA_MAX=2` + `G1PeriodicGCInterval=300000` → RSS 천장 ~409→~300MB (512MB 내 근본 해결)
       리스크: 힙 피크 90MB 관측이 대표적이지 않으면(대형 AI 응답) JVM OOME — 단 컨테이너 kill보다 양성
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
-- [ ] **#255 후속**: ① 다음 기능 작업에서 Deviations·Blindspot Pass 실효성 확인 ② `E:/development/.claude/template/`에
-      orchestrator·clarify·quiz 동기화 (별도 저장소, 이 레포 밖)
+- [ ] **#255 후속**: 다음 기능 작업에서 Blindspot Pass 실효성 확인 (Deviations→QA 집중검토 흐름은
+      #259에서 1차 동작 확인. template 동기화는 07-10 완료 — orchestrator·clarify·quiz + 훅 스크립트 3종)
 - [ ] 질문 뱅크 category 파라미터 — 현재 DailyMailScheduler가 항상 null로 호출해 카테고리 분기가
       죽은 경로 (QA MEDIUM, 의도적 보류). 향후 카테고리별 배분 쓸 계획 생기면 활성화
 - [ ] 질문 뱅크 규모 확대 시(수백 건↑) `findAllBy...` 전체 로드 방식 재검토 — `ORDER BY RANDOM() LIMIT 1`
