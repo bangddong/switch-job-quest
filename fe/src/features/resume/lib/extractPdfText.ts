@@ -37,16 +37,20 @@ export async function extractPdfText(file: File): Promise<string> {
   const doc = await pdfjs.getDocument({ data }).promise
 
   const pageTexts: string[] = []
-  for (let pageNum = 1; pageNum <= doc.numPages; pageNum += 1) {
-    const page = await doc.getPage(pageNum)
-    const content = await page.getTextContent()
-    let pageText = ''
-    for (const item of content.items) {
-      if (!('str' in item)) continue
-      pageText += item.str
-      pageText += item.hasEOL ? '\n' : ' '
+  try {
+    for (let pageNum = 1; pageNum <= doc.numPages; pageNum += 1) {
+      const page = await doc.getPage(pageNum)
+      const content = await page.getTextContent()
+      let pageText = ''
+      for (const item of content.items) {
+        if (!('str' in item)) continue
+        pageText += item.str
+        pageText += item.hasEOL ? '\n' : ' '
+      }
+      pageTexts.push(pageText)
     }
-    pageTexts.push(pageText)
+  } finally {
+    await doc.destroy()
   }
 
   const normalized = normalizeExtractedText(pageTexts.join('\n\n'))
