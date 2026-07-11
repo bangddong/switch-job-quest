@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { loadResume, updateResume } from '../api/resumeApi'
+import { extractPdfText, truncateExtractedText, validatePdfFile, PdfExtractError } from '../lib/extractPdfText'
 
 const MAX_LENGTH = 50000
 const PLACEHOLDER = '## 경력 요약\n- ...\n\n## 기술 스택\n- ...\n\n## 프로젝트 경험\n### 프로젝트명\n- 역할:\n- 성과:'
@@ -21,6 +22,8 @@ export function ResumeProfilePage() {
   const [saving, setSaving] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [message, setMessage] = useState<{ text: string; success: boolean } | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadResume()
@@ -49,6 +52,47 @@ export function ResumeProfilePage() {
       setMessage({ text: '저장에 실패했습니다. 내용을 확인 후 다시 시도해주세요.', success: false })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handlePdfButtonClick = () => {
+    if (extracting) return
+    fileInputRef.current?.click()
+  }
+
+  const handlePdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    const validationError = validatePdfFile(file)
+    if (validationError) {
+      setMessage({ text: validationError, success: false })
+      return
+    }
+
+    if (content.trim() && !window.confirm('현재 작성 중인 내용을 PDF에서 추출한 내용으로 덮어쓸까요?')) {
+      return
+    }
+
+    setExtracting(true)
+    setMessage(null)
+    try {
+      const extracted = await extractPdfText(file)
+      const { text, truncated } = truncateExtractedText(extracted)
+      setContent(text)
+      setMessage(
+        truncated
+          ? { text: '내용이 50,000자를 초과해 일부만 불러왔습니다.', success: true }
+          : { text: 'PDF에서 텍스트를 불러왔습니다.', success: true },
+      )
+    } catch (err) {
+      const text = err instanceof PdfExtractError
+        ? err.message
+        : 'PDF에서 텍스트를 추출하지 못했습니다. 내용을 직접 붙여넣어 주세요.'
+      setMessage({ text, success: false })
+    } finally {
+      setExtracting(false)
     }
   }
 
@@ -124,23 +168,52 @@ export function ResumeProfilePage() {
               />
             )}
 
-            {registered && (
-              <button
-                onClick={() => setPreviewing((prev) => !prev)}
-                style={{
-                  marginTop: 8,
-                  background: 'none',
-                  border: 'none',
-                  color: '#F59E0B',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  padding: 0,
-                  fontFamily: "'Courier New', monospace",
-                }}
-              >
-                {previewing ? '편집으로 돌아가기' : '미리보기'}
-              </button>
+            {(registered || !previewing) && (
+              <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+                {registered && (
+                  <button
+                    onClick={() => setPreviewing((prev) => !prev)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#F59E0B',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      padding: 0,
+                      fontFamily: "'Courier New', monospace",
+                    }}
+                  >
+                    {previewing ? '편집으로 돌아가기' : '미리보기'}
+                  </button>
+                )}
+
+                {!previewing && (
+                  <button
+                    onClick={handlePdfButtonClick}
+                    disabled={extracting}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#F59E0B',
+                      cursor: extracting ? 'not-allowed' : 'pointer',
+                      fontSize: 13,
+                      padding: 0,
+                      fontFamily: "'Courier New', monospace",
+                    }}
+                  >
+                    {extracting ? 'PDF에서 텍스트 추출 중...' : 'PDF에서 불러오기'}
+                  </button>
+                )}
+              </div>
             )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={handlePdfFileChange}
+              style={{ display: 'none' }}
+            />
 
             <button
               onClick={handleSave}
