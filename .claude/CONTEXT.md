@@ -7,17 +7,17 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | (없음 — main 최신) |
-| 열린 PR | 없음 |
+| 브랜치 | feat/resume-pdf-upload |
+| 열린 PR | #261 — 이력서 프로필 PDF 업로드, 브라우저 텍스트 추출 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0 | 2026-07-11 |
 | #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
 | #257 | 데일리 질문 휘발형 학습(후속 질문) Phase A — POST /daily-question/explain(원본 Q/답변/피드백 컨텍스트, 단발·순수텍스트), explain 전용 레이트리밋(IP당 5회/일, 기존 2회/일 버킷과 분리 신설), DailyQuestionPage 후속질문 섹션. 게스트 허용. QA HIGH 0, MEDIUM 2 수정. CD 배포 트리거됨 | 2026-07-09 |
 | #255 | 프롬프트 체계에 Finding Your Unknowns 기법 적용 — Deviations 로그(builder→QA 주입), Blindspot Pass(3.5단계), Design 다방향 모드, Gate 결정 테이블, Merge Quiz 스킬 | 2026-07-08 |
-| #253 | 지원 상태 전환 이력 Phase 4-1 — STATUS_CHANGE activity 기록 + 이력 타임라인(관심→지원). 배포 완료 | 2026-07-07 |
 
 ## 다음 작업
 
@@ -27,7 +27,11 @@
 - [ ] **Phase 4 후보 (실사용 후 판단)**: 면접 회고 메모(activity NOTE 타입), 같은 회사 카드
       그룹핑 뷰, JD 등록/수정 모달(현재 AddCompanyModal에서만 입력 가능), Phase 3c(JD URL 파싱)
 - [ ] tech-debt(LOW): CompanyCard 삭제/상태변경 진행 중 busy 플래그(연타 중복 요청 가드, #259 QA LOW),
-      FE 테스트 러너 미도입(vitest 등 — 인프라 도입 여부 별도 결정 필요, #259에서 확인)
+      FE 테스트 러너 미도입(vitest 등 — 인프라 도입 여부 별도 결정 필요, #259에서 확인),
+      extractPdfText LOW 3건(#261 QA — destroy 실패 시 원 예외 덮어쓰기, `\r` 정규식 엣지,
+      pdfjs 로딩/파싱 실패 메시지 미구분)
+- [ ] **#261 후속**: 배포 후 실제 PDF 이력서로 추출 품질 확인(줄바꿈·표 레이아웃 깨짐 정도).
+      BE 파싱(PDFBox) 구현은 로컬 `backup/be-pdf-parse` 브랜치 보존 — 스케일업 결정 시 재활용
 - [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
       사용 필요해지면 DB ON CONFLICT 전환
 - [ ] **OOM 후속 관찰** (#245 swap 배포 후) — 07-10 3.3일차 실측: kill 0건(마지막 kill 07-07 00:01
