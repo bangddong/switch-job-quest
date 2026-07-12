@@ -7,14 +7,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | feat/resume-pdf-upload |
-| 열린 PR | #261 — 이력서 프로필 PDF 업로드, 브라우저 텍스트 추출 (머지 대기) |
+| 브랜치 | main |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0 | 2026-07-11 |
+| #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0. **머지 완료(2026-07-12), FE CD 배포 트리거됨** | 2026-07-11 |
 | #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
 | #257 | 데일리 질문 휘발형 학습(후속 질문) Phase A — POST /daily-question/explain(원본 Q/답변/피드백 컨텍스트, 단발·순수텍스트), explain 전용 레이트리밋(IP당 5회/일, 기존 2회/일 버킷과 분리 신설), DailyQuestionPage 후속질문 섹션. 게스트 허용. QA HIGH 0, MEDIUM 2 수정. CD 배포 트리거됨 | 2026-07-09 |
 | #255 | 프롬프트 체계에 Finding Your Unknowns 기법 적용 — Deviations 로그(builder→QA 주입), Blindspot Pass(3.5단계), Design 다방향 모드, Gate 결정 테이블, Merge Quiz 스킬 | 2026-07-08 |
