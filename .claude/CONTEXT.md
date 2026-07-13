@@ -7,17 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | chore/jvm-memory-diet |
-| 열린 PR | #263 — JVM 메모리 다이어트 (OOM 근본 완화, 무비용) (머지 대기) |
+| 브랜치 | main |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #263 | JVM 메모리 다이어트 (OOM 근본 완화, 무비용) — Dockerfile ENTRYPOINT: 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규(GC 확정용). RSS 천장 ~409→~300MB 목표. **Blindspot Pass로 계획 2건 제외**(`MALLOC_ARENA_MAX`=musl 무효, `G1PeriodicGCInterval`=SerialGC 추정). 빌드 pass, **머지 완료·BE CD 배포 트리거됨(2026-07-13)**. ⚠️ post-deploy 관측 필요 | 2026-07-13 |
 | #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0. **머지 완료(2026-07-12), FE CD 배포 트리거됨** | 2026-07-11 |
 | #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
-| #257 | 데일리 질문 휘발형 학습(후속 질문) Phase A — POST /daily-question/explain(원본 Q/답변/피드백 컨텍스트, 단발·순수텍스트), explain 전용 레이트리밋(IP당 5회/일, 기존 2회/일 버킷과 분리 신설), DailyQuestionPage 후속질문 섹션. 게스트 허용. QA HIGH 0, MEDIUM 2 수정. CD 배포 트리거됨 | 2026-07-09 |
-| #255 | 프롬프트 체계에 Finding Your Unknowns 기법 적용 — Deviations 로그(builder→QA 주입), Blindspot Pass(3.5단계), Design 다방향 모드, Gate 결정 테이블, Merge Quiz 스킬 | 2026-07-08 |
 
 ## 다음 작업
 
@@ -37,14 +36,14 @@
 - [ ] **OOM 후속 관찰** (#245 swap 배포 후) — 07-10 3.3일차 실측: kill 0건(마지막 kill 07-07 00:01
       = 스왑 배포 직전, anon-rss 409MB), 스왑 소비 22~32MB/일 선형(배포 재시작 시 리셋),
       mem_available 12~47MB 바닥권 지속 → 무배포 8~10일 시 스왑 소진·재발 가능성 🟡.
-      남은 확인: 4~5일차(07-11~12) creep 둔화 여부 → JVM 다이어트 조정폭 확정 후 PR 착수
-- [ ] **JVM 메모리 다이어트 (#263 — 머지·배포·관측 대기)**: 힙 50%→35%(~179MB) + Metaspace 160→128m
-      + `ReservedCodeCacheSize=96m` + `-Xlog:gc`(GC 확정용). Dockerfile ENTRYPOINT 수정. RSS 천장 ~409→~300MB 목표.
-      **Blindspot Pass로 계획 2건 제외**: `MALLOC_ARENA_MAX`(musl/alpine라 glibc 튜너블 무효),
-      `G1PeriodicGCInterval`(1cpu/512MB라 기본 SerialGC 추정 → G1 미사용). 배포 후 `-Xlog:gc`로 GC 확정.
-      **post-deploy 필수 관측**: `fly_instance_memory_mem_available` 며칠 → RSS 천장 ~300 안착 여부 +
-      AI 평가 시 힙 피크 179MB 초과(OOME) 여부. 리스크: 힙 피크 초과 시 OOME — 단 컨테이너 kill보다 양성.
-      GC 확정 후 page 반납 레버(SerialGC엔 없음 → 필요 시 G1 명시 전환) 별도 판단.
+      → **JVM 다이어트(#263)로 근본 대응 착수·배포 완료(07-13)**. 이후 검증은 위 "post-deploy 관측" 항목으로 이관.
+- [ ] **JVM 다이어트 post-deploy 관측 (#263 배포됨 2026-07-13)** — 확인할 것 3가지:
+      ① `fly_instance_memory_mem_available`(Grafana fly uid `prometheus_on_fly`) 며칠 → RSS 천장이
+      실제 ~300MB 초반 안착하는지 (기존 ~409 대비). ② AI 평가 여러 번 돌려 힙 피크가 179MB(35%) 초과로
+      OOME 안 나는지 — 나면 힙% 소폭 상향. ③ `-Xlog:gc` 로그로 실제 GC 종류 확정
+      (fly-metrics.net `application_logs_vlog`, `"gc"` 필터). SerialGC면 page 반납 옵션 없음 →
+      creep 여전하면 G1 명시 전환 or 예약 재시작 cron 별도 판단. G1 확정 시 `G1PeriodicGCInterval` 재도입 검토.
+      관측 안정 확인되면 이 항목 종료 + `-Xlog:gc` 유지/제거 결정.
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 - [ ] **#255 후속**: 다음 기능 작업에서 Blindspot Pass 실효성 확인 (Deviations→QA 집중검토 흐름은
       #259에서 1차 동작 확인. template 동기화는 07-10 완료 — orchestrator·clarify·quiz + 훅 스크립트 3종)
