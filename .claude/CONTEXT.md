@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main |
-| 열린 PR | 없음 |
+| 브랜치 | chore/jvm-memory-diet |
+| 열린 PR | #263 — JVM 메모리 다이어트 (OOM 근본 완화, 무비용) (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
@@ -38,9 +38,13 @@
       = 스왑 배포 직전, anon-rss 409MB), 스왑 소비 22~32MB/일 선형(배포 재시작 시 리셋),
       mem_available 12~47MB 바닥권 지속 → 무배포 8~10일 시 스왑 소진·재발 가능성 🟡.
       남은 확인: 4~5일차(07-11~12) creep 둔화 여부 → JVM 다이어트 조정폭 확정 후 PR 착수
-- [ ] **JVM 메모리 다이어트 PR** (스왑 관찰 후 진행): 힙 상한 50%→35% + `ReservedCodeCacheSize=96m`
-      + `MALLOC_ARENA_MAX=2` + `G1PeriodicGCInterval=300000` → RSS 천장 ~409→~300MB (512MB 내 근본 해결)
-      리스크: 힙 피크 90MB 관측이 대표적이지 않으면(대형 AI 응답) JVM OOME — 단 컨테이너 kill보다 양성
+- [ ] **JVM 메모리 다이어트 (#263 — 머지·배포·관측 대기)**: 힙 50%→35%(~179MB) + Metaspace 160→128m
+      + `ReservedCodeCacheSize=96m` + `-Xlog:gc`(GC 확정용). Dockerfile ENTRYPOINT 수정. RSS 천장 ~409→~300MB 목표.
+      **Blindspot Pass로 계획 2건 제외**: `MALLOC_ARENA_MAX`(musl/alpine라 glibc 튜너블 무효),
+      `G1PeriodicGCInterval`(1cpu/512MB라 기본 SerialGC 추정 → G1 미사용). 배포 후 `-Xlog:gc`로 GC 확정.
+      **post-deploy 필수 관측**: `fly_instance_memory_mem_available` 며칠 → RSS 천장 ~300 안착 여부 +
+      AI 평가 시 힙 피크 179MB 초과(OOME) 여부. 리스크: 힙 피크 초과 시 OOME — 단 컨테이너 kill보다 양성.
+      GC 확정 후 page 반납 레버(SerialGC엔 없음 → 필요 시 G1 명시 전환) 별도 판단.
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 - [ ] **#255 후속**: 다음 기능 작업에서 Blindspot Pass 실효성 확인 (Deviations→QA 집중검토 흐름은
       #259에서 1차 동작 확인. template 동기화는 07-10 완료 — orchestrator·clarify·quiz + 훅 스크립트 3종)
