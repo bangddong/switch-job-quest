@@ -7,14 +7,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main |
-| 열린 PR | 없음 |
+| 브랜치 | fix/metaspace-oome-restore |
+| 열린 PR | #265 — Metaspace 160m 복구 (프로덕션 다운 핫픽스, **머지 시 즉시 배포 필요**) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| #263 | JVM 메모리 다이어트 (OOM 근본 완화, 무비용) — Dockerfile ENTRYPOINT: 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규(GC 확정용). RSS 천장 ~409→~300MB 목표. **Blindspot Pass로 계획 2건 제외**(`MALLOC_ARENA_MAX`=musl 무효, `G1PeriodicGCInterval`=SerialGC 추정). 빌드 pass, **머지 완료·BE CD 배포 트리거됨(2026-07-13)**. ⚠️ post-deploy 관측 필요 | 2026-07-13 |
+| #263 | JVM 메모리 다이어트 — 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규. **⚠️ Metaspace 128m 축소가 34시간 후 prod OOME 다운 유발 → #265로 160m 복구.** 힙 35%·CodeCache 96m·`-Xlog:gc`는 유효하여 유지 (힙 실측 42MB로 무죄 판명). 교훈: **실측 없이 상한을 자름** — 커밋 메시지에 "근사치, 배포 후 실측 검증 필요"라 본인이 써놓고 그대로 배포 | 2026-07-13 |
 | #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0. **머지 완료(2026-07-12), FE CD 배포 트리거됨** | 2026-07-11 |
 | #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
 
@@ -37,13 +37,22 @@
       = 스왑 배포 직전, anon-rss 409MB), 스왑 소비 22~32MB/일 선형(배포 재시작 시 리셋),
       mem_available 12~47MB 바닥권 지속 → 무배포 8~10일 시 스왑 소진·재발 가능성 🟡.
       → **JVM 다이어트(#263)로 근본 대응 착수·배포 완료(07-13)**. 이후 검증은 위 "post-deploy 관측" 항목으로 이관.
-- [ ] **JVM 다이어트 post-deploy 관측 (#263 배포됨 2026-07-13)** — 확인할 것 3가지:
-      ① `fly_instance_memory_mem_available`(Grafana fly uid `prometheus_on_fly`) 며칠 → RSS 천장이
-      실제 ~300MB 초반 안착하는지 (기존 ~409 대비). ② AI 평가 여러 번 돌려 힙 피크가 179MB(35%) 초과로
-      OOME 안 나는지 — 나면 힙% 소폭 상향. ③ `-Xlog:gc` 로그로 실제 GC 종류 확정
-      (fly-metrics.net `application_logs_vlog`, `"gc"` 필터). SerialGC면 page 반납 옵션 없음 →
-      creep 여전하면 G1 명시 전환 or 예약 재시작 cron 별도 판단. G1 확정 시 `G1PeriodicGCInterval` 재도입 검토.
-      관측 안정 확인되면 이 항목 종료 + `-Xlog:gc` 유지/제거 결정.
+- [ ] 🔥 **메타스페이스 누수 조사 (#265 이후 최우선)** — #263이 우연히 드러낸 것. 근거: Metaspace 128m이
+      **기동 34시간 후** 고갈(Spring 클래스 로딩은 기동 몇 분이면 끝남 → 단순 부족이면 즉사했어야 함)
+      = 서서히 자란다 🟡. **160m 복구는 시간만 버는 것 — 사실이면 며칠 뒤 재발.**
+      - 1차 검증(제일 쌈): Grafana `grafanacloud-prom`에서
+        `jvm_memory_used_bytes{area="nonheap", id="Metaspace", application="devquest-api"}` 7일 range.
+        **우상향 직선 → 누수 확정. 기동 후 평탄·포화 → 그냥 128m가 빠듯했던 것(조사 종료).**
+      - 누수 확정 시 용의자: 동적 프록시/CGLIB 반복 생성, 람다 hidden class, 클래스로더 누수,
+        Kotlin reflection. 관측 도구: `jcmd VM.metaspace`, `-XX:+PrintClassHistogramAfterFullGC` (QA #265 권장)
+      - **통합 가설 🟡**: 이게 아래 "RSS creep ~3MB/h" 미스터리의 정체일 수 있음 —
+        Metaspace는 네이티브라 **힙 지표에 안 잡히고 RSS엔 잡힌다**. 같은 원인, 먼저 닿는 천장만 다름
+        (이전 160m: RSS 409MB 커널 kill이 먼저 / 지금 128m: Metaspace OOME가 먼저).
+        맞다면 이거 잡는 게 OOM 시리즈 전체의 근본 해결. **단, QA 반론 있음**: 160m은 RSS creep 시기에도
+        쓰던 값이고 당시 metaspace가 원인으로 지목된 적 없음 → creep 주범은 힙 커밋 페이지라는 기존 해석도 유효.
+        두 리스크를 혼동하지 말 것.
+      - ② AI 평가 여러 번 돌려 힙 피크 확인(현 상한 179MB) — **실측 42MB로 여유 커 보임. 오히려 더 줄일 여지**
+      - ③ `-Xlog:gc`로 GC 종류 확정 — 이번 로그는 전부 Metadata 트리거라 미확정. G1 확정 시 `G1PeriodicGCInterval` 재검토
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 - [ ] **#255 후속**: 다음 기능 작업에서 Blindspot Pass 실효성 확인 (Deviations→QA 집중검토 흐름은
       #259에서 1차 동작 확인. template 동기화는 07-10 완료 — orchestrator·clarify·quiz + 훅 스크립트 3종)
@@ -70,6 +79,20 @@
 - 헬스 엔드포인트: `/health` (actuator 아님). 참고: `k8s/docs/env-requirements.md`
 
 ## 알아둬야 할 비자명적 결정
+
+### Metaspace OOME 사고 + 힙 실측치 확보 (2026-07-14, #263→#265)
+- **힙 실측: 사용 42MB / 커밋 117MB / 상한 179MB.** prod GC 로그로 직접 확인 🔴.
+  힙은 남아돈다 — 향후 메모리 튜닝 시 힙을 되돌리거나 늘리는 방향은 근거 없음. **더 줄일 여지가 있는 쪽.**
+- `MaxMetaspaceSize=128m`(#263)이 34시간 후 `OutOfMemoryError: Metaspace` 유발 → 프로덕션 다운.
+  증상: `Pause Full (Metadata GC Threshold)` / `(Metadata GC Clear Soft References)` 2초짜리가
+  **42M->42M로 아무것도 회수 못 하며 무한 교대 반복** = 메타스페이스 고갈 데스 스파이럴. → #265로 160m 복구.
+- **진단 교훈**: "Major GC가 계속 돈다" ≠ "힙 부족". **GC 트리거 괄호를 먼저 읽어라** —
+  `(Allocation Failure)`면 힙, `(Metadata GC *)`면 메타스페이스. 화살표 좌우가 안 줄면(42M->42M) 힙 문제 아님.
+- **관측 교훈**: `-Xlog:gc`가 없었으면 이 진단 불가능했다 (#263이 우연히 같이 넣음). **제거 금지.**
+  단 변경과 관측을 동시에 넣으면 "원래 있던 현상"과 "새로 생긴 현상"을 구분 못 하는 confound가 생긴다.
+- **프로세스 교훈**: #263은 힙·메타스페이스·코드캐시 **3개를 실측 없이 동시에** 잘랐다
+  (커밋 메시지에 "근사치, 배포 후 실측 검증 필요"라 스스로 명시하고도 배포).
+  → 리소스 상한은 **live set 실측 후에** 자른다. 한 번에 하나씩.
 
 ### OOM 진짜 원인 확정 — 순수 누적형 RSS 포화, kill 수위 anon-rss ~409MB (2026-07-07, #245)
 #239 JVM 튜닝 후에도 재발. 커널 OOM 로그 7일 전수(8건)로 인과 최종 확정:
