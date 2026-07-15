@@ -7,15 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | docs/aws-eks-learning-plan |
-| 열린 PR | 진행 중 — AWS EKS 학습 놀이터 계획 문서화 |
+| 브랜치 | docs/metaspace-investigation-findings |
+| 열린 PR | 진행 중 — 메타스페이스 조사 결과 문서화 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| #265 | **Metaspace 160m 복구 — 프로덕션 다운 핫픽스.** #263의 128m 축소가 34시간 후 `OutOfMemoryError: Metaspace` 유발. 힙은 무죄(42M/179M) — GC 트리거가 전부 `Metadata GC *` 계열이었음. 단일 값만 복구, 힙 35%·CodeCache·`-Xlog:gc` 유지. QA HIGH 0. **머지·BE CD 배포 성공(07-14)**. ⚠️ 메타스페이스 누수 검증 미완 | 2026-07-14 |
-| #263 | JVM 메모리 다이어트 — 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규. **⚠️ Metaspace 128m 축소가 34시간 후 prod OOME 다운 유발 → #265로 160m 복구.** 힙 35%·CodeCache 96m·`-Xlog:gc`는 유효하여 유지 (힙 실측 42MB로 무죄 판명). 교훈: **실측 없이 상한을 자름** — 커밋 메시지에 "근사치, 배포 후 실측 검증 필요"라 본인이 써놓고 그대로 배포 | 2026-07-13 |
+| #266 | AWS EKS 학습 놀이터 계획 문서화 (`infra/aws-eks/README.md`). 머지 완료 | 2026-07-15 |
+| #265 | **Metaspace 160m 복구 — 프로덕션 다운 핫픽스.** #263의 128m 축소가 `OutOfMemoryError: Metaspace` 유발. 힙은 무죄(42M/179M) — GC 트리거가 전부 `Metadata GC *` 계열이었음. 단일 값만 복구, 힙 35%·CodeCache·`-Xlog:gc` 유지. QA HIGH 0. **머지·BE CD 배포 성공(07-14)**. ✅ **누수 검증 완료(07-15) — 누수 없음, 160m 적정. 아래 "비자명적 결정" 참조** | 2026-07-14 |
+| #263 | JVM 메모리 다이어트 — 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규. **⚠️ Metaspace 128m 축소가 prod OOME 다운 유발(붕괴 ~20h, 발견·수정 34h) → #265로 160m 복구.** 힙 35%·CodeCache 96m·`-Xlog:gc`는 유효하여 유지 (힙 실측 42MB로 무죄 판명). 교훈: **실측 없이 상한을 자름** — 당시 Grafana에 작동점 135~137 MiB가 이미 찍혀 있었는데 128m로 잘랐다 | 2026-07-13 |
 | #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0. **머지 완료(2026-07-12), FE CD 배포 트리거됨** | 2026-07-11 |
 | #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
 
@@ -38,22 +39,12 @@
       = 스왑 배포 직전, anon-rss 409MB), 스왑 소비 22~32MB/일 선형(배포 재시작 시 리셋),
       mem_available 12~47MB 바닥권 지속 → 무배포 8~10일 시 스왑 소진·재발 가능성 🟡.
       → **JVM 다이어트(#263)로 근본 대응 착수·배포 완료(07-13)**. 이후 검증은 위 "post-deploy 관측" 항목으로 이관.
-- [ ] 🔥 **메타스페이스 누수 조사 (#265 이후 최우선)** — #263이 우연히 드러낸 것. 근거: Metaspace 128m이
-      **기동 34시간 후** 고갈(Spring 클래스 로딩은 기동 몇 분이면 끝남 → 단순 부족이면 즉사했어야 함)
-      = 서서히 자란다 🟡. **160m 복구는 시간만 버는 것 — 사실이면 며칠 뒤 재발.**
-      - 1차 검증(제일 쌈): Grafana `grafanacloud-prom`에서
-        `jvm_memory_used_bytes{area="nonheap", id="Metaspace", application="devquest-api"}` 7일 range.
-        **우상향 직선 → 누수 확정. 기동 후 평탄·포화 → 그냥 128m가 빠듯했던 것(조사 종료).**
-      - 누수 확정 시 용의자: 동적 프록시/CGLIB 반복 생성, 람다 hidden class, 클래스로더 누수,
-        Kotlin reflection. 관측 도구: `jcmd VM.metaspace`, `-XX:+PrintClassHistogramAfterFullGC` (QA #265 권장)
-      - **통합 가설 🟡**: 이게 아래 "RSS creep ~3MB/h" 미스터리의 정체일 수 있음 —
-        Metaspace는 네이티브라 **힙 지표에 안 잡히고 RSS엔 잡힌다**. 같은 원인, 먼저 닿는 천장만 다름
-        (이전 160m: RSS 409MB 커널 kill이 먼저 / 지금 128m: Metaspace OOME가 먼저).
-        맞다면 이거 잡는 게 OOM 시리즈 전체의 근본 해결. **단, QA 반론 있음**: 160m은 RSS creep 시기에도
-        쓰던 값이고 당시 metaspace가 원인으로 지목된 적 없음 → creep 주범은 힙 커밋 페이지라는 기존 해석도 유효.
-        두 리스크를 혼동하지 말 것.
-      - ② AI 평가 여러 번 돌려 힙 피크 확인(현 상한 179MB) — **실측 42MB로 여유 커 보임. 오히려 더 줄일 여지**
-      - ③ `-Xlog:gc`로 GC 종류 확정 — 이번 로그는 전부 Metadata 트리거라 미확정. G1 확정 시 `G1PeriodicGCInterval` 재검토
+- [x] ~~메타스페이스 누수 조사~~ → **2026-07-15 종결. 누수 없음.** 아래 "비자명적 결정" 참조.
+      잔여 관찰(선택): 신규 기능으로 클래스가 늘면 작동점 134.6 MiB가 올라간다. 160 MiB 여유는
+      25.4 MiB(16%)뿐이므로 **대형 의존성 추가 시 Grafana로 작동점 재확인**할 것.
+- [ ] tech-debt(LOW, BE): `DailyExplainRateLimitInterceptor`·`TechInterviewRateLimitInterceptor`가
+      **요청마다 `ObjectMapper()` 신규 생성** (07-15 조사 중 발견). 메타스페이스와 무관하나 힙·CPU 낭비 →
+      싱글턴 주입으로 교체
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 - [ ] **#255 후속**: 다음 기능 작업에서 Blindspot Pass 실효성 확인 (Deviations→QA 집중검토 흐름은
       #259에서 1차 동작 확인. template 동기화는 07-10 완료 — orchestrator·clarify·quiz + 훅 스크립트 3종)
@@ -88,12 +79,80 @@
 
 ## 알아둬야 할 비자명적 결정
 
+### 메타스페이스 조사 종결 — 누수 없음, 128m이 작동점보다 낮았을 뿐 (2026-07-15) 🔴
+Grafana 7일 range 실측으로 확정. **재조사 불필요.**
+- **이 앱의 메타스페이스 작동점 = 134.6 MiB.** 160m 하에서 **uptime 94.3h까지 평탄**(95포인트 연속 실측).
+  #263의 `128m`은 **이 작동점보다 6.6 MiB 낮았다** → 죽는 게 필연이었다. 누수와 무관.
+- **128m 창의 실제 모양**: 재시작 후 122.7 → 10.9h에 126.3 MiB(=상한의 **98.7%**) 도달 → **9시간 고정**
+  (상한이 눌러서 Full GC로 버틴 것) → **uptime 19.9h에 전 지표 소실**(좀비화).
+  **"34시간 후 OOME"는 틀린 기록** — 34h는 사람이 알아채고 #265를 배포한 시각. 실제 붕괴는 **~20h**.
+- **누수 아님의 근거 3종** 🔴: ① 클래스 수 평탄~순감소(11분 +12개, 부하 중 -51개)
+  ② **정지 30초 Δ=0 바이트** ③ 동일 부하 2R이 1R의 51%(감속). 시간이 아니라 **처음 밟는 코드 경로**가 키운다.
+- **계단의 정체**: 매일 **00:00 UTC(=09:00 KST) DailyMailScheduler**가 돌 때 +4.2 MiB 점프 후 평탄.
+  07-10·07-15 동일 패턴. 전형적 **지연 로딩**.
+- **통합 가설(metaspace = RSS creep 3MB/h의 정체) 기각** 🔴 — 메타스페이스 성장은 0.73 MiB/h이고
+  평상시 0이다. 3MB/h RSS creep을 설명 못 함. **QA 반론이 옳았다. 두 리스크는 별개.**
+- **잔여 여유 25.4 MiB(16%)** — 신규 대형 의존성 추가 시 작동점 재확인할 것.
+- **최대 교훈**: 이 사고의 답은 **배포 당시 이미 Grafana 그래프에 찍혀 있었다**(07-08 시점 135~137 MiB).
+  **상한을 자르기 전에 그래프의 작동점을 먼저 본다.** 5분이면 막을 수 있었다.
+
+### GC는 SerialGC다 — G1 아님 (2026-07-15) 🔴
+- prod 실측: `gc="Copy"`(Serial Young) + `gc="MarkSweepCompact"`(Serial Old).
+  512MB + shared-cpu-1x라 JVM 인체공학이 자동 선택(2코어 미만 & 1792MB 미만 → SerialGC).
+- **`G1PeriodicGCInterval` 검토 항목은 폐기** — 전제부터 틀렸다. G1 옵션은 이 앱에서 전부 무효.
+- #263의 2초짜리 `Pause Full`은 이상 현상이 아니라 **Serial Old 단일스레드 컴팩션의 정상 비용**.
+- Serial은 **Full GC 때만 클래스를 언로드**한다. 힙이 45M/179M라 Full GC가 거의 안 돌아
+  언로드가 사실상 정지 상태(11.8h에 379개). 메타스페이스가 상한을 쳐야 비로소 Full GC가 돈다.
+
+### prod JVM 지표 조회법 — jcmd 없는 JRE 이미지 우회 (2026-07-15)
+프로덕션 이미지는 **JRE 전용**이라 `jcmd`/`jmap`/`jstat`이 없다(`java jfr jrunscript jwebserver keytool rmiregistry`만).
+어태치 기반 진단 불가. **대신 액추에이터를 머신 내부에서 친다** — `SecurityConfig`가 IP 화이트리스트라 무인증 통과:
+```bash
+export FLY_API_TOKEN=$(cat ~/.fly/config.yml | grep access_token | awk '{print $2}')
+fly ssh console -a devquest-api -C "/bin/sh -c 'wget -qO- localhost:8080/actuator/prometheus | grep Metaspace'" < /dev/null
+```
+- 근거: `SecurityConfig.kt` → `/actuator/**` 는 `hasIpAddress('127.0.0.1') or ('::1') or ('fdaa::/16')`.
+  외부에선 403, 내부에선 200. `/health`·`/actuator/health`만 공개.
+- `fly ssh console`은 Windows에서 끝에 `Error: The handle is invalid`를 뱉지만 **출력은 정상** — 무시.
+  `< /dev/null` 붙이면 tty 문제 완화.
+- **주의**: `[metrics]` 섹션이 `be/fly.toml`에 없다 → **Fly는 앱 메트릭을 스크레이프하지 않는다.**
+  JVM 지표는 오직 Grafana Cloud(OTLP push)에만 있다.
+
+### Grafana Cloud 스택 접근법 (2026-07-15) — 좌표는 로컬에만 (이 레포는 PUBLIC)
+> ⚠️ **스택 slug/URL은 여기 적지 않는다.** 이 레포는 공개라 테넌트 식별자를 남기면 표적 피싱의 과녁이 된다.
+> **찾는 법**: Chrome에 grafana.com 세션이 살아 있다 → `fetch('/api/instances')` 하면
+> `slug`·`url`·`status`가 나온다. instance id는 `application-prod.yml`의 `grafana.otlp.instance-id`와 일치하는지로 검증.
+- **무료 플랜은 UI가 자동 슬립한다** — `/api/instances`가 `status: "paused"`, `pausedAt: null`로 보인다.
+  **수동 pause가 아니다.** 스택 URL로 접속하면 `Grafana is loading...` 후 ~1분 내 기동. Prometheus 수집은 계속됨.
+- 조회는 브라우저 세션으로 datasource proxy fetch (스크린샷 불필요):
+```js
+fetch('/api/datasources/proxy/uid/grafanacloud-prom/api/v1/query_range?query='
+  + encodeURIComponent('jvm_memory_used_bytes{area="nonheap",id="Metaspace",application="devquest-api"}')
+  + '&start=<epoch>&end=<epoch>&step=1800', {credentials:'include'}).then(r=>r.json())
+```
+- 스택 목록이 필요하면 grafana.com 로그인 세션에서 `fetch('/api/instances')`.
+- **단위 함정**: Grafana는 **MiB(2²⁰)** 로 표기, actuator raw는 바이트. `138,162,760 B = 131.8 MiB`.
+  MB(10⁶)와 섞어 비교하면 없는 문제를 만든다 (07-15에 실제로 오경보 냄).
+
+### flyctl이 config.yml 토큰을 자동 로드하지 못함 (2026-07-15) — 매 세션 30분 낭비 방지
+- 증상: `fly auth whoami` → `no access token available` (**로컬 판정, 네트워크 요청 없음**).
+  토큰은 `~/.fly/config.yml`에 멀쩡히 있고(665자) fly.io 콘솔의 토큰은 **`Expires: Never`**. 만료 아님.
+- 원인 불명 ⚪ (flyctl v0.4.54 / Windows). HOME 경로 이론은 반증됨 — Go는 Windows에서 `HOME`을 무시하고
+  `USERPROFILE`을 본다 → `HOME=...` 실험은 **무효**다. 재현 시 그 실험 반복하지 말 것.
+- **해결: env 주입** (이 프로젝트의 확립된 패턴, 과거 12회 사용. 리터럴 붙여넣기 0회):
+```bash
+export FLY_API_TOKEN=$(cat ~/.fly/config.yml | grep access_token | awk '{print $2}')
+```
+  값을 절대 출력하지 말 것 — 프리픽스만 찍어도 자격증명 실체화로 차단된다.
+
 ### Metaspace OOME 사고 + 힙 실측치 확보 (2026-07-14, #263→#265)
 - **힙 실측: 사용 42MB / 커밋 117MB / 상한 179MB.** prod GC 로그로 직접 확인 🔴.
   힙은 남아돈다 — 향후 메모리 튜닝 시 힙을 되돌리거나 늘리는 방향은 근거 없음. **더 줄일 여지가 있는 쪽.**
-- `MaxMetaspaceSize=128m`(#263)이 34시간 후 `OutOfMemoryError: Metaspace` 유발 → 프로덕션 다운.
+- `MaxMetaspaceSize=128m`(#263)이 `OutOfMemoryError: Metaspace` 유발 → 프로덕션 다운.
   증상: `Pause Full (Metadata GC Threshold)` / `(Metadata GC Clear Soft References)` 2초짜리가
   **42M->42M로 아무것도 회수 못 하며 무한 교대 반복** = 메타스페이스 고갈 데스 스파이럴. → #265로 160m 복구.
+  ⚠️ **"34시간 후"는 오기** — 07-15 Grafana 실측 결과 실제 붕괴는 **~20h**, 34h는 발견·수정 시각.
+  ⚠️ 원인도 정정: "누수 의심"이 아니라 **128m < 작동점 134.6 MiB**. 위 07-15 항목이 최신·확정본.
 - **진단 교훈**: "Major GC가 계속 돈다" ≠ "힙 부족". **GC 트리거 괄호를 먼저 읽어라** —
   `(Allocation Failure)`면 힙, `(Metadata GC *)`면 메타스페이스. 화살표 좌우가 안 줄면(42M->42M) 힙 문제 아님.
 - **관측 교훈**: `-Xlog:gc`가 없었으면 이 진단 불가능했다 (#263이 우연히 같이 넣음). **제거 금지.**
