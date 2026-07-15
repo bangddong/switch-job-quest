@@ -7,18 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | docs/metaspace-investigation-findings |
-| 열린 PR | 진행 중 — 메타스페이스 조사 결과 문서화 |
+| 브랜치 | chore/context-sync-267 |
+| 열린 PR | 진행 중 — CONTEXT 갱신 (#267 머지 반영) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #267 | **메타스페이스 조사 종결 — 누수 없음 확정.** Grafana 7일 range 실측: 작동점 **134.6 MiB**(160m 하 uptime 94.3h 평탄, 95포인트). #263의 128m은 작동점보다 6.6 MiB 낮아 붕괴 필연. 누수 부재 근거 3종(클래스 수 평탄~순감소 / 무부하 Δ=0 / 동일 부하 2R이 1R의 51%). 정정: **붕괴는 ~20h**(34h는 발견 시각), **GC는 SerialGC**(G1 아님), **통합 가설 기각**. 조치 불필요 — 160m 유지, 여유 25.4 MiB. 머지 완료 | 2026-07-15 |
 | #266 | AWS EKS 학습 놀이터 계획 문서화 (`infra/aws-eks/README.md`). 머지 완료 | 2026-07-15 |
 | #265 | **Metaspace 160m 복구 — 프로덕션 다운 핫픽스.** #263의 128m 축소가 `OutOfMemoryError: Metaspace` 유발. 힙은 무죄(42M/179M) — GC 트리거가 전부 `Metadata GC *` 계열이었음. 단일 값만 복구, 힙 35%·CodeCache·`-Xlog:gc` 유지. QA HIGH 0. **머지·BE CD 배포 성공(07-14)**. ✅ **누수 검증 완료(07-15) — 누수 없음, 160m 적정. 아래 "비자명적 결정" 참조** | 2026-07-14 |
-| #263 | JVM 메모리 다이어트 — 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규. **⚠️ Metaspace 128m 축소가 prod OOME 다운 유발(붕괴 ~20h, 발견·수정 34h) → #265로 160m 복구.** 힙 35%·CodeCache 96m·`-Xlog:gc`는 유효하여 유지 (힙 실측 42MB로 무죄 판명). 교훈: **실측 없이 상한을 자름** — 당시 Grafana에 작동점 135~137 MiB가 이미 찍혀 있었는데 128m로 잘랐다 | 2026-07-13 |
-| #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0. **머지 완료(2026-07-12), FE CD 배포 트리거됨** | 2026-07-11 |
-| #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
 
 ## 다음 작업
 

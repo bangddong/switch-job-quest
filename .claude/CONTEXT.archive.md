@@ -18,10 +18,13 @@
 - #239 대응: `MaxRAMPercentage 75→50`, Metaspace 160m, Xss512k — **재발함** (튜닝으로 불충분)
 - `spring.threads.virtual.enabled=true`라서 `server.tomcat.threads.max`는 죽은 설정
 
-## 완료 PR 이력 (2026-05-26 ~ 2026-07-01, 2026-07-07 이동)
+## 완료 PR 이력 (2026-05-26 ~ 2026-07-13, 2026-07-15 이동)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #263 | JVM 메모리 다이어트 — 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규. **⚠️ Metaspace 128m 축소가 prod OOME 다운 유발(붕괴 ~20h, 발견·수정 34h) → #265로 160m 복구.** 힙 35%·CodeCache 96m·`-Xlog:gc`는 유효하여 유지 (힙 실측 42MB로 무죄). 교훈: **실측 없이 상한을 자름** — 당시 Grafana에 작동점 135~137 MiB가 이미 찍혀 있었는데 128m로 잘랐다 (#267에서 원인 확정) | 2026-07-13 |
+| #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0 | 2026-07-11 |
+| #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0 | 2026-07-10 |
 | #240 | 질문 뱅크 wiki 시드 2026-07 — concept 12건 + V11 질문 21건 (뱅크 총 26건) | 2026-07-05 |
 | #239 | OOM 대응 JVM 메모리 예산 튜닝 (힙 50%, Metaspace 160m, Xss512k) — 이후 재발, #245로 이어짐 | 2026-07-04 |
 | #237 | 질문 뱅크 wiki 시드 반자동화 — /question-bank-seed 스킬 + SessionStart 훅 | 2026-07-03 |
