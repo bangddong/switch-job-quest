@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | chore/context-sync-267 |
-| 열린 PR | 진행 중 — CONTEXT 갱신 (#267 머지 반영) |
+| 브랜치 | chore/scrap-k8s-learning-plan |
+| 열린 PR | 진행 중 — K8s 학습 트랙·AWS EKS 계획 폐기 |
 
 ## 최근 완료 (최근 3건)
 
@@ -61,19 +61,10 @@
   - 원인: 512MB shared CPU + Neon DB cold start + Flyway 실행 겹침
   - 방향: `spring.main.lazy-initialization=true` / `min_machines_running=1`(비용) / Neon PgBouncer
 
-### AWS EKS 학습 놀이터 (2026-07-13 확정, 07-14 문서화)
-- **계획 문서: `infra/aws-eks/README.md`** — 착수 전 반드시 읽을 것
-- 한 줄: **EKS를 OpenTofu로 세웠다 부수는 K8s 학습 놀이터.** destroy-after-use + $200 크레딧.
-  **prod는 Fly($0) 그대로** (prod 이전은 검토 후 명시적 기각 — Fargate 상시 월 $35 = 크레딧 5.7개월 → 절벽)
-- 다음: Stage 0 (VPC+EKS+노드그룹+kubectl) → **즉시 destroy 1회 왕복**으로 teardown부터 체득
-- ⚠️ 착수 전 **AWS Budgets 알림 먼저 설정**. NAT Gateway 금지(+$32/mo). Ingress·PVC를 tofu destroy보다 먼저 삭제
-
-### K8s 학습 진행 상태
-- Stage 1 ✅ (Pod+Service e2e), Stage 2 ✅ (ConfigMap/Secret, PR #225) — 기록: `k8s/docs/stage*-learning.md`
-- **다음: Stage 3** — H2 → PostgreSQL StatefulSet. 이후 Stage 4 (Ingress)
-- WSL 클론: `~/switch-job-quest`, 이미지 `devquest-be:local` (`kind load docker-image`)
-- local 프로파일 필수 env 3개: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `JWT_SECRET` (Secret `devquest-secrets`)
-- 헬스 엔드포인트: `/health` (actuator 아님). 참고: `k8s/docs/env-requirements.md`
+### K8s / AWS 학습 — 전면 폐기 후 재시작 (2026-07-16)
+- 기존 kind 로컬 트랙(Stage 1~3, `k8s/`)과 AWS EKS 놀이터 계획(`infra/aws-eks/README.md`) **전부 폐기**.
+  파일 삭제 완료 — 복구 필요 시 git 히스토리(#225, #266 시점) 참조.
+- 새 계획은 백지에서 수립 예정 (미정)
 
 ## 알아둬야 할 비자명적 결정
 
