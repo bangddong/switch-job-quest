@@ -118,9 +118,10 @@ fly ssh console -a devquest-api -C "/bin/sh -c 'wget -qO- localhost:8080/actuato
 - **주의**: `[metrics]` 섹션이 `be/fly.toml`에 없다 → **Fly는 앱 메트릭을 스크레이프하지 않는다.**
   JVM 지표는 오직 Grafana Cloud(OTLP push)에만 있다.
 
-### Grafana Cloud 스택 좌표 (2026-07-15) — 레포 어디에도 없어서 매번 헤맴
-- **스택 URL: `https://spryspinach2629.grafana.net`** (slug `spryspinach2629`, instance id **1680166**,
-  cluster `prod-ap-northeast-0`, plan **free**). id는 `application-prod.yml`의 `grafana.otlp.instance-id`와 일치.
+### Grafana Cloud 스택 접근법 (2026-07-15) — 좌표는 로컬에만 (이 레포는 PUBLIC)
+> ⚠️ **스택 slug/URL은 여기 적지 않는다.** 이 레포는 공개라 테넌트 식별자를 남기면 표적 피싱의 과녁이 된다.
+> **찾는 법**: Chrome에 grafana.com 세션이 살아 있다 → `fetch('/api/instances')` 하면
+> `slug`·`url`·`status`가 나온다. instance id는 `application-prod.yml`의 `grafana.otlp.instance-id`와 일치하는지로 검증.
 - **무료 플랜은 UI가 자동 슬립한다** — `/api/instances`가 `status: "paused"`, `pausedAt: null`로 보인다.
   **수동 pause가 아니다.** 스택 URL로 접속하면 `Grafana is loading...` 후 ~1분 내 기동. Prometheus 수집은 계속됨.
 - 조회는 브라우저 세션으로 datasource proxy fetch (스크린샷 불필요):
