@@ -7,13 +7,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | fix/metaspace-oome-restore |
-| 열린 PR | #265 — Metaspace 160m 복구 (프로덕션 다운 핫픽스, **머지 시 즉시 배포 필요**) |
+| 브랜치 | docs/aws-eks-learning-plan |
+| 열린 PR | 진행 중 — AWS EKS 학습 놀이터 계획 문서화 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #265 | **Metaspace 160m 복구 — 프로덕션 다운 핫픽스.** #263의 128m 축소가 34시간 후 `OutOfMemoryError: Metaspace` 유발. 힙은 무죄(42M/179M) — GC 트리거가 전부 `Metadata GC *` 계열이었음. 단일 값만 복구, 힙 35%·CodeCache·`-Xlog:gc` 유지. QA HIGH 0. **머지·BE CD 배포 성공(07-14)**. ⚠️ 메타스페이스 누수 검증 미완 | 2026-07-14 |
 | #263 | JVM 메모리 다이어트 — 힙 50%→35%(~179MB), Metaspace 160→128m, `ReservedCodeCacheSize=96m` 신규, `-Xlog:gc` 신규. **⚠️ Metaspace 128m 축소가 34시간 후 prod OOME 다운 유발 → #265로 160m 복구.** 힙 35%·CodeCache 96m·`-Xlog:gc`는 유효하여 유지 (힙 실측 42MB로 무죄 판명). 교훈: **실측 없이 상한을 자름** — 커밋 메시지에 "근사치, 배포 후 실측 검증 필요"라 본인이 써놓고 그대로 배포 | 2026-07-13 |
 | #261 | 이력서 PDF 업로드 — pdfjs-dist 브라우저 파싱(dynamic import 지연 로드), 5MB 제한·스캔본 에러·50k자 자르기·덮어쓰기 confirm. **서버 파싱(PDFBox) 구현했다 폐기** — OOM 임계 상태라 서버 부하 0 방향 선택, BE 커밋은 로컬 `backup/be-pdf-parse` 보존. QA 2회, HIGH/MEDIUM 0. **머지 완료(2026-07-12), FE CD 배포 트리거됨** | 2026-07-11 |
 | #259 | FE tech-debt LOW 3건 — onDelete/onStatusChange 에러 패턴 통일(Promise<void> 전환, swallow 제거), formatSavedAt invalid date 방어, 주석 보완. QA HIGH/MEDIUM 0. 머지·FE CD 배포 트리거됨 | 2026-07-10 |
@@ -70,6 +71,13 @@
 - [ ] **Spring 시작 시간 최적화** — 현재 cold start 시 2~3분 소요, 사용자 503 경험
   - 원인: 512MB shared CPU + Neon DB cold start + Flyway 실행 겹침
   - 방향: `spring.main.lazy-initialization=true` / `min_machines_running=1`(비용) / Neon PgBouncer
+
+### AWS EKS 학습 놀이터 (2026-07-13 확정, 07-14 문서화)
+- **계획 문서: `infra/aws-eks/README.md`** — 착수 전 반드시 읽을 것
+- 한 줄: **EKS를 OpenTofu로 세웠다 부수는 K8s 학습 놀이터.** destroy-after-use + $200 크레딧.
+  **prod는 Fly($0) 그대로** (prod 이전은 검토 후 명시적 기각 — Fargate 상시 월 $35 = 크레딧 5.7개월 → 절벽)
+- 다음: Stage 0 (VPC+EKS+노드그룹+kubectl) → **즉시 destroy 1회 왕복**으로 teardown부터 체득
+- ⚠️ 착수 전 **AWS Budgets 알림 먼저 설정**. NAT Gateway 금지(+$32/mo). Ingress·PVC를 tofu destroy보다 먼저 삭제
 
 ### K8s 학습 진행 상태
 - Stage 1 ✅ (Pod+Service e2e), Stage 2 ✅ (ConfigMap/Secret, PR #225) — 기록: `k8s/docs/stage*-learning.md`
