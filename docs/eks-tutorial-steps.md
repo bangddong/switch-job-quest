@@ -21,13 +21,15 @@
 | 파일명 | 필요한 화면 | 완료 |
 |--------|------------|:----:|
 | step-00-credits.png | ⚠️ Billing → Credits: Total remaining **$200.00 / 사용 $0.00** + Active credits 6건 목록 ($100 Free Tier + $20×5 Explore AWS). 크레딧 소비 시작(Stage 0 apply) 후엔 재현 불가 | ☐ |
+| step-00-budget-amount.png | Set your budget — name·Monthly/Recurring·Fixed·$200 | ☑ |
+| step-00-budget-scope.png | Budget scope — All AWS services / Unblended costs | ☑ |
 | step-00-budget-alerts.png | 예산 알림 설정 화면 — Threshold **Absolute value** 10/50/150, Trigger **Actual**, Email recipients (자리표시 `your_email@example.com`로 캡처 권장) | ☐ |
 | step-00-budgets.png | Budgets 목록에 `eks-credit-guard` + 임계값 알림 표시 | ☐ |
 | step-00-anomaly.png | Cost Anomaly Detection 모니터 생성 완료 화면 | ☐ |
 
-> **이미지 확보 주의**: remote 세션에서는 채팅에 붙인 이미지·파일이 실행 디스크에 도달하지 않고
-> 클립보드도 공유되지 않는다(확인됨). 이미지는 base64 텍스트로 전달하거나 local 세션/클론에서
-> 저장·커밋한다. 텍스트 절차가 본체이므로 이미지는 후속으로 미뤄도 무방.
+> **remote 세션 이미지 전송법** (확정): 채팅 인라인 이미지·파일은 실행 디스크에 안 닿고 클립보드도
+> 격리됨. → **캡처 → GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된 URL을 채팅에 전달 → `gh` 토큰으로
+> 다운로드**. (익명 접근은 404, `Authorization: token $(gh auth token)` 헤더 필요.)
 
 ## 사전 조건 (전체 공통)
 
@@ -57,8 +59,12 @@ Billing and Cost Management 콘솔 → 좌측 **Budgets** → **Create budget**
    - Details → Budget name: `eks-credit-guard`
    - Set budget amount → Period **Monthly** / Budget renewal type **Recurring budget** /
      Budgeting method **Fixed** / Enter your budgeted amount **`200`** (= 크레딧 총액)
+
+     ![Set your budget](images/eks-tutorial/step-00-budget-amount.png)
    - Budget scope → **All AWS services (Recommended)** / Aggregate costs by **Unblended costs**
      - ⚠️ **크레딧 제외는 신규 계정에서 지금 불가** — 아래 "함정 ①" 참조. 24h 뒤 편집으로 추가.
+
+     ![Budget scope](images/eks-tutorial/step-00-budget-scope.png)
    - Next
 3. **Configure alerts** → **Add alert threshold** 3개 (전부 아래처럼):
 
