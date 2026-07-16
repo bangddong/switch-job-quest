@@ -65,6 +65,14 @@
 - **계획 문서: `infra/aws-eks/README.md`** — 착수 전 반드시 읽을 것 (비용 분석·기각안 포함)
 - **작업 일지: `docs/eks-migration-log.md` 실시간 유지 의무** — 규칙은 루트 `CLAUDE.md`
   "EKS 작업 일지 규칙" 참조. 블로그 원고 소스. 서브에이전트 위임 시 규칙 전파 필수
+- **정답 경로 튜토리얼: `docs/eks-tutorial-steps.md`** — 성공 확인된 절차만. 최상단 캡처 체크리스트로
+  이미지 추적. 진행 상태: Step 0(비용 가드레일) 진행 중 — 예산 `eks-credit-guard` 생성 완료,
+  Cost Anomaly Detection·크레딧 제외 필터 남음(`.claude/TASKS.md` TASK-4/5)
+- **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에
+  **안 닿고** 클립보드도 격리됨. → 사용자가 **캡처를 GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된
+  `user-attachments` URL을 채팅에 전달** → 에이전트가 받아서 `docs/images/eks-tutorial/`에 저장.
+  익명 접근은 404라 **`gh` 토큰 필요**: `curl -sSL -H "Authorization: token $(gh auth token)" -o <경로> <url>`.
+  (PS5.1 `Invoke-WebRequest`는 실패 — curl 쓸 것.)
 - 한 줄: **EKS를 OpenTofu로 세웠다 부수는 K8s 학습 놀이터.** destroy-after-use + $200 크레딧.
   **prod는 Fly($0) 그대로** (prod 이전은 검토 후 명시적 기각 — Fargate 상시 월 $35 = 크레딧 5.7개월 → 절벽)
 - 다음: Stage 0 (VPC+EKS+노드그룹+kubectl) → **즉시 destroy 1회 왕복**으로 teardown부터 체득
