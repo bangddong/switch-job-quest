@@ -1,24 +1,19 @@
 # 미완료 작업
 
-### TASK-5: 예산에 크레딧 제외 필터 추가 — 계정 생성 +24h 이후 (2026-07-16 등록)
+> **IaC-first 전환(07-16)으로 기존 콘솔 작업 TASK-4/5 폐기.** 크레딧 제외 필터·이상탐지는 이제
+> 콘솔이 아니라 `0-bootstrap`의 코드(`aws_budgets_budget cost_types` / `aws_ce_anomaly_monitor`)로 처리.
+> 콘솔 예산은 활성 가드레일로 유지하다 0-bootstrap apply 후 import/재생성으로 승격.
 
-신규 계정이라 Cost Explorer 데이터 미수집으로 charge type 필터를 지금 못 걸었음(일지 07-16 `[막힘]`).
-데이터 수집(계정 생성 ~24h, **2026-07-17 이후**) 후 예산 편집으로 추가:
+### TASK-4: 0-bootstrap 착수 준비 — AWS 자격증명 (사용자, 2026-07-16)
 
-1. Billing → Budgets → `eks-credit-guard` → **Edit**
-2. Budget scope → **Filter specific AWS cost dimensions**
-3. Dimension **Charge type** / 연산자 **Excludes** / Values에서 **Credit, Refund** 선택 → Apply filter
-4. Save. → 완료 후 Claude에 알리면 일지 `[해결]` 기록 + 이 항목 제거
-   - 목적: 크레딧이 청구액을 $0으로 가려 알림이 늦는 것 방지 (실사용 비용 기준 경보)
+IaC-first의 최초 로컬 `tofu apply`(S3 backend 버킷·예산 생성)에는 AWS 자격증명이 필요.
+Claude는 AWS 콘솔·자격증명 설정을 대신 못 하므로 사용자가 준비:
 
-### TASK-4: Cost Anomaly Detection 모니터 생성 — Stage 0 착수 전 (2026-07-16)
-
-예산(`eks-credit-guard`)은 생성 완료. **이상 탐지 모니터가 남음.**
-
-1. AWS 콘솔 → Billing and Cost Management → 좌측 **Cost Anomaly Detection** → Create monitor
-2. Monitor type **AWS services**(전체), 이름 예 `all-services`
-3. Alert subscription: **Daily summary**, 임계값 예 **$5**, 수신 이메일 등록 → Create
-4. 완료 후 Claude에 알리기 → 일지·튜토리얼 0-2 기록 + 이 항목 제거
+1. 부트스트랩용 자격 마련 — 택1:
+   - **AWS IAM Identity Center(SSO)** 로 관리자 권한 → `aws configure sso` (권장, 키 없음)
+   - 또는 관리자 IAM 사용자 **액세스키** → `aws configure`
+   - ⚠️ 액세스키는 로컬에만, **git 절대 금지**. 부트스트랩 후 GitHub OIDC로 전환하고 키 폐기.
+2. `aws sts get-caller-identity` 로 계정 확인되면 Claude에 알리기 → `0-bootstrap` 코드 작성 착수
 
 ## 완료된 항목
 

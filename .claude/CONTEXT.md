@@ -66,8 +66,15 @@
 - **작업 일지: `docs/eks-migration-log.md` 실시간 유지 의무** — 규칙은 루트 `CLAUDE.md`
   "EKS 작업 일지 규칙" 참조. 블로그 원고 소스. 서브에이전트 위임 시 규칙 전파 필수
 - **정답 경로 튜토리얼: `docs/eks-tutorial-steps.md`** — 성공 확인된 절차만. 최상단 캡처 체크리스트로
-  이미지 추적. 진행 상태: Step 0(비용 가드레일) 진행 중 — 예산 `eks-credit-guard` 생성 완료,
-  Cost Anomaly Detection·크레딧 제외 필터 남음(`.claude/TASKS.md` TASK-4/5)
+  이미지 추적.
+- **🎯 방향 확정 (07-16): IaC-first — "인프라 전부를 코드로, 콘솔 클릭 0".** 레이어별 state 분리
+  `0-bootstrap`(remote backend·OIDC·IAM·예산·이상탐지) / `1-network` / `2-cluster`(destroy 대상) /
+  `gitops`(ArgoCD). CI: plan-on-PR+tfsec, apply-on-merge(OIDC). 상세: `infra/aws-eks/README.md`.
+  - 진행: AWS 신규계정 + **콘솔 예산(수동 부트스트랩 프롤로그) 완료**. 콘솔 예산은 유지하다
+    0-bootstrap `aws_budgets_budget` apply 후 import/재생성으로 승격 (삭제 안 함).
+  - 크레딧 제외·이상탐지는 콘솔 아닌 **0-bootstrap 코드로** (기존 콘솔 TASK 폐기).
+  - **다음 사용자 액션: AWS 자격증명 준비**(TASK-4) → 이후 `0-bootstrap` 코드 착수.
+  - IaC-first라 **캡처 필요량 급감** — 단계가 코드+CLI 텍스트. 잔여는 서사/증빙 소수.
 - **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에
   **안 닿고** 클립보드도 격리됨. → 사용자가 **캡처를 GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된
   `user-attachments` URL을 채팅에 전달** → 에이전트가 받아서 `docs/images/eks-tutorial/`에 저장.
@@ -75,8 +82,9 @@
   (PS5.1 `Invoke-WebRequest`는 실패 — curl 쓸 것.)
 - 한 줄: **EKS를 OpenTofu로 세웠다 부수는 K8s 학습 놀이터.** destroy-after-use + $200 크레딧.
   **prod는 Fly($0) 그대로** (prod 이전은 검토 후 명시적 기각 — Fargate 상시 월 $35 = 크레딧 5.7개월 → 절벽)
-- 다음: Stage 0 (VPC+EKS+노드그룹+kubectl) → **즉시 destroy 1회 왕복**으로 teardown부터 체득
-- ⚠️ 착수 전 **AWS Budgets 알림 먼저 설정**. NAT Gateway 금지(+$32/mo). Ingress·PVC를 tofu destroy보다 먼저 삭제
+- 착수 순서(IaC-first): 0-bootstrap(backend·OIDC·예산 코드) → CI(plan/apply) → 1-network →
+  2-cluster(+즉시 destroy 왕복으로 teardown 체득) → gitops → 재현 검증. 상세 README 참조.
+- ⚠️ NAT Gateway 금지(+$32/mo). Ingress·PVC를 tofu destroy보다 먼저 삭제. **tfstate git 커밋 금지**(public repo)
 - **kind 로컬 트랙(Stage 1~3, `k8s/`)은 07-16 폐기·삭제** (#269) — README의 "kind 트랙 합류" 언급은
   무시, EKS 단독 트랙으로 진행. 복구 필요 시 git 히스토리(#225 시점) 참조
 
