@@ -1,5 +1,13 @@
 # 미완료 작업
 
+### TASK-4: AWS Budgets 알림 설정 — Stage 0 착수 전 필수 (2026-07-16)
+
+신규 계정($200 크레딧) 생성 완료. **EKS Stage 0 `tofu apply` 전에 반드시 설정** (`infra/aws-eks/README.md` 비용 가드레일).
+
+1. AWS 콘솔 → Billing and Cost Management → **Budgets** → Create budget
+2. Cost budget 3개 생성: **$10 / $50 / $150** — 각각 Actual 80%·100% 알림, 수신 이메일 등록
+3. 같은 화면 좌측 **Cost Anomaly Detection** → 모니터 생성 (AWS services 전체, 일일 알림)
+4. 완료 후 Claude에 알려주기 → 일지 기록 + 이 항목 제거
 
 ## 완료된 항목
 
