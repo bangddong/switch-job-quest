@@ -4,16 +4,19 @@
 > 콘솔이 아니라 `0-bootstrap`의 코드(`aws_budgets_budget cost_types` / `aws_ce_anomaly_monitor`)로 처리.
 > 콘솔 예산은 활성 가드레일로 유지하다 0-bootstrap apply 후 import/재생성으로 승격.
 
-### TASK-4: 0-bootstrap 착수 준비 — AWS 자격증명 (사용자, 2026-07-16)
+### TASK-4: 0-bootstrap 착수 준비 — AWS 자격증명 (사용자, 2026-07-16, 진행 중)
 
-IaC-first의 최초 로컬 `tofu apply`(S3 backend 버킷·예산 생성)에는 AWS 자격증명이 필요.
-Claude는 AWS 콘솔·자격증명 설정을 대신 못 하므로 사용자가 준비:
+> ⚠️ **SSO(IAM Identity Center) 경로 폐기** — Organizations로 켜면 **$200 크레딧 즉시 소멸**(일지 `[막힘]`).
+> → **IAM 사용자 액세스키**로 확정 (org 안 만듦 = 크레딧 안전).
 
-1. 부트스트랩용 자격 마련 — 택1:
-   - **AWS IAM Identity Center(SSO)** 로 관리자 권한 → `aws configure sso` (권장, 키 없음)
-   - 또는 관리자 IAM 사용자 **액세스키** → `aws configure`
-   - ⚠️ 액세스키는 로컬에만, **git 절대 금지**. 부트스트랩 후 GitHub OIDC로 전환하고 키 폐기.
-2. `aws sts get-caller-identity` 로 계정 확인되면 Claude에 알리기 → `0-bootstrap` 코드 작성 착수
+최초 로컬 `tofu apply`(S3 backend·예산)에 자격증명 필요. Claude는 시크릿 키를 못 다루므로 사용자가 직접:
+
+1. 콘솔 → IAM → Users → **`bootstrap-admin`** 생성, **AdministratorAccess** attach
+2. Security credentials → **Create access key** (use case: CLI)
+3. **PC 터미널에서 직접** `aws configure` — key/secret 본인 입력, region **`ap-northeast-2`**, output `json`
+   - ⚠️ 키를 Claude에 붙여넣지 말 것. `~/.aws/`에만, **git 절대 금지**.
+4. "configure 했어" → Claude가 `aws sts get-caller-identity` 확인 → `0-bootstrap` 코드 착수
+   - 부트스트랩 후 GitHub OIDC로 전환하고 **이 액세스키 폐기**
 
 ## 완료된 항목
 
