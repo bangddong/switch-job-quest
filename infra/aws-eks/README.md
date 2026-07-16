@@ -188,6 +188,10 @@ tofu state list                         # ③ 비었는지 확인
 
 > ⚠️ 2025-07 이후 신규 AWS 계정은 **Free Plan** 구조 — 크레딧 소진 시 Paid Plan 업그레이드 안 하면
 > 리소스가 중단될 수 있다. 정확한 만료 동작은 **가입 시 직접 확인** 필요 (신정책이라 케이스별 상이 🟡).
+>
+> 🔴 **치명적 함정 (07-16 실측)**: **AWS Organizations를 만들면 Free Plan → Paid 전환되며 크레딧이
+> 즉시 소멸**한다. IAM **Identity Center(SSO)를 켜는 기본 경로가 org를 생성**하므로 **누르지 말 것**.
+> 자격증명은 **IAM 사용자 액세스키**로 (org 불필요). 경고 원문·상세: `docs/eks-migration-log.md`.
 
 ### 계정 관련 메모
 
