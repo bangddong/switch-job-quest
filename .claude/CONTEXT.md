@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | chore/context-sync-269 |
-| 열린 PR | 진행 중 — CONTEXT 갱신 (#269 머지 반영) |
+| 브랜치 | chore/eks-migration-log |
+| 열린 PR | 진행 중 — EKS 작업 일지 체계 도입 |
 
 ## 최근 완료 (최근 3건)
 
@@ -63,6 +63,8 @@
 
 ### AWS EKS 학습 놀이터 — 새 시작점 (07-13 확정, 07-16 kind 트랙 폐기로 단독 트랙化)
 - **계획 문서: `infra/aws-eks/README.md`** — 착수 전 반드시 읽을 것 (비용 분석·기각안 포함)
+- **작업 일지: `docs/eks-migration-log.md` 실시간 유지 의무** — 규칙은 루트 `CLAUDE.md`
+  "EKS 작업 일지 규칙" 참조. 블로그 원고 소스. 서브에이전트 위임 시 규칙 전파 필수
 - 한 줄: **EKS를 OpenTofu로 세웠다 부수는 K8s 학습 놀이터.** destroy-after-use + $200 크레딧.
   **prod는 Fly($0) 그대로** (prod 이전은 검토 후 명시적 기각 — Fargate 상시 월 $35 = 크레딧 5.7개월 → 절벽)
 - 다음: Stage 0 (VPC+EKS+노드그룹+kubectl) → **즉시 destroy 1회 왕복**으로 teardown부터 체득
