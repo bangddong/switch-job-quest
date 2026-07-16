@@ -181,6 +181,8 @@ tofu state list                         # ③ 비었는지 확인
 2. OpenTofu 설치, `infra/aws-eks/tofu/` 스캐폴딩
 3. **Stage 0** — VPC + EKS + 노드그룹 + `kubectl` 연결까지 `tofu apply` → **즉시 `destroy` 1회 왕복** (teardown 절차를 먼저 몸에 익힌다)
 4. 이후 Stage 1~4 순차
+5. **재현 검증 (완료 조건)** — 이관 완료 후 클러스터 전체 destroy → `docs/eks-tutorial-steps.md`만
+   보고 처음부터 재현. 막히면 문서 수정 후 재시도, 통과해야 완료 (블로그 공개 전 정확성 검증)
 
 ## 참조
 
