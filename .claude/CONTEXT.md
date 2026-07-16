@@ -7,16 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | chore/context-sync-267 |
-| 열린 PR | 진행 중 — CONTEXT 갱신 (#267 머지 반영) |
+| 브랜치 | chore/scrap-k8s-learning-plan |
+| 열린 PR | #269 — K8s 학습 트랙·AWS EKS 계획 폐기 (머지 대기) |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #269 | kind 로컬 K8s 학습 트랙(Stage 1~3, `k8s/`) 폐기 — AWS EKS 놀이터(`infra/aws-eks/README.md`)를 단독 새 시작점으로 확정 (README는 삭제했다 사용자 확인 후 복원). 머지 대기 | 2026-07-16 |
 | #267 | **메타스페이스 조사 종결 — 누수 없음 확정.** Grafana 7일 range 실측: 작동점 **134.6 MiB**(160m 하 uptime 94.3h 평탄, 95포인트). #263의 128m은 작동점보다 6.6 MiB 낮아 붕괴 필연. 누수 부재 근거 3종(클래스 수 평탄~순감소 / 무부하 Δ=0 / 동일 부하 2R이 1R의 51%). 정정: **붕괴는 ~20h**(34h는 발견 시각), **GC는 SerialGC**(G1 아님), **통합 가설 기각**. 조치 불필요 — 160m 유지, 여유 25.4 MiB. 머지 완료 | 2026-07-15 |
 | #266 | AWS EKS 학습 놀이터 계획 문서화 (`infra/aws-eks/README.md`). 머지 완료 | 2026-07-15 |
-| #265 | **Metaspace 160m 복구 — 프로덕션 다운 핫픽스.** #263의 128m 축소가 `OutOfMemoryError: Metaspace` 유발. 힙은 무죄(42M/179M) — GC 트리거가 전부 `Metadata GC *` 계열이었음. 단일 값만 복구, 힙 35%·CodeCache·`-Xlog:gc` 유지. QA HIGH 0. **머지·BE CD 배포 성공(07-14)**. ✅ **누수 검증 완료(07-15) — 누수 없음, 160m 적정. 아래 "비자명적 결정" 참조** | 2026-07-14 |
 
 ## 다음 작업
 
@@ -61,19 +61,14 @@
   - 원인: 512MB shared CPU + Neon DB cold start + Flyway 실행 겹침
   - 방향: `spring.main.lazy-initialization=true` / `min_machines_running=1`(비용) / Neon PgBouncer
 
-### AWS EKS 학습 놀이터 (2026-07-13 확정, 07-14 문서화)
-- **계획 문서: `infra/aws-eks/README.md`** — 착수 전 반드시 읽을 것
+### AWS EKS 학습 놀이터 — 새 시작점 (07-13 확정, 07-16 kind 트랙 폐기로 단독 트랙化)
+- **계획 문서: `infra/aws-eks/README.md`** — 착수 전 반드시 읽을 것 (비용 분석·기각안 포함)
 - 한 줄: **EKS를 OpenTofu로 세웠다 부수는 K8s 학습 놀이터.** destroy-after-use + $200 크레딧.
   **prod는 Fly($0) 그대로** (prod 이전은 검토 후 명시적 기각 — Fargate 상시 월 $35 = 크레딧 5.7개월 → 절벽)
 - 다음: Stage 0 (VPC+EKS+노드그룹+kubectl) → **즉시 destroy 1회 왕복**으로 teardown부터 체득
 - ⚠️ 착수 전 **AWS Budgets 알림 먼저 설정**. NAT Gateway 금지(+$32/mo). Ingress·PVC를 tofu destroy보다 먼저 삭제
-
-### K8s 학습 진행 상태
-- Stage 1 ✅ (Pod+Service e2e), Stage 2 ✅ (ConfigMap/Secret, PR #225) — 기록: `k8s/docs/stage*-learning.md`
-- **다음: Stage 3** — H2 → PostgreSQL StatefulSet. 이후 Stage 4 (Ingress)
-- WSL 클론: `~/switch-job-quest`, 이미지 `devquest-be:local` (`kind load docker-image`)
-- local 프로파일 필수 env 3개: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `JWT_SECRET` (Secret `devquest-secrets`)
-- 헬스 엔드포인트: `/health` (actuator 아님). 참고: `k8s/docs/env-requirements.md`
+- **kind 로컬 트랙(Stage 1~3, `k8s/`)은 07-16 폐기·삭제** (#269) — README의 "kind 트랙 합류" 언급은
+  무시, EKS 단독 트랙으로 진행. 복구 필요 시 git 히스토리(#225 시점) 참조
 
 ## 알아둬야 할 비자명적 결정
 
