@@ -23,7 +23,7 @@
 | step-00-credits.png | ⚠️ Billing → Credits: Total remaining **$200.00 / 사용 $0.00** + Active credits 6건 목록 ($100 Free Tier + $20×5 Explore AWS). 크레딧 소비 시작(Stage 0 apply) 후엔 재현 불가 | ☐ |
 | step-00-budget-amount.png | Set your budget — name·Monthly/Recurring·Fixed·$200 | ☑ |
 | step-00-budget-scope.png | Budget scope — All AWS services / Unblended costs | ☑ |
-| step-00-budget-alerts.png | 예산 알림 설정 화면 — Threshold **Absolute value** 10/50/150, Trigger **Actual**, Email recipients (자리표시 `your_email@example.com`로 캡처 권장) | ☐ |
+| step-00-budget-alerts.png | 예산 알림 설정 화면 — Threshold **Absolute value** 10/50/150, Trigger **Actual**, Email recipients (자리표시 `your_email@example.com`로 캡처 권장) | ☑ |
 | step-00-budgets.png | Budgets 목록에 `eks-credit-guard` + 임계값 알림 표시 | ☐ |
 | step-00-anomaly.png | Cost Anomaly Detection 모니터 생성 완료 화면 | ☐ |
 
@@ -76,7 +76,8 @@ Billing and Cost Management 콘솔 → 좌측 **Budgets** → **Create budget**
 
    - ⚠️ **단위 반드시 `Absolute value`** — 기본값 `% of budgeted amount`이면 150이 **$300**(크레딧 $200 초과 → 영영 안 울림). "함정 ②" 참조.
    - 확인: Alert #1 Summary가 `When your actual cost is greater than $10.00 (5.00%)...`로 뜨면 정상.
-   <!-- 캡처 필요: step-00-budget-alerts.png — 위 알림 3개 중 하나. 이메일은 your_email@example.com 자리표시로 캡처 -->
+
+     ![예산 알림 설정](images/eks-tutorial/step-00-budget-alerts.png)
 4. **Attach actions** — Optional, 건너뛰기 → Next
 5. **Review** → **Create budget**
 
