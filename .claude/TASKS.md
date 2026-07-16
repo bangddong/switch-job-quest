@@ -1,13 +1,24 @@
 # 미완료 작업
 
-### TASK-4: AWS Budgets 알림 설정 — Stage 0 착수 전 필수 (2026-07-16)
+### TASK-5: 예산에 크레딧 제외 필터 추가 — 계정 생성 +24h 이후 (2026-07-16 등록)
 
-신규 계정($200 크레딧) 생성 완료. **EKS Stage 0 `tofu apply` 전에 반드시 설정** (`infra/aws-eks/README.md` 비용 가드레일).
+신규 계정이라 Cost Explorer 데이터 미수집으로 charge type 필터를 지금 못 걸었음(일지 07-16 `[막힘]`).
+데이터 수집(계정 생성 ~24h, **2026-07-17 이후**) 후 예산 편집으로 추가:
 
-1. AWS 콘솔 → Billing and Cost Management → **Budgets** → Create budget
-2. Cost budget 3개 생성: **$10 / $50 / $150** — 각각 Actual 80%·100% 알림, 수신 이메일 등록
-3. 같은 화면 좌측 **Cost Anomaly Detection** → 모니터 생성 (AWS services 전체, 일일 알림)
-4. 완료 후 Claude에 알려주기 → 일지 기록 + 이 항목 제거
+1. Billing → Budgets → `eks-credit-guard` → **Edit**
+2. Budget scope → **Filter specific AWS cost dimensions**
+3. Dimension **Charge type** / 연산자 **Excludes** / Values에서 **Credit, Refund** 선택 → Apply filter
+4. Save. → 완료 후 Claude에 알리면 일지 `[해결]` 기록 + 이 항목 제거
+   - 목적: 크레딧이 청구액을 $0으로 가려 알림이 늦는 것 방지 (실사용 비용 기준 경보)
+
+### TASK-4: Cost Anomaly Detection 모니터 생성 — Stage 0 착수 전 (2026-07-16)
+
+예산(`eks-credit-guard`)은 생성 완료. **이상 탐지 모니터가 남음.**
+
+1. AWS 콘솔 → Billing and Cost Management → 좌측 **Cost Anomaly Detection** → Create monitor
+2. Monitor type **AWS services**(전체), 이름 예 `all-services`
+3. Alert subscription: **Daily summary**, 임계값 예 **$5**, 수신 이메일 등록 → Create
+4. 완료 후 Claude에 알리기 → 일지·튜토리얼 0-2 기록 + 이 항목 제거
 
 ## 완료된 항목
 
