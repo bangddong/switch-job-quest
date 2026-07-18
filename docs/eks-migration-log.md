@@ -186,5 +186,14 @@
   `AdministratorAccess` 첨부, OIDC provider 등록 확인. `tfsec` No problems(admin 첨부는
   `#tfsec:ignore:aws-iam-no-policy-wildcards` 근거 주석). `tofu plan` No changes.
 - `[비용]` IAM·OIDC 리소스 $0.
-- `[메모]` **다음: apply-plan CI 파이프라인** — `.github/workflows`에 plan-on-PR(역할 assume,
-  `tofu plan` 코멘트) + apply-on-merge(main, `tofu apply`). 이 역할 ARN 사용. 이후 1-network.
+- `[해결]` **apply-plan CI 파이프라인 신설 — `.github/workflows/infra-deploy.yml`.** plan-on-PR(step
+  summary 출력) + apply-on-merge(main). OIDC로 `aws-actions/configure-aws-credentials@v4`가 역할 assume,
+  `opentofu/setup-opentofu`로 tofu 설치. `concurrency.cancel-in-progress=false`(apply 중 취소 방지),
+  `permissions.id-token: write`(OIDC 필수).
+- `[결정]` **CI 관리 대상은 우선 0-bootstrap** (matrix `layer: [0-bootstrap]`) — 존재하는 유일 레이어라
+  OIDC end-to-end 검증 가능. 상위 레이어는 matrix에 추가만. self-관리 리스크는 PR리뷰+스캐너로 완화,
+  최악 시 로컬 admin 키(bootstrap-admin)로 복구.
+- `[결정]` **역할 ARN·예산 이메일은 GitHub Secret으로** (커밋 파일에 account ID·이메일 못 넣음, public repo).
+  `gh secret set AWS_ROLE_ARN`(tofu output에서), `BUDGET_EMAIL`. 워크플로는 `${{ secrets.* }}`로 주입.
+- `[메모]` **다음: PR #283에서 infra-deploy plan-on-PR이 실제로 도는지 확인 → 0-bootstrap 완성 →
+  PR ready·머지.** 이후 1-network(VPC) 착수.

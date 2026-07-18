@@ -1,0 +1,63 @@
+name: Infra Deploy
+
+# OpenTofu plan-on-PR / apply-on-merge. 장기 액세스키 없이 GitHub OIDC로 역할 assume.
+#   - PR 열림      → tofu plan (변경 미리보기, step summary에 출력)
+#   - main 머지    → tofu apply (실제 반영)
+# 역할 ARN·민감 변수는 커밋 파일에 두지 않고 GitHub Secret으로 주입한다.
+
+on:
+  pull_request:
+    paths: ["infra/aws-eks/**"]
+  push:
+    branches: [main]
+    paths: ["infra/aws-eks/**"]
+
+concurrency:
+  group: infra-deploy-${{ github.ref }}
+  cancel-in-progress: false # apply 도중 취소는 state 꼬임 위험 → 끄기
+
+permissions:
+  id-token: write # OIDC 토큰 발급(역할 assume)에 필수
+  contents: read
+
+jobs:
+  tofu:
+    name: Infra Deploy / ${{ matrix.layer }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        layer: [0-bootstrap] # 상위 레이어(1-network·2-cluster·gitops)는 생기면 추가
+    defaults:
+      run:
+        working-directory: infra/aws-eks/${{ matrix.layer }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.8.5
+
+      # OIDC로 임시 자격증명 획득 — 신뢰정책이 이 레포 main/PR로 제한
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: tofu init
+        run: tofu init -input=false
+
+      - name: tofu plan (PR)
+        if: github.event_name == 'pull_request'
+        env:
+          TF_VAR_budget_notification_email: ${{ secrets.BUDGET_EMAIL }}
+        run: |
+          echo '### tofu plan — `${{ matrix.layer }}`' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tofu plan -input=false -no-color 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: tofu apply (merge to main)
+        if: github.event_name == 'push'
+        env:
+          TF_VAR_budget_notification_email: ${{ secrets.BUDGET_EMAIL }}
+        run: tofu apply -auto-approve -input=false -no-color
