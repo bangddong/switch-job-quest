@@ -34,3 +34,10 @@ variable "budget_alert_thresholds_usd" {
   description = "절대값(USD) 알림 임계값 — 크레딧 제외 실사용 기준"
   default     = [10, 50, 150]
 }
+
+# 공개 정보(레포 URL) — default 허용. OIDC 신뢰정책의 sub 조건에 쓰인다.
+variable "github_repo" {
+  type        = string
+  description = "GitHub Actions가 이 역할을 assume할 수 있는 레포 (owner/repo)"
+  default     = "bangddong/switch-job-quest"
+}

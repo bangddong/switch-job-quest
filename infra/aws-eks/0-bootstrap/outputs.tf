@@ -13,3 +13,8 @@ output "account_id" {
   value       = data.aws_caller_identity.current.account_id
   sensitive   = true
 }
+
+output "github_actions_role_arn" {
+  description = "CI 워크플로가 assume할 역할 ARN (apply-plan 파이프라인에서 사용)"
+  value       = aws_iam_role.github_actions.arn
+}

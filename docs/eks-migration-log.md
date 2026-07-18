@@ -174,4 +174,17 @@
   놓친 걸 잡은 실제 사례** — "매 작업 보안 점검"을 손이 아니라 CI로 옮긴 결정의 정당성.
 - `[메모]` application-local.yml의 실제 flyio-access-token(엔트로피 5.87)은 **gitignore 확인** — 커밋 안 됨,
   CI 스캔 대상 아님. (gitleaks dir 모드가 디스크 전체를 훑어 48건 노이즈를 냈으나 전부 gitignore된 로컬 파일)
-- `[메모]` **다음: GitHub OIDC + IAM 베이스라인 → apply-on-merge CI(plan-on-PR 포함).** 이후 1-network.
+- `[해결]` **GitHub OIDC + IAM 역할 apply 완료 — 장기키 없는 CI 인증 확립.** `iam-github-oidc.tf` 신규,
+  3 리소스: `aws_iam_openid_connect_provider.github`(발급자 token.actions.githubusercontent.com,
+  aud=sts.amazonaws.com, 지문은 `tls_certificate` data로 동적 조회 → `tls` provider v4.3.0 추가) +
+  `aws_iam_role.github_actions` + `AdministratorAccess` 첨부. 출력 `github_actions_role_arn` 추가.
+- `[결정]` **역할 권한 = AdministratorAccess + 신뢰정책 강잠금** (사용자 선택). 근거: 학습 전용계정
+  (prod는 Fly 별도)이라 폭발 반경이 이 계정에 갇히고, EKS apply가 권한부족으로 막힐 일 없음. 보안 경계는
+  "무엇을 할 수 있나"가 아니라 **"누가 assume 가능한가"**로 이동 — 신뢰정책 `sub`를
+  `repo:bangddong/switch-job-quest:ref:refs/heads/main` + `:pull_request`로 한정. prod였다면 최소권한 스코프.
+- `[해결]` CLI 검증: `get-role`의 AssumeRolePolicyDocument에서 sub 2건(main/PR)·aud(sts) 정확,
+  `AdministratorAccess` 첨부, OIDC provider 등록 확인. `tfsec` No problems(admin 첨부는
+  `#tfsec:ignore:aws-iam-no-policy-wildcards` 근거 주석). `tofu plan` No changes.
+- `[비용]` IAM·OIDC 리소스 $0.
+- `[메모]` **다음: apply-plan CI 파이프라인** — `.github/workflows`에 plan-on-PR(역할 assume,
+  `tofu plan` 코멘트) + apply-on-merge(main, `tofu apply`). 이 역할 ARN 사용. 이후 1-network.
