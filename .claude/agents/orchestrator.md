@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-model: sonnet
+model: opus
 tools: "*"
 description: Feature Dev 오케스트레이터. 사용자 요청을 분석해 필요한 에이전트만 선택적으로 스폰하며 BE·FE·Design·QA를 조율한다. `claude --agent orchestrator`로 실행.
 hooks:
