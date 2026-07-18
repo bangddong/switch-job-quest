@@ -25,8 +25,9 @@ jobs:
     name: Infra Deploy / ${{ matrix.layer }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false # 레이어는 독립적 — 하나 실패해도 나머지는 진행
       matrix:
-        layer: [0-bootstrap] # 상위 레이어(1-network·2-cluster·gitops)는 생기면 추가
+        layer: [0-bootstrap, 1-network] # 2-cluster·gitops는 생기면 추가
     defaults:
       run:
         working-directory: infra/aws-eks/${{ matrix.layer }}
