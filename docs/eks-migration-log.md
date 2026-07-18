@@ -197,3 +197,16 @@
   `gh secret set AWS_ROLE_ARN`(tofu output에서), `BUDGET_EMAIL`. 워크플로는 `${{ secrets.* }}`로 주입.
 - `[메모]` **다음: PR #283에서 infra-deploy plan-on-PR이 실제로 도는지 확인 → 0-bootstrap 완성 →
   PR ready·머지.** 이후 1-network(VPC) 착수.
+- `[해결]` **0-bootstrap 종료 (#283 머지, #284 CONTEXT 정리, #282 orchestrator opus).** apply-on-merge가
+  main에서 no-op(`0 added`) 확인 — 양방향 OIDC CI/CD 루프 완성. 열린 PR 0, 비용 $0.
+
+- `[결정]` **1-network 착수 — 퍼블릭 서브넷 전용(NAT 회피).** README line 183 방침 그대로: NAT Gateway
+  $32/mo 폭탄 회피 위해 노드를 퍼블릭 서브넷에 두고 `map_public_ip_on_launch=true`로 공인IP → IGW 경유
+  인터넷(무료). prod면 private+NAT/endpoint지만 학습장 트레이드오프. 구성: VPC 10.0.0.0/16(DNS
+  hostnames/support ON=EKS 필수) + IGW + 퍼블릭 서브넷 ×2(ap-northeast-2a/2c, /20) + 라우트(0.0.0.0/0→IGW).
+  서브넷에 EKS discovery 태그(`kubernetes.io/role/elb=1`, `kubernetes.io/cluster/devquest-eks=shared`).
+- `[해결]` tfsec: 공인IP(`aws-ec2-no-public-ip-subnet`)·flow logs(`require-vpc-flow-logs`) 2건은
+  의도적 → `#tfsec:ignore` 근거 주석. `No problems detected`. `tofu plan` = 7 to add. 비용 $0.
+- `[결정]` **apply는 CI 도그푸딩** — `infra-deploy.yml` matrix에 `1-network` 추가(`fail-fast:false`).
+  PR→CI plan / merge→CI apply로 VPC 생성. 방금 만든 파이프라인을 실제 사용.
+- `[메모]` state는 `1-network/terraform.tfstate` 키(0-bootstrap과 한 버킷). 이 레이어는 secret/tfvars 없음.
