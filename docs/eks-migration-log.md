@@ -160,4 +160,18 @@
   → `.gitleaksignore`에 지문 2개 + 근거 기록 후 재스캔 `no leaks found`. **히스토리에 실제 유출 없음.**
 - `[메모]` 잔여 저위험: `monitoring/config.alloy` 히스토리에 Grafana 인스턴스 ID(username) 평문 존재 —
   credential 아닌 식별자라 gitleaks 미검출. 히스토리 재작성(filter-repo)은 과투자로 보류.
+- `[해결]` **draft PR #283 개설 — 보안 CI 실증.** feat/ 브랜치라 `assert-qa-run.sh` 훅이 PR 생성 차단
+  → qa-reviewer 실행(HIGH 0, MEDIUM 1=paths filter 효율성, LOW 2)해 마커 생성 후 개설.
+- `[막힘]` 🔴 **CI gitleaks FAIL인데 로컬은 통과 — 거짓 그린.** CI가 `.gitleaksignore:4`를 generic-api-key로
+  검출. 원인: **오탐을 문서화하며 유발 문자열(scrape 대상 경로)을 주석에 그대로 인용** → 자기검출(자책골).
+  로컬이 통과한 건 `gitleaks git`이 **커밋 히스토리만** 스캔하는데 그 시점 `.gitleaksignore`가 미커밋
+  워킹트리라 파일 자체가 스캔 대상이 아니었기 때문. 즉 **로컬 검증 방식이 CI와 불일치**했다.
+- `[해결]` 3단계로 수습: ① 주석에서 문자열 제거(16117ec) ② 그래도 과거 커밋 blob(64a0bd8)에 남아
+  검출 → 그 지문 `64a0bd8:.gitleaksignore:generic-api-key:4` 등록(cc99728) ③ **커밋 후** `gitleaks git`
+  502커밋 `no leaks found` 재확인 → push → CI **gitleaks PASS + tfsec PASS**.
+- `[메모]` **교훈**: git-모드 시크릿 스캐너는 **커밋 후** 검증해야 CI와 일치한다(워킹트리 파일은 안 봄).
+  그리고 오탐을 문서화할 땐 유발 문자열을 그대로 인용하지 말 것. **기계 강제(CI)가 사람 손(로컬)이
+  놓친 걸 잡은 실제 사례** — "매 작업 보안 점검"을 손이 아니라 CI로 옮긴 결정의 정당성.
+- `[메모]` application-local.yml의 실제 flyio-access-token(엔트로피 5.87)은 **gitignore 확인** — 커밋 안 됨,
+  CI 스캔 대상 아님. (gitleaks dir 모드가 디스크 전체를 훑어 48건 노이즈를 냈으나 전부 gitignore된 로컬 파일)
 - `[메모]` **다음: GitHub OIDC + IAM 베이스라인 → apply-on-merge CI(plan-on-PR 포함).** 이후 1-network.
