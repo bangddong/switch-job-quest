@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | (없음 — main) |
-| 열린 PR | 없음 |
+| 브랜치 | feat/eks-0-bootstrap |
+| 열린 PR | #283 (draft) — EKS 0-bootstrap: remote backend·예산·보안 CI. OIDC·IAM 후속 |
 
 ## 최근 완료 (최근 3건)
 

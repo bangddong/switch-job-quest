@@ -1,0 +1,13 @@
+# gitleaks 오탐 허용 목록 — 각 항목은 "확인 후 오탐 확정"된 것만.
+#
+# monitoring/config.alloy:2 (generic-api-key, entropy 3.72)
+#   → 해당 라인은 Prometheus 스크랩 대상 경로를 적은 주석일 뿐(실제 키 아님).
+#     실제 Grafana 키는 같은 파일에서 env() 참조로 주입되며(하드코딩 아님) 파일은 삭제됨(#172).
+#     ※ 오탐 유발 문자열을 여기 그대로 인용하면 이 파일에서 재검출되므로 인용하지 않는다.
+387a3a7058c9d49330197a7d28e8cc61d1283a23:monitoring/config.alloy:generic-api-key:2
+0dc6fb6345bfe18f0d4b6453792c8264132f683e:monitoring/config.alloy:generic-api-key:2
+
+# 위 오탐을 문서화하며 커밋 64a0bd8의 이 파일 주석에 유발 문자열을 그대로 인용했다가
+# 재검출된 것 — 현재 커밋에선 문자열을 제거(16117ec)했으나 과거 커밋 blob은 히스토리에 남아
+# gitleaks git이 계속 잡으므로 그 1회 발생만 억제. (대화형 rebase 미지원 환경이라 히스토리 재작성 대신 지문 등록)
+64a0bd82241a79b4d8059b0f07dc06e506ee0c98:.gitleaksignore:generic-api-key:4

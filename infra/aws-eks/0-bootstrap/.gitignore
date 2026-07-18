@@ -1,0 +1,18 @@
+# OpenTofu / Terraform — ⚠️ public repo: state·tfvars 절대 커밋 금지
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.tfstate.lock.info
+
+# 변수 파일에 이메일·계정ID 등 민감정보 → 커밋 금지 (example만 허용)
+*.tfvars
+!*.tfvars.example
+
+# 기타
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
