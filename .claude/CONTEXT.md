@@ -14,9 +14,9 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| #283 | **EKS 0-bootstrap 레이어 완성 (IaC-first, 콘솔 클릭 0).** remote backend(S3+DynamoDB 락, 암호화·버전·잠금) + state S3 이관 / 예산 `aws_budgets_budget`(크레딧 제외 `include_credit=false`, 절대값 $10/$50/$150 알림, 콘솔 예산 삭제로 일원화) / 보안 CI 2층 `infra-ci.yml`(gitleaks+tfsec, findings 트리아지) / GitHub OIDC + IAM 역할(AdministratorAccess + 신뢰정책 `repo:...:main`·`pull_request` 강잠금) / `infra-deploy.yml` plan-on-PR·apply-on-merge. **PR→plan / merge→apply 양방향 OIDC 실증**(장기키 0개). 비용 $0. 머지 완료 | 2026-07-18 |
+| #285 | **EKS 1-network 레이어 완성.** VPC(10.0.0.0/16, DNS ON) + IGW + 퍼블릭 서브넷 ×2(ap-northeast-2a/2c, /20, 공인IP 자동) + 라우트(0.0.0.0/0→IGW). **NAT 회피**(퍼블릭 서브넷+노드 공인IP, $32/mo 절약) — tfsec `no-public-ip`·`vpc-flow-logs`는 근거 ignore. EKS discovery 태그(`role/elb=1`, `cluster/devquest-eks=shared`). **CI 도그푸딩**: infra-deploy matrix에 `1-network` 추가 → PR plan / merge apply(OIDC)로 VPC 생성, CLI 실측 검증. 비용 $0. 머지 완료 | 2026-07-18 |
+| #283 | **EKS 0-bootstrap 레이어 완성 (IaC-first, 콘솔 클릭 0).** remote backend(S3+DynamoDB 락) + state S3 이관 / 예산 `aws_budgets_budget`(크레딧 제외, $10/$50/$150 알림) / 보안 CI 2층 `infra-ci.yml`(gitleaks+tfsec) / GitHub OIDC + IAM 역할(admin + 신뢰정책 `repo:...:main`·`pull_request` 강잠금) / `infra-deploy.yml` plan-on-PR·apply-on-merge. **양방향 OIDC 실증**(장기키 0개). 비용 $0. 머지 완료 | 2026-07-18 |
 | #271 | EKS 작업 일지 체계 도입 — `docs/eks-migration-log.md`(블로그 원고 소스, 누적 비용 테이블) + CLAUDE.md "EKS 작업 일지 규칙"(즉시 append·태그 체계·에이전트 전파, EKS 종료 시 제거). 머지 완료 | 2026-07-16 |
-| #269 | kind 로컬 K8s 학습 트랙(Stage 1~3, `k8s/`) 폐기 — AWS EKS 놀이터(`infra/aws-eks/README.md`)를 단독 새 시작점으로 확정 (README는 삭제했다 사용자 확인 후 복원). **DevSecOps 확장 검토 후 기각 — 목표는 "Fly prod 유지 + DevQuest를 EKS에 올리는 학습" 고정.** 머지 완료 | 2026-07-16 |
 
 ## 다음 작업
 
@@ -74,8 +74,15 @@
     보안 CI(gitleaks+tfsec)·GitHub OIDC+IAM(admin+신뢰정책 강잠금)·plan/apply 파이프라인. PR→plan /
     merge→apply 양방향 OIDC 실증. 비용 $0. GitHub Secret `AWS_ROLE_ARN`·`BUDGET_EMAIL` 등록됨.
     로컬 자격증명 = `bootstrap-admin` 액세스키(`aws configure`, region ap-northeast-2).
-  - **➡️ 다음: 1-network(VPC) 착수.** ⚠️ NAT Gateway 금지(+$32/mo). CI가 관리할 상위 레이어는
-    `infra-deploy.yml`의 matrix `layer`에 추가만 하면 편입됨(현재 `[0-bootstrap]`).
+  - **✅ 1-network 완료 (#285, 07-18):** VPC 10.0.0.0/16 + IGW + 퍼블릭 서브넷 ×2(2a/2c, 공인IP) +
+    라우트. NAT 회피(퍼블릭+공인IP). EKS discovery 태그. CI 도그푸딩(matrix에 `1-network` 추가,
+    merge→apply로 VPC 생성 실측). 비용 $0. 실측 VPC `vpc-0e8401b42ba207328`.
+  - **➡️ 다음: 2-cluster (EKS 컨트롤플레인 + 노드그룹).** ⚠️⚠️ **여기서 비용 발생 시작** —
+    EKS 컨트롤플레인 **$0.10/hr(방치 시 월 ~$73)** + 노드(t4g.small Spot) + EBS. **세션 종료 시
+    `tofu destroy` 필수**(destroy-after-use). backend·예산·VPC는 $0라 유지. 착수 전 크레딧 잔여 재확인.
+    - infra-deploy matrix에 `2-cluster` 추가 시 편입. 단 2-cluster는 destroy 왕복이 잦아 CI apply보다
+      **로컬 apply/destroy가 나을 수 있음** — 착수 시 판단. `kubernetes`/`helm` 프로바이더 주의(README 81줄).
+  - CI 관리 레이어 현재: `infra-deploy.yml` matrix `[0-bootstrap, 1-network]`.
   - IaC-first라 **캡처 필요량 급감** — 단계가 코드+CLI 텍스트. 잔여는 서사/증빙 소수.
 - **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에
   **안 닿고** 클립보드도 격리됨. → 사용자가 **캡처를 GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된
