@@ -135,5 +135,29 @@
   크레딧 남아도 실제 $10 쓰면 발동하는 진짜 가드레일.
 - `[비용]` 예산 리소스 $0 (계정당 2개까지 무료). 현재 코드판 `devquest-eks-monthly` + 콘솔판
   `eks-credit-guard` = 2개 공존, 아직 무료 구간. 콘솔판 삭제 시 1개.
-- `[메모]` **다음: 콘솔 예산 `eks-credit-guard` 삭제**(코드판이 동일 알림 커버 → 일원화) → 커밋 →
-  GitHub OIDC·IAM + CI 파이프라인.
+- `[해결]` **콘솔 예산 `eks-credit-guard` 삭제 → 코드판 `devquest-eks-monthly` 단독.** 커밋 `eae1268`.
+
+- `[결정]` **보안 점검을 "손"에서 "기계 강제"로 — CI 스캐너 2층을 OIDC보다 먼저 도입.**
+  계기: 사용자가 "매 작업마다 보안 점검 잘 되나" 질문 → 감사 결과 **자동 방어는 .gitignore 하나뿐**,
+  나머지는 수동+비일관(첫 apply에서 account ID 평문 노출한 전례). 결정론 스캐너 0개(gitleaks·tfsec·
+  checkov·trivy 전무), CI 6개 워크플로 중 IaC/시크릿 스캔 0개 확인.
+- `[해결]` **`.github/workflows/infra-ci.yml` 신설** — gitleaks(시크릿, `fetch-depth:0` 전체 히스토리)
+  + tfsec(IaC, `working_directory: infra/aws-eks`) 2 job. 매 PR 자동 실행, 발견 시 머지 차단.
+- `[해결]` **tfsec 로컬 선점 트리아지 — 5 findings.** Docker 데몬 미기동 → tfsec 바이너리 포터블
+  다운(`v1.28.14`, `/tmp/tfsec.exe`)로 커밋 전 미리 검사. 결과 판단:
+  - **고침(무료)**: `aws-dynamodb-enable-at-rest-encryption`(HIGH) → `server_side_encryption{enabled=true}`
+    추가. apply 결과 `SSEType:KMS, ENABLED`(AWS 관리키, 키요금 $0). in-place 업데이트, 재생성 없음.
+  - **근거 달고 무시(`#tfsec:ignore:`)**: `aws-s3-encryption-customer-key`(HIGH, AES256 유지 — CMK 월 ~$1
+    과투자, 사용자 결정) / `aws-s3-enable-bucket-logging`(MED, 별도 로그버킷 과함) /
+    `aws-dynamodb-enable-recovery`(MED, 락 테이블은 복구할 데이터 없음) / `aws-dynamodb-table-customer-key`(LOW).
+  - `[막힘→해결]` `#tfsec:ignore`는 **finding이 붙는 리소스**에 정확히 달아야 함. s3 암호화 finding은
+    `aws_s3_bucket`이 아니라 `aws_s3_bucket_server_side_encryption_configuration`에 붙음 → 주석 위치
+    옮기니 해소. 최종 `No problems detected!`(9 passed, 4 ignored, 0 problem).
+- `[해결]` **gitleaks 히스토리 선점 스캔 — 2건 잡힘, 검증 결과 오탐 확정.** 바이너리 포터블
+  다운(`v8.30.1`, windows는 `.zip`) → `gitleaks git --redact` 499커밋 스캔. 2건 모두
+  `monitoring/config.alloy:2`(generic-api-key, entropy 3.72). `git show`로 확인: 해당 라인은 **주석**이고
+  실제 Grafana 키는 line 21 `env("GRAFANA_API_KEY")` 참조(하드코딩 아님), 파일은 #172에서 삭제됨.
+  → `.gitleaksignore`에 지문 2개 + 근거 기록 후 재스캔 `no leaks found`. **히스토리에 실제 유출 없음.**
+- `[메모]` 잔여 저위험: `monitoring/config.alloy` 히스토리에 Grafana 인스턴스 ID(username) 평문 존재 —
+  credential 아닌 식별자라 gitleaks 미검출. 히스토리 재작성(filter-repo)은 과투자로 보류.
+- `[메모]` **다음: GitHub OIDC + IAM 베이스라인 → apply-on-merge CI(plan-on-PR 포함).** 이후 1-network.

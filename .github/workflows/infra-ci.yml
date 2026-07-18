@@ -1,0 +1,39 @@
+name: Infra CI
+
+# IaC 보안 2층 게이트 — 매 PR에서 자동 강제 (사람 손 점검을 기계 강제로 대체).
+#   1) gitleaks : 코드/히스토리 시크릿 스캔 (AWS 키·토큰·비밀번호 등)
+#   2) tfsec    : OpenTofu/Terraform 설정 취약점 스캔 (infra/aws-eks)
+# tfsec는 코드의 #tfsec:ignore:<id> 주석(근거 명시된 판단)을 존중한다.
+
+on:
+  pull_request:
+
+concurrency:
+  group: infra-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Infra CI / gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # 전체 히스토리 스캔 (과거 커밋에 섞인 시크릿까지)
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  tfsec:
+    name: Infra CI / tfsec (IaC scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: infra/aws-eks
+          # 발견 시 종료코드 비0 → PR 체크 실패 (근거 없는 취약점은 머지 차단)

@@ -1,0 +1,8 @@
+# gitleaks 오탐 허용 목록 — 각 항목은 "확인 후 오탐 확정"된 것만.
+#
+# monitoring/config.alloy:2 (generic-api-key, entropy 3.72)
+#   → 해당 라인은 주석("// devquest-api.internal:8080/actuator/prometheus 스크랩 → Grafana Cloud push").
+#     실제 Grafana API 키는 같은 파일 line 21에서 env("GRAFANA_API_KEY")로 참조(하드코딩 아님).
+#     파일 자체도 #172(afa9367)에서 삭제됨. 히스토리에만 존재하는 오탐.
+387a3a7058c9d49330197a7d28e8cc61d1283a23:monitoring/config.alloy:generic-api-key:2
+0dc6fb6345bfe18f0d4b6453792c8264132f683e:monitoring/config.alloy:generic-api-key:2
