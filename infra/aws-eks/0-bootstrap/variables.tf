@@ -15,3 +15,22 @@ variable "lock_table_name" {
   description = "state 락용 DynamoDB 테이블 이름"
   default     = "devquest-eks-tflock"
 }
+
+# ⚠️ public repo: 이메일은 default 금지 — 값은 gitignore되는 terraform.tfvars에 둔다.
+variable "budget_notification_email" {
+  type        = string
+  description = "예산 알림 수신 이메일 (terraform.tfvars에 값 지정)"
+  sensitive   = true
+}
+
+variable "budget_limit_usd" {
+  type        = string
+  description = "월 예산 기준 금액 (USD). 크레딧 총액 $200 기준."
+  default     = "200"
+}
+
+variable "budget_alert_thresholds_usd" {
+  type        = list(number)
+  description = "절대값(USD) 알림 임계값 — 크레딧 제외 실사용 기준"
+  default     = [10, 50, 150]
+}

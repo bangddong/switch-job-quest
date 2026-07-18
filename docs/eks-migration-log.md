@@ -125,5 +125,15 @@
   이제 이 스택이 자기 state를 자기가 만든 버킷에 둔다(자기참조 backend). 키에 레이어명 prefix를 줘
   1-network/2-cluster와 한 버킷 공유하되 충돌 없음. backend 블록은 var 불가 → 버킷·테이블명 리터럴.
   `-force-copy`는 비대화형 Bash에서 tofu의 "copy state? yes" 확인을 자동 통과(로컬 .backup 있어 안전).
-- `[메모]` **다음: 예산(`aws_budgets_budget`, `cost_types{include_credit=false}`)·GitHub OIDC·IAM
-  베이스라인 코드 작성 → apply.** 콘솔 예산은 이후 import 또는 재생성으로 코드판에 승격.
+- `[해결]` **예산 코드화 apply 완료 — `aws_budgets_budget.monthly`.** `budget.tf` 신규:
+  기준 $200/월, `cost_types{include_credit=false, include_refund=false}`,
+  알림 3단계 `ABSOLUTE_VALUE` $10/$50/$150(GREATER_THAN, ACTUAL) → dynamic block로 리스트에서 생성.
+  이메일은 `sensitive` 변수 → gitignore되는 `terraform.tfvars`에 값(`.example`은 커밋). `Apply: 1 added`.
+  CLI 검증: `describe-notifications-for-budget` → 3건 절대값 $10/$50/$150 확인.
+- `[결정]` **`ABSOLUTE_VALUE` + `include_credit=false` 조합이 핵심.** %기준이면 $200 기준 $20/$100/$300으로
+  어긋나고(콘솔 함정 재현), 크레딧 포함이면 $200 소진 전까지 알림 침묵 → 학습장 무방비. 절대값 실요금 기준이
+  크레딧 남아도 실제 $10 쓰면 발동하는 진짜 가드레일.
+- `[비용]` 예산 리소스 $0 (계정당 2개까지 무료). 현재 코드판 `devquest-eks-monthly` + 콘솔판
+  `eks-credit-guard` = 2개 공존, 아직 무료 구간. 콘솔판 삭제 시 1개.
+- `[메모]` **다음: 콘솔 예산 `eks-credit-guard` 삭제**(코드판이 동일 알림 커버 → 일원화) → 커밋 →
+  GitHub OIDC·IAM + CI 파이프라인.

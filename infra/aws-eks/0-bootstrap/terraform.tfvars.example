@@ -1,0 +1,3 @@
+# 복사해서 terraform.tfvars 로 만들고 실제 값 채울 것 (terraform.tfvars는 gitignore됨).
+#   cp terraform.tfvars.example terraform.tfvars
+budget_notification_email = "you@example.com"
