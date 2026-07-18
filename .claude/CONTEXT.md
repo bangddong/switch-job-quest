@@ -7,16 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | feat/eks-0-bootstrap |
-| 열린 PR | #283 (draft) — EKS 0-bootstrap: remote backend·예산·보안 CI. OIDC·IAM 후속 |
+| 브랜치 | (없음 — main) |
+| 열린 PR | 없음 |
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #283 | **EKS 0-bootstrap 레이어 완성 (IaC-first, 콘솔 클릭 0).** remote backend(S3+DynamoDB 락, 암호화·버전·잠금) + state S3 이관 / 예산 `aws_budgets_budget`(크레딧 제외 `include_credit=false`, 절대값 $10/$50/$150 알림, 콘솔 예산 삭제로 일원화) / 보안 CI 2층 `infra-ci.yml`(gitleaks+tfsec, findings 트리아지) / GitHub OIDC + IAM 역할(AdministratorAccess + 신뢰정책 `repo:...:main`·`pull_request` 강잠금) / `infra-deploy.yml` plan-on-PR·apply-on-merge. **PR→plan / merge→apply 양방향 OIDC 실증**(장기키 0개). 비용 $0. 머지 완료 | 2026-07-18 |
 | #271 | EKS 작업 일지 체계 도입 — `docs/eks-migration-log.md`(블로그 원고 소스, 누적 비용 테이블) + CLAUDE.md "EKS 작업 일지 규칙"(즉시 append·태그 체계·에이전트 전파, EKS 종료 시 제거). 머지 완료 | 2026-07-16 |
 | #269 | kind 로컬 K8s 학습 트랙(Stage 1~3, `k8s/`) 폐기 — AWS EKS 놀이터(`infra/aws-eks/README.md`)를 단독 새 시작점으로 확정 (README는 삭제했다 사용자 확인 후 복원). **DevSecOps 확장 검토 후 기각 — 목표는 "Fly prod 유지 + DevQuest를 EKS에 올리는 학습" 고정.** 머지 완료 | 2026-07-16 |
-| #267 | **메타스페이스 조사 종결 — 누수 없음 확정.** Grafana 7일 range 실측: 작동점 **134.6 MiB**(160m 하 uptime 94.3h 평탄, 95포인트). #263의 128m은 작동점보다 6.6 MiB 낮아 붕괴 필연. 누수 부재 근거 3종(클래스 수 평탄~순감소 / 무부하 Δ=0 / 동일 부하 2R이 1R의 51%). 정정: **붕괴는 ~20h**(34h는 발견 시각), **GC는 SerialGC**(G1 아님), **통합 가설 기각**. 조치 불필요 — 160m 유지, 여유 25.4 MiB. 머지 완료 | 2026-07-15 |
 
 ## 다음 작업
 
@@ -70,10 +70,12 @@
 - **🎯 방향 확정 (07-16): IaC-first — "인프라 전부를 코드로, 콘솔 클릭 0".** 레이어별 state 분리
   `0-bootstrap`(remote backend·OIDC·IAM·예산·이상탐지) / `1-network` / `2-cluster`(destroy 대상) /
   `gitops`(ArgoCD). CI: plan-on-PR+tfsec, apply-on-merge(OIDC). 상세: `infra/aws-eks/README.md`.
-  - 진행: AWS 신규계정 + **콘솔 예산(수동 부트스트랩 프롤로그) 완료**. 콘솔 예산은 유지하다
-    0-bootstrap `aws_budgets_budget` apply 후 import/재생성으로 승격 (삭제 안 함).
-  - 크레딧 제외·이상탐지는 콘솔 아닌 **0-bootstrap 코드로** (기존 콘솔 TASK 폐기).
-  - **다음 사용자 액션: AWS 자격증명 준비**(TASK-4) → 이후 `0-bootstrap` 코드 착수.
+  - **✅ 0-bootstrap 완료 (#283, 07-18):** backend(S3+DynamoDB)·state 이관·예산(콘솔판 삭제로 코드 일원화)·
+    보안 CI(gitleaks+tfsec)·GitHub OIDC+IAM(admin+신뢰정책 강잠금)·plan/apply 파이프라인. PR→plan /
+    merge→apply 양방향 OIDC 실증. 비용 $0. GitHub Secret `AWS_ROLE_ARN`·`BUDGET_EMAIL` 등록됨.
+    로컬 자격증명 = `bootstrap-admin` 액세스키(`aws configure`, region ap-northeast-2).
+  - **➡️ 다음: 1-network(VPC) 착수.** ⚠️ NAT Gateway 금지(+$32/mo). CI가 관리할 상위 레이어는
+    `infra-deploy.yml`의 matrix `layer`에 추가만 하면 편입됨(현재 `[0-bootstrap]`).
   - IaC-first라 **캡처 필요량 급감** — 단계가 코드+CLI 텍스트. 잔여는 서사/증빙 소수.
 - **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에
   **안 닿고** 클립보드도 격리됨. → 사용자가 **캡처를 GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된
