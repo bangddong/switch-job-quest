@@ -210,3 +210,14 @@
 - `[결정]` **apply는 CI 도그푸딩** — `infra-deploy.yml` matrix에 `1-network` 추가(`fail-fast:false`).
   PR→CI plan / merge→CI apply로 VPC 생성. 방금 만든 파이프라인을 실제 사용.
 - `[메모]` state는 `1-network/terraform.tfstate` 키(0-bootstrap과 한 버킷). 이 레이어는 secret/tfvars 없음.
+
+## 2026-07-19
+
+- `[비용]` **크레딧 잔여 $200 재확인** (사용자 콘솔 Credits 조회) — 0/1 레이어 전부 $0라 소비 없음.
+  2-cluster 착수 직전 시작점. 만료 2027-07-15.
+- `[결정]` **2-cluster는 로컬 apply/destroy** (CI 도그푸딩한 0/1과 다름). 근거: 컨트롤플레인 $0.10/hr
+  = 유휴 과금 자원이라 세션마다 올렸다 부수는 왕복이 잦음 → `tofu destroy` 한 줄이 CI 머지 왕복보다
+  빠르고 비용 통제가 손에 잡힘. CI 관리 레이어는 상주형 0/1만 유지(infra-deploy matrix 그대로).
+- `[결정]` **2-cluster 착수 — 브랜치 `chore/eks-2-cluster`.** 올릴 자원 예상 비용(서울 근사치):
+  EKS 컨트롤플레인 $0.10/hr(유휴에도) / 노드 t4g.small Spot ×1 ~$0.006~0.008/hr / EBS gp3 노드 루트볼륨 /
+  ECR·애드온·IAM·IRSA·OIDC는 $0. apply 전 plan 리소스 해설+사용자 확인 게이트 유지.
