@@ -7,8 +7,13 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | (없음 — main) |
+| 브랜치 | `chore/eks-2-cluster` (push됨, PR 아직 없음 — 코드 전 설계·계획만) |
 | 열린 PR | 없음 |
+
+> **⏸️ 2-cluster 착수 중단점 (07-19)**: brainstorming→설계문서→구현계획까지 완료·push.
+> 크레딧 $200 재확인. **결정**: 핸드롤 / 첫 apply=최소 커널+노드 / public 엔드포인트 / **로컬 apply·destroy**(CI 아님).
+> **다음(내일)**: 계획 [docs/superpowers/plans/2026-07-19-eks-2-cluster.md](docs/superpowers/plans/2026-07-19-eks-2-cluster.md) **Task 1(스캐폴드)부터** 인라인 실행.
+> Task 1~7은 $0(코드+plan), **Task 8만 과금**(그 앞 plan 해설+사용자 승인 게이트). 설계: [docs/superpowers/specs/2026-07-19-eks-2-cluster-design.md](docs/superpowers/specs/2026-07-19-eks-2-cluster-design.md).
 
 ## 최근 완료 (최근 3건)
 
