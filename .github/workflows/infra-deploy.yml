@@ -27,7 +27,13 @@ jobs:
     strategy:
       fail-fast: false # 레이어는 독립적 — 하나 실패해도 나머지는 진행
       matrix:
-        layer: [0-bootstrap, 1-network] # 2-cluster·gitops는 생기면 추가
+        # ⚠️ 여기 나열된 레이어는 main 머지 시 CI가 자동으로 tofu apply 한다.
+        #    2-cluster(EKS 컨트롤플레인 $0.10/hr)는 로컬 apply/destroy 전용 —
+        #    절대 추가하지 말 것. 추가하면 머지 순간 CI가 컨트롤플레인을 띄우고,
+        #    아무도 destroy 안 하면 상시 과금이 샌다.
+        #    → Infra CI의 guard 잡(guard-local-layers)이 이 실수를 기계적으로 차단한다.
+        #    gitops 등 상주형($0 유지) 레이어만 생기면 추가.
+        layer: [0-bootstrap, 1-network]
     defaults:
       run:
         working-directory: infra/aws-eks/${{ matrix.layer }}

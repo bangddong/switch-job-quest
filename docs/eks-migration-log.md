@@ -210,3 +210,39 @@
 - `[결정]` **apply는 CI 도그푸딩** — `infra-deploy.yml` matrix에 `1-network` 추가(`fail-fast:false`).
   PR→CI plan / merge→CI apply로 VPC 생성. 방금 만든 파이프라인을 실제 사용.
 - `[메모]` state는 `1-network/terraform.tfstate` 키(0-bootstrap과 한 버킷). 이 레이어는 secret/tfvars 없음.
+
+## 2026-07-19
+
+- `[비용]` **크레딧 잔여 $200 재확인** (사용자 콘솔 Credits 조회) — 0/1 레이어 전부 $0라 소비 없음.
+  2-cluster 착수 직전 시작점. 만료 2027-07-15.
+- `[결정]` **2-cluster는 로컬 apply/destroy** (CI 도그푸딩한 0/1과 다름). 근거: 컨트롤플레인 $0.10/hr
+  = 유휴 과금 자원이라 세션마다 올렸다 부수는 왕복이 잦음 → `tofu destroy` 한 줄이 CI 머지 왕복보다
+  빠르고 비용 통제가 손에 잡힘. CI 관리 레이어는 상주형 0/1만 유지(infra-deploy matrix 그대로).
+- `[결정]` **2-cluster 착수 — 브랜치 `chore/eks-2-cluster`.** 올릴 자원 예상 비용(서울 근사치):
+  EKS 컨트롤플레인 $0.10/hr(유휴에도) / 노드 t4g.small Spot ×1 ~$0.006~0.008/hr / EBS gp3 노드 루트볼륨 /
+  ECR·애드온·IAM·IRSA·OIDC는 $0. apply 전 plan 리소스 해설+사용자 확인 게이트 유지.
+
+## 2026-07-20
+
+- `[막힘]` 새 클론 머신에 IaC 툴체인 없음 — `tofu`/`terraform`/`tfsec` 전부 `not found`
+  (07-19 clone된 환경, 어제 작업은 다른 머신). `brew install opentofu tfsec` → OpenTofu v1.12.4,
+  tfsec v1.28.14 설치 후 진행. aws 자격증명은 `bootstrap-admin` IAM user 정상.
+- `[결정]` **K8s 버전 계획 default `1.32` → `1.36`으로 상향.** apply 직전 재확인 방침대로 실측:
+  ```
+  aws eks describe-cluster-versions --region ap-northeast-2 \
+    --query 'clusterVersions[?status==`STANDARD_SUPPORT`].[clusterVersion,defaultVersion,endOfStandardSupportDate]'
+  1.36  True   2027-08-02   (default)
+  1.35  False  2027-03-27
+  1.34  False  2026-12-02
+  1.33  False  2026-07-29   ← 9일 뒤 표준지원 종료
+  ```
+  `1.32`는 이미 표준지원 밖(목록에 없음). `1.33`은 만료 임박 → 회피. **default·최신·지원 최장인
+  `1.36` 선택.** 애드온 3종은 버전 미명시 → 클러스터 버전(1.36) 기본값 자동 선택(apply 시 확정).
+  ⚠️ 함정: `describe-cluster-versions` 필터 필드는 `clusterVersionStatus`가 아니라 `status`.
+  잘못 쓰면 빈 출력(에러 없이) → 없는 문제로 오인. 원문 먼저 확인할 것.
+- `[해결]` Task 1~7 완료(코드+plan, $0). 11개 `.tf` 각 태스크마다 `fmt`→`validate`→`tfsec` 통과
+  (tfsec: 근거 ignore 8건 외 No problems). 실제 backend init 후 `tofu plan` = **`14 to add,
+  0 to change, 0 to destroy`** (계획 예상치 일치, remote_state로 1-network VPC 정상 참조). apply는
+  별도 세션(사용자 승인 게이트). QA 리뷰 HIGH 0 — 머지 가능.
+- `[메모]` 아키텍처 다이어그램 상시 유지 시작 — mermaid 소스 `docs/architecture/eks-2-cluster.md`
+  (repo, PR·블로그용) + 라이브 아티팩트(줌·전체화면). 이후 레이어/Stage마다 갱신.

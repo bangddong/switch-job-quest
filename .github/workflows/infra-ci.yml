@@ -37,3 +37,25 @@ jobs:
         with:
           working_directory: infra/aws-eks
           # 발견 시 종료코드 비0 → PR 체크 실패 (근거 없는 취약점은 머지 차단)
+
+  guard-local-layers:
+    name: Infra CI / guard (로컬 전용 레이어 apply 차단)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 로컬 전용 레이어가 apply 매트릭스에 없는지 검증
+        # 2-cluster(EKS 컨트롤플레인 상시 과금)는 로컬 apply/destroy 전용.
+        # infra-deploy 매트릭스에 들어가면 main 머지 시 CI가 자동 apply → 과금 누수.
+        # 그 실수를 담은 PR을 여기서 기계적으로 실패시켜 머지를 차단한다.
+        # (yq는 GitHub ubuntu-latest 러너에 기본 탑재)
+        run: |
+          LAYERS=$(yq '.jobs.tofu.strategy.matrix.layer[]' .github/workflows/infra-deploy.yml)
+          echo "infra-deploy apply 매트릭스: $(echo "$LAYERS" | tr '\n' ' ')"
+          for local_layer in 2-cluster; do
+            if echo "$LAYERS" | grep -qx "$local_layer"; then
+              echo "::error file=.github/workflows/infra-deploy.yml::'$local_layer'는 로컬 apply/destroy 전용 레이어입니다. apply 매트릭스에서 제거하세요 — main 머지 시 CI가 자동 apply하여 상시 과금됩니다."
+              exit 1
+            fi
+          done
+          echo "OK: 로컬 전용 레이어가 apply 매트릭스에 없음"
