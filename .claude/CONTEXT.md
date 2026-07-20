@@ -29,11 +29,20 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #289 | **서비스 분해 설계 확정 (제품 방향 전환).** "만든 사람조차 안 쓴다" → 무거운 12기능 앱을 **가볍게 매일 쓰는 데일리 도구**로 재정렬 + EKS 다중서비스 학습. 모듈러 모놀리스를 **daily + ai-service + core 3서비스**로 분해. **핵심 발견**: AI 경계가 이미 `core-domain` 포트(`*EvaluatorPort` 18종)로 존재 → 어댑터 in-process→HTTP 스왑으로 추출. strangler 순서(ai→daily→core 유지), 모노레포 멀티모듈, ai=NetworkPolicy만·공유DB 스키마분리·daily FE는 Phase2 동반. 스케일링(이메일 Resend 무료~100/일 천장→SES·토큰·캐싱)·EKS 인프라 영향(2-cluster addon NetworkPolicy·노드용량)·배포전략(EKS=실습/Fly=fallback) 포함. 설계 문서 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md` + 브리핑 아티팩트. 코드 0줄. 머지 완료 | 2026-07-20 |
 | #287 | **EKS 2-cluster 레이어 코드 완성·머지 (apply는 별도 세션).** 핸드롤 OpenTofu 11개 `.tf` — 컨트롤플레인(public·auth=API) + 관리형 노드그룹(t4g.small Spot 1~2) + OIDC(IRSA 토대) + 애드온 3종(vpc-cni·kube-proxy·coredns) + Access Entry(bootstrap-admin→ClusterAdmin). 1-network를 `terraform_remote_state`로 소비, state key 격리. K8s **1.36** 핀(실측: 1.32 표준지원 밖·1.33 07-29 만료). `tofu plan=14 to add`(과금 $0). **로컬 apply/destroy** 결정 → CI 미편입 + `guard-local-layers` 잡으로 매트릭스 진입 차단. 아키텍처 다이어그램 상시 유지 도입(mermaid `docs/architecture/` + 라이브 아티팩트). QA HIGH 0. 비용 $0. 머지 완료 | 2026-07-20 |
 | #285 | **EKS 1-network 레이어 완성.** VPC(10.0.0.0/16, DNS ON) + IGW + 퍼블릭 서브넷 ×2(ap-northeast-2a/2c, /20, 공인IP 자동) + 라우트(0.0.0.0/0→IGW). **NAT 회피**(퍼블릭 서브넷+노드 공인IP, $32/mo 절약) — tfsec `no-public-ip`·`vpc-flow-logs`는 근거 ignore. EKS discovery 태그(`role/elb=1`, `cluster/devquest-eks=shared`). **CI 도그푸딩**: infra-deploy matrix에 `1-network` 추가 → PR plan / merge apply(OIDC)로 VPC 생성, CLI 실측 검증. 비용 $0. 머지 완료 | 2026-07-18 |
-| #283 | **EKS 0-bootstrap 레이어 완성 (IaC-first, 콘솔 클릭 0).** remote backend(S3+DynamoDB 락) + state S3 이관 / 예산 `aws_budgets_budget`(크레딧 제외, $10/$50/$150 알림) / 보안 CI 2층 `infra-ci.yml`(gitleaks+tfsec) / GitHub OIDC + IAM 역할(admin + 신뢰정책 `repo:...:main`·`pull_request` 강잠금) / `infra-deploy.yml` plan-on-PR·apply-on-merge. **양방향 OIDC 실증**(장기키 0개). 비용 $0. 머지 완료 | 2026-07-18 |
 
 ## 다음 작업
+
+### 🎯 서비스 분해 에픽 (신규 대방향, #289 설계 확정) — 여러 세션짜리
+- **설계 문서: `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`** (착수 전 필독)
+- **방향**: 무거운 앱 → 라이트 데일리 도구 재정렬 + EKS 다중서비스 학습. **daily + ai-service + core 3분리.**
+- **strangler 이관**: Phase 0(준비: ai-api 스캐폴드+HTTP어댑터 피처플래그) → 1(ai-service 추출, 포트 어댑터 HTTP화, AI parity 검증) → 2(daily-service 추출 +경량 FE, 무로그인 e2e) → 3(EKS 배포: Deployment×3·Ingress·NetworkPolicy)
+- **➡️ 다음 스텝: Phase 0~1 구현 계획(plan) 문서 작성** → BE 에이전트로 착수 (TDD·검증 게이트)
+- **⚠️ 2-cluster에 영향**: ai NetworkPolicy 실현하려면 vpc-cni addon에 `enableNetworkPolicy` 필요(현재 맨몸), JVM 3개엔 t4g.small 빠듯→medium. Phase 3 체크리스트.
+- **미해결(구현 중)**: 데일리 캐싱 전략(공통콘텐츠 1회생성→서빙, Redis) / 이메일 SES 전환·소유(core vs daily) / AiCheck 오케스트레이션 경계 / 분산 트레이싱
+- CI 메모: `tfsec` 잡이 릴리스 다운로드 시 GitHub API rate-limit(403)로 간헐 실패 → `github_token` 주입으로 근본해결 가능(미적용, 재실행으로 우회 중)
 
 ### 코드 작업
 - [ ] **파이프라인 후속 (사용자 확인 대기)**: ① 모바일 실기기 확인 (데스크톱 시나리오는 Claude가
