@@ -144,6 +144,34 @@ flowchart TB
   → **선택**: (a) 스케줄러·발송은 core에 두고 daily가 콘텐츠만 제공 / (b) daily가 core의 "구독자 조회" API를 호출.
   Phase 2에서 확정. 어느 쪽이든 발송 인프라(SES 전환·큐)는 별도 관심사로 뺀다.
 
+## EKS 인프라 영향 (기존 레이어 설계와의 관계)
+
+**핵심: 토대는 워크로드에 무관해 대부분 재사용된다.** 앱이 1개든 3개든 클러스터 인프라는 같다.
+아래는 3분리가 실제로 건드리는 지점만.
+
+| 레이어 | 3분리로 바뀌나 | 내용 |
+|--------|:--:|------|
+| 0-bootstrap · 1-network | ❌ | backend·OIDC·예산·VPC·서브넷·IGW 그대로 |
+| 2-cluster 골격(CP·노드그룹) | ⚠️ | **addon·노드 용량은 수정 필요**(아래) |
+| Ingress/ALB | ⬆️ | "나중 Stage"에서 **핵심**으로 승격 |
+| ECR·IRSA·관측·gitops | 📈 | 1개 → 3개 규모 |
+
+### ⚠️ 이미 머지한 2-cluster를 손대야 하는 것 (놓치기 쉬움)
+1. **vpc-cni addon에 NetworkPolicy 활성화** 🟡 — ai-service를 "NetworkPolicy만"으로 격리하는 인증 결정은
+   **AWS VPC CNI가 NetworkPolicy를 강제해야** 성립. 현재 `addons.tf`의 vpc-cni는 설정 없이 맨몸 →
+   `configuration_values`로 `enableNetworkPolicy: "true"`를 켜거나 Calico 도입 필요. **이 결정의 전제 인프라.**
+2. **노드 용량** 🟡 — Spring 앱 ~300~450MB × 3 ≈ 1~1.4GB + 시스템 파드 → **t4g.small(2GB) 빠듯**.
+   t4g.medium(4GB)로 승격 or 노드 2개. "1노드 미니멀" 가정 깨짐, 비용 소폭↑.
+
+### 3분리로 새로/더 커지는 것
+- **Ingress/ALB** 🔴: path 라우팅(/api·/daily, ai 내부)이 토폴로지의 중심 → Ingress 컨트롤러가 조기 필요.
+- **ECR**: 이미지 1 → 3 (리포 3개 or 태그 분리).
+- **IRSA**: 서비스가 AWS 직접 호출 시(ai→Bedrock?, daily 메일→SES?) 서비스별 역할. OIDC 프로바이더는 2-cluster에 이미 존재.
+- **관측**: 단일 앱 OTLP → 멀티서비스 분산 트레이싱(서비스간 trace 상관관계).
+- **gitops(ArgoCD)**: 앱 1 → 3 매니페스트.
+
+→ Phase 3(EKS 배포)에서 이 목록을 체크리스트로 사용. 특히 **#1(NetworkPolicy)은 인증 결정의 전제**라 우선.
+
 ## 완료 조건 (에픽 전체)
 1. ai-service·daily-service·core가 각각 독립 배포되고 로컬/EKS에서 e2e 동작
 2. AI 평가 결과가 분리 전후 parity
