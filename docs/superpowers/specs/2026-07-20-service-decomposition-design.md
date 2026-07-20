@@ -56,36 +56,33 @@
 
 ```mermaid
 flowchart TB
-  userD["데일리 사용자<br/>(무로그인)"]
-  userC["앱 사용자<br/>(로그인)"]
+  userD["데일리 사용자<br/>무로그인"]
+  userC["앱 사용자<br/>로그인"]
 
-  subgraph eks["EKS 클러스터 (2-cluster 위)"]
+  subgraph eks["EKS 클러스터 · 2-cluster 위"]
     ing["Ingress<br/>path 라우팅"]
-
-    subgraph daily["daily-service (경량 FE + API)"]
-      dapi["daily-api<br/>DailyQuestion·코테·기술질문<br/>무인증·최소상태"]
-    end
-    subgraph core["core-service (메인, 기존)"]
-      capi["core-api<br/>Auth·User·Progress<br/>Company·Resume·Coach"]
-    end
-    subgraph ai["ai-service (내부 전용)"]
-      aapi["ai-api<br/>Evaluator 18종<br/>stateless 컴퓨트"]
-    end
-
-    db[("Neon Postgres<br/>스키마 분리")]
+    dapi["daily-service<br/>daily-api + 경량 FE"]
+    capi["core-service<br/>Auth·User·Progress·Company·Resume"]
+    aapi["ai-service · 내부 전용<br/>Evaluator 18종 · stateless"]
   end
 
-  userD -->|/daily| ing --> dapi
-  userC -->|/api| ing --> capi
-  dapi -.->|"*EvaluatorPort (HTTP)"| aapi
-  capi -.->|"*EvaluatorPort (HTTP)"| aapi
+  db[("Neon Postgres<br/>스키마 분리")]
+
+  userD -->|/daily| ing
+  userC -->|/api| ing
+  ing --> dapi
+  ing --> capi
+  dapi -.->|EvaluatorPort HTTP| aapi
+  capi -.->|EvaluatorPort HTTP| aapi
   capi --> db
   dapi --> db
 
-  classDef svc fill:#e6f5ef,stroke:#0e8a6f,color:#0c3b32;
-  classDef internal fill:#eef1f4,stroke:#8a94a3,color:#232a33;
-  class dapi,capi svc;
-  class aapi internal;
+  classDef svcCore fill:#e6f5ef,stroke:#0e8a6f,color:#0c3b32;
+  classDef svcAi fill:#eef1f4,stroke:#8a94a3,color:#232a33;
+  classDef svcDaily fill:#fdeecf,stroke:#d97706,color:#5a3a08;
+  class capi svcCore;
+  class aapi svcAi;
+  class dapi svcDaily;
 ```
 
 - **공유 모듈**(core-enum·core-domain·db-core·client-ai)은 그대로 두고, **앱 모듈 3개**(`core-api`·`ai-api`·`daily-api`)가 필요한 것만 의존.
