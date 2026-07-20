@@ -40,9 +40,10 @@
 | ai-service 성격 | **내부 전용 stateless 컴퓨트** (ClusterIP, 유저 직접 노출 X) | 계산만 수행, 평가 결과 데이터는 호출자(core)가 소유. 과거 OOM/토큰/지연 이슈를 독립 격리 | 🟡 |
 | ai-service 계약 | **기존 `*EvaluatorPort`를 HTTP로 재현** — core/daily는 포트 어댑터를 HTTP 클라이언트로 교체 | 포트가 이미 있어 계약이 정의돼 있음. 최소 침습 | 🔴 |
 | daily-service 성격 | 무로그인 · 경량 · 최소 상태(문제 시드 + rate-limit) · 독립 경량 FE | 매일 쓰는 라이트 제품. scale-to-zero로 저비용 | 🟡 |
-| 인증 경계 | daily=무인증 / ai=서비스간 내부 인증 / core=기존 유저 인증 | ai는 내부 전용이라 유저 인증 불필요, 서비스간만 보호 | 🟡 |
+| 인증 경계 | daily=무인증 / **ai=NetworkPolicy만**(ClusterIP 내부 전용, 앱레벨 인증 없음) / core=기존 유저 인증 | ai는 내부 전용이라 유저 인증 불필요. 학습 시작엔 NetworkPolicy가 가장 싸고 EKS 네트워킹 실습 표본. 필요 시 토큰/mTLS로 승격 | 🔴 확정(07-20) |
 | 이관 순서 | **strangler: ① ai-service ② daily-service ③ core는 그대로** (빅뱅 금지) | ai는 포트 덕에 가장 깨끗·학습가치 큼. daily는 무인증이라 얽힘 적음. core는 최대한 유지 | 🔴 |
-| DB 전략 (초기) | **공유 Neon Postgres 유지** — ai=DB 없음(stateless), daily=자체 스키마/테이블, core=기존 소유 | DB-per-service는 순수하나 솔로 프로젝트엔 과함. 스키마 분리로 시작, 필요 시 물리 분리 | 🟡 |
+| DB 전략 (초기) | **공유 Neon Postgres 유지** — ai=DB 없음(stateless), daily=자체 스키마/테이블, core=기존 소유 | DB-per-service는 순수하나 솔로 프로젝트엔 과함. 스키마 분리로 시작, 필요 시 물리 분리 | 🔴 확정(07-20) |
+| daily FE 시점 | **Phase 2에 경량 FE 함께 출시** | 제품(라이트 데일리) 검증을 가장 빨리. API만 먼저 내면 쓸 제품이 늦음 | 🔴 확정(07-20) |
 
 ### 기각한 대안
 - **풀 마이크로서비스**(회사·이력서·코딩·면접 전부 분리): 분산 데이터 정합성·서비스간 인증·배포 N개.
@@ -104,8 +105,8 @@ flowchart TB
   피처플래그(in-process ↔ HTTP)로 도입. 기존 동작 그대로.
 - **Phase 1 — ai-service 추출**: `client-ai`·평가자를 ai-api로 이동, ai-api를 독립 앱으로 기동.
   core의 포트 어댑터를 HTTP로 전환. **동작 확인**: 기존 AI 평가 결과 parity(같은 입력→같은 스키마 응답).
-- **Phase 2 — daily-service 추출**: DailyQuestion 로직을 daily-api로 이동(ai-service 호출), 무인증 경량 FE.
-  **동작 확인**: 무로그인으로 오늘의 질문→AI 설명까지 e2e.
+- **Phase 2 — daily-service 추출 (+경량 FE 확정)**: DailyQuestion 로직을 daily-api로 이동(ai-service 호출),
+  무인증 경량 FE를 **함께** 출시(제품 먼저 검증). **동작 확인**: 무로그인으로 오늘의 질문→AI 설명까지 e2e.
 - **Phase 3 — EKS 배포 토폴로지**: Deployment ×3 + Ingress path 라우팅(/api, /daily, ai는 내부),
   ai-service 서비스간 인증·NetworkPolicy. 2-cluster 위에 얹음. **동작 확인**: 클러스터에서 3서비스 e2e.
 
@@ -126,9 +127,12 @@ flowchart TB
 4. EKS에 3 Deployment + Ingress 라우팅, ai 내부 전용
 5. 아키텍처 다이어그램(`docs/architecture/`) 갱신, 각 phase 검증 기록
 
-## 범위 밖 / 열린 질문 (구현 계획 전 확정 필요)
-- **daily FE를 언제**: Phase 2에 함께 vs 이후. (제품 검증 시점과 연결)
-- **ai-service 내부 인증 방식**: 공유 토큰 vs mTLS vs NetworkPolicy만. (학습 목적상 단순부터)
-- **DB 물리 분리 여부**: 초기 공유 스키마 → 언제 분리할지 트리거.
+## 확정된 결정 (07-20 리뷰)
+- **daily FE 시점**: Phase 2에 경량 FE **함께** 출시 (제품 먼저 검증).
+- **ai 내부 인증**: **NetworkPolicy만** — ai=ClusterIP 내부 전용, 앱레벨 인증 없음. 필요 시 토큰/mTLS로 승격.
+- **DB 전략**: **공유 Neon + 스키마 분리** (ai=DB 없음). 물리 분리는 트리거 생기면.
+
+## 열린 질문 (구현 중 실증/결정)
 - **core의 AiCheck**: 오케스트레이션만 core에 남기고 평가는 ai로 위임하는 경계가 맞는지 Phase 1에서 실증.
-- **관측**: 서비스간 분산 트레이싱(현재 Grafana OTLP 단일 앱 전제) 확장 범위.
+- **DB 물리 분리 트리거**: 공유 스키마로 시작 → 성능·소유 경계 문제 생기면 분리 판단.
+- **관측**: 서비스간 분산 트레이싱(현재 Grafana OTLP 단일 앱 전제) 확장 — Phase 3에서.
