@@ -13,7 +13,7 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "EKS K8s 버전 (apply 직전 표준 지원 최신으로 재확인)"
   type        = string
-  default     = "1.32"
+  default     = "1.36"
 }
 
 variable "node_instance_type" {
