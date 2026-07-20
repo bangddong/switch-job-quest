@@ -7,31 +7,31 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/eks-2-cluster` |
-| 열린 PR | #287 — 2-cluster 레이어 (코드+plan, apply 전 · 머지 대기) |
+| 브랜치 | (없음 — main) |
+| 열린 PR | 없음 |
 
-> **⏸️ 2-cluster 코드 완료·apply 대기 (07-20)**: Task 1~7 인라인 실행 완료 — 11개 `.tf`
-> (각 태스크 fmt/validate/tfsec 통과), 실제 backend init 후 `tofu plan` = **`14 to add`**($0).
-> **QA HIGH 0 — 머지 가능** (마커 `4743855`). PR **#287** 오픈. K8s 버전 **1.36**으로 핀(실측:
-> 1.32는 표준지원 밖, 1.33은 07-29 만료 → default 1.36). 툴체인: 이 머신엔 tofu 없었어서
-> `brew install opentofu tfsec`로 설치함(07-19 clone 환경).
-> **다음(별도 세션): Task 8 = apply(★과금)→`kubectl get nodes` Ready→`tofu destroy` 왕복.**
-> 계획 [docs/superpowers/plans/2026-07-19-eks-2-cluster.md](docs/superpowers/plans/2026-07-19-eks-2-cluster.md) Task 8. apply 전 plan 해설+승인 게이트 유지. 30~40분 왕복 시간 필요.
+> **⏸️ 2-cluster 코드 머지됨(#287)·apply 대기 (07-20)**: 코드 11개 `.tf` main 랜딩. **아직 apply 안 함
+> = AWS에 아무것도 안 떠 있음, 비용 $0, 크레딧 $200 온전.**
+> **다음(별도 세션): Task 8 = apply(★과금 시작)→`kubectl get nodes` Ready→`tofu destroy` 왕복.**
+> 계획 [docs/superpowers/plans/2026-07-19-eks-2-cluster.md](docs/superpowers/plans/2026-07-19-eks-2-cluster.md) Task 8.
+> **로컬** apply/destroy(CI 아님). apply 전 plan 해설+승인 게이트 유지. **30~40분 통으로 필요**(중간에 자리 뜨면 과금 샘).
+> 실행: `cd infra/aws-eks/2-cluster && tofu init && tofu plan` → 승인 후 `apply` → 끝나면 반드시 `tofu destroy`.
+> K8s 1.36 핀(실측: 1.32 표준지원 밖·1.33 07-29 만료). 툴체인: 이 머신은 `brew install opentofu tfsec` 필요(07-19 clone).
 >
 > **🖼️ 아키텍처 다이어그램 상시 유지 (07-20 도입)**: 매 레이어/Stage마다 갱신. ① mermaid 소스
 > `docs/architecture/eks-2-cluster.md`(repo·PR·블로그용, GitHub 자동 렌더) ② 라이브 아티팩트
 > (줌·전체화면·과금 색구분) https://claude.ai/code/artifact/0d4a3aa3-74eb-46c3-a598-96228686b311
 >
-> ⚠️ **커밋 트레일러 주의**: 이 repo는 `Co-Authored-By` 금지(CLAUDE.md). 브랜치 8개 커밋에 실수로
-> 트레일러 들어갔으나 **squash 머지라 main엔 안 남음** — 머지 시 squash 메시지만 트레일러 없이 쓰면 됨.
+> **🔒 CI 가드 (07-20 #287)**: `infra-ci.yml`의 `guard-local-layers` 잡이 `infra-deploy.yml` 매트릭스에
+> `2-cluster` 진입 시 CI 실패시킴 — 로컬 전용 레이어가 CI 자동 apply로 과금 새는 것 기계 차단.
 
 ## 최근 완료 (최근 3건)
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #287 | **EKS 2-cluster 레이어 코드 완성·머지 (apply는 별도 세션).** 핸드롤 OpenTofu 11개 `.tf` — 컨트롤플레인(public·auth=API) + 관리형 노드그룹(t4g.small Spot 1~2) + OIDC(IRSA 토대) + 애드온 3종(vpc-cni·kube-proxy·coredns) + Access Entry(bootstrap-admin→ClusterAdmin). 1-network를 `terraform_remote_state`로 소비, state key 격리. K8s **1.36** 핀(실측: 1.32 표준지원 밖·1.33 07-29 만료). `tofu plan=14 to add`(과금 $0). **로컬 apply/destroy** 결정 → CI 미편입 + `guard-local-layers` 잡으로 매트릭스 진입 차단. 아키텍처 다이어그램 상시 유지 도입(mermaid `docs/architecture/` + 라이브 아티팩트). QA HIGH 0. 비용 $0. 머지 완료 | 2026-07-20 |
 | #285 | **EKS 1-network 레이어 완성.** VPC(10.0.0.0/16, DNS ON) + IGW + 퍼블릭 서브넷 ×2(ap-northeast-2a/2c, /20, 공인IP 자동) + 라우트(0.0.0.0/0→IGW). **NAT 회피**(퍼블릭 서브넷+노드 공인IP, $32/mo 절약) — tfsec `no-public-ip`·`vpc-flow-logs`는 근거 ignore. EKS discovery 태그(`role/elb=1`, `cluster/devquest-eks=shared`). **CI 도그푸딩**: infra-deploy matrix에 `1-network` 추가 → PR plan / merge apply(OIDC)로 VPC 생성, CLI 실측 검증. 비용 $0. 머지 완료 | 2026-07-18 |
 | #283 | **EKS 0-bootstrap 레이어 완성 (IaC-first, 콘솔 클릭 0).** remote backend(S3+DynamoDB 락) + state S3 이관 / 예산 `aws_budgets_budget`(크레딧 제외, $10/$50/$150 알림) / 보안 CI 2층 `infra-ci.yml`(gitleaks+tfsec) / GitHub OIDC + IAM 역할(admin + 신뢰정책 `repo:...:main`·`pull_request` 강잠금) / `infra-deploy.yml` plan-on-PR·apply-on-merge. **양방향 OIDC 실증**(장기키 0개). 비용 $0. 머지 완료 | 2026-07-18 |
-| #271 | EKS 작업 일지 체계 도입 — `docs/eks-migration-log.md`(블로그 원고 소스, 누적 비용 테이블) + CLAUDE.md "EKS 작업 일지 규칙"(즉시 append·태그 체계·에이전트 전파, EKS 종료 시 제거). 머지 완료 | 2026-07-16 |
 
 ## 다음 작업
 
@@ -92,12 +92,14 @@
   - **✅ 1-network 완료 (#285, 07-18):** VPC 10.0.0.0/16 + IGW + 퍼블릭 서브넷 ×2(2a/2c, 공인IP) +
     라우트. NAT 회피(퍼블릭+공인IP). EKS discovery 태그. CI 도그푸딩(matrix에 `1-network` 추가,
     merge→apply로 VPC 생성 실측). 비용 $0. 실측 VPC `vpc-0e8401b42ba207328`.
-  - **➡️ 다음: 2-cluster (EKS 컨트롤플레인 + 노드그룹).** ⚠️⚠️ **여기서 비용 발생 시작** —
-    EKS 컨트롤플레인 **$0.10/hr(방치 시 월 ~$73)** + 노드(t4g.small Spot) + EBS. **세션 종료 시
-    `tofu destroy` 필수**(destroy-after-use). backend·예산·VPC는 $0라 유지. 착수 전 크레딧 잔여 재확인.
-    - infra-deploy matrix에 `2-cluster` 추가 시 편입. 단 2-cluster는 destroy 왕복이 잦아 CI apply보다
-      **로컬 apply/destroy가 나을 수 있음** — 착수 시 판단. `kubernetes`/`helm` 프로바이더 주의(README 81줄).
-  - CI 관리 레이어 현재: `infra-deploy.yml` matrix `[0-bootstrap, 1-network]`.
+  - **✅ 2-cluster 코드 완성·머지 (#287, 07-20):** 컨트롤플레인+노드그룹+OIDC+애드온+Access Entry 11개 `.tf`.
+    K8s 1.36 핀. `tofu plan=14 to add`. **로컬 apply/destroy 확정**(CI 미편입) + `guard-local-layers` 잡으로
+    매트릭스 진입 차단. **⚠️ 아직 apply 안 함 — 비용 $0.**
+  - **➡️ 다음: Task 8 = 2-cluster apply 왕복 (별도 세션, ★과금 시작).** ⚠️⚠️ EKS 컨트롤플레인 **$0.10/hr**
+    + 노드(t4g.small Spot) + EBS. 실행: `cd infra/aws-eks/2-cluster && tofu init && tofu plan`(해설+승인 게이트)
+    → `apply` → `kubectl get nodes` Ready 확인 → **끝나면 반드시 `tofu destroy`**(destroy-after-use).
+    **로컬**에서만(CI 아님). 30~40분 통으로 필요. 착수 전 크레딧 잔여 재확인. 그 다음은 gitops 또는 Stage 1(ECR·앱 배포).
+  - CI 관리 레이어 현재: `infra-deploy.yml` matrix `[0-bootstrap, 1-network]` (2-cluster는 로컬 전용이라 의도적 제외).
   - IaC-first라 **캡처 필요량 급감** — 단계가 코드+CLI 텍스트. 잔여는 서사/증빙 소수.
 - **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에
   **안 닿고** 클립보드도 격리됨. → 사용자가 **캡처를 GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된
