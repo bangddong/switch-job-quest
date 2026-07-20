@@ -7,13 +7,23 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/eks-2-cluster` (push됨, PR 아직 없음 — 코드 전 설계·계획만) |
-| 열린 PR | 없음 |
+| 브랜치 | `chore/eks-2-cluster` |
+| 열린 PR | #287 — 2-cluster 레이어 (코드+plan, apply 전 · 머지 대기) |
 
-> **⏸️ 2-cluster 착수 중단점 (07-19)**: brainstorming→설계문서→구현계획까지 완료·push.
-> 크레딧 $200 재확인. **결정**: 핸드롤 / 첫 apply=최소 커널+노드 / public 엔드포인트 / **로컬 apply·destroy**(CI 아님).
-> **다음(내일)**: 계획 [docs/superpowers/plans/2026-07-19-eks-2-cluster.md](docs/superpowers/plans/2026-07-19-eks-2-cluster.md) **Task 1(스캐폴드)부터** 인라인 실행.
-> Task 1~7은 $0(코드+plan), **Task 8만 과금**(그 앞 plan 해설+사용자 승인 게이트). 설계: [docs/superpowers/specs/2026-07-19-eks-2-cluster-design.md](docs/superpowers/specs/2026-07-19-eks-2-cluster-design.md).
+> **⏸️ 2-cluster 코드 완료·apply 대기 (07-20)**: Task 1~7 인라인 실행 완료 — 11개 `.tf`
+> (각 태스크 fmt/validate/tfsec 통과), 실제 backend init 후 `tofu plan` = **`14 to add`**($0).
+> **QA HIGH 0 — 머지 가능** (마커 `4743855`). PR **#287** 오픈. K8s 버전 **1.36**으로 핀(실측:
+> 1.32는 표준지원 밖, 1.33은 07-29 만료 → default 1.36). 툴체인: 이 머신엔 tofu 없었어서
+> `brew install opentofu tfsec`로 설치함(07-19 clone 환경).
+> **다음(별도 세션): Task 8 = apply(★과금)→`kubectl get nodes` Ready→`tofu destroy` 왕복.**
+> 계획 [docs/superpowers/plans/2026-07-19-eks-2-cluster.md](docs/superpowers/plans/2026-07-19-eks-2-cluster.md) Task 8. apply 전 plan 해설+승인 게이트 유지. 30~40분 왕복 시간 필요.
+>
+> **🖼️ 아키텍처 다이어그램 상시 유지 (07-20 도입)**: 매 레이어/Stage마다 갱신. ① mermaid 소스
+> `docs/architecture/eks-2-cluster.md`(repo·PR·블로그용, GitHub 자동 렌더) ② 라이브 아티팩트
+> (줌·전체화면·과금 색구분) https://claude.ai/code/artifact/0d4a3aa3-74eb-46c3-a598-96228686b311
+>
+> ⚠️ **커밋 트레일러 주의**: 이 repo는 `Co-Authored-By` 금지(CLAUDE.md). 브랜치 8개 커밋에 실수로
+> 트레일러 들어갔으나 **squash 머지라 main엔 안 남음** — 머지 시 squash 메시지만 트레일러 없이 쓰면 됨.
 
 ## 최근 완료 (최근 3건)
 
