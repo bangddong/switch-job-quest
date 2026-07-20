@@ -183,6 +183,9 @@ flowchart TB
 - **daily FE 시점**: Phase 2에 경량 FE **함께** 출시 (제품 먼저 검증).
 - **ai 내부 인증**: **NetworkPolicy만** — ai=ClusterIP 내부 전용, 앱레벨 인증 없음. 필요 시 토큰/mTLS로 승격.
 - **DB 전략**: **공유 Neon + 스키마 분리** (ai=DB 없음). 물리 분리는 트리거 생기면.
+- **배포 전략 (확정, 재론 안 함)**: **EKS = 실습**($200 크레딧 한도 내 destroy-after-use로 3서비스 학습) /
+  **Fly.io = 상시 fallback**(언제든 복귀 가능한 안전지대). Cloud Run·Oracle·Render 등 대안은 **이미 고려·기각**.
+  배포 타겟은 열린 문제 아님. EKS 비용통제는 scale-to-zero가 아니라 **destroy-after-use 규율**로.
 
 ## 열린 질문 (구현 중 실증/결정)
 - **core의 AiCheck**: 오케스트레이션만 core에 남기고 평가는 ai로 위임하는 경계가 맞는지 Phase 1에서 실증.
