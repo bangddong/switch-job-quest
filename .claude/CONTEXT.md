@@ -10,6 +10,12 @@
 | 브랜치 | (없음 — main) |
 | 열린 PR | 없음 |
 
+> **🌙 내일 이어서 (07-20 종료 시점)**: 오늘 EKS 2-cluster 코드 머지(#287)·**서비스 분해 설계 확정(#289)**까지.
+> main clean · 열린 PR 0 · 코드 0줄 · EKS $0. **두 갈래 중 택1로 시작:**
+> - **① [주 방향] 서비스 분해 Phase 0~1 구현계획(plan) 작성** — 설계 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md` 기반, ai-service 추출부터. 상세는 "다음 작업 › 🎯 서비스 분해 에픽".
+> - **② EKS 2-cluster apply 왕복** — 30~40분 통시간 있을 때(바로 아래 상세). 학습 트랙.
+> - **메모(리뷰 CI)**: OCR(alibaba)·roborev 검토 완료 → **도입 보류.** 우리 유일한 구멍="서버사이드 CI 리뷰"인데 솔로라 안 아픔 + OCR은 **API 종량제(Claude 구독 불가)**. 현 qa-reviewer(구독 내 추가 $0)로 충분. **협업자 생기거나 PR이 3서비스로 늘면** 그때 OCR 파일럿(haiku·diff만·예산알림). 나중 카드.
+>
 > **⏸️ 2-cluster 코드 머지됨(#287)·apply 대기 (07-20)**: 코드 11개 `.tf` main 랜딩. **아직 apply 안 함
 > = AWS에 아무것도 안 떠 있음, 비용 $0, 크레딧 $200 온전.**
 > **다음(별도 세션): Task 8 = apply(★과금 시작)→`kubectl get nodes` Ready→`tofu destroy` 왕복.**
