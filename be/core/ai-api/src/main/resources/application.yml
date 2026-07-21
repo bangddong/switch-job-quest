@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: devquest-ai-api
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  level:
+    com.devquest: DEBUG
