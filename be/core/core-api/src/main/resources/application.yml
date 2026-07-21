@@ -45,6 +45,8 @@ devquest:
     pass-score: 70
     max-retry: 3
     interview-questions: 10
+    # AI 포트 전송 계층 전환 스위치. inprocess(기본) = client-ai 빈 사용(무행동). http = HTTP 어댑터 빈 사용(Phase 1 배선 전까지 미실행).
+    transport: inprocess
   judge0:
     api-key: ${JUDGE0_API_KEY:}
     api-host: judge0-ce.p.rapidapi.com
