@@ -178,9 +178,18 @@ ai-api엔 db-core 빈이 없다 → 그대로 뽑으면 **기동 시 `AiCallLogP
 **개념 노트:** 피처플래그를 **빈 선택 레벨**에 두면(서비스는 인터페이스만 앎) strangler 전환이 설정 한 줄.
 Phase 0에선 HTTP 빈이 아직 실제 호출을 안 하므로 기본값 inprocess로 동작 불변.
 
-- [ ] **Step 1:** 전환 스위치 슬라이스 테스트 — `transport=inprocess`면 in-process 빈, `=http`면 HTTP 빈 주입 검증
-- [ ] **Step 2:** `AiTransportConfig` + HTTP 어댑터 **뼈대**(메서드는 `TODO`/미배선, 기본값 inprocess라 미실행)
-- [ ] **검증:** 기본값에서 기존 테스트 전부 그린. `=http` 컨텍스트 로드만 확인(호출은 Phase 1)
+- [x] **Step 1:** 전환 스위치 슬라이스 테스트 2개(`AiTransportInprocessSwitchTest`/`HttpSwitchTest`) — 빈 주입 검증
+- [x] **Step 2:** `AiTransportConfig`(`@Bean`+`@ConditionalOnProperty(http)`+`@Primary`) + `BlogHttpEvaluator`
+  뼈대(`TODO()` 미배선). **client-ai·소비서비스 무수정** — 기본 inprocess면 HTTP 빈 미등록→client-ai 주입.
+- [x] **검증:** core-api 161 tests 0 failures(무행동) · build 그린 · core-api bootJar 성공(Fly 무영향).
+
+> **✅ 구현 결정 (2026-07-21, #300):** 전환 = `AiTransportConfig`의 조건부 `@Bean`+`@Primary`(어댑터 자체에
+> @Component 안 달아 client-ai 무수정). HTTP 어댑터는 **대표 1개(BlogEvaluatorPort→`BlogHttpEvaluator`)만**
+> 뼈대 구현 — 같은 패턴이 나머지 16개에 기계적 적용되므로 메커니즘 증명엔 1개로 충분. **나머지 16개는
+> Phase 1 Task 1.4에서 실제 HTTP 배선과 함께.** 테스트는 `@SpringBootTest(webEnvironment=NONE)` 풀 컨텍스트
+> 슬라이스(레포 선례 따름).
+
+**✅ Phase 0 완료 (2026-07-21, Task 0.1~0.4 전부 머지 #295·#297·#298·#300).** 아래 판정 전부 충족.
 
 **Phase 0 완료 판정:** `./gradlew build` 그린 · 기존 테스트 100% 그린 · 앱 런타임 동작 불변 · `ai-api` 모듈
 독립 기동 · 피처플래그 기본 inprocess · **Fly 배포 무영향 검증(아래)**. **아직 단일 배포, HTTP 미사용.**
