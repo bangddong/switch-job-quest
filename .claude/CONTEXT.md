@@ -10,9 +10,12 @@
 | 브랜치 | (없음 — main) |
 | 열린 PR | 없음 |
 
-> **🌙 다음 세션 시작점 (07-21 갱신)**: **서비스 분해 Phase 0~1 구현계획 확정·머지(#292)** 완료.
-> main clean · 코드 0줄 · EKS $0. **다음 = 실제 구현 착수 or EKS apply, 택1:**
-> - **① [주 방향] 서비스 분해 Phase 0 구현 착수** — 계획 `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md`의 **Task 0.1(AI 포트 17개 마커 식별)**부터 BE 에이전트로 TDD. Phase 0는 전부 **무행동 변경**(seam 정리)이라 안전. 순서: 0.1→0.2(AiCallLog 소비처 조사, 방침 A 확정)→0.3(`core:ai-api` 스캐폴드)→0.4(HTTP 어댑터+피처플래그).
+> **🌙 다음 세션 시작점 (07-21 갱신)**: 서비스 분해 **Phase 0 진행 중 — Task 0.1 완료·머지(#295).**
+> AI 포트 17개에 `AiEvaluatorPort` 마커 부여(무행동). main clean · EKS $0. **다음 = Task 0.2 이어가기 or EKS apply, 택1:**
+> - **① [주 방향] Phase 0 Task 0.2 착수** — **AiCallLog 소비처 조사**(방침 A=관측 재배치 확정, core에 소비처
+>   있으면 A+C 병행). 조사·결정 태스크(코드 변경 없음). 이어서 0.3(`core:ai-api` 스캐폴드)→0.4(HTTP 어댑터+피처플래그).
+>   계획 `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md` Task 0.2~0.4.
+>   ⚠️ **불변식 재확인**: Task 1.4에서 `client-ai` 의존 제거 금지(Phase 3까지 유지=inprocess 롤백 보존), Fly 배포 무영향(core-api bootJar 단독 빌드).
 > - **② EKS 2-cluster apply 왕복** — 30~40분 통시간 있을 때(아래 상세). 학습 트랙.
 > - **메모(리뷰 CI)**: OCR(alibaba)·roborev 검토 완료 → **도입 보류.** 솔로라 안 아픔 + OCR은 **API 종량제(Claude 구독 불가)**. 현 qa-reviewer로 충분. **협업자 생기거나 PR이 3서비스로 늘면** 그때 OCR 파일럿. 나중 카드.
 > - **메모(DB)**: **Neon→RDS 전환 = 폐기(07-21).** 무료 사용량 부족 시점에만 재고. RDS는 상시 과금이라 destroy-after-use(EKS 실습)·Fly fallback 전략과 배치. 상세는 "백로그 › DB".
@@ -36,9 +39,9 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #295 | **서비스 분해 Phase 0 Task 0.1 — AI 포트 마커 (무행동 변경).** 향후 ai-service 추출 대상을 타입으로 식별 가능하게: `port/ai/AiEvaluatorPort.kt` 빈 마커(순수 Kotlin) 생성 + AI(LLM) 포트 **정확히 17개**에 상속 표식만 추가(시그니처·반환 무변경). `*EvaluatorPort` 10 + `*Port` 7(TechInterview·InterviewCoach·CodingHint·SkillAssessment·JourneyReport·ActClearReport·CodingProblemGenerator). **Judge0Port 제외**(비-LLM 코드채점). 규약 테스트 `ArchAiPortConventionTest`로 "정확히 17개 + Judge0·DB 포트 14개 제외" 고정. QA 실측: 전체 모듈 재컴파일 회귀 0·core-api bootJar 정상(Fly 무영향). HIGH 0·LOW 2(규약 테스트 jar스킴/dedupe 견고성, 무해). 커밋 316509b | 2026-07-21 |
 | #292 | **서비스 분해 Phase 0~1 구현계획 확정 (ai-service 추출).** 설계(#289)를 태스크로 분해하기 전 **Blindspot Pass 진단**으로 "어댑터만 스왑" 가정을 실제 코드와 대조 → **부분 일치**, 4개 불일치를 Phase 0 선행 태스크로 반영: ① AI 포트 **17개** 중 7개가 `*EvaluatorPort` 미준수라 DB 포트와 혼재 → 마커 인터페이스(Task 0.1) ② `CacheMetricsAdvisor`→`AiCallLogPort`→db-core로 **매 호출 core DB write**(숨은 역결합) → **관측 재배치 A안**(Task 0.2/1.3) ③ `max-retry`·Judge0 설정이 core-api에 분산(Task 1.2) ④ `AiCheckService` `@Transactional` 안 AI+DB 혼용→HTTP 지연 유입(Task 1.4). 안전장치: 피처플래그(`transport=inprocess↔http`) strangler 롤백, 계약=`core-domain` data class 단일출처. Phase 0=무행동 변경, Phase 1 완료판정=parity+즉시롤백. 계획 `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md`. 코드 0줄. 머지 완료 | 2026-07-21 |
 | #289 | **서비스 분해 설계 확정 (제품 방향 전환).** "만든 사람조차 안 쓴다" → 무거운 12기능 앱을 **가볍게 매일 쓰는 데일리 도구**로 재정렬 + EKS 다중서비스 학습. 모듈러 모놀리스를 **daily + ai-service + core 3서비스**로 분해. **핵심 발견**: AI 경계가 이미 `core-domain` 포트(`*EvaluatorPort` 18종)로 존재 → 어댑터 in-process→HTTP 스왑으로 추출. strangler 순서(ai→daily→core 유지), 모노레포 멀티모듈, ai=NetworkPolicy만·공유DB 스키마분리·daily FE는 Phase2 동반. 스케일링(이메일 Resend 무료~100/일 천장→SES·토큰·캐싱)·EKS 인프라 영향(2-cluster addon NetworkPolicy·노드용량)·배포전략(EKS=실습/Fly=fallback) 포함. 설계 문서 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md` + 브리핑 아티팩트. 코드 0줄. 머지 완료 | 2026-07-20 |
-| #287 | **EKS 2-cluster 레이어 코드 완성·머지 (apply는 별도 세션).** 핸드롤 OpenTofu 11개 `.tf` — 컨트롤플레인(public·auth=API) + 관리형 노드그룹(t4g.small Spot 1~2) + OIDC(IRSA 토대) + 애드온 3종(vpc-cni·kube-proxy·coredns) + Access Entry(bootstrap-admin→ClusterAdmin). 1-network를 `terraform_remote_state`로 소비, state key 격리. K8s **1.36** 핀(실측: 1.32 표준지원 밖·1.33 07-29 만료). `tofu plan=14 to add`(과금 $0). **로컬 apply/destroy** 결정 → CI 미편입 + `guard-local-layers` 잡으로 매트릭스 진입 차단. 아키텍처 다이어그램 상시 유지 도입(mermaid `docs/architecture/` + 라이브 아티팩트). QA HIGH 0. 비용 $0. 머지 완료 | 2026-07-20 |
 
 ## 다음 작업
 
@@ -46,8 +49,9 @@
 - **설계 문서: `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`** (착수 전 필독)
 - **방향**: 무거운 앱 → 라이트 데일리 도구 재정렬 + EKS 다중서비스 학습. **daily + ai-service + core 3분리.**
 - **strangler 이관**: Phase 0(준비: ai-api 스캐폴드+HTTP어댑터 피처플래그) → 1(ai-service 추출, 포트 어댑터 HTTP화, AI parity 검증) → 2(daily-service 추출 +경량 FE, 무로그인 e2e) → 3(EKS 배포: Deployment×3·Ingress·NetworkPolicy)
-- **✅ Phase 0~1 구현계획 확정·머지 (#292, 07-21)**: `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md`. Blindspot Pass로 4개 불일치 반영(마커·AiCallLog 역결합·설정분산·트랜잭션경계).
-- **➡️ 다음 스텝: Phase 0 구현 착수 = Task 0.1(AI 포트 마커)부터 BE 에이전트 TDD.** 순서 0.1→0.2→0.3→0.4, 전부 무행동 변경. Task 0.2에서 AiCallLog 소비처 조사(방침 A=관측 재배치 확정).
+- **✅ Phase 0~1 구현계획 확정·머지 (#292, 07-21)**: `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md`. Blindspot Pass로 4개 불일치 반영(마커·AiCallLog 역결합·설정분산·트랜잭션경계). #294로 Fly 무영향·롤백 불변식 보강.
+- **✅ Phase 0 Task 0.1 완료·머지 (#295, 07-21)**: AI 포트 17개 `AiEvaluatorPort` 마커, 규약 테스트로 고정. 무행동 변경 QA 실측 확인.
+- **➡️ 다음 스텝: Phase 0 Task 0.2 = AiCallLog 소비처 조사**(방침 A=관측 재배치 확정, 소비처 있으면 A+C 병행). 조사·결정만(코드 무변경). 이어서 0.3(`core:ai-api` 스캐폴드)→0.4(HTTP 어댑터+피처플래그).
 - **⚠️ 2-cluster에 영향**: ai NetworkPolicy 실현하려면 vpc-cni addon에 `enableNetworkPolicy` 필요(현재 맨몸), JVM 3개엔 t4g.small 빠듯→medium. Phase 3 체크리스트.
 - **미해결(구현 중)**: 데일리 캐싱 전략(공통콘텐츠 1회생성→서빙, Redis) / 이메일 SES 전환·소유(core vs daily) / AiCheck 오케스트레이션 경계 / 분산 트레이싱
 - CI 메모: `tfsec` 잡이 릴리스 다운로드 시 GitHub API rate-limit(403)로 간헐 실패 → `github_token` 주입으로 근본해결 가능(미적용, 재실행으로 우회 중)
@@ -89,6 +93,9 @@
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 나중에 복습(로그인·DB·간격 반복, RPG XP 연동). 지금은 보류.
 
 ### 백로그
+- [ ] **tech-debt(LOW): `be/gradlew` 실행 권한 없음(mode 100644)** — 로컬 clone에서 `./gradlew` 직접
+      실행 불가(07-21 Task 0.1 중 발견, BE 에이전트가 chmod로 우회 후 원복). CI는 통과(체크아웃/래퍼 호출
+      방식이 달라 무영향). `git update-index --chmod=+x be/gradlew`로 실행비트 커밋하면 근본 해결.
 - [ ] **DB: Neon→RDS 전환 — 폐기, 무료 한도 부족 시 재고 (07-21 판단)**. 트리거 = Neon 무료 티어
       (storage·compute 시간·연결수) 실제 부족. **RDS는 상시 과금**(db.t4g.micro ~$12–15/mo + storage + backup)
       이라 EKS destroy-after-use 규율·Fly fallback 전략과 배치 → 전환 시 3그림으로 갈림(①prod 완전이전=전략재론
