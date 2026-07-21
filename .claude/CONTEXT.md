@@ -20,8 +20,18 @@
 >   계획 `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md` Phase 1.
 >   ⚠️ **불변식**: ①`client-ai` 의존 제거 금지(Phase 3까지=inprocess 롤백 보존) ②Fly 무영향(core-api bootJar 단독)
 >   ③`transport` 프로덕션 기본값은 검증 누적까지 **inprocess 유지**.
-> - **② EKS 2-cluster apply 왕복** — 30~40분 통시간 있을 때(아래 상세).
 > - **② EKS 2-cluster apply 왕복** — 30~40분 통시간 있을 때(아래 상세). 학습 트랙.
+>
+> **📋 Phase 0 회고 (KPT) — Phase 1 착수 전 반드시 볼 것:**
+> - **Problem(재발 방지)**: ①계획 stale — 진단 발견(AiCallLog 역결합)을 Task 0.3 문구에 전파 안 해 QA가 모순
+>   지적 → **Phase 1 착수 전 계획에 진단이 완전 반영됐는지 먼저 훑기.** ②CONTEXT 갱신 PR 오버헤드(10PR 중 6문서).
+>   ③로컬 환경 반복 낭비(매 에이전트 JDK 설치·gradlew chmod).
+> - **Try(Phase 1 반영)**: ①계획 재점검 선행 ②**트랜잭션 경계(1.4)가 유일하게 동작 바뀔 수 있는 지점 →
+>   회귀 테스트 집중** ③parity=완료 판정(LLM 비결정성→스키마 동등 비교) ④`gradlew` 실행비트 선제 정비.
+> - **시각화**: Phase 0 회고 https://claude.ai/code/artifact/8d702047-0184-4743-b89d-4f085b8644bc ·
+>   목표 아키텍처 https://claude.ai/code/artifact/ffe35a97-ee42-4412-b85c-2716e8b59a14
+> - **배포 타겟 열린 결정(Phase 3 전 확정)**: "최종 prod"를 EKS 완전체 vs Fly 3서비스 vs Fly 단일+EKS 학습전용 —
+>   미정. EKS 상시는 컨트롤플레인 $73/mo 고정비(destroy-after-use 전제). Phase 1(코드 추출)엔 영향 없음.
 > - **메모(리뷰 CI)**: OCR(alibaba)·roborev 검토 완료 → **도입 보류.** 솔로라 안 아픔 + OCR은 **API 종량제(Claude 구독 불가)**. 현 qa-reviewer로 충분. **협업자 생기거나 PR이 3서비스로 늘면** 그때 OCR 파일럿. 나중 카드.
 > - **메모(DB)**: **Neon→RDS 전환 = 폐기(07-21).** 무료 사용량 부족 시점에만 재고. RDS는 상시 과금이라 destroy-after-use(EKS 실습)·Fly fallback 전략과 배치. 상세는 "백로그 › DB".
 >
