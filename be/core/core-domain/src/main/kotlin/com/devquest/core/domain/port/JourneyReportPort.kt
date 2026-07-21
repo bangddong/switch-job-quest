@@ -1,8 +1,9 @@
 package com.devquest.core.domain.port
 
 import com.devquest.core.domain.model.evaluation.JourneyReportResult
+import com.devquest.core.domain.port.ai.AiEvaluatorPort
 
-interface JourneyReportPort {
+interface JourneyReportPort : AiEvaluatorPort {
     fun generate(
         companyName: String,
         targetPosition: String,

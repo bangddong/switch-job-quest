@@ -1,8 +1,9 @@
 package com.devquest.core.domain.port
 
 import com.devquest.core.domain.model.evaluation.InterviewEvaluationResult
+import com.devquest.core.domain.port.ai.AiEvaluatorPort
 
-interface InterviewEvaluatorPort {
+interface InterviewEvaluatorPort : AiEvaluatorPort {
     fun evaluate(
         category: String,
         question: String,

@@ -1,6 +1,7 @@
 package com.devquest.core.domain.port
 
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
+import com.devquest.core.domain.port.ai.AiEvaluatorPort
 
 data class CompanyInfo(
     val name: String,
@@ -10,6 +11,6 @@ data class CompanyInfo(
     val description: String
 )
 
-interface CompanyFitEvaluatorPort {
+interface CompanyFitEvaluatorPort : AiEvaluatorPort {
     fun analyze(preferences: Map<String, String>, companies: List<CompanyInfo>): List<CompanyFitResult>
 }
