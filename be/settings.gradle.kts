@@ -21,6 +21,7 @@ include(
     "core:core-enum",
     "core:core-domain",
     "core:core-api",
+    "core:ai-api",
     "storage:db-core",
     "clients:client-ai",
     "support:logging",
