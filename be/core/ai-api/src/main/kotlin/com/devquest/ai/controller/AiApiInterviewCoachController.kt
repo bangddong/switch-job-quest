@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/internal/ai/interview-coach")
-class InterviewCoachController(
+class AiApiInterviewCoachController(
     private val interviewCoachPort: InterviewCoachPort,
 ) {
 

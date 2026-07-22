@@ -4,7 +4,7 @@ import com.devquest.core.domain.model.evaluation.CoachAnswerHistory
 import com.devquest.core.domain.model.evaluation.CoachAnswerResult
 import com.devquest.core.domain.model.evaluation.CoachReportResult
 import com.devquest.core.domain.model.evaluation.CoachSessionResult
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpMethod

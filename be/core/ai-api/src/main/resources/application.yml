@@ -7,16 +7,23 @@ spring:
   # 리소스를 core-api·ai-api가 동일하게 import하므로 값이 자동으로 동행(별도 이관 불필요).
   config:
     import: classpath:client-ai-anthropic.yml
+  web:
+    error:
+      # Phase 1 Task 1.5 정정(parity 테스트로 실측 발견) — Task 1.4a는 이 키를 `server.error.
+      # include-message`로 뒀지만 그건 Boot 3 이하 키다. Boot 4.0.3은 에러 속성 바인딩을
+      # `ServerProperties`(→ server.*)에서 `WebProperties`(→ spring.web.*)로 옮겼다
+      # (`org.springframework.boot.autoconfigure.web.WebProperties`가 `@ConfigurationProperties
+      # ("spring.web")`로 `error: ErrorProperties`를 갖는다 — 실측: javap로 바이트코드 직접 확인).
+      # `server.error.include-message`는 존재하지 않는 키라 조용히 무시돼 기본값(`never`)으로 동작했고,
+      # 지금까지 core로 실제 원인 메시지가 전달된 적이 없었다(실측: 이 정정 전 raw HTTP 응답에
+      # message 필드 자체가 없음을 AiApiHttpParityTest로 확인). ai-api는 /internal/** 내부 전용
+      # (공개 API가 아님)이고 Phase 3에서 EKS NetworkPolicy로 외부 접근을 차단할 계획이므로, 내부
+      # 예외 메시지 노출은 허용 가능한 트레이드오프로 판단해 always로 켠다(보안 판단, Task 1.4a 결정
+      # 유지, 키만 정정). 스택트레이스는 그대로 노출하지 않는다(include-stacktrace 기본값 never 유지).
+      include-message: always
 
 server:
   port: 8081
-  error:
-    # Phase 1 Task 1.4a — 함정 (d) 에러 전파. 기본값 `never`면 Boot 기본 에러 바디에 message 필드가
-    # 빠져 원인 문자열이 core로 안 온다. ai-api는 /internal/** 내부 전용(공개 API가 아님)이고,
-    # Phase 3에서 EKS NetworkPolicy로 외부 접근을 차단할 계획이므로, 내부 예외 메시지 노출은
-    # 허용 가능한 트레이드오프로 판단해 always로 켠다(보안 판단, Task 1.4a 결정). 스택트레이스는
-    # 그대로 노출하지 않는다(include-stacktrace 기본값 never 유지) — 메시지 한 줄 이상은 불필요.
-    include-message: always
 
 management:
   endpoints:

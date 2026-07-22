@@ -2,7 +2,7 @@ package com.devquest.core.api.adapter.ai.http
 
 import com.devquest.core.domain.model.evaluation.ActClearReportResult
 import com.devquest.core.domain.port.ActClearReportPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.web.client.RestClient
 
 /** `ActClearReportPort`의 HTTP 어댑터 — ai-api `POST /internal/ai/act-clear-report/generate` 호출. */

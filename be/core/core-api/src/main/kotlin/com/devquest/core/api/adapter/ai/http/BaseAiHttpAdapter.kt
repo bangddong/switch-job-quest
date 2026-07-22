@@ -1,13 +1,13 @@
 package com.devquest.core.api.adapter.ai.http
 
 import com.devquest.core.domain.support.AiEvaluationException
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpResponse
 import org.springframework.util.StreamUtils
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.readValue
 import java.nio.charset.StandardCharsets
 
 /**
@@ -33,17 +33,18 @@ import java.nio.charset.StandardCharsets
  * 실측 테스트(`AiHttpAdapterTimeoutAndAcceptHeaderTest`)로 증명한다.
  *
  * ⚠️ **요청도 항상 `String`으로 직접 만든다** — Spring Boot 4.x는 기본적으로 Jackson 3
- * (`tools.jackson.databind.json.JsonMapper`)을 자동 구성하고, `com.fasterxml.jackson.databind.ObjectMapper`
- * (Jackson 2) 빈은 이 코드베이스에서 별도로 등록하지 않는 한 컨텍스트에 존재하지 않는다. 요청 직렬화를
- * `RestClient`의 자동 감지 컨버터에 맡기면 실행 시점에 어떤 Jackson 메이저 버전이 실제로 선택되는지가
- * 모호해진다. 그래서 [objectMapper](이 어댑터가 명시적으로 주입받는 Jackson 2 + kotlin 모듈
- * `ObjectMapper`, [com.devquest.core.api.config.AiHttpClientConfig] 참고)로 요청 본문을 직접
- * `writeValueAsString`한 뒤 `Content-Type: application/json`을 명시하고 `String`으로 전송한다.
- * `StringHttpMessageConverter`는 지원 미디어 타입에 `MediaType.ALL`을 포함해 임의의 `Content-Type`
- * 헤더를 붙인 `String` 바디도 그대로 써낼 수 있으므로, JSON 컨버터 버전 문제와 완전히 무관해진다.
+ * (`tools.jackson.databind.json.JsonMapper`)을 자동 구성한다. ai-api 서버(별도 프로세스)도 Boot 4
+ * 기본값 그대로 Jackson 3로 (역)직렬화하므로, 이 어댑터가 Jackson 2로 요청/응답을 다루면 **core가 J2로
+ * 쓰고 ai-api가 J3로 읽는 비대칭**이 생긴다(Task 1.4a 시점의 QA MEDIUM #1 — "프레임워크 버전과
+ * 무관하게"는 틀린 목표였고, 옳은 목표는 ai-api의 실제 선택인 J3와 **일치**시키는 것이다). 그래서
+ * [objectMapper](Boot가 자동구성하는 J3 `ObjectMapper`를 그대로 주입받는다 — Kotlin 모듈 등록 여부는
+ * `AiHttpJacksonV3ContextTest`로 실측 확인됨)로 요청 본문을 직접 `writeValueAsString`한 뒤
+ * `Content-Type: application/json`을 명시하고 `String`으로 전송한다. `StringHttpMessageConverter`는
+ * 지원 미디어 타입에 `MediaType.ALL`을 포함해 임의의 `Content-Type` 헤더를 붙인 `String` 바디도 그대로
+ * 써낼 수 있으므로, RestClient가 자동 감지하는 JSON 컨버터가 어떤 버전이든 무관하게 동작한다.
  *
  * **에러 매핑 정책**: ai-api가 4xx/5xx를 반환하면 Boot 기본 에러 바디
- * (`{timestamp,status,error,path,message}`, ai-api의 `server.error.include-message: always` 설정으로
+ * (`{timestamp,status,error,path,message}`, ai-api의 `spring.web.error.include-message: always` 설정으로
  * `message` 필드가 채워짐)를 읽어 원인 메시지를 [AiEvaluationException]에 실어 던진다. 네트워크 오류
  * (연결 실패·커넥트/리드 타임아웃 등 `RestClientException`)도 동일하게 [AiEvaluationException]으로
  * 단일화한다 — in-process 경로(`AiCallExecutor`)도 실패 시 동일한 예외 타입을 던지므로, 전송 계층이
@@ -54,11 +55,11 @@ abstract class BaseAiHttpAdapter(
     protected val objectMapper: ObjectMapper,
 ) {
 
-    /** JSON 응답을 T로 역직렬화한다. `jacksonTypeRef`로 `List<X>` 같은 제네릭 타입 소거를 방지한다. */
+    /** JSON 응답을 T로 역직렬화한다. `tools.jackson.module.kotlin.readValue` reified 확장으로 `List<X>` 같은 제네릭 타입 소거를 방지한다. */
     protected inline fun <reified T> postJson(path: String, requestBody: Any): T {
         val raw = fetchRaw(path, requestBody)
         return try {
-            objectMapper.readValue(raw, jacksonTypeRef<T>())
+            objectMapper.readValue<T>(raw)
         } catch (e: Exception) {
             throw AiEvaluationException("ai-api 응답 파싱 실패($path): ${e.message}", e)
         }

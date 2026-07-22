@@ -16,7 +16,7 @@ import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 @ExtendWith(MockitoExtension::class)
-class ResumeControllerTest {
+class AiApiResumeControllerTest {
 
     @Mock
     private lateinit var resumeEvaluatorPort: ResumeEvaluatorPort
@@ -25,7 +25,7 @@ class ResumeControllerTest {
 
     @BeforeEach
     fun setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(ResumeController(resumeEvaluatorPort)).build()
+        mockMvc = MockMvcBuilders.standaloneSetup(AiApiResumeController(resumeEvaluatorPort)).build()
     }
 
     @Test

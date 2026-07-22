@@ -36,7 +36,7 @@ import com.devquest.core.domain.port.ResumeEvaluatorPort
 import com.devquest.core.domain.port.SkillAssessmentPort
 import com.devquest.core.domain.port.SystemDesignEvaluatorPort
 import com.devquest.core.domain.port.TechInterviewPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration

@@ -167,6 +167,20 @@ class AiCheckServiceTest {
         verify(questProgressRecorder).record(eq("user1"), eq("2-1"), eq(2), eq(40), eq(false), eq(0), isNull())
     }
 
+    @Test
+    fun `checkTechBlog - AI 평가가 실패하면 questProgressRecorder를 호출하지 않고 예외가 그대로 전파된다 (트랜잭션 재배치 회귀 가드)`() {
+        whenever(blogEvaluator.evaluate(any(), any(), any())).thenThrow(RuntimeException("AI 호출 실패"))
+
+        assertThat(
+            org.assertj.core.api.Assertions.catchThrowable {
+                service.checkTechBlog("user1", "2-1", "Kotlin", "제목", "내용")
+            }
+        ).isInstanceOf(RuntimeException::class.java).hasMessage("AI 호출 실패")
+
+        verify(questProgressRecorder, org.mockito.kotlin.never())
+            .record(any(), any(), any(), any(), any(), any(), any())
+    }
+
     // ===== checkMockInterview 테스트 =====
 
     @Test
@@ -243,5 +257,48 @@ class AiCheckServiceTest {
         service.checkPersonalityInterview("user1", "장단점은?", "저는...")
 
         verify(questProgressRecorder).record(eq("user1"), eq("5-1"), eq(5), eq(88), eq(true), eq(480), isNull())
+    }
+
+    // ===== evaluateDeveloperClass 테스트 (Task 1.4b 트랜잭션 재배치 회귀 가드) =====
+    // 읽기(진행상황 조회 x2) → AI 호출 → 쓰기(record) 패턴 — 재배치 대상 중 유일하게 AI 호출 앞에
+    // DB 읽기가 있는 케이스라 별도로 특성 테스트를 추가한다(재배치 전 이 파일에 커버리지 0건이었음).
+
+    @Test
+    fun `evaluateDeveloperClass - 진행상황을 읽어 AI에 전달하고 성공 시 결과를 저장한다`() {
+        val skillProgress = com.devquest.core.domain.model.QuestProgress(
+            userId = "user1", questId = QuestConstants.SKILL_ASSESSMENT, actId = 1,
+            aiEvaluationJson = """{"score":80}""",
+        )
+        val essayProgress = com.devquest.core.domain.model.QuestProgress(
+            userId = "user1", questId = QuestConstants.CAREER_ESSAY, actId = 1,
+            aiEvaluationJson = """{"score":70}""",
+        )
+        whenever(progressPort.findByUserIdAndQuestId("user1", QuestConstants.SKILL_ASSESSMENT)).thenReturn(skillProgress)
+        whenever(progressPort.findByUserIdAndQuestId("user1", QuestConstants.CAREER_ESSAY)).thenReturn(essayProgress)
+        val expected = DeveloperClassResult(overallScore = 85, developerClass = "백엔드 마스터")
+        whenever(developerClassEvaluator.evaluate("""{"score":80}""", """{"score":70}""")).thenReturn(expected)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
+
+        val result = service.evaluateDeveloperClass("user1")
+
+        assertThat(result.overallScore).isEqualTo(85)
+        assertThat(result.passed).isTrue()
+        verify(questProgressRecorder).record(
+            eq("user1"), eq(QuestConstants.COMPANY_FIT_BOSS), eq(1), eq(85), eq(true), any(), eq("{}")
+        )
+    }
+
+    @Test
+    fun `evaluateDeveloperClass - AI 평가가 실패하면 questProgressRecorder를 호출하지 않고 예외가 그대로 전파된다`() {
+        whenever(progressPort.findByUserIdAndQuestId("user1", QuestConstants.SKILL_ASSESSMENT)).thenReturn(null)
+        whenever(progressPort.findByUserIdAndQuestId("user1", QuestConstants.CAREER_ESSAY)).thenReturn(null)
+        whenever(developerClassEvaluator.evaluate(any(), any())).thenThrow(RuntimeException("AI 호출 실패"))
+
+        assertThat(
+            org.assertj.core.api.Assertions.catchThrowable { service.evaluateDeveloperClass("user1") }
+        ).isInstanceOf(RuntimeException::class.java).hasMessage("AI 호출 실패")
+
+        verify(questProgressRecorder, org.mockito.kotlin.never())
+            .record(any(), any(), any(), any(), any(), any(), any())
     }
 }
