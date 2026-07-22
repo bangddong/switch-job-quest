@@ -10,6 +10,13 @@ spring:
 
 server:
   port: 8081
+  error:
+    # Phase 1 Task 1.4a — 함정 (d) 에러 전파. 기본값 `never`면 Boot 기본 에러 바디에 message 필드가
+    # 빠져 원인 문자열이 core로 안 온다. ai-api는 /internal/** 내부 전용(공개 API가 아님)이고,
+    # Phase 3에서 EKS NetworkPolicy로 외부 접근을 차단할 계획이므로, 내부 예외 메시지 노출은
+    # 허용 가능한 트레이드오프로 판단해 always로 켠다(보안 판단, Task 1.4a 결정). 스택트레이스는
+    # 그대로 노출하지 않는다(include-stacktrace 기본값 never 유지) — 메시지 한 줄 이상은 불필요.
+    include-message: always
 
 management:
   endpoints:
