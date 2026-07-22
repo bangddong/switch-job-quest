@@ -4,12 +4,15 @@ import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
 /**
- * 서비스 분해 에픽 Phase 0 Task 0.3 — 향후 ai-service로 분리될 빈 스캐폴드 앱.
+ * 서비스 분해 에픽 — Phase 0 Task 0.3에서 빈 스캐폴드로 시작, Phase 1 Task 1.1에서
+ * `client-ai` 평가자(`com.devquest.client.ai.*`)를 붙였다.
  *
- * 이 시점엔 컨트롤러가 없어 아무도 호출하지 않는다. 독립 기동(컨텍스트 로드)만
- * 가능하면 되며, 기존 core-api 앱과 배포 산출물에는 영향을 주지 않는다.
+ * `scanBasePackages`를 `com.devquest`로 넓힌 이유: 기본 컴포넌트 스캔은 이 클래스가 속한
+ * `com.devquest.ai` 패키지로 한정되는데, client-ai의 평가자·`AiCallExecutor`·
+ * `CacheMetricsAdvisor` 등은 `com.devquest.client.ai` 패키지에 있어 그대로 두면 빈으로
+ * 잡히지 않는다. core-api의 `DevQuestApplication`과 동일한 패턴.
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = ["com.devquest"])
 class AiApiApplication
 
 fun main(args: Array<String>) {
