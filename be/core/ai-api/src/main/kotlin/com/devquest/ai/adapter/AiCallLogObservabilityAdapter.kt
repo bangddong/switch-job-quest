@@ -5,7 +5,6 @@ import com.devquest.core.domain.port.AiCallLogPort
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-import java.util.concurrent.TimeUnit
 
 /**
  * ai-api용 AiCallLogPort 관측 어댑터.
@@ -19,7 +18,14 @@ import java.util.concurrent.TimeUnit
  * `ai.call.duration`·`ai.tokens.input`·`ai.tokens.output`·`ai.tokens.cache_read`·
  * `ai.tokens.cache_creation`과 겹치지 않게 `ai.call.log.*`로 분리한다. Task 1.1에서
  * `client-ai`가 ai-api 프로세스에 붙으면 `CacheMetricsAdvisor`와 이 어댑터가 같은
- * 호출 1건에 대해 동시에 도는 구조라, 이름이 같으면 값이 이중 계상된다.
+ * 호출 1건에 대해 동시에 도는 구조다.
+ *
+ * **지연시간 메트릭은 별도로 기록하지 않는다.** 이 어댑터가 받는 `latencyMs`는
+ * `CacheMetricsAdvisor`가 이미 측정해 `AiCallLog`에 실어 넘긴 값 그대로이므로, 여기서
+ * 다시 타이머로 기록하면 `ai.call.duration`과 완전히 같은 숫자를 두 이름으로 중복 기록하게
+ * 된다(같은 구간을 다르게 잰 것이 아니라 값 자체가 동일). `ai.call.duration`을 authoritative
+ * 지연시간 지표로 두고, 이 어댑터는 advisor에 없는 축(호출 건수·성공여부)만
+ * `ai.call.log.recorded` 카운터로 보강한다(#304 QA MEDIUM 이월 처리).
  */
 @Component
 class AiCallLogObservabilityAdapter(
@@ -48,11 +54,5 @@ class AiCallLogObservabilityAdapter(
             "model", log.modelName,
             "success", log.success.toString(),
         ).increment()
-
-        meterRegistry.timer(
-            "ai.call.log.latency",
-            "evaluator", log.evaluatorName,
-            "model", log.modelName,
-        ).record(log.latencyMs, TimeUnit.MILLISECONDS)
     }
 }
