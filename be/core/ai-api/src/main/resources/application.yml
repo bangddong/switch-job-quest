@@ -1,6 +1,12 @@
 spring:
   application:
     name: devquest-ai-api
+  # Phase 1 Task 1.1 — client-ai가 요구하는 ChatModel 빈(Spring AI Anthropic 오토컨피그)을
+  # 로드하기 위한 하드 전제. 이게 없으면 컨텍스트 로드 자체가 실패한다. max-retry·judge0 등
+  # 나머지 설정 이관은 Task 1.2 범위이며 여기서 건드리지 않는다(AiCallExecutor·Judge0Adapter의
+  # @Value에 이미 기본값이 있어 지금은 없어도 뜬다).
+  config:
+    import: classpath:client-ai-anthropic.yml
 
 server:
   port: 8081

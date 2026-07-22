@@ -232,10 +232,32 @@ Phase 0에선 HTTP 빈이 아직 실제 호출을 안 하므로 기본값 inproc
 어댑터와 1:1 대응이라 parity 추적이 쉽다. `InterviewCoach`·`TechInterview`처럼 다단계 포트도 서버 세션이
 없고 히스토리를 파라미터로 받으므로(진단 확인) 각 호출을 독립 엔드포인트로 낼 수 있다.
 
-- [ ] **Step 1:** 포트별 컨트롤러 테스트(실패) — 요청→평가자 위임→data class 직렬화 검증
-- [ ] **Step 2:** 컨트롤러 구현. Judge0은 Task 0.1 결정대로 포함/제외
-- [ ] **Step 3:** default 파라미터 소실 케이스 테스트(생략 필드 → 서버 기본값 복원)
-- [ ] **검증:** `./gradlew :core:ai-api:test` 그린
+- [x] **Step 0 (선행, #304 QA 이월):** 어댑터의 `ai.call.log.latency` 타이머 **제거**
+      (`ai.call.duration`과 동일 값 중복 — Task 1.3 결정 박스 참조). 카운터는 유지.
+- [x] **Step 1:** 포트별 컨트롤러 테스트(실패) — 요청→평가자 위임→data class 직렬화 검증
+- [x] **Step 2:** 컨트롤러 구현. Judge0은 Task 0.1 결정대로 포함
+- [x] **Step 3:** default 파라미터 소실 케이스 테스트(생략 필드 → 서버 기본값 복원)
+- [x] **검증:** `./gradlew :core:ai-api:test` 그린 + `:core:core-api:bootJar -x test` 성공(Fly 무영향)
+
+> **✅ 구현 완료 (2026-07-22, #305 — QA HIGH 1건·MEDIUM 3건 후속 처리 포함).**
+> - **엔드포인트 24개** — 18개 컨트롤러(17개 `AiEvaluatorPort` + `Judge0Port`)에 걸쳐 `/internal/ai/{evaluator}/{action}`
+>   규약으로 노출. Judge0은 Task 0.1 추천대로 **포함**(비-LLM이지만 "외부 컴퓨트 위임" 성격 동일).
+> - **default 파라미터 소실 대응 3건**: ①`JdAnalysisRequests.resumeContent`(nullable + `?: ""` 복원)
+>   ②`TechInterviewDailyQuestionRequest.recentQuestions`(nullable + `?: emptyList()` 복원)
+>   ③`TechInterviewExplainFollowupRequest.modelAnswer`(도메인 포트 자체가 `String? = null`이라 HTTP
+>   필드 생략 시 자연히 null — 별도 복원 로직 불필요, 자연 케이스로 3번째 유형에 포함).
+> - **String 반환 엔드포인트 wire 계약 실측 확정 (QA HIGH 후속, `TechInterviewWireFormatContractTest`):**
+>   `/daily-question`·`/explain-followup`은 `produces = APPLICATION_JSON_VALUE`를 붙여도 반환 타입이
+>   순수 `String`이라 `StringHttpMessageConverter`가 먼저 선택되어 **따옴표 없는 raw text**가 나감
+>   (헤더는 `application/json`인데 바디는 유효한 JSON이 아닌 불일치 상태였음 — QA 가설 확인됨).
+>   → `produces = "text/plain;charset=UTF-8"`로 정정해 헤더·바디를 일치시킴. 한글 인코딩은 실측상
+>   UTF-8로 정상(Boot 전체 컨텍스트가 `StringHttpMessageConverter` 기본 charset을 재구성). Task 1.4의
+>   RestClient는 이 두 엔드포인트를 `text/plain` 응답으로 취급해 `String` 그대로 읽으면 됨.
+> - **에러 경로 관측(MEDIUM, 설계 결정 아님·Task 1.4용 기록):** 포트가 런타임 예외를 던지면 Spring Boot
+>   기본 에러 핸들링(`BasicErrorController`)이 동작 — 상태코드 그대로(예: 500) +
+>   `{"timestamp","status","error","path"}` 형태 JSON(‌RFC 7807 `ProblemDetail` 아님). Kotlin non-null
+>   필드가 JSON에서 누락되면 `HttpMessageNotReadableException` → **400**, 동일 바디 형태.
+>   `ApiControllerAdvice`는 core-api 모듈 소유라 ai-api엔 없음 — 에러 핸들링 커스터마이즈는 Task 1.4 설계 몫.
 
 ### Task 1.2: 설정 이관 (불일치 #3)
 
@@ -258,9 +280,31 @@ Phase 0에선 HTTP 빈이 아직 실제 호출을 안 하므로 기본값 inproc
 - Create: `be/core/ai-api/.../adapter/AiCallLogObservabilityAdapter.kt` — `AiCallLogPort` 구현(메트릭/구조화 로그)
 - (A안) core에서 AiCallLog DB write 경로가 ai 호출과 분리됐는지 확인
 
-- [ ] **Step 1:** ai-api `AiCallLogPort` 빈 존재 + 호출 시 예외 없음 테스트
-- [ ] **Step 2:** 방침대로 구현(A: 관측 어댑터 / C: 응답 메타 → core 기록)
-- [ ] **검증:** ai-api에서 AI 호출 경로가 core DB에 의존하지 않음(격리 확인)
+- [x] **Step 1:** ai-api `AiCallLogPort` 빈 존재 + 호출 시 예외 없음 테스트
+- [x] **Step 2:** 방침 A대로 구현 — `AiCallLogObservabilityAdapter`(구조화 로그 + Micrometer, DB 접근 0)
+- [x] **검증:** `DataSource` 빈 부재 단언으로 core DB 미의존 격리 증명 · `:core:ai-api:test` 7 tests 0 failures ·
+  `build` 그린 · `:core:core-api:bootJar -x test` 성공(Fly 무영향) · BE CI 통과
+
+> **✅ 구현 완료 (2026-07-22, #304).** 어댑터는 `MeterRegistry`만 주입받고 DB에 접근하지 않는다.
+> 구조화 로그 1줄에 토큰 4종(input/output/cacheRead/cacheCreation)·latency·success를 전부 남겨
+> **비용 추적 관측 공백 없음**. 메트릭은 `CacheMetricsAdvisor`의 기존 이름(`ai.call.duration`·
+> `ai.tokens.*`)과 충돌하지 않도록 `ai.call.log.*` 네임스페이스로 분리.
+> 예외 안전성은 `CacheMetricsAdvisor`가 `record()` 호출을 `runCatching`으로 감싸고 있어 확보됨
+> (어댑터 내부 예외가 AI 응답 반환 경로를 깨지 않음).
+>
+> **⚠️ QA MEDIUM 2건 → Task 1.1에서 처리할 것 (#304 리뷰):**
+> 1. **`ai.call.log.latency` 타이머는 `ai.call.duration`과 완전 중복이다.** `CacheMetricsAdvisor`가
+>    잰 `latencyMs`를 그대로 `AiCallLog`에 실어 넘기므로 **같은 숫자를 두 이름으로** 기록한다
+>    (서로 다른 구간 측정이 아님). 합산 오류는 없지만 대시보드에 동일 신호가 두 번 뜨고 알람이
+>    이중 트리거될 수 있다.
+>    → **결정: `ai.call.duration`을 authoritative로 두고 어댑터의 `ai.call.log.latency` 타이머는 제거한다.**
+>    카운터 `ai.call.log.recorded`는 유지 — advisor에 없는 "호출 건수·성공여부" 축을 새로 채우므로 중복 아님.
+> 2. **`success=false` 태그는 현재 도달 불가.** `CacheMetricsAdvisor`는 정상 응답일 때만 `record()`를
+>    부르고 `success = true`로 하드코딩한다(실패 경로는 조기 return).
+>    → **결정: Task 1.1에서 고치지 않는다.** 고치려면 `CacheMetricsAdvisor`(client-ai)를 손대야 하는데,
+>    그러면 **inprocess 경로도 같이 바뀌어** 실패 건이 core DB(`ai_call_log`)에 새로 쌓인다 = 롤백 경로의
+>    동작 변경. Phase 1의 "동작 불변" 원칙에 반한다. **AI 실패율 관측은 Task 1.4에서 HTTP 어댑터 레벨의
+>    에러 매핑으로 확보**하고(그쪽이 core가 실제로 겪는 실패다), advisor 개선은 Phase 3 정리 대상.
 
 ### Task 1.4: core HTTP 어댑터 배선 + 전환 + 트랜잭션 경계 (불일치 #4)
 

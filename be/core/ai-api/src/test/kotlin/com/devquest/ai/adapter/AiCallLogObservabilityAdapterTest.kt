@@ -39,7 +39,7 @@ class AiCallLogObservabilityAdapterTest {
     }
 
     @Test
-    fun `record 호출 시 ai_call_log_latency 타이머가 기록된다`() {
+    fun `record 호출은 ai_call_log_latency 타이머를 남기지 않는다 (ai_call_duration과 중복 제거)`() {
         val meterRegistry = SimpleMeterRegistry()
         val adapter = AiCallLogObservabilityAdapter(meterRegistry)
 
@@ -56,12 +56,9 @@ class AiCallLogObservabilityAdapterTest {
             )
         )
 
-        val timer = meterRegistry.get("ai.call.log.latency")
-            .tag("evaluator", "BlogEvaluator")
-            .tag("model", "claude-3-5-sonnet")
-            .timer()
+        val timers = meterRegistry.find("ai.call.log.latency").timers()
 
-        assertThat(timer.count()).isEqualTo(1L)
+        assertThat(timers).isEmpty()
     }
 
     @Test
