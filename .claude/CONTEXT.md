@@ -217,14 +217,76 @@ README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3
 - **🔴 ECR 구멍**: `README:101,148`은 ECR을 **`2-cluster`(destroy 대상)** 소속으로 적어놨으나
   **실제 `.tf`엔 `aws_ecr_*` 리소스가 0건**(전수 grep). 계획대로 두면 **destroy마다 이미지 전멸**
   → 세션마다 Spring Boot 이미지 3개 재빌드·재푸시(5~10분×3) = destroy-after-use의 실질 마찰.
-- **→ 새 레이어 `1-shared` 신설 권고**: ECR ×3(+**lifecycle policy 필수**) + 학습용 EBS 1개.
-  `infra-deploy.yml` 매트릭스에 추가(저비용·안전하므로 자동 apply 적합).
+- **→ ECR은 `0-bootstrap`에 편입**(2026-07-22 확정). 새 레이어(`1-shared`) 신설안은 **폐기** —
+  영속 대상이 ECR 하나뿐이라 레이어를 늘리면 `tofu init/apply` 대상과 CI 매트릭스만 증가한다.
+  0-bootstrap은 이미 **계정 수준 공유·영속 인프라**(S3 state·DynamoDB·OIDC·IAM·예산)를 담고 있어
+  성격이 같고, `infra-deploy.yml` 매트릭스에 이미 있어 **CI 변경도 불필요**. **lifecycle policy 필수**(무한 누적 방지).
 - **EBS는 terraform이 소유하고 K8s는 static PV로 바인딩**(동적 PVC 아님). 근거: ①IaC-first 원칙
   ②ALB 고아와 같은 실패 모드 원천 차단 ③**학습 가치** — 동적 프로비저닝은 쉽고, 어려운 건
   "이미 있는 볼륨에 StatefulSet 붙이기"(`volumeHandle` static PV). **부수고 다시 지어도 데이터가
   그대로 붙는 것**을 확인하는 게 진짜 교보재.
-- ⚠️ **EBS는 AZ에 묶인다** — 볼륨이 `2a`인데 노드가 `2c`에 뜨면 파드가 **영구 Pending**.
-  `nodeAffinity` 또는 노드그룹 서브넷 고정 필요. 실제로 밟게 될 함정.
+- **EBS를 6개월 영속 유지한다** (월 $1.82 = 6개월 $11 = 크레딧 5.5%). *"한 번 확인하면 끝"*이라는
+  초안 판단은 **철회** — 학습은 반복에서 나오고, **아래 실패 6종은 여러 번 밟아야만 만난다.**
+  ⭐ **destroy-after-use 규율이 희소한 반복 기회를 공짜로 만든다**: 보통 학습자는 클러스터를 부술
+  이유가 없어 이 경험 자체를 못 한다(kind는 EBS가 없고, 회사에선 플랫폼팀이 소유). 우리는 비용 때문에
+  **어차피 매번 부수므로**, 그 사이클에 볼륨 재바인딩을 얹으면 **추가 작업 없이 매 세션 연습**된다.
+- ⚠️ **반복해야만 만나는 실패 6종** (문서만 읽어선 안 잡힘):
+  ①**AZ 불일치** → 파드 영구 Pending (노드가 매번 같은 AZ에 안 뜬다 — 운 나쁜 날에만 터짐)
+  ②`reclaimPolicy: Delete` 실수로 볼륨 동반 삭제 ③PV `volumeHandle` ↔ 실제 volume ID 불일치
+  ④**`claimRef` 잔존**으로 PV가 새 PVC를 안 받음(최다 정체 지점) ⑤StatefulSet `volumeClaimTemplates`가
+  PVC를 자동 생성 → static PV와 충돌 ⑥기존 볼륨을 **포맷**해버림(복구 불가).
+
+#### 🔴 DB 전략 — 환경별 분리 확정 (2026-07-22)
+> **prod(Fly)는 Neon 그대로. EKS 학습 클러스터에서만 in-cluster PostgreSQL + 영속 EBS.**
+
+| 환경 | DB | 근거 |
+|------|-----|------|
+| **Fly (prod, 24/7)** | **Neon** (변경 없음) | 상시 필요 · **$0** · 관리형 백업/PITR/풀링 |
+| **EKS (학습, 가동률 ~15%)** | **in-cluster PostgreSQL + 영속 EBS** | 자기완결형 풀스택 · K8s 스토리지 실습 |
+
+- **코드 변경 0** — `application-prod.yml`이 `jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}` 등
+  **100% 환경변수 기반**(실측 확인). 환경변수만 다르게 주입하면 됨(`transport` 플래그와 같은 패턴).
+  **Flyway 마이그레이션 12개**가 스키마를 자동 생성 → 시드 불필요.
+- **왜 Neon을 못 걷어내나** (걷어내자는 검토 → 기각):
+  ①**비용 동기 없음** — Neon은 현재 **$0**, 걷어내도 절감 0원
+  ②**가동률 충돌** — 650h/4,380h ≈ **15%**. prod DB가 클러스터 안이면 **85% 시간 앱이 죽는다**
+  ③**역설: in-cluster가 최고가** — 상시로 돌리려면 컨트롤플레인 $73이 따라붙어 **월 $125+**
+  (Neon 무료 $0 · Supabase $0 · RDS $12~15 · Neon 유료 ~$19 **< in-cluster 상시 $125+**)
+  ④관리형에서 얻던 **자동 백업·PITR·scale-to-zero·PgBouncer·HA**를 전부 자작해야 하고,
+  그것들이 클러스터와 함께 85% 시간 죽는다 ⑤노드가 **스팟** — 회수 시 DB 파드 다운
+- **왜 RDS가 아니라 in-cluster인가** (RDS 재탈락):
+  ①RDS는 **클러스터를 꺼도 상시 과금** → 15%만 쓰고 100% 지불, 6개월 **$72~90 = 크레딧의 36~45%**
+  ②"클러스터 밖 관리형 Postgres"는 **Neon이 이미 그거고 공짜**다
+  ③**배우려는 걸 안 가르친다** — RDS는 클러스터 밖이라 **EBS·PVC를 전혀 안 건드림** =
+  "부수고 다시 붙이기"가 성립하지 않는다. README 학습 목표(`:77`·`:218` StatefulSet·PVC·EBS)와 불일치.
+- **학습 워크로드로 Redis보다 Postgres가 낫다** (초안의 Redis 제안 **철회**): 캐시는 유실돼도 안 아파서
+  `reclaimPolicy`를 대충 넘기게 된다. **긴장감이 학습을 만든다.** + 앱 연결에 코드 변경이 0이고
+  실제 스키마(Flyway 12개)가 돈다.
+- ⚠️ **"in-cluster Postgres는 설계와 모순"이라던 초기 경고는 *Neon 대체* 경우에만 유효**했다.
+  **병행은 표준 패턴**(테스트 환경)이며 모순이 아니다.
+- **부수 효과**: EKS 클러스터가 **외부 의존 0의 자기완결 스택**이 되어 NetworkPolicy·서비스간 통신
+  실습이 깨끗해진다(외부 Neon egress 예외 처리 불필요).
+- **Neon을 실제로 걷어낼 트리거**: 무료 한도(storage·compute 시간·연결수) 부족. 그때 후보는
+  **Neon 유료 · Supabase · RDS**. **in-cluster는 그때도 답이 아니다**(상시 $125+).
+  별건: **Neon cold start**(앱 cold start 2~3분의 한 원인)는 DB 이전이 아니라
+  `min_machines_running`·lazy-init·PgBouncer로 푼다 — 백로그의 "Spring 시작 시간 최적화" 항목.
+
+#### 앱은 영속 볼륨이 필요 없다 (전수 확인, 2026-07-22)
+EBS는 **순수 학습 목적**이다. BE 코드 grep 결과 `MultipartFile`·`Files.write`/`FileOutputStream`·
+S3 클라이언트·로컬 디스크 경로 설정 **전부 0건** — 파일을 디스크에 쓰는 코드가 아예 없다.
+
+| 데이터 | 실제 저장소 | EBS 필요? |
+|--------|------------|:---:|
+| 앱 DB (사용자·퀘스트·진행도·AI 평가·`ai_call_log`) | Neon (AWS 밖) | ❌ |
+| 컨테이너 이미지 | ECR | ❌ |
+| K8s 매니페스트·ArgoCD 설정 | git (GitOps) | ❌ |
+| 메트릭·로그 | Grafana Cloud (OTLP push) | ❌ |
+| 프롬프트 `.st`·`conference-references.json` | jar 내부 리소스(읽기 전용) | ❌ |
+| 이력서 PDF | **FE에서 pdfjs 파싱** → 텍스트만 전송, 파일 저장 없음 | ❌ |
+| Terraform state | S3 | ❌ |
+
+ArgoCD 기본 설치도 PVC 미사용(상태는 CRD, repo-server는 emptyDir), Prometheus는 in-cluster가 아니라
+Grafana Cloud push → **인프라 컴포넌트도 영속 볼륨을 요구하지 않는다.**
 
 #### destroy 시 데이터 생존 (코드로 전수 확인)
 | 데이터 | 소속 | destroy 시 |
