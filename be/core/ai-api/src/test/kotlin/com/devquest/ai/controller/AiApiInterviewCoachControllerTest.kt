@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 @ExtendWith(MockitoExtension::class)
-class InterviewCoachControllerTest {
+class AiApiInterviewCoachControllerTest {
 
     @Mock
     private lateinit var interviewCoachPort: InterviewCoachPort
@@ -28,7 +28,7 @@ class InterviewCoachControllerTest {
 
     @BeforeEach
     fun setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(InterviewCoachController(interviewCoachPort)).build()
+        mockMvc = MockMvcBuilders.standaloneSetup(AiApiInterviewCoachController(interviewCoachPort)).build()
     }
 
     @Test

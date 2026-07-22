@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/internal/ai/tech-interview")
-class TechInterviewController(
+class AiApiTechInterviewController(
     private val techInterviewPort: TechInterviewPort,
 ) {
 

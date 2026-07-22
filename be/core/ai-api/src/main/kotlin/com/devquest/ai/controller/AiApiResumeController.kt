@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/internal/ai/resume")
-class ResumeController(
+class AiApiResumeController(
     private val resumeEvaluatorPort: ResumeEvaluatorPort,
 ) {
 

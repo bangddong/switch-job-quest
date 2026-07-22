@@ -1,0 +1,30 @@
+# Phase 1 Task 1.5 — parity 테스트(AiApiHttpParityTest) 전용 설정.
+#
+# 왜 application.yml이 아니라 별도 이름인가: 이 테스트는 core-api 테스트 JVM 안에서
+# `testImplementation(project(":core:ai-api"))`를 통해 ai-api의 실제 클래스를 함께 클래스패스에
+# 올린다. 그 결과 `classpath:application.yml`이라는 같은 경로에 core-api 자신의
+# `application.yml`과 ai-api의 `application.yml` 두 개가 동시에 존재하게 된다. Spring Boot의 기본
+# 설정 파일 탐색(`classpath:/application.yml`)은 여러 후보 중 클래스패스 순서상 먼저 발견되는
+# 하나만 신뢰할 수 있게 로드한다는 보장이 없어(Gradle 테스트 classpath 조립 순서에 의존), 어느 쪽이
+# 로드될지 결정적이지 않다 — 특히 core-api의 application.yml이 이기면 `classpath:db-core.yml` import가
+# 딸려와 실제 DataSource 연결을 시도할 위험도 있다. 그래서 `spring.config.name`을 이 파일 이름으로
+# 지정해 두 `application.yml` 모두를 무시하고 이 파일만 결정적으로 로드하게 한다.
+spring:
+  config:
+    # client-ai(ChatClient/ChatModel 오토컨피그)가 요구하는 spring.ai.anthropic.* 프로퍼티 공급.
+    # 컨텍스트 로드에는 필요하지만(빈 생성 자체는 키 검증을 하지 않음) 이 테스트는 AI 포트를 전부
+    # @MockitoBean으로 대체하므로 실제 LLM 호출은 없다 — 값은 빈 문자열 기본값 그대로 사용.
+    import: classpath:client-ai-anthropic.yml
+  web:
+    error:
+      # ai-api 프로덕션 설정(core/ai-api/src/main/resources/application.yml)과 동일 — 포트 예외 발생 시
+      # Boot 기본 에러 바디에 message 필드가 채워지는 실제 동작을 그대로 재현해야 에러 매핑 parity를
+      # 검증할 수 있다. 키가 `server.error.include-message`가 아니라 `spring.web.error.include-message`
+      # 인 이유는 ai-api application.yml 주석 참고(Boot 4 프로퍼티 이전, 이 parity 테스트로 실측 발견).
+      include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

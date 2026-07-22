@@ -44,7 +44,7 @@ import java.nio.charset.StandardCharsets
  * 써낼 수 있으므로, RestClient가 자동 감지하는 JSON 컨버터가 어떤 버전이든 무관하게 동작한다.
  *
  * **에러 매핑 정책**: ai-api가 4xx/5xx를 반환하면 Boot 기본 에러 바디
- * (`{timestamp,status,error,path,message}`, ai-api의 `server.error.include-message: always` 설정으로
+ * (`{timestamp,status,error,path,message}`, ai-api의 `spring.web.error.include-message: always` 설정으로
  * `message` 필드가 채워짐)를 읽어 원인 메시지를 [AiEvaluationException]에 실어 던진다. 네트워크 오류
  * (연결 실패·커넥트/리드 타임아웃 등 `RestClientException`)도 동일하게 [AiEvaluationException]으로
  * 단일화한다 — in-process 경로(`AiCallExecutor`)도 실패 시 동일한 예외 타입을 던지므로, 전송 계층이
