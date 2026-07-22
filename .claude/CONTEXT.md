@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | (없음 — main) |
-| 열린 PR | 없음 |
+| 브랜치 | `chore/gradlew-exec-bit` → 이후 Phase 1 브랜치 연속 |
+| 열린 PR | 진행 중 — Phase 1 순차 실행 (gradlew 정비 → 1.3 → 1.1 → 1.2 → 1.4) |
 
 > **🌙 다음 세션 시작점 (07-21 갱신)**: 서비스 분해 **Phase 0 전체 완료 (Task 0.1~0.4 머지 #295·#297·#298·#300).**
 > AI 포트 마커 · AiCallLog 방침 A · `core:ai-api` 스캐폴드 · 전송 전환 스위치(`devquest.ai.transport=inprocess` 기본).
@@ -118,9 +118,9 @@
       (신규 `ai-api` 포함)를 실행하나(확인됨, 기능 정상), `Upload test report`는 `core-api` 경로만 업로드 →
       ai-api 등 다른 모듈 실패 시 리포트 아티팩트 미보존(디버깅 관측성 갭, #298 QA MEDIUM). 3서비스로
       늘면 각 모듈 리포트 경로 추가 필요.
-- [ ] **tech-debt(LOW): `be/gradlew` 실행 권한 없음(mode 100644)** — 로컬 clone에서 `./gradlew` 직접
-      실행 불가(07-21 Task 0.1 중 발견, BE 에이전트가 chmod로 우회 후 원복). CI는 통과(체크아웃/래퍼 호출
-      방식이 달라 무영향). `git update-index --chmod=+x be/gradlew`로 실행비트 커밋하면 근본 해결.
+- [x] ~~**tech-debt(LOW): `be/gradlew` 실행 권한 없음(mode 100644)**~~ → **2026-07-22 해결.**
+      `git update-index --chmod=+x be/gradlew`로 100755 커밋. 이제 clone 직후 `./gradlew` 바로 실행 가능
+      (에이전트마다 chmod 우회하던 낭비 제거 — Phase 0 회고 Try ④).
 - [ ] **DB: Neon→RDS 전환 — 폐기, 무료 한도 부족 시 재고 (07-21 판단)**. 트리거 = Neon 무료 티어
       (storage·compute 시간·연결수) 실제 부족. **RDS는 상시 과금**(db.t4g.micro ~$12–15/mo + storage + backup)
       이라 EKS destroy-after-use 규율·Fly fallback 전략과 배치 → 전환 시 3그림으로 갈림(①prod 완전이전=전략재론
