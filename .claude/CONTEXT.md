@@ -7,31 +7,42 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/gradlew-exec-bit` → 이후 Phase 1 브랜치 연속 |
-| 열린 PR | 진행 중 — Phase 1 순차 실행 (gradlew 정비 → 1.3 → 1.1 → 1.2 → 1.4) |
+| 브랜치 | `chore/ci-parity-test` (머지 후 main) |
+| 열린 PR | 없음 (Phase 1 전 태스크 머지 완료) |
 
-> **🌙 다음 세션 시작점 (07-21 갱신)**: 서비스 분해 **Phase 0 전체 완료 (Task 0.1~0.4 머지 #295·#297·#298·#300).**
-> AI 포트 마커 · AiCallLog 방침 A · `core:ai-api` 스캐폴드 · 전송 전환 스위치(`devquest.ai.transport=inprocess` 기본).
-> **모두 무행동 변경 — 코드는 뜯길 준비됐고 런타임은 불변.** main clean · EKS $0. **다음 = Phase 1 착수 or EKS apply, 택1:**
-> - **① [주 방향] Phase 1 착수 (HTTP 전환·parity) — ⚠️ 착수 순서 `1.3→1.1→1.2→1.4`:**
->   1.3(ai-api에 `AiCallLogPort` 관측 어댑터 — client-ai 붙이기 위한 선행) → 1.1(ai-api REST 컨트롤러, client-ai
->   평가자 노출, `scanBasePackages="com.devquest"` 확대) → 1.2(설정 이관: max-retry·Judge0·anthropic yml) →
->   1.4(core HTTP 어댑터 배선 + 트랜잭션 경계 + parity). **Phase 1부터 실제 HTTP 호출 발생 — 덩치 큼, 새 세션 권장.**
->   계획 `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md` Phase 1.
->   ⚠️ **불변식**: ①`client-ai` 의존 제거 금지(Phase 3까지=inprocess 롤백 보존) ②Fly 무영향(core-api bootJar 단독)
->   ③`transport` 프로덕션 기본값은 검증 누적까지 **inprocess 유지**.
-> - **② EKS 2-cluster apply 왕복** — 30~40분 통시간 있을 때(아래 상세). 학습 트랙.
+> **🌙 다음 세션 시작점 (07-22 갱신)**: 서비스 분해 **Phase 0 + Phase 1 전체 완료.**
+> Phase 0(#295·#297·#298·#300) → Phase 1(#304 1.3 · #305 1.1 · #306 1.2 · #307 1.4a · #308 1.4b·1.5).
+> **ai-api가 AI 포트 24개를 REST로 노출하는 독립 서비스가 됐고, core는 HTTP 어댑터로 호출 가능하다.**
+> ⚠️ **프로덕션 기본값은 계획대로 `transport=inprocess` 유지** — 검증 누적 전까지 전환 안 함. Fly 무영향, main clean, EKS $0.
+> **다음 = 택1:**
+> - **① Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`.
+>   ⚠️ **Phase 2 착수 전 반드시**: ai-api를 **실제 네트워크에 처음 올리는 시점**이므로 `/internal/ai/**` **무인증**
+>   문제를 먼저 해결할 것(현재는 Fly가 core-api만 배포해서 노출 안 됨). `include-message: always`도 켜져 있다.
+> - **② `transport=http` 실전 검증** — 로컬에서 ai-api 띄우고 수동 e2e → 문제없으면 prod 기본값 전환 검토.
+>   Phase 1은 "전환 가능"까지만 했고 "전환 완료"는 아니다.
+> - **③ EKS 2-cluster apply 왕복** — 30~40분 통시간 있을 때(아래 상세). 학습 트랙.
 >
-> **📋 Phase 0 회고 (KPT) — Phase 1 착수 전 반드시 볼 것:**
-> - **Problem(재발 방지)**: ①계획 stale — 진단 발견(AiCallLog 역결합)을 Task 0.3 문구에 전파 안 해 QA가 모순
->   지적 → **Phase 1 착수 전 계획에 진단이 완전 반영됐는지 먼저 훑기.** ②CONTEXT 갱신 PR 오버헤드(10PR 중 6문서).
->   ③로컬 환경 반복 낭비(매 에이전트 JDK 설치·gradlew chmod).
-> - **Try(Phase 1 반영)**: ①계획 재점검 선행 ②**트랜잭션 경계(1.4)가 유일하게 동작 바뀔 수 있는 지점 →
->   회귀 테스트 집중** ③parity=완료 판정(LLM 비결정성→스키마 동등 비교) ④`gradlew` 실행비트 선제 정비.
+> **📋 Phase 1 회고 — Phase 2 착수 전 반드시 볼 것:**
+> - **가장 큰 교훈: 가짜 서버 테스트는 계약을 증명하지 못한다.** Task 1.4a의 테스트 68개가 전부 그린이었는데도
+>   `MockRestServiceServer`/가짜 HTTP 서버라 **ai-api의 진짜 Jackson을 한 번도 안 거쳤다.** Task 1.5에서
+>   진짜 ai-api를 띄우자마자 **`server.error.include-message`가 Boot 3 키였다는 버그**가 드러났다
+>   (Boot 4는 `spring.web.error.include-message` — AI 실패 원인이 core로 **한 번도 전달된 적 없었음**).
+>   → **경계를 넘는 계약은 반드시 양쪽 실물을 붙여서 검증한다.**
+> - **테스트가 거짓 안심을 준 사례 2건**: ①`jsonPath("$")`는 json-smart **permissive 모드**라 따옴표 없는
+>   raw text도 통과시킨다 → String 반환 엔드포인트의 wire format 불일치를 못 잡았다(#305).
+>   ②`produces=APPLICATION_JSON_VALUE`를 붙여도 `StringHttpMessageConverter`가 `*/*`를 지원해 Jackson보다
+>   먼저 선택된다 → 헤더는 JSON인데 바디는 raw text. **실측(바이트 확인) 전엔 믿지 마라.**
+> - **QA가 HIGH를 낸 건 1건(#305), 그리고 그게 맞았다.** 추측으로 고치지 않고 `@SpringBootTest(RANDOM_PORT)`로
+>   실제 바이트를 재고 나서 수정한 절차가 유효했다. **"추측 결론으로 코드 수정 금지" 규칙이 실제로 작동함.**
+> - **계획 전파는 매 태스크 첫 커밋으로**: QA 발견을 다음 태스크 브랜치의 첫 커밋으로 계획 문서에 반영하는
+>   패턴을 썼다(#305→1.2 브랜치, #304→1.1 브랜치). Phase 0의 "계획 stale" 문제가 재발하지 않았고
+>   **문서 전용 PR도 0건**(Phase 0은 10PR 중 6개가 문서였다).
+> - **큰 태스크는 쪼갠다**: Task 1.4를 1.4a(기계적·무행동)와 1.4b(동작 변경)로 분리했다. 회귀가 났을 때
+>   원인 범위가 절반으로 줄어든다. Phase 2의 daily-service 추출에도 같은 분리를 적용할 것.
 > - **시각화**: Phase 0 회고 https://claude.ai/code/artifact/8d702047-0184-4743-b89d-4f085b8644bc ·
 >   목표 아키텍처 https://claude.ai/code/artifact/ffe35a97-ee42-4412-b85c-2716e8b59a14
 > - **배포 타겟 열린 결정(Phase 3 전 확정)**: "최종 prod"를 EKS 완전체 vs Fly 3서비스 vs Fly 단일+EKS 학습전용 —
->   미정. EKS 상시는 컨트롤플레인 $73/mo 고정비(destroy-after-use 전제). Phase 1(코드 추출)엔 영향 없음.
+>   미정. EKS 상시는 컨트롤플레인 $73/mo 고정비(destroy-after-use 전제).
 > - **메모(리뷰 CI)**: OCR(alibaba)·roborev 검토 완료 → **도입 보류.** 솔로라 안 아픔 + OCR은 **API 종량제(Claude 구독 불가)**. 현 qa-reviewer로 충분. **협업자 생기거나 PR이 3서비스로 늘면** 그때 OCR 파일럿. 나중 카드.
 > - **메모(DB)**: **Neon→RDS 전환 = 폐기(07-21).** 무료 사용량 부족 시점에만 재고. RDS는 상시 과금이라 destroy-after-use(EKS 실습)·Fly fallback 전략과 배치. 상세는 "백로그 › DB".
 >
@@ -54,6 +65,10 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #308 | **Phase 1 Task 1.4b·1.5 — 트랜잭션 경계 재배치 + parity 검증 (Phase 1 완료).** Task 0.1~1.4a를 통틀어 **처음으로 프로덕션 동작을 바꾼 PR.** ①Jackson 2→3 교체(ai-api와 동일 라이브러리로 통일, 1.4a QA 지적) + read-timeout 90s→150s(기존값이 "30초×재시도3회"와 마진 0) ②**parity 라운드트립 12 tests** — core-api에 전용 소스셋 `parityTest` 신설(일반 test에 넣으니 `scanBasePackages="com.devquest"`로 ai-api가 딸려와 233개 중 43개 회귀 → 클래스패스 격리), 실제 ai-api 기동 + AI 포트만 목 → in-process와 HTTP 결과 **정확 일치** 비교. Map·List<중첩>·nullable·default 생략·text/plain·400/500 전부 커버 ③**트랜잭션 재배치 14개 메서드**(AiCheckService 11 + TechInterviewService.evaluate + CompanyService 2) — 전부 "AI 호출→단일 쓰기" 패턴이라 바깥 `@Transactional`이 애초에 추가 원자성을 안 줬음(QA가 호출 그래프로 독립 검증). `CodingQuestService` 2건은 재시도 루프에 뒤섞여 **의도적 보류**. HikariCP pool=10 고갈 위험 제거. 회귀 가드 6건("AI 실패→쓰기 `never()`"). **🐛 parity가 진짜 버그 검출**: `server.error.include-message`가 Boot 3 키 → Boot 4는 `spring.web.error.*` = AI 실패 원인이 core로 **한 번도 전달된 적 없었음**. core-api 239 tests + parity 12 + ai-api 41 전부 0 failures. Fly 무영향(bootJar task graph에 ai-api 0개) | 2026-07-22 |
+| #307 | **Phase 1 Task 1.4a — core HTTP 어댑터 배선 (무행동).** Task 1.4를 기계적 배선(1.4a)과 동작 변경(1.4b)으로 **분리**. 어댑터 18개/엔드포인트 24개, `BaseAiHttpAdapter`가 직렬화·에러 매핑 흡수. `AiTransportConfig`를 18개 포트로 확장(어댑터에 `@Component` 안 달아 inprocess에선 빈 생성조차 안 됨 — `getBeanNamesForType(RestClient)` 비어있음으로 증명). **계획이 예고한 함정 4종 처리**: ①타임아웃 명시(무한 대기 방지) ②**재시도 미도입**(ai-api 안 `AiCallExecutor`가 이미 3회 → 또 하면 최대 9회 실제 LLM 호출·비용 폭증) ③**Accept 406 회피**(`text/plain` 2개 + JSON 22개를 `.accept()` 없이 String 수신, JDK HttpServer로 진짜 협상 재현 실측) ④에러 전파. core-api 229 tests(기존 161 보존 + 신규 68) | 2026-07-22 |
+| #305 | **Phase 1 Task 1.1 — ai-api REST 컨트롤러 (Phase 1 본체).** client-ai 부착(`scanBasePackages="com.devquest"` 확대, db-core 미의존 유지) + AI 포트 17개 전 메서드 23개 + Judge0 = **엔드포인트 24개** 노출. 응답은 core-domain data class 그대로(계약 단일 출처). Kotlin default 파라미터 소실 3건 서버측 복원. **🔴 QA HIGH 1건 — 실측으로 확정**: `produces=APPLICATION_JSON_VALUE`를 붙여도 `StringHttpMessageConverter`가 `*/*` 지원으로 Jackson보다 먼저 선택 → **헤더는 JSON, 바디는 따옴표 없는 raw text**. `@SpringBootTest(RANDOM_PORT)`+JDK HttpClient로 바이트 실측 후 `text/plain;charset=UTF-8`로 정정. **테스트가 거짓 안심을 준 구조도 제거**(`jsonPath("$")`는 json-smart permissive라 bare word 통과) | 2026-07-22 |
+| #304 · #306 | **Phase 1 Task 1.3(#304) — ai-api `AiCallLogPort` 관측 어댑터.** Phase 1 나머지의 선행 조건(client-ai를 db-core 없이 붙이기 위함). 구조화 로그 + Micrometer만, DB 접근 0. 토큰 4종 전부 로그 보존(비용 추적 공백 없음). / **Task 1.2(#306) — 설정 이관.** client-ai `@Value` 5건 전수 조사 → `max-retry`·`judge0.*`를 ai-api에 **동일 값으로** 명시(기본값에 우연히 의존하던 상태 해소). **core-api에선 키를 지우지 않음** — inprocess가 여전히 client-ai 빈을 호스팅하므로 롤백 보존, Phase 3 정리. 부수 발견: `devquest.ai.pass-score`·`interview-questions`는 소비처 0건(죽은 설정) | 2026-07-22 |
 | #295 | **서비스 분해 Phase 0 Task 0.1 — AI 포트 마커 (무행동 변경).** 향후 ai-service 추출 대상을 타입으로 식별 가능하게: `port/ai/AiEvaluatorPort.kt` 빈 마커(순수 Kotlin) 생성 + AI(LLM) 포트 **정확히 17개**에 상속 표식만 추가(시그니처·반환 무변경). `*EvaluatorPort` 10 + `*Port` 7(TechInterview·InterviewCoach·CodingHint·SkillAssessment·JourneyReport·ActClearReport·CodingProblemGenerator). **Judge0Port 제외**(비-LLM 코드채점). 규약 테스트 `ArchAiPortConventionTest`로 "정확히 17개 + Judge0·DB 포트 14개 제외" 고정. QA 실측: 전체 모듈 재컴파일 회귀 0·core-api bootJar 정상(Fly 무영향). HIGH 0·LOW 2(규약 테스트 jar스킴/dedupe 견고성, 무해). 커밋 316509b | 2026-07-21 |
 | #292 | **서비스 분해 Phase 0~1 구현계획 확정 (ai-service 추출).** 설계(#289)를 태스크로 분해하기 전 **Blindspot Pass 진단**으로 "어댑터만 스왑" 가정을 실제 코드와 대조 → **부분 일치**, 4개 불일치를 Phase 0 선행 태스크로 반영: ① AI 포트 **17개** 중 7개가 `*EvaluatorPort` 미준수라 DB 포트와 혼재 → 마커 인터페이스(Task 0.1) ② `CacheMetricsAdvisor`→`AiCallLogPort`→db-core로 **매 호출 core DB write**(숨은 역결합) → **관측 재배치 A안**(Task 0.2/1.3) ③ `max-retry`·Judge0 설정이 core-api에 분산(Task 1.2) ④ `AiCheckService` `@Transactional` 안 AI+DB 혼용→HTTP 지연 유입(Task 1.4). 안전장치: 피처플래그(`transport=inprocess↔http`) strangler 롤백, 계약=`core-domain` data class 단일출처. Phase 0=무행동 변경, Phase 1 완료판정=parity+즉시롤백. 계획 `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md`. 코드 0줄. 머지 완료 | 2026-07-21 |
 | #289 | **서비스 분해 설계 확정 (제품 방향 전환).** "만든 사람조차 안 쓴다" → 무거운 12기능 앱을 **가볍게 매일 쓰는 데일리 도구**로 재정렬 + EKS 다중서비스 학습. 모듈러 모놀리스를 **daily + ai-service + core 3서비스**로 분해. **핵심 발견**: AI 경계가 이미 `core-domain` 포트(`*EvaluatorPort` 18종)로 존재 → 어댑터 in-process→HTTP 스왑으로 추출. strangler 순서(ai→daily→core 유지), 모노레포 멀티모듈, ai=NetworkPolicy만·공유DB 스키마분리·daily FE는 Phase2 동반. 스케일링(이메일 Resend 무료~100/일 천장→SES·토큰·캐싱)·EKS 인프라 영향(2-cluster addon NetworkPolicy·노드용량)·배포전략(EKS=실습/Fly=fallback) 포함. 설계 문서 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md` + 브리핑 아티팩트. 코드 0줄. 머지 완료 | 2026-07-20 |
@@ -71,8 +86,20 @@
   **전부 무행동 변경.**
   - **⚠️ 0.3 핵심 발견**: client-ai를 ai-api에 붙이면 `CacheMetricsAdvisor→AiCallLogPort→db-core` 런타임 체인이
     딸려옴 → client-ai 의존은 Phase 1로 연기. **Phase 1 착수 순서 = 1.3(ai-api AiCallLogPort 관측 어댑터)→1.1→1.2→1.4.**
-- **➡️ 다음 스텝: Phase 1 (HTTP 전환·parity)** — 순서 1.3→1.1→1.2→1.4. 실제 HTTP 호출 발생, 덩치 큼(새 세션 권장).
-  Task 1.4에서 트랜잭션 경계 재배치 + parity 검증. `client-ai` 의존 제거 금지(Phase 3까지).
+- **✅ Phase 1 전체 완료·머지 (07-22)**: 1.3 관측 어댑터(#304) → 1.1 REST 컨트롤러 24개(#305) →
+  1.2 설정 이관(#306) → 1.4a HTTP 어댑터 배선(#307) → 1.4b·1.5 트랜잭션 재배치 + parity(#308).
+  **ai-api = AI 포트 24개를 REST로 노출하는 독립 서비스. core는 `transport=http`로 호출 가능.**
+  - ⚠️ **프로덕션 기본값은 `inprocess` 유지** — Phase 1은 "전환 가능"까지고 "전환 완료"가 아니다.
+    실전 검증(로컬 e2e → prod 전환 판단)이 남았다.
+  - ⚠️ **`client-ai` 의존 제거 금지** (Phase 3까지 = inprocess 롤백 보존).
+  - **잔존 리스크 1건**: `CodingQuestService.generateProblem`/`submitCode`는 재시도 루프에 AI·Judge0·DB가
+    뒤섞여 트랜잭션 재배치를 **의도적 보류**했다. HTTP 전환이 완료되면 **이 둘이 유일하게 AI 호출 중
+    DB 커넥션을 잡는 지점**이 된다. 전환 전 재검토 필요.
+- **➡️ 다음 스텝: Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 문서 §이관계획.
+  ⚠️ **착수 전 필수**: ai-api를 **실제 네트워크에 처음 올리는 단계**다. `/internal/ai/**`가 **무인증**이고
+  `spring.web.error.include-message: always`로 내부 예외 메시지까지 노출한다. 현재는 Fly가 core-api만
+  배포해서 안 드러날 뿐이다. **인증·격리를 Phase 2 첫 태스크로 처리할 것.**
+  Phase 1처럼 **기계적 작업과 동작 변경을 다른 PR로 분리**하는 패턴을 그대로 적용한다.
 - **⚠️ 2-cluster에 영향**: ai NetworkPolicy 실현하려면 vpc-cni addon에 `enableNetworkPolicy` 필요(현재 맨몸), JVM 3개엔 t4g.small 빠듯→medium. Phase 3 체크리스트.
 - **미해결(구현 중)**: 데일리 캐싱 전략(공통콘텐츠 1회생성→서빙, Redis) / 이메일 SES 전환·소유(core vs daily) / AiCheck 오케스트레이션 경계 / 분산 트레이싱
 - CI 메모: `tfsec` 잡이 릴리스 다운로드 시 GitHub API rate-limit(403)로 간헐 실패 → `github_token` 주입으로 근본해결 가능(미적용, 재실행으로 우회 중)
@@ -114,10 +141,18 @@
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 나중에 복습(로그인·DB·간격 반복, RPG XP 연동). 지금은 보류.
 
 ### 백로그
-- [ ] **tech-debt(LOW, CI): `be-ci.yml` 테스트 리포트 업로드 범위** — `test` 태스크는 모든 서브프로젝트
-      (신규 `ai-api` 포함)를 실행하나(확인됨, 기능 정상), `Upload test report`는 `core-api` 경로만 업로드 →
-      ai-api 등 다른 모듈 실패 시 리포트 아티팩트 미보존(디버깅 관측성 갭, #298 QA MEDIUM). 3서비스로
-      늘면 각 모듈 리포트 경로 추가 필요.
+- [x] ~~**tech-debt(LOW, CI): `be-ci.yml` 테스트 리포트 업로드 범위**~~ → **2026-07-22 해결.**
+      리포트 경로를 5개 모듈(core-api·ai-api·core-domain·db-core·client-ai)로 확장 + **`parityTest`를
+      CI에 연결**(전용 소스셋이라 `check`/`test`에 자동으로 안 붙어 12개 parity 테스트가 죽어 있었음, #308 QA MEDIUM).
+- [ ] **tech-debt(LOW): `core-api/application-prod.yml`의 `server.error.*`가 Boot 3 잔재 키**
+      (#308 QA LOW). Boot 4는 `spring.web.error.*`로 이동 — 현재 값이 `never`(기본값과 동일)라 무해하지만
+      **죽은 설정**이다. ai-api에서 같은 버그가 실제 피해를 냈으므로(에러 메시지 미전달) 정리 권장.
+- [ ] **tech-debt(LOW): 죽은 설정 2건** — `devquest.ai.pass-score`(70)·`devquest.ai.interview-questions`(10)은
+      `be/` 전체에서 소비처 **0건**(#306 조사에서 발견, QA 독립 확인). 제거 또는 용도 복원 판단 필요.
+- [ ] **tech-debt(LOW): Jackson 2 잔재** — `CodingQuestService`(`ObjectMapper()` 직접 생성)·
+      `TechInterviewRateLimitInterceptor`·`DailyExplainRateLimitInterceptor`가 여전히 Jackson 2 사용.
+      AI HTTP 경로는 J3로 통일됐으나(#308) 코드베이스 전체는 혼재. **위 인터셉터 2건은 요청마다
+      `ObjectMapper()`를 새로 만드는 기존 tech-debt와 동일 대상** — 함께 정리하면 효율적.
 - [x] ~~**tech-debt(LOW): `be/gradlew` 실행 권한 없음(mode 100644)**~~ → **2026-07-22 해결.**
       `git update-index --chmod=+x be/gradlew`로 100755 커밋. 이제 clone 직후 `./gradlew` 바로 실행 가능
       (에이전트마다 chmod 우회하던 낭비 제거 — Phase 0 회고 Try ④).

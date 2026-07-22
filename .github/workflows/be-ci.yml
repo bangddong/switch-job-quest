@@ -67,12 +67,21 @@ jobs:
           fi
           echo "✅ Flyway 마이그레이션 버전 번호 중복 없음."
 
+      # parityTest는 전용 소스셋이라 `check`/`test`에 자동으로 붙지 않는다 → 명시 호출 필수.
+      # 빠지면 "in-process vs HTTP 동등성"이라는 Phase 1 완료 판정 근거가 CI에서 죽는다(#308 QA MEDIUM).
       - name: Build & Test
-        run: ./gradlew :core:core-api:bootJar test --no-daemon
+        run: ./gradlew :core:core-api:bootJar test :core:core-api:parityTest --no-daemon
 
+      # 모듈별 경로를 전부 나열한다. core-api만 올리면 ai-api 등 다른 모듈이 실패했을 때
+      # 리포트가 남지 않아 CI 로그만으로 디버깅해야 한다(#298 QA MEDIUM).
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report
-          path: be/core/core-api/build/reports/tests/
+          path: |
+            be/core/core-api/build/reports/tests/
+            be/core/ai-api/build/reports/tests/
+            be/core/core-domain/build/reports/tests/
+            be/storage/db-core/build/reports/tests/
+            be/clients/client-ai/build/reports/tests/
