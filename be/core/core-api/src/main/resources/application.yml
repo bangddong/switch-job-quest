@@ -49,9 +49,18 @@ devquest:
     # 의존이 제거되는 Phase 3에 이 키를 core-api에서 삭제한다 — 지금 지우면 inprocess 롤백이 깨진다.
     max-retry: 3
     interview-questions: 10
-    # AI 포트 전송 계층 전환 스위치. inprocess(기본) = client-ai 빈 사용(무행동). http = HTTP 어댑터 빈 사용(Phase 1 배선 전까지 미실행).
+    # AI 포트 전송 계층 전환 스위치. inprocess(기본) = client-ai 빈 사용(무행동). http = HTTP 어댑터 빈 사용.
     # 이 키는 core-api 자신(AiTransportConfig)이 @ConditionalOnProperty로 직접 소비 — ai-api로 이관 대상 아님.
+    # ⚠️ Phase 1 Task 1.4a: 이 기본값을 바꾸지 않는다. http는 테스트에서만 켠다(무행동 불변식).
     transport: inprocess
+    http:
+      # ai-api 베이스 URL. 시크릿 아님 — 평문 기본값 허용(로컬 개발 기준 ai-api 포트 8081).
+      base-url: ${AI_API_BASE_URL:http://localhost:8081}
+      # AiHttpClientConfig 참고: 내부망 연결이라 3초 안에 안 붙으면 네트워크/기동 문제로 간주해 즉시 실패.
+      connect-timeout-ms: ${AI_API_CONNECT_TIMEOUT_MS:3000}
+      # AiHttpClientConfig 참고: ai-api 내부 AiCallExecutor가 max-retry=3으로 같은 HTTP 응답 안에서
+      # 순차 재시도할 수 있어(최대 90초 안팎) 이보다 짧게 잡으면 정상 응답이 잘린다.
+      read-timeout-ms: ${AI_API_READ_TIMEOUT_MS:90000}
   judge0:
     # Phase 1 Task 1.2 조사: Judge0Adapter(client-ai/judge0)가 소비. max-retry와 동일한 이유로
     # core-api에 유지하되 ai-api에도 이관 완료(Task 1.2). Phase 3(client-ai 의존 제거)에 삭제 대상.
