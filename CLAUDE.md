@@ -15,6 +15,7 @@
 | 스킬 작성/수정 | `.claude/docs/skill-guide.md` |
 | 사용자 직접 실행 필요한 작업 | `.claude/TASKS.md` ← 파일이 존재하면 미완료 작업 있음 |
 | 현재 작업 상태 / PR / 최근 결정 | `.claude/CONTEXT.md` ← 새 대화 시작 시 **먼저 읽기** |
+| 미해결 QA 지적 (미룬 것) | `.claude/review-ledger.md` ← PR에서 안 고치기로 한 지적의 유일한 영속 저장소 |
 
 ## mneme (외부 성장 두뇌) 사용 규칙
 
