@@ -43,11 +43,18 @@ logging:
 devquest:
   ai:
     pass-score: 70
+    # Phase 1 Task 1.2 조사: AiCallExecutor(client-ai/support)가 소비. core-api 자신은 이 키를
+    # 직접 참조하지 않지만, inprocess 모드에서는 client-ai 빈이 core-api 컨텍스트 안에서 뜨므로
+    # 여전히 필요하다(롤백 불변식). ai-api에도 동일 값을 이관 완료(Task 1.2). client-ai 컴파일
+    # 의존이 제거되는 Phase 3에 이 키를 core-api에서 삭제한다 — 지금 지우면 inprocess 롤백이 깨진다.
     max-retry: 3
     interview-questions: 10
     # AI 포트 전송 계층 전환 스위치. inprocess(기본) = client-ai 빈 사용(무행동). http = HTTP 어댑터 빈 사용(Phase 1 배선 전까지 미실행).
+    # 이 키는 core-api 자신(AiTransportConfig)이 @ConditionalOnProperty로 직접 소비 — ai-api로 이관 대상 아님.
     transport: inprocess
   judge0:
+    # Phase 1 Task 1.2 조사: Judge0Adapter(client-ai/judge0)가 소비. max-retry와 동일한 이유로
+    # core-api에 유지하되 ai-api에도 이관 완료(Task 1.2). Phase 3(client-ai 의존 제거)에 삭제 대상.
     api-key: ${JUDGE0_API_KEY:}
     api-host: judge0-ce.p.rapidapi.com
   cors:

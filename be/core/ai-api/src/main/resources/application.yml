@@ -2,9 +2,9 @@ spring:
   application:
     name: devquest-ai-api
   # Phase 1 Task 1.1 — client-ai가 요구하는 ChatModel 빈(Spring AI Anthropic 오토컨피그)을
-  # 로드하기 위한 하드 전제. 이게 없으면 컨텍스트 로드 자체가 실패한다. max-retry·judge0 등
-  # 나머지 설정 이관은 Task 1.2 범위이며 여기서 건드리지 않는다(AiCallExecutor·Judge0Adapter의
-  # @Value에 이미 기본값이 있어 지금은 없어도 뜬다).
+  # 로드하기 위한 하드 전제. 이게 없으면 컨텍스트 로드 자체가 실패한다.
+  # boss-model·boss-max-tokens(AiClientConfig)도 이 파일에서 함께 온다 — client-ai 모듈
+  # 리소스를 core-api·ai-api가 동일하게 import하므로 값이 자동으로 동행(별도 이관 불필요).
   config:
     import: classpath:client-ai-anthropic.yml
 
@@ -20,3 +20,15 @@ management:
 logging:
   level:
     com.devquest: DEBUG
+
+# Phase 1 Task 1.2 — client-ai가 소비하는데 core-api/application.yml에만 명시돼 있던 설정을
+# 이관한다. 값은 core-api와 동일하게 맞춰 동작 동일성을 유지한다(우연한 기본값 일치에 기대지 않음).
+devquest:
+  ai:
+    # AiCallExecutor(client-ai/support) 소비. core-api/application.yml의 devquest.ai.max-retry와 동일.
+    max-retry: 3
+  judge0:
+    # Judge0Adapter(client-ai/judge0) 소비. core-api/application.yml의 devquest.judge0.*와 동일.
+    # 시크릿은 반드시 ${ENV:} 플레이스홀더 — application-local.yml을 만들지 않는다(be/CLAUDE.md 규칙).
+    api-key: ${JUDGE0_API_KEY:}
+    api-host: judge0-ce.p.rapidapi.com
