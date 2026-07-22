@@ -5,7 +5,7 @@ import com.devquest.core.domain.model.evaluation.CoachAnswerResult
 import com.devquest.core.domain.model.evaluation.CoachReportResult
 import com.devquest.core.domain.model.evaluation.CoachSessionResult
 import com.devquest.core.domain.port.InterviewCoachPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.web.client.RestClient
 
 /**

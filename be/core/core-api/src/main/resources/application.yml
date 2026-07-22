@@ -58,9 +58,11 @@ devquest:
       base-url: ${AI_API_BASE_URL:http://localhost:8081}
       # AiHttpClientConfig 참고: 내부망 연결이라 3초 안에 안 붙으면 네트워크/기동 문제로 간주해 즉시 실패.
       connect-timeout-ms: ${AI_API_CONNECT_TIMEOUT_MS:3000}
-      # AiHttpClientConfig 참고: ai-api 내부 AiCallExecutor가 max-retry=3으로 같은 HTTP 응답 안에서
-      # 순차 재시도할 수 있어(최대 90초 안팎) 이보다 짧게 잡으면 정상 응답이 잘린다.
-      read-timeout-ms: ${AI_API_READ_TIMEOUT_MS:90000}
+      # AiHttpClientConfig 참고(Task 1.4b 정정): ai-api 내부 AiCallExecutor가 max-retry=3으로 같은
+      # HTTP 응답 안에서 순차 재시도(단일 호출 상한 가정 30초 × 3회 = 90초)하는데, 기존 기본값 90000이
+      # 이 90초와 정확히 일치해 안전 마진이 0이었다(1ms만 늘어져도 core가 먼저 끊고 ai-api는 LLM 비용을
+      # 계속 태움). 90초 위에 60초 안전 마진을 더해 150초로 상향.
+      read-timeout-ms: ${AI_API_READ_TIMEOUT_MS:150000}
   judge0:
     # Phase 1 Task 1.2 조사: Judge0Adapter(client-ai/judge0)가 소비. max-retry와 동일한 이유로
     # core-api에 유지하되 ai-api에도 이관 완료(Task 1.2). Phase 3(client-ai 의존 제거)에 삭제 대상.

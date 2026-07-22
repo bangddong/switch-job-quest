@@ -2,7 +2,7 @@ package com.devquest.core.api.adapter.ai.http
 
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.port.BlogEvaluatorPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.web.client.RestClient
 
 /**

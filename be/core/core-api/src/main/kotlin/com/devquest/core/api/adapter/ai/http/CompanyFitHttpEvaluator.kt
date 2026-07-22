@@ -3,7 +3,7 @@ package com.devquest.core.api.adapter.ai.http
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.port.CompanyFitEvaluatorPort
 import com.devquest.core.domain.port.CompanyInfo
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.web.client.RestClient
 
 /** `CompanyFitEvaluatorPort`의 HTTP 어댑터 — ai-api `POST /internal/ai/company-fit/analyze` 호출. */

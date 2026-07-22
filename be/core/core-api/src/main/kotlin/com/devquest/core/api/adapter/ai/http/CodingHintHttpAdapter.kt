@@ -2,7 +2,7 @@ package com.devquest.core.api.adapter.ai.http
 
 import com.devquest.core.domain.model.coding.CodingHint
 import com.devquest.core.domain.port.CodingHintPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.web.client.RestClient
 
 /** `CodingHintPort`의 HTTP 어댑터 — ai-api `POST /internal/ai/coding-hint/get` 호출. */

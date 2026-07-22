@@ -2,7 +2,7 @@ package com.devquest.core.api.adapter.ai.http
 
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.port.PersonalityEvaluatorPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.web.client.RestClient
 
 /** `PersonalityEvaluatorPort`의 HTTP 어댑터 — ai-api `POST /internal/ai/personality/evaluate` 호출. */

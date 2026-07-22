@@ -2,7 +2,7 @@ package com.devquest.core.api.adapter.ai.http
 
 import com.devquest.core.domain.model.evaluation.TechInterviewResult
 import com.devquest.core.domain.port.TechInterviewPort
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.web.client.RestClient
 
 /**
