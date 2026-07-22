@@ -6,7 +6,6 @@ import com.devquest.ai.controller.request.TechInterviewExplainFollowupRequest
 import com.devquest.ai.controller.request.TechInterviewQuestionsRequest
 import com.devquest.core.domain.model.evaluation.TechInterviewResult
 import com.devquest.core.domain.port.TechInterviewPort
-import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -26,9 +25,18 @@ class TechInterviewController(
     fun evaluate(@RequestBody request: TechInterviewEvaluateRequest): TechInterviewResult =
         techInterviewPort.evaluate(request.techStack, request.questions, request.answers)
 
-    // 반환 타입이 순수 String이라 기본 컨버터가 text/plain을 고를 수 있다 — Task 1.4의 RestClient가
-    // core-domain 계약과 동일하게 JSON 문자열로 역직렬화할 수 있도록 명시적으로 JSON을 강제한다.
-    @PostMapping("/daily-question", produces = [MediaType.APPLICATION_JSON_VALUE])
+    /**
+     * wire 계약 (실측 확정 — `TechInterviewWireFormatContractTest` 참고):
+     * `produces = APPLICATION_JSON_VALUE`를 붙여도 반환 타입이 순수 `String`이면
+     * `StringHttpMessageConverter`가 먼저 선택되어 **따옴표 없는 raw text**가 나간다
+     * (`Content-Type: application/json`을 붙여도 실제 바디는 유효한 JSON이 아니다 — 헤더가
+     * 거짓말을 하는 상태). 따라서 헤더를 바디 실제 형식과 일치시켜 `text/plain;charset=UTF-8`로
+     * 명시한다. 한글 인코딩은 실측상 UTF-8로 정상 처리됨(mojibake 없음) — Boot 전체 컨텍스트가
+     * `StringHttpMessageConverter` 기본 charset(ISO-8859-1)을 UTF-8로 재구성해 주기 때문이다.
+     * Task 1.4의 RestClient는 이 엔드포인트를 `text/plain` 응답으로 취급해 `String`으로 그대로
+     * 읽으면 된다(추가 JSON 역직렬화 불필요).
+     */
+    @PostMapping("/daily-question", produces = ["text/plain;charset=UTF-8"])
     fun generateDailyQuestion(@RequestBody request: TechInterviewDailyQuestionRequest): String =
         techInterviewPort.generateDailyQuestion(
             request.techStack,
@@ -36,7 +44,8 @@ class TechInterviewController(
             request.recentQuestions ?: emptyList(),
         )
 
-    @PostMapping("/explain-followup", produces = [MediaType.APPLICATION_JSON_VALUE])
+    // wire 계약은 generateDailyQuestion과 동일 — 위 KDoc 참고.
+    @PostMapping("/explain-followup", produces = ["text/plain;charset=UTF-8"])
     fun explainFollowup(@RequestBody request: TechInterviewExplainFollowupRequest): String =
         techInterviewPort.explainFollowup(
             request.question,

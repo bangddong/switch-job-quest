@@ -70,8 +70,11 @@ class TechInterviewControllerTest {
             content = """{"techStack":"Kotlin","recentQuestions":["이전질문1"]}"""
         }.andExpect {
             status { isOk() }
-            content { contentType(MediaType.APPLICATION_JSON) }
-            jsonPath("$") { value("오늘의 질문") }
+            // 실제 wire 계약(TechInterviewWireFormatContractTest로 실측 고정)은 따옴표 없는 raw
+            // text다 — jsonPath("$")는 json-smart의 permissive 파싱 때문에 거짓 통과가 가능해
+            // content { string(...) } 원문 비교로 고정한다.
+            content { contentType("text/plain;charset=UTF-8") }
+            content { string("오늘의 질문") }
         }
 
         verify(techInterviewPort).generateDailyQuestion("Kotlin", listOf("이전질문1"))

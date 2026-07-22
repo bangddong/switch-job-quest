@@ -232,12 +232,32 @@ Phase 0에선 HTTP 빈이 아직 실제 호출을 안 하므로 기본값 inproc
 어댑터와 1:1 대응이라 parity 추적이 쉽다. `InterviewCoach`·`TechInterview`처럼 다단계 포트도 서버 세션이
 없고 히스토리를 파라미터로 받으므로(진단 확인) 각 호출을 독립 엔드포인트로 낼 수 있다.
 
-- [ ] **Step 0 (선행, #304 QA 이월):** 어댑터의 `ai.call.log.latency` 타이머 **제거**
+- [x] **Step 0 (선행, #304 QA 이월):** 어댑터의 `ai.call.log.latency` 타이머 **제거**
       (`ai.call.duration`과 동일 값 중복 — Task 1.3 결정 박스 참조). 카운터는 유지.
-- [ ] **Step 1:** 포트별 컨트롤러 테스트(실패) — 요청→평가자 위임→data class 직렬화 검증
-- [ ] **Step 2:** 컨트롤러 구현. Judge0은 Task 0.1 결정대로 포함/제외
-- [ ] **Step 3:** default 파라미터 소실 케이스 테스트(생략 필드 → 서버 기본값 복원)
-- [ ] **검증:** `./gradlew :core:ai-api:test` 그린 + `:core:core-api:bootJar -x test` 성공(Fly 무영향)
+- [x] **Step 1:** 포트별 컨트롤러 테스트(실패) — 요청→평가자 위임→data class 직렬화 검증
+- [x] **Step 2:** 컨트롤러 구현. Judge0은 Task 0.1 결정대로 포함
+- [x] **Step 3:** default 파라미터 소실 케이스 테스트(생략 필드 → 서버 기본값 복원)
+- [x] **검증:** `./gradlew :core:ai-api:test` 그린 + `:core:core-api:bootJar -x test` 성공(Fly 무영향)
+
+> **✅ 구현 완료 (2026-07-22, #305 — QA HIGH 1건·MEDIUM 3건 후속 처리 포함).**
+> - **엔드포인트 24개** — 18개 컨트롤러(17개 `AiEvaluatorPort` + `Judge0Port`)에 걸쳐 `/internal/ai/{evaluator}/{action}`
+>   규약으로 노출. Judge0은 Task 0.1 추천대로 **포함**(비-LLM이지만 "외부 컴퓨트 위임" 성격 동일).
+> - **default 파라미터 소실 대응 3건**: ①`JdAnalysisRequests.resumeContent`(nullable + `?: ""` 복원)
+>   ②`TechInterviewDailyQuestionRequest.recentQuestions`(nullable + `?: emptyList()` 복원)
+>   ③`TechInterviewExplainFollowupRequest.modelAnswer`(도메인 포트 자체가 `String? = null`이라 HTTP
+>   필드 생략 시 자연히 null — 별도 복원 로직 불필요, 자연 케이스로 3번째 유형에 포함).
+> - **String 반환 엔드포인트 wire 계약 실측 확정 (QA HIGH 후속, `TechInterviewWireFormatContractTest`):**
+>   `/daily-question`·`/explain-followup`은 `produces = APPLICATION_JSON_VALUE`를 붙여도 반환 타입이
+>   순수 `String`이라 `StringHttpMessageConverter`가 먼저 선택되어 **따옴표 없는 raw text**가 나감
+>   (헤더는 `application/json`인데 바디는 유효한 JSON이 아닌 불일치 상태였음 — QA 가설 확인됨).
+>   → `produces = "text/plain;charset=UTF-8"`로 정정해 헤더·바디를 일치시킴. 한글 인코딩은 실측상
+>   UTF-8로 정상(Boot 전체 컨텍스트가 `StringHttpMessageConverter` 기본 charset을 재구성). Task 1.4의
+>   RestClient는 이 두 엔드포인트를 `text/plain` 응답으로 취급해 `String` 그대로 읽으면 됨.
+> - **에러 경로 관측(MEDIUM, 설계 결정 아님·Task 1.4용 기록):** 포트가 런타임 예외를 던지면 Spring Boot
+>   기본 에러 핸들링(`BasicErrorController`)이 동작 — 상태코드 그대로(예: 500) +
+>   `{"timestamp","status","error","path"}` 형태 JSON(‌RFC 7807 `ProblemDetail` 아님). Kotlin non-null
+>   필드가 JSON에서 누락되면 `HttpMessageNotReadableException` → **400**, 동일 바디 형태.
+>   `ApiControllerAdvice`는 core-api 모듈 소유라 ai-api엔 없음 — 에러 핸들링 커스터마이즈는 Task 1.4 설계 몫.
 
 ### Task 1.2: 설정 이관 (불일치 #3)
 
