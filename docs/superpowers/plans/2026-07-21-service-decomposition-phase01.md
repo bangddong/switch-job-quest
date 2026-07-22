@@ -313,6 +313,23 @@ Phase 0에선 HTTP 빈이 아직 실제 호출을 안 하므로 기본값 inproc
 - Edit: `core-api` — `AiCheckService` 등 트랜잭션 경계 점검 (⚠️ **`client-ai` 의존은 유지**, 아래 참조)
 - Create: HTTP 어댑터 유닛 테스트(MockWebServer 또는 `RestClient` 스텁)
 
+> **⚠️ Task 1.1(#305)에서 이월된 함정 — `Accept` 헤더 406 (착수 시 반드시 반영):**
+> ai-api 엔드포인트 24개 중 **2개만 `Content-Type`이 다르다.**
+> `/internal/ai/tech-interview/daily-question`·`/explain-followup`은 반환 타입이 순수 `String`이라
+> **`text/plain;charset=UTF-8`**로 확정됐다(나머지 22개는 `application/json`).
+> 실측 근거: `produces=APPLICATION_JSON_VALUE`를 붙여도 `StringHttpMessageConverter`가 Jackson보다
+> 먼저 선택돼 **따옴표 없는 raw text**가 나갔다 → 헤더를 실물에 맞춰 정정한 것.
+> → **공용 `RestClient`에 `.accept(MediaType.APPLICATION_JSON)`을 균일하게 걸면 이 2개에서 406
+> Not Acceptable이 난다.** 어댑터를 짤 때 ① Accept를 강제하지 않거나 ② 이 2개는 `TEXT_PLAIN`을
+> 함께 accept하도록 분기할 것. 응답은 `String`으로 그대로 읽으면 되고 JSON 역직렬화가 필요 없다.
+> 계약 회귀 테스트: `ai-api`의 `TechInterviewWireFormatContractTest`가 실제 바이트로 고정하고 있다.
+>
+> **⚠️ 에러 전파 (같이 결정할 것):** ai-api는 `ApiControllerAdvice`(core-api 소유)를 쓸 수 없어
+> **Boot 기본 에러 응답**을 낸다 — 포트 예외 시 500 `{timestamp,status,error,path}`, 필수 필드 누락 시 400.
+> `server.error.include-message`가 기본값(`never`)이라 **`message` 필드가 없다** = 실패 원인 문자열이
+> core로 전달되지 않는다. → HTTP 어댑터가 원인을 `AiEvaluationException`으로 되살리려면
+> ai-api에 `server.error.include-message: always`를 켜거나 전용 에러 바디를 정의해야 한다. **Task 1.4에서 결정.**
+
 **⚠️ 롤백 불변식 (Global Constraints 재확인):** 이 태스크에서 **`client-ai` 컴파일 의존을 제거하지 않는다.**
 inprocess 경로가 client-ai 빈을 직접 쓰므로, 떼면 `transport=inprocess` 롤백이 죽어 prod(Fly) 문제 시
 되돌릴 안전지대가 사라진다. core-api는 Phase 1 내내 **client-ai(inprocess) + HTTP 어댑터(http) 둘 다
