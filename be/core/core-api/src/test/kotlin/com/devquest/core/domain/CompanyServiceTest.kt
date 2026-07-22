@@ -260,6 +260,20 @@ class CompanyServiceTest {
         verify(companyActivityPort, never()).save(any())
     }
 
+    @Test
+    fun `analyzeCompany - AI 평가가 실패하면 companyActivityPort를 호출하지 않고 예외가 그대로 전파된다 (트랜잭션 재배치 회귀 가드)`() {
+        val companyWithJd = company(id = 1L, companyName = "카카오", jobDescription = "Java 백엔드 개발자 모집")
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithJd)
+        whenever(jdAnalysisEvaluatorPort.analyze(any(), any(), any(), any(), any()))
+            .thenThrow(RuntimeException("AI 호출 실패"))
+
+        assertThatThrownBy {
+            service.analyzeCompany("user-1", 1L, listOf("Java"), listOf("3년 백엔드"))
+        }.isInstanceOf(RuntimeException::class.java).hasMessage("AI 호출 실패")
+
+        verify(companyActivityPort, never()).save(any())
+    }
+
     // ===== checkResume 테스트 =====
 
     @Test
@@ -323,6 +337,20 @@ class CompanyServiceTest {
 
         verify(companyActivityPort, never()).save(any())
         verify(resumeEvaluatorPort, never()).evaluate(any(), any(), any())
+    }
+
+    @Test
+    fun `checkResume - AI 평가가 실패하면 companyActivityPort를 호출하지 않고 예외가 그대로 전파된다 (트랜잭션 재배치 회귀 가드)`() {
+        val companyWithJd = company(id = 1L, companyName = "카카오", jobDescription = "Java 백엔드 개발자 모집")
+        val resume = UserResume(id = 1L, userId = "user-1", content = "5년차 백엔드 개발자")
+        whenever(companyPort.findByIdAndUserId(1L, "user-1")).thenReturn(companyWithJd)
+        whenever(userResumePort.findByUserId("user-1")).thenReturn(resume)
+        whenever(resumeEvaluatorPort.evaluate(any(), any(), any())).thenThrow(RuntimeException("AI 호출 실패"))
+
+        assertThatThrownBy { service.checkResume("user-1", 1L) }
+            .isInstanceOf(RuntimeException::class.java).hasMessage("AI 호출 실패")
+
+        verify(companyActivityPort, never()).save(any())
     }
 
     // ===== getActivities 테스트 =====

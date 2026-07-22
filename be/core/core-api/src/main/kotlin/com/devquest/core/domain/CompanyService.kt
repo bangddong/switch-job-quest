@@ -97,7 +97,16 @@ class CompanyService(
         log.info("회사 삭제: userId=${userId}, companyId=${companyId}")
     }
 
-    @Transactional
+    /**
+     * ⚠️ **트랜잭션 경계 (Phase 1 Task 1.4b/1.5)**: 의도적으로 `@Transactional`을 붙이지 않는다.
+     * 회사·이력서 조회(읽기)와 활동 로그 저장(쓰기)은 각각 [CompanyPort]·[UserResumePort]·
+     * [CompanyActivityPort] 구현체(db-core의 Spring Data JPA 리포지토리 어댑터)가 호출 시점마다
+     * 자체적으로 트랜잭션을 여는 개별 CRUD 호출이라 이 메서드가 별도로 감쌀 필요가 없다(Spring Data
+     * JPA의 `SimpleJpaRepository`는 `save`/조회 메서드마다 자체 `@Transactional`을 갖는다 — 실측:
+     * `CompanyActivityAdapter.save`가 `JpaRepository.save`에 그대로 위임). AI 호출(`jdAnalysisEvaluatorPort
+     * .analyze`) 동안 DB 커넥션을 붙잡지 않기 위해 예전의 메서드 전체 `@Transactional`을 제거했다 —
+     * 자세한 근거는 [AiCheckService] 상단 KDoc 참고(동일 패턴).
+     */
     fun analyzeCompany(
         userId: String,
         companyId: Long,
@@ -130,7 +139,7 @@ class CompanyService(
         return result
     }
 
-    @Transactional
+    /** ⚠️ 트랜잭션 경계 — [analyzeCompany] KDoc과 동일 근거로 `@Transactional`을 의도적으로 뺐다. */
     fun checkResume(userId: String, companyId: Long): Pair<ResumeCheckResult, LocalDateTime> {
         val company = companyPort.findByIdAndUserId(companyId, userId)
             ?: throw CoreException(ErrorType.COMPANY_NOT_FOUND)
