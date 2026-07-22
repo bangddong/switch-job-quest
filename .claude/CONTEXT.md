@@ -39,7 +39,9 @@
 >   **문서 전용 PR도 0건**(Phase 0은 10PR 중 6개가 문서였다).
 > - **큰 태스크는 쪼갠다**: Task 1.4를 1.4a(기계적·무행동)와 1.4b(동작 변경)로 분리했다. 회귀가 났을 때
 >   원인 범위가 절반으로 줄어든다. Phase 2의 daily-service 추출에도 같은 분리를 적용할 것.
-> - **시각화**: Phase 0 회고 https://claude.ai/code/artifact/8d702047-0184-4743-b89d-4f085b8644bc ·
+> - **시각화**: **Phase 1 브리핑 https://claude.ai/code/artifact/244a74dd-e7a4-4d62-a0e1-5eb5a4668e45**
+>   (경계 다이어그램·실행 순서·검출된 버그·트랜잭션 재배치·이월 항목) ·
+>   Phase 0 회고 https://claude.ai/code/artifact/8d702047-0184-4743-b89d-4f085b8644bc ·
 >   목표 아키텍처 https://claude.ai/code/artifact/ffe35a97-ee42-4412-b85c-2716e8b59a14
 > - **배포 타겟 열린 결정(Phase 3 전 확정)**: "최종 prod"를 EKS 완전체 vs Fly 3서비스 vs Fly 단일+EKS 학습전용 —
 >   미정. EKS 상시는 컨트롤플레인 $73/mo 고정비(destroy-after-use 전제).
