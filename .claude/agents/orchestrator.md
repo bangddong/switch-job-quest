@@ -353,32 +353,71 @@ Agent(subagent_type: "qa-reviewer", prompt: """
   <BE 파일 목록>
   <FE 파일 목록>
 
-  보고서를 반환한다.
+  보고서를 반환한다. 지적에 ID를 부여하고 findings 파일에 기록해라.
 """)
 ```
 
-→ HIGH 여부 확인
+→ 지적 목록(ID·등급)을 받아 8단계로
 
-> **마커는 qa-reviewer가 자동 생성** — orchestrator가 직접 생성 금지.
-> qa-reviewer가 현재 HEAD SHA를 `.claude/qa-cache/<branch>`에 기록한다.
-> 리뷰 후 커밋이 추가되면 SHA 불일치 → PR 생성 훅이 차단 → qa-reviewer 재실행 필요.
+> **마커·findings는 qa-reviewer가 자동 생성** — orchestrator가 직접 생성 금지.
+> - `.claude/qa-cache/<branch>` = 리뷰 시점 HEAD SHA
+> - `.claude/qa-cache/<branch>.findings.md` = 지적 표(ID·등급·상태·위치·내용)
+>
+> 리뷰 후 커밋이 추가되면 SHA 불일치 → PR 훅이 차단 → qa-reviewer 재실행.
+> **재실행 시 findings 파일이 있으면 자동으로 재검토(델타) 모드**가 되어 전체 재리뷰보다 훨씬 싸다.
+> orchestrator는 findings의 **상태 컬럼만** 갱신한다(8단계).
 
 ---
 
-## 8단계: HIGH 처리
+## 8단계: 지적 처리 (triage) — 루프를 닫는 단계
 
-**HIGH 없음** → 9단계 (PR 생성 시 assert-qa-run.sh + assert-pr-reviewed.sh가 자동으로 검토 실행)
+qa-reviewer가 `.claude/qa-cache/<브랜치>.findings.md`에 지적을 **ID 붙여** 남겨뒀다.
+**모든 지적은 상태가 확정돼야 한다.** 하나라도 `open`이면 훅이 PR을 막는다.
 
-**HIGH 있음**:
-- BE HIGH → be-feature-builder 재스폰 (수정 내용 명시)
-- FE HIGH → fe-feature-builder 재스폰
-- 수정 후 qa-reviewer 재실행
-- 최대 2회 재시도. 실패 시 사용자에게 원인과 함께 보고
+| 상태 | 언제 | 필수 조건 |
+|------|------|----------|
+| `fixed` | 이번 PR에서 고침 | **재QA로 해소 확인** (아래) |
+| `deferred` | 나중에 고침 | **`.claude/review-ledger.md` 등재 필수** — 안 하면 훅이 차단 |
+| `wontfix` | 안 고치기로 확정 | 근거를 findings 내용란 또는 PR 본문에 명시 |
+| `obsolete` | 코드가 바뀌어 무의미 | — |
 
-**MEDIUM / LOW**: 오케스트레이터가 타당성 판단 후 처리 여부 결정. PR 생성 차단 안 함.
+> ⚠️ **HIGH는 `fixed`/`obsolete`만 허용.** 미룰 수 없다 — 훅이 막는다.
 
-> **강제 장치**: `gh pr create` 실행 시 PreToolUse 훅이 Anthropic API로 diff를 재검토한다.
-> HIGH 있으면 PR 생성 차단 → 반드시 수정 후 재시도.
+### 수정이 필요한 경우
+
+- BE → be-feature-builder 재스폰 / FE → fe-feature-builder 재스폰
+- **어느 ID를 왜 고치는지 프롬프트에 명시**한다 (지적 원문 그대로 붙일 것)
+- 수정 후 **qa-reviewer 재실행** → 재검토 모드로 자동 진입(findings 파일이 있으므로).
+  이전 ID별 `fixed`/`not-fixed`/`obsolete` 판정 + 델타의 신규 지적을 받는다.
+- **`not-fixed`가 나오면 고쳐진 게 아니다.** 다시 재스폰.
+- **최대 2회 재시도.** 3회째에도 `not-fixed`면 **멈추고 사용자에게 보고** — 반복이 아니라
+  아키텍처 재검토가 필요하다는 신호다("3번 시도했는데 안 되네, 4번 더" 금지).
+
+### 미루는 경우 — 원장 이관 (PR 생성 **전에**)
+
+`.claude/qa-cache/`는 **gitignore(휘발성)**다. 브랜치를 지우면 findings도 사라진다.
+그래서 `deferred`는 반드시 커밋되는 원장으로 옮긴다:
+
+```
+.claude/review-ledger.md 의 "미해결 (open)" 표에 행 추가
+  출처 = <브랜치>/<F-ID>   ← 훅이 이 문자열로 등재를 검사한다. 형식 고정.
+  이관 사유 = 왜 지금 안 고치는지 (근거 없이 미루기 금지)
+```
+
+그리고 findings 파일의 해당 행 상태를 `deferred`로 갱신한다.
+
+> **CONTEXT.md가 이미 소유한 항목은 원장에 이중 등재하지 않는다** — 백로그/다음 작업에 적었으면
+> 그걸로 충분하다. 원장 하단 "이미 다른 곳에 기록된 것" 절에 한 줄만 남긴다.
+
+### 강제 장치 (기계가 막는 것)
+
+| 훅 | 무엇을 막나 |
+|----|------------|
+| `assert-qa-run.sh` | QA 미실행 / QA 후 커밋 추가(SHA 불일치) / **미처리 지적 잔존** / **HIGH 미룸** / **deferred 원장 미등재** |
+| `assert-pr-reviewed.sh` | `gh pr create` 시 Anthropic API로 diff 재검토 — HIGH 있으면 차단 |
+
+> ⚠️ **`chore/`·`docs/` 브랜치는 QA가 면제된다.** 편하다고 **수정을 chore로 우회하지 마라** —
+> 그건 리뷰를 건너뛰는 것이다. 코드 수정은 원래 브랜치에서 끝내고 재QA를 받는다.
 
 ---
 

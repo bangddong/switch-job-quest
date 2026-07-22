@@ -27,9 +27,76 @@ hooks:
 
 코드를 고치고 싶다는 판단이 들어도 보고서에 기록만 하고 멈춘다.
 
-## QA 마커 생성 (필수 — 리뷰 완료 후 항상 실행)
+## 실행 모드 — 시작 전에 반드시 판별
 
-HIGH/MEDIUM/LOW 여부와 무관하게 보고서 반환 **직전** 반드시 실행:
+리뷰를 시작하기 전에 **이전 findings 파일이 있는지** 확인한다:
+
+```bash
+BRANCH=$(git branch --show-current)
+FINDINGS=".claude/qa-cache/${BRANCH}.findings.md"
+MARKER=".claude/qa-cache/${BRANCH}"
+[ -f "$FINDINGS" ] && cat "$FINDINGS"
+[ -f "$MARKER" ] && echo "이전 QA SHA: $(cat "$MARKER")"
+```
+
+| 상황 | 모드 | 무엇을 하나 |
+|------|------|------------|
+| findings 파일 **없음** | **최초 리뷰** | 아래 체크리스트로 전체 검토 |
+| findings 파일 **있음** | **재검토(델타)** | 아래 "재검토 모드" 절차 |
+
+### 재검토 모드 (토큰 절약의 핵심)
+
+**전체를 다시 읽지 마라.** 이전 QA 이후 바뀐 것만 본다.
+
+```bash
+PREV_SHA=$(cat ".claude/qa-cache/${BRANCH}")
+git diff "$PREV_SHA"..HEAD --stat
+git diff "$PREV_SHA"..HEAD
+```
+
+1. **이전 지적 전건에 대해 ID별 판정을 낸다** — 하나도 빠뜨리지 말 것:
+
+   | 판정 | 의미 |
+   |------|------|
+   | `fixed` | 수정됐고 **그 수정이 지적을 실제로 해소**했다 (근거 = 파일:라인 또는 실행 출력) |
+   | `not-fixed` | 안 고쳐졌거나, 고쳤는데 **해소가 안 됐다** |
+   | `obsolete` | 코드가 달라져 지적이 무의미해졌다 |
+
+   ⚠️ **"수정 커밋이 있으니 해소됐다"고 넘기지 마라.** 수정이 **지적한 문제를 실제로 없앴는지** 확인하는 것이
+   이 모드의 존재 이유다. 겉만 고치고 원인이 남은 경우가 이 프로젝트에서 실제로 있었다.
+
+2. **델타에서 새로 생긴 문제**를 찾는다 — 수정이 새 버그를 만드는 일이 흔하다. 새 지적은 **이어지는 번호**로 부여.
+3. 이전 지적 중 `deferred`/`wontfix`로 이미 확정된 것은 **재판정하지 않는다**(그대로 유지).
+
+---
+
+## findings 파일 + 마커 생성 (필수 — 보고서 반환 직전 항상 실행)
+
+HIGH/MEDIUM/LOW 유무와 무관하게 **둘 다** 쓴다.
+
+### 1) findings 파일 — 지적을 ID 붙여 기록
+
+`.claude/qa-cache/<브랜치>.findings.md`. **아래 표 형식을 정확히 지킬 것** — 훅이 이 줄들을 grep으로 검사한다.
+
+```markdown
+# findings: <브랜치>
+> QA SHA: <HEAD SHA>
+
+| ID | 등급 | 상태 | 위치 | 내용 |
+|----|------|------|------|------|
+| F-1 | HIGH | open | be/core/.../X.kt:42 | 한 줄 요약 |
+| F-2 | MEDIUM | open | be/core/.../Y.kt:17 | 한 줄 요약 |
+| F-3 | LOW | open | — | 한 줄 요약 |
+```
+
+- **ID는 브랜치 안에서만 유일**하면 된다(`F-1`부터). 재검토 시 **번호를 재사용하지 말고 이어서** 붙인다.
+- 등급은 `HIGH`/`MEDIUM`/`LOW` 대문자 그대로.
+- **qa-reviewer가 쓰는 상태는 언제나 `open`뿐이다.** 처리 판정(`fixed`/`deferred`/`wontfix`)은 orchestrator 몫.
+  단 **재검토 모드**에서는 이전 지적의 상태를 `fixed`/`not-fixed`/`obsolete`로 직접 갱신한다.
+- 위치를 특정할 수 없으면 `—`.
+- 상세 설명·근거·실패 시나리오는 **보고서 본문**에 쓴다. 이 표는 색인이다.
+
+### 2) SHA 마커
 
 ```bash
 BRANCH=$(git branch --show-current)
@@ -39,7 +106,12 @@ echo "$HEAD_SHA" > ".claude/qa-cache/$BRANCH"
 ```
 
 > 마커 = "이 커밋에 대해 qa-reviewer가 실행됐다"는 증거.
-> orchestrator는 마커를 직접 생성하지 않는다 — qa-reviewer만 생성한다.
+> orchestrator는 마커도 findings도 **직접 생성하지 않는다** — qa-reviewer만 생성한다.
+> (단 findings의 **상태 컬럼 갱신**은 orchestrator가 한다.)
+
+### 지적이 0건이면
+
+표 본문 없이 헤더만 쓴다. 파일 자체는 반드시 만든다 — 없으면 "QA가 findings를 안 썼다"와 구분이 안 된다.
 
 ---
 
@@ -221,7 +293,23 @@ FE apiClient → 에러 메시지 파싱 → 사용자 노출
 ### 종합 판정
 - [ ] 머지 가능 (HIGH 없음)
 - [ ] 수정 후 재검토 필요 (HIGH N건)
+
+### findings
+| ID | 등급 | 상태 | 위치 | 내용 |
+|----|------|------|------|------|
+| F-1 | HIGH | open | ... | ... |
+
+(재검토 모드일 때는 아래를 **먼저** 붙인다)
+
+### 이전 지적 판정
+| ID | 이전 등급 | 판정 | 근거 |
+|----|-----------|------|------|
+| F-1 | HIGH | fixed | 실제 해소를 확인한 파일:라인 또는 실행 출력 |
+| F-2 | MEDIUM | not-fixed | 왜 아직 해소가 아닌지 |
 ```
+
+> 보고서의 findings 표는 `.claude/qa-cache/<브랜치>.findings.md`에 쓴 내용과 **정확히 같아야 한다.**
+> 둘이 다르면 orchestrator가 판단을 잘못 내리고, 훅은 파일 쪽만 본다.
 
 > 보고서 작성 후 전체 검토 과정을 재현하지 않는다. 위 형식 그대로 반환하고 끝낸다.
 
