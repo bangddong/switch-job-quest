@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/ci-parity-test` (머지 후 main) |
-| 열린 PR | 없음 (Phase 1 전 태스크 머지 완료) |
+| 브랜치 | `chore/eks-capacity-type-ondemand` |
+| 열린 PR | #314 — EKS capacity_type 변수화(ON_DEMAND) + Free Plan 실측 반영 (머지 대기) |
 
 > **🌙 다음 세션 시작점 (07-22 갱신)**: 서비스 분해 **Phase 0 + Phase 1 전체 완료.**
 > Phase 0(#295·#297·#298·#300) → Phase 1(#304 1.3 · #305 1.1 · #306 1.2 · #307 1.4a · #308 1.4b·1.5).
@@ -314,18 +314,39 @@ Grafana Cloud push → **인프라 컴포넌트도 영속 볼륨을 요구하지
 | 1 | `endpoint_public_access=true`, `0.0.0.0/0` | CIDR 제한 / private | $0 |
 | 2 | 컨트롤플레인 로깅 생략 | `enabled_cluster_log_types` | CloudWatch 요금 |
 | 3 | secret KMS 암호화 생략 | KMS 암호화 | KMS $1/월+ |
-| 4 | `capacity_type="SPOT"` **하드코딩** | **변수화** → 온디맨드/혼합 | 노드비 2.2배 |
+| 4 | ~~`capacity_type="SPOT"` 하드코딩~~ → **변수화 완료** (`node_capacity_type`, 기본 `ON_DEMAND`) | tfvars로 SPOT 주입(쿼터 증액 후) | 노드비 2.2배 |
 | 5 | 노드가 **퍼블릭 서브넷**+공인IP | 프라이빗 서브넷+NAT | **+$32/월** |
 | 6 | `desired_size=1` | 2+ (다중 AZ HA) | 노드비 ×N |
 | 7 | CI IAM이 admin 정책 | 최소권한 | $0 |
 
-- **이미 변수화**(tfvars만 교체): 인스턴스 타입·노드 수·K8s 버전·클러스터명
-- **하드코딩이라 코드 수정 필요**: `capacity_type`·`ami_type`·서브넷 선택·엔드포인트 설정
+- **이미 변수화**(tfvars만 교체): 인스턴스 타입·노드 수·K8s 버전·클러스터명·**`capacity_type`**(07-23 추가)
+- **하드코딩이라 코드 수정 필요**: `ami_type`·서브넷 선택·엔드포인트 설정
 - 즉 *"학습 IaC를 그대로 prod에"*가 아니라 **"같은 골격에 prod 파라미터를 끼운다"** — 레이어 분리·
   remote backend·OIDC·IRSA·애드온 배선은 **전부 그대로 간다.** 그게 IaC 학습의 목표 그 자체.
 
-> **⚠️ 미확인 (콘솔에서 봐야 함)**: ①크레딧 **정확한 만료일** — 6개월 전제로 계산했으니 캘린더에 박을 것
-> ②크레딧이 **EKS를 커버하는지**(일부 프로모션 크레딧은 서비스 제외 있음).
+#### 🔴 Free Plan 실측 확정 (2026-07-23, API·공식문서 3자 대조) — 위 "미확인 2건" 해소
+계정 API(`accountPlanType`·Service Quotas)·공식 빌링 문서(`free-tier-plans.html`)·한국어 랜딩 대조.
+
+| 확인 항목 | 결과 |
+|-----------|------|
+| 계정 플랜 | `FREE` · 크레딧 **$199.81 잔여** |
+| 만료일 | **2027-01-15** (약 25주) — 📅 캘린더 등록 필요 |
+| EKS가 Free Plan 제한 대상? | **아니다.** 제한 예시는 Savings Plans·RI·일부 Marketplace뿐. EKS 쿼터 100·dry-run 통과 |
+| 초과 과금? | **없다.** "No charges incur during usage" — 대신 아래 폐쇄 |
+
+- 🔴 **폐쇄 트리거 2개**: *"Account closes when credits are depleted **OR** when the plan duration ends."*
+  **만료일만이 아니라 크레딧 소진도 즉시 계정 폐쇄**다. 한국어 랜딩은 이 문장을 통째로 누락 →
+  "요금 안 나감"만 강조해 오해 유발. **돈이 아니라 계정이 대가.** (폐쇄 후 90일 content 보관, Paid 업그레이드 시 복구)
+  → **안전 예비 $30 확보 규칙**: 사용 가능액 $170. 풀 토폴로지($0.26/hr) 654h·학습($0.14/hr) 1,214h = 여전히 충분.
+  단 "다 태우기"를 목표로 삼지 말 것. prod는 Fly+Neon이라 계정 폐쇄돼도 무영향.
+- 🟡 **Spot vCPU 쿼터=0은 Free Plan 제한이 아니라 신규 계정 기본값** — 증액 요청이 통할 수 있음.
+  단 스팟↔온디맨드 650h 차이가 **$13뿐**이고 회수 중단이 사라지니 **온디맨드가 낫다**(nodes.tf 기본값 ON_DEMAND 확정).
+- 🟡 **자동 Paid 전환 트리거 주의**: AWS Organizations 가입·Control Tower·Partner Network·Enterprise
+  Agreement 등을 건드리면 **Free→Paid 자동 전환 → 초과 과금 시작**. 현 GitHub OIDC+IAM은 무관.
+  **멀티계정 실습으로 Organizations를 만지면 그 순간 Paid**가 되니 로드맵에 들어가면 미리 인지.
+- 🟢 **잔여 크레딧 이월**: Paid 업그레이드해도 남은 크레딧이 future bill에 자동 적용 → "만료 직전 업그레이드"가 손해 아님.
+
+> **📅 사용자 액션**: 2027-01-15 크레딧 만료(계정 폐쇄)를 캘린더에 등록. (`.claude/TASKS.md` 참조)
 
 ---
 
@@ -349,7 +370,8 @@ Grafana Cloud push → **인프라 컴포넌트도 영속 볼륨을 요구하지
     K8s 1.36 핀. `tofu plan=14 to add`. **로컬 apply/destroy 확정**(CI 미편입) + `guard-local-layers` 잡으로
     매트릭스 진입 차단. **⚠️ 아직 apply 안 함 — 비용 $0.**
   - **➡️ 다음: Task 8 = 2-cluster apply 왕복 (별도 세션, ★과금 시작).** ⚠️⚠️ EKS 컨트롤플레인 **$0.10/hr**
-    + 노드(t4g.small Spot) + EBS. 실행: `cd infra/aws-eks/2-cluster && tofu init && tofu plan`(해설+승인 게이트)
+    + 노드(t4g.small **ON_DEMAND** — Spot 쿼터=0이라 07-23 기본값 변경) + EBS.
+    실행: `cd infra/aws-eks/2-cluster && tofu init && tofu plan`(해설+승인 게이트)
     → `apply` → `kubectl get nodes` Ready 확인 → **끝나면 반드시 `tofu destroy`**(destroy-after-use).
     **로컬**에서만(CI 아님). 30~40분 통으로 필요. 착수 전 크레딧 잔여 재확인. 그 다음은 gitops 또는 Stage 1(ECR·앱 배포).
   - CI 관리 레이어 현재: `infra-deploy.yml` matrix `[0-bootstrap, 1-network]` (2-cluster는 로컬 전용이라 의도적 제외).
