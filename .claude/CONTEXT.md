@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/eks-capacity-type-ondemand` |
-| 열린 PR | #314 — EKS capacity_type 변수화(ON_DEMAND) + Free Plan 실측 반영 (머지 대기) |
+| 브랜치 | main (작업 없음) |
+| 열린 PR | 없음 (#314 머지 완료) |
 
 > **🌙 다음 세션 시작점 (07-22 갱신)**: 서비스 분해 **Phase 0 + Phase 1 전체 완료.**
 > Phase 0(#295·#297·#298·#300) → Phase 1(#304 1.3 · #305 1.1 · #306 1.2 · #307 1.4a · #308 1.4b·1.5).
@@ -67,6 +67,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #314 | **EKS node `capacity_type` 변수화 + Free Plan 실측 반영 (Task 8 선행).** `nodes.tf`의 `capacity_type="SPOT"` 하드코딩 → `var.node_capacity_type`(기본 **ON_DEMAND**) — 계정 API 실측 **Spot vCPU 쿼터=0**이라 SPOT이면 apply 필패. 스팟 학습 시 쿼터 증액 후 tfvars 주입(온디맨드↔스팟 650h 차 $13). **Free Plan 3자 대조 확정**(API·공식문서·한국어랜딩): 크레딧 **$199.81**/만료 **2027-01-15**/EKS 제한 대상 아님(쿼터 100). 🔴 **크레딧 소진도 계정 폐쇄 트리거**("depleted OR duration ends") → 안전예비 $30 규칙. 🟡 Organizations 등 자동 Paid 전환 주의·🟢 잔여크레딧 이월. tfstate 없음(apply 전)이라 replace 무. **prod(Fly+Neon) 무영향.** 만료일 캘린더 등록 = TASKS.md TASK-6 | 2026-07-23 |
 | #308 | **Phase 1 Task 1.4b·1.5 — 트랜잭션 경계 재배치 + parity 검증 (Phase 1 완료).** Task 0.1~1.4a를 통틀어 **처음으로 프로덕션 동작을 바꾼 PR.** ①Jackson 2→3 교체(ai-api와 동일 라이브러리로 통일, 1.4a QA 지적) + read-timeout 90s→150s(기존값이 "30초×재시도3회"와 마진 0) ②**parity 라운드트립 12 tests** — core-api에 전용 소스셋 `parityTest` 신설(일반 test에 넣으니 `scanBasePackages="com.devquest"`로 ai-api가 딸려와 233개 중 43개 회귀 → 클래스패스 격리), 실제 ai-api 기동 + AI 포트만 목 → in-process와 HTTP 결과 **정확 일치** 비교. Map·List<중첩>·nullable·default 생략·text/plain·400/500 전부 커버 ③**트랜잭션 재배치 14개 메서드**(AiCheckService 11 + TechInterviewService.evaluate + CompanyService 2) — 전부 "AI 호출→단일 쓰기" 패턴이라 바깥 `@Transactional`이 애초에 추가 원자성을 안 줬음(QA가 호출 그래프로 독립 검증). `CodingQuestService` 2건은 재시도 루프에 뒤섞여 **의도적 보류**. HikariCP pool=10 고갈 위험 제거. 회귀 가드 6건("AI 실패→쓰기 `never()`"). **🐛 parity가 진짜 버그 검출**: `server.error.include-message`가 Boot 3 키 → Boot 4는 `spring.web.error.*` = AI 실패 원인이 core로 **한 번도 전달된 적 없었음**. core-api 239 tests + parity 12 + ai-api 41 전부 0 failures. Fly 무영향(bootJar task graph에 ai-api 0개) | 2026-07-22 |
 | #307 | **Phase 1 Task 1.4a — core HTTP 어댑터 배선 (무행동).** Task 1.4를 기계적 배선(1.4a)과 동작 변경(1.4b)으로 **분리**. 어댑터 18개/엔드포인트 24개, `BaseAiHttpAdapter`가 직렬화·에러 매핑 흡수. `AiTransportConfig`를 18개 포트로 확장(어댑터에 `@Component` 안 달아 inprocess에선 빈 생성조차 안 됨 — `getBeanNamesForType(RestClient)` 비어있음으로 증명). **계획이 예고한 함정 4종 처리**: ①타임아웃 명시(무한 대기 방지) ②**재시도 미도입**(ai-api 안 `AiCallExecutor`가 이미 3회 → 또 하면 최대 9회 실제 LLM 호출·비용 폭증) ③**Accept 406 회피**(`text/plain` 2개 + JSON 22개를 `.accept()` 없이 String 수신, JDK HttpServer로 진짜 협상 재현 실측) ④에러 전파. core-api 229 tests(기존 161 보존 + 신규 68) | 2026-07-22 |
 | #305 | **Phase 1 Task 1.1 — ai-api REST 컨트롤러 (Phase 1 본체).** client-ai 부착(`scanBasePackages="com.devquest"` 확대, db-core 미의존 유지) + AI 포트 17개 전 메서드 23개 + Judge0 = **엔드포인트 24개** 노출. 응답은 core-domain data class 그대로(계약 단일 출처). Kotlin default 파라미터 소실 3건 서버측 복원. **🔴 QA HIGH 1건 — 실측으로 확정**: `produces=APPLICATION_JSON_VALUE`를 붙여도 `StringHttpMessageConverter`가 `*/*` 지원으로 Jackson보다 먼저 선택 → **헤더는 JSON, 바디는 따옴표 없는 raw text**. `@SpringBootTest(RANDOM_PORT)`+JDK HttpClient로 바이트 실측 후 `text/plain;charset=UTF-8`로 정정. **테스트가 거짓 안심을 준 구조도 제거**(`jsonPath("$")`는 json-smart permissive라 bare word 통과) | 2026-07-22 |
