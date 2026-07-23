@@ -8,7 +8,7 @@
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `chore/eks-capacity-type-ondemand` |
-| 열린 PR | 진행 중 — EKS capacity_type 변수화 + Free Plan 실측 반영 |
+| 열린 PR | #314 — EKS capacity_type 변수화(ON_DEMAND) + Free Plan 실측 반영 (머지 대기) |
 
 > **🌙 다음 세션 시작점 (07-22 갱신)**: 서비스 분해 **Phase 0 + Phase 1 전체 완료.**
 > Phase 0(#295·#297·#298·#300) → Phase 1(#304 1.3 · #305 1.1 · #306 1.2 · #307 1.4a · #308 1.4b·1.5).
