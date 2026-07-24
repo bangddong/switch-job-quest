@@ -8,15 +8,18 @@
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#316 Task 8 실증 문서화 머지 완료) |
+| 열린 PR | 없음 (#318 EKS 학습 퀴즈 게이트 머지 완료) |
 
 > **🌙 다음 세션 시작점 (07-24 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
 >   24개를 REST로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
 > - **EKS 트랙**: #314(capacity_type ON_DEMAND) → **Task 8 apply 왕복 실증 완료(07-24, #316).**
 >   2-cluster IaC가 뜬다-부순다 왕복 동작 확인. kubectl 설치됨. 크레딧 $199.81(만료 2027-01-15).
+>   → **#318: EKS 학습 퀴즈 게이트 도입.** 이제 학습 마일스톤은 **`stage/eks-*` 브랜치**로 만들고, 구축 후
+>   `quiz.md` 퀴즈 + `docs/eks-quizzes/<br>.md`의 `<!-- QUIZ-PASSED -->` 없으면 `assert-eks-quiz.sh`가 PR 차단.
 > **다음 = 택1:**
-> - **① EKS Stage 1 (ECR + 앱 배포)** — ⚠️ 선행: **ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건, +lifecycle).
+> - **① EKS Stage 1 (ECR + 앱 배포)** — ⚠️ 브랜치를 **`stage/eks-1-ecr`** 로 만들 것(퀴즈 게이트 발동).
+>   선행: **ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건, +lifecycle).
 >   Stage 1부터 ALB/PVC 생기면 destroy 전 `kubectl delete ingress,pvc --all -A` 필수. (아래 EKS 섹션 상세)
 > - **② Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`.
 >   ⚠️ **착수 전 반드시**: ai-api를 **실제 네트워크에 처음 올리는 시점**이므로 `/internal/ai/**` **무인증**
@@ -72,6 +75,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #318 | **EKS 학습 퀴즈 게이트 — 이해 검증 기계 강제 (2026-07-24).** Task 8에서 CLAUDE.md "학습 설명 의무"(prose)가 momentum에 밀려 실제 누락된 것을 교정. QA 루프(`assert-qa-run.sh`)와 동일 철학으로 **구축 후 이해도 퀴즈를 훅으로 강제**. `assert-eks-quiz.sh`: `stage/eks-*` 브랜치 `gh pr create` 시 `docs/eks-quizzes/<br>.md` + `<!-- QUIZ-PASSED -->` 마커 없으면 차단(5경우 전수 테스트). `quiz.md`에 "EKS 학습 마일스톤 모드"(실측 로그 기반 문제·기록·마커), orchestrator 9.5단계 필수화, CLAUDE.md 브랜치 규칙에 `stage/eks-*` 추가. **첫 적용=Stage 1부터.** 리허설(Task 8 내용 5문제) 2/5 — 게이트 효용 실증(구축됐지만 이해 구멍 드러남). | 2026-07-24 |
 | Task 8 (문서 PR) | **★ EKS 첫 과금 왕복 실증 (2026-07-24).** `tofu apply`(14 added, ~10분) → `kubectl get nodes` **노드 Ready**(v1.36.2·arm64 Graviton·공인IP·NAT 회피 확인) → `tofu destroy`(14 destroyed) → **teardown 전수검증 고아 0**(state·EBS·SG·LB·NAT 전부 없음). **2-cluster IaC가 실제로 뜬다-부순다 왕복 동작함을 실증.** 비용 **~$0.1 이하**(벽시계 ~50분, 컨트롤플레인 40분×$0.10). 사전점검서 kubectl 미설치 발견→`brew install`(v1.36.3). K8s 1.36 표준지원 재확인. #314의 ON_DEMAND 노드 정상 프로비저닝. 문서: `eks-migration-log.md` 실측 + `eks-tutorial-steps.md` Step 8 정답경로. **다음=Stage 1(ECR 편입 후 앱 배포).** | 2026-07-24 |
 | #314 | **EKS node `capacity_type` 변수화 + Free Plan 실측 반영 (Task 8 선행).** `nodes.tf`의 `capacity_type="SPOT"` 하드코딩 → `var.node_capacity_type`(기본 **ON_DEMAND**) — 계정 API 실측 **Spot vCPU 쿼터=0**이라 SPOT이면 apply 필패. 스팟 학습 시 쿼터 증액 후 tfvars 주입(온디맨드↔스팟 650h 차 $13). **Free Plan 3자 대조 확정**(API·공식문서·한국어랜딩): 크레딧 **$199.81**/만료 **2027-01-15**/EKS 제한 대상 아님(쿼터 100). 🔴 **크레딧 소진도 계정 폐쇄 트리거**("depleted OR duration ends") → 안전예비 $30 규칙. 🟡 Organizations 등 자동 Paid 전환 주의·🟢 잔여크레딧 이월. tfstate 없음(apply 전)이라 replace 무. **prod(Fly+Neon) 무영향.** 만료일 캘린더 등록 = TASKS.md TASK-6 | 2026-07-23 |
 | #308 | **Phase 1 Task 1.4b·1.5 — 트랜잭션 경계 재배치 + parity 검증 (Phase 1 완료).** Task 0.1~1.4a를 통틀어 **처음으로 프로덕션 동작을 바꾼 PR.** ①Jackson 2→3 교체(ai-api와 동일 라이브러리로 통일, 1.4a QA 지적) + read-timeout 90s→150s(기존값이 "30초×재시도3회"와 마진 0) ②**parity 라운드트립 12 tests** — core-api에 전용 소스셋 `parityTest` 신설(일반 test에 넣으니 `scanBasePackages="com.devquest"`로 ai-api가 딸려와 233개 중 43개 회귀 → 클래스패스 격리), 실제 ai-api 기동 + AI 포트만 목 → in-process와 HTTP 결과 **정확 일치** 비교. Map·List<중첩>·nullable·default 생략·text/plain·400/500 전부 커버 ③**트랜잭션 재배치 14개 메서드**(AiCheckService 11 + TechInterviewService.evaluate + CompanyService 2) — 전부 "AI 호출→단일 쓰기" 패턴이라 바깥 `@Transactional`이 애초에 추가 원자성을 안 줬음(QA가 호출 그래프로 독립 검증). `CodingQuestService` 2건은 재시도 루프에 뒤섞여 **의도적 보류**. HikariCP pool=10 고갈 위험 제거. 회귀 가드 6건("AI 실패→쓰기 `never()`"). **🐛 parity가 진짜 버그 검출**: `server.error.include-message`가 Boot 3 키 → Boot 4는 `spring.web.error.*` = AI 실패 원인이 core로 **한 번도 전달된 적 없었음**. core-api 239 tests + parity 12 + ai-api 41 전부 0 failures. Fly 무영향(bootJar task graph에 ai-api 0개) | 2026-07-22 |
