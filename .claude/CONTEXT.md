@@ -7,20 +7,22 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `docs/eks-task8-apply-roundtrip` |
-| 열린 PR | 진행 중 — Task 8 apply 왕복 실증 문서화 (일지·튜토리얼·CONTEXT) |
+| 브랜치 | main (작업 없음) |
+| 열린 PR | 없음 (#316 Task 8 실증 문서화 머지 완료) |
 
-> **🌙 다음 세션 시작점 (07-22 갱신)**: 서비스 분해 **Phase 0 + Phase 1 전체 완료.**
-> Phase 0(#295·#297·#298·#300) → Phase 1(#304 1.3 · #305 1.1 · #306 1.2 · #307 1.4a · #308 1.4b·1.5).
-> **ai-api가 AI 포트 24개를 REST로 노출하는 독립 서비스가 됐고, core는 HTTP 어댑터로 호출 가능하다.**
-> ⚠️ **프로덕션 기본값은 계획대로 `transport=inprocess` 유지** — 검증 누적 전까지 전환 안 함. Fly 무영향, main clean, EKS $0.
+> **🌙 다음 세션 시작점 (07-24 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
+> - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
+>   24개를 REST로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
+> - **EKS 트랙**: #314(capacity_type ON_DEMAND) → **Task 8 apply 왕복 실증 완료(07-24, #316).**
+>   2-cluster IaC가 뜬다-부순다 왕복 동작 확인. kubectl 설치됨. 크레딧 $199.81(만료 2027-01-15).
 > **다음 = 택1:**
-> - **① Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`.
->   ⚠️ **Phase 2 착수 전 반드시**: ai-api를 **실제 네트워크에 처음 올리는 시점**이므로 `/internal/ai/**` **무인증**
+> - **① EKS Stage 1 (ECR + 앱 배포)** — ⚠️ 선행: **ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건, +lifecycle).
+>   Stage 1부터 ALB/PVC 생기면 destroy 전 `kubectl delete ingress,pvc --all -A` 필수. (아래 EKS 섹션 상세)
+> - **② Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`.
+>   ⚠️ **착수 전 반드시**: ai-api를 **실제 네트워크에 처음 올리는 시점**이므로 `/internal/ai/**` **무인증**
 >   문제를 먼저 해결할 것(현재는 Fly가 core-api만 배포해서 노출 안 됨). `include-message: always`도 켜져 있다.
-> - **② `transport=http` 실전 검증** — 로컬에서 ai-api 띄우고 수동 e2e → 문제없으면 prod 기본값 전환 검토.
+> - **③ `transport=http` 실전 검증** — 로컬에서 ai-api 띄우고 수동 e2e → 문제없으면 prod 기본값 전환 검토.
 >   Phase 1은 "전환 가능"까지만 했고 "전환 완료"는 아니다.
-> - **③ EKS 2-cluster apply 왕복** — 30~40분 통시간 있을 때(아래 상세). 학습 트랙.
 >
 > **📋 Phase 1 회고 — Phase 2 착수 전 반드시 볼 것:**
 > - **가장 큰 교훈: 가짜 서버 테스트는 계약을 증명하지 못한다.** Task 1.4a의 테스트 68개가 전부 그린이었는데도
