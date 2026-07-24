@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#314 머지 완료) |
+| 브랜치 | `docs/eks-task8-apply-roundtrip` |
+| 열린 PR | 진행 중 — Task 8 apply 왕복 실증 문서화 (일지·튜토리얼·CONTEXT) |
 
 > **🌙 다음 세션 시작점 (07-22 갱신)**: 서비스 분해 **Phase 0 + Phase 1 전체 완료.**
 > Phase 0(#295·#297·#298·#300) → Phase 1(#304 1.3 · #305 1.1 · #306 1.2 · #307 1.4a · #308 1.4b·1.5).
@@ -48,13 +48,16 @@
 > - **메모(리뷰 CI)**: OCR(alibaba)·roborev 검토 완료 → **도입 보류.** 솔로라 안 아픔 + OCR은 **API 종량제(Claude 구독 불가)**. 현 qa-reviewer로 충분. **협업자 생기거나 PR이 3서비스로 늘면** 그때 OCR 파일럿. 나중 카드.
 > - **메모(DB)**: **Neon→RDS 전환 = 폐기(07-21).** 무료 사용량 부족 시점에만 재고. RDS는 상시 과금이라 destroy-after-use(EKS 실습)·Fly fallback 전략과 배치. 상세는 "백로그 › DB".
 >
-> **⏸️ 2-cluster 코드 머지됨(#287)·apply 대기 (07-20)**: 코드 11개 `.tf` main 랜딩. **아직 apply 안 함
-> = AWS에 아무것도 안 떠 있음, 비용 $0, 크레딧 $200 온전.**
-> **다음(별도 세션): Task 8 = apply(★과금 시작)→`kubectl get nodes` Ready→`tofu destroy` 왕복.**
-> 계획 [docs/superpowers/plans/2026-07-19-eks-2-cluster.md](docs/superpowers/plans/2026-07-19-eks-2-cluster.md) Task 8.
-> **로컬** apply/destroy(CI 아님). apply 전 plan 해설+승인 게이트 유지. **30~40분 통으로 필요**(중간에 자리 뜨면 과금 샘).
-> 실행: `cd infra/aws-eks/2-cluster && tofu init && tofu plan` → 승인 후 `apply` → 끝나면 반드시 `tofu destroy`.
-> K8s 1.36 핀(실측: 1.32 표준지원 밖·1.33 07-29 만료). 툴체인: 이 머신은 `brew install opentofu tfsec` 필요(07-19 clone).
+> **✅ Task 8 완료 — 2-cluster apply 왕복 실증 (2026-07-24, ★첫 과금)**: `tofu apply`(14 added, ~10분)
+> → `kubectl get nodes` **노드 Ready**(v1.36.2·arm64·공인IP) → `tofu destroy`(14 destroyed) → **고아 리소스 0**
+> (EBS·SG·LB·NAT 전수 확인). **2-cluster IaC가 실제로 동작함이 검증됨.** 비용 **~$0.1 이하**(벽시계 ~50분,
+> 컨트롤플레인 40분×$0.10). **현재 AWS에 아무것도 안 떠 있음 = 비용 $0, 크레딧 $199.81 유지.**
+> teardown 명령·개념은 `docs/eks-tutorial-steps.md` Step 8(검증된 정답 경로), 실측은 `docs/eks-migration-log.md`.
+> - **➡️ 다음: Stage 1 = ECR + 앱 배포.** ⚠️ **선행: ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건 — 계획은
+>   2-cluster 소속이라 destroy마다 이미지 전멸). Stage 1부터 ALB/PVC 생기면 **destroy 전 `kubectl delete
+>   ingress,pvc --all -A` 필수**(K8s 생성 AWS 리소스는 tofu state 밖 = 고아 과금).
+> - kubectl 이 머신에 설치 완료(`brew install kubectl` v1.36.3, 07-24).
+> - K8s 1.36 핀 유효 재확인(07-24 실측: 표준지원 종료 27-08-02, 1.33은 07-29 종료).
 >
 > **🖼️ 아키텍처 다이어그램 상시 유지 (07-20 도입)**: 매 레이어/Stage마다 갱신. ① mermaid 소스
 > `docs/architecture/eks-2-cluster.md`(repo·PR·블로그용, GitHub 자동 렌더) ② 라이브 아티팩트
@@ -67,6 +70,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| Task 8 (문서 PR) | **★ EKS 첫 과금 왕복 실증 (2026-07-24).** `tofu apply`(14 added, ~10분) → `kubectl get nodes` **노드 Ready**(v1.36.2·arm64 Graviton·공인IP·NAT 회피 확인) → `tofu destroy`(14 destroyed) → **teardown 전수검증 고아 0**(state·EBS·SG·LB·NAT 전부 없음). **2-cluster IaC가 실제로 뜬다-부순다 왕복 동작함을 실증.** 비용 **~$0.1 이하**(벽시계 ~50분, 컨트롤플레인 40분×$0.10). 사전점검서 kubectl 미설치 발견→`brew install`(v1.36.3). K8s 1.36 표준지원 재확인. #314의 ON_DEMAND 노드 정상 프로비저닝. 문서: `eks-migration-log.md` 실측 + `eks-tutorial-steps.md` Step 8 정답경로. **다음=Stage 1(ECR 편입 후 앱 배포).** | 2026-07-24 |
 | #314 | **EKS node `capacity_type` 변수화 + Free Plan 실측 반영 (Task 8 선행).** `nodes.tf`의 `capacity_type="SPOT"` 하드코딩 → `var.node_capacity_type`(기본 **ON_DEMAND**) — 계정 API 실측 **Spot vCPU 쿼터=0**이라 SPOT이면 apply 필패. 스팟 학습 시 쿼터 증액 후 tfvars 주입(온디맨드↔스팟 650h 차 $13). **Free Plan 3자 대조 확정**(API·공식문서·한국어랜딩): 크레딧 **$199.81**/만료 **2027-01-15**/EKS 제한 대상 아님(쿼터 100). 🔴 **크레딧 소진도 계정 폐쇄 트리거**("depleted OR duration ends") → 안전예비 $30 규칙. 🟡 Organizations 등 자동 Paid 전환 주의·🟢 잔여크레딧 이월. tfstate 없음(apply 전)이라 replace 무. **prod(Fly+Neon) 무영향.** 만료일 캘린더 등록 = TASKS.md TASK-6 | 2026-07-23 |
 | #308 | **Phase 1 Task 1.4b·1.5 — 트랜잭션 경계 재배치 + parity 검증 (Phase 1 완료).** Task 0.1~1.4a를 통틀어 **처음으로 프로덕션 동작을 바꾼 PR.** ①Jackson 2→3 교체(ai-api와 동일 라이브러리로 통일, 1.4a QA 지적) + read-timeout 90s→150s(기존값이 "30초×재시도3회"와 마진 0) ②**parity 라운드트립 12 tests** — core-api에 전용 소스셋 `parityTest` 신설(일반 test에 넣으니 `scanBasePackages="com.devquest"`로 ai-api가 딸려와 233개 중 43개 회귀 → 클래스패스 격리), 실제 ai-api 기동 + AI 포트만 목 → in-process와 HTTP 결과 **정확 일치** 비교. Map·List<중첩>·nullable·default 생략·text/plain·400/500 전부 커버 ③**트랜잭션 재배치 14개 메서드**(AiCheckService 11 + TechInterviewService.evaluate + CompanyService 2) — 전부 "AI 호출→단일 쓰기" 패턴이라 바깥 `@Transactional`이 애초에 추가 원자성을 안 줬음(QA가 호출 그래프로 독립 검증). `CodingQuestService` 2건은 재시도 루프에 뒤섞여 **의도적 보류**. HikariCP pool=10 고갈 위험 제거. 회귀 가드 6건("AI 실패→쓰기 `never()`"). **🐛 parity가 진짜 버그 검출**: `server.error.include-message`가 Boot 3 키 → Boot 4는 `spring.web.error.*` = AI 실패 원인이 core로 **한 번도 전달된 적 없었음**. core-api 239 tests + parity 12 + ai-api 41 전부 0 failures. Fly 무영향(bootJar task graph에 ai-api 0개) | 2026-07-22 |
 | #307 | **Phase 1 Task 1.4a — core HTTP 어댑터 배선 (무행동).** Task 1.4를 기계적 배선(1.4a)과 동작 변경(1.4b)으로 **분리**. 어댑터 18개/엔드포인트 24개, `BaseAiHttpAdapter`가 직렬화·에러 매핑 흡수. `AiTransportConfig`를 18개 포트로 확장(어댑터에 `@Component` 안 달아 inprocess에선 빈 생성조차 안 됨 — `getBeanNamesForType(RestClient)` 비어있음으로 증명). **계획이 예고한 함정 4종 처리**: ①타임아웃 명시(무한 대기 방지) ②**재시도 미도입**(ai-api 안 `AiCallExecutor`가 이미 3회 → 또 하면 최대 9회 실제 LLM 호출·비용 폭증) ③**Accept 406 회피**(`text/plain` 2개 + JSON 22개를 `.accept()` 없이 String 수신, JDK HttpServer로 진짜 협상 재현 실측) ④에러 전파. core-api 229 tests(기존 161 보존 + 신규 68) | 2026-07-22 |
@@ -369,12 +373,15 @@ Grafana Cloud push → **인프라 컴포넌트도 영속 볼륨을 요구하지
     merge→apply로 VPC 생성 실측). 비용 $0. 실측 VPC `vpc-0e8401b42ba207328`.
   - **✅ 2-cluster 코드 완성·머지 (#287, 07-20):** 컨트롤플레인+노드그룹+OIDC+애드온+Access Entry 11개 `.tf`.
     K8s 1.36 핀. `tofu plan=14 to add`. **로컬 apply/destroy 확정**(CI 미편입) + `guard-local-layers` 잡으로
-    매트릭스 진입 차단. **⚠️ 아직 apply 안 함 — 비용 $0.**
-  - **➡️ 다음: Task 8 = 2-cluster apply 왕복 (별도 세션, ★과금 시작).** ⚠️⚠️ EKS 컨트롤플레인 **$0.10/hr**
-    + 노드(t4g.small **ON_DEMAND** — Spot 쿼터=0이라 07-23 기본값 변경) + EBS.
-    실행: `cd infra/aws-eks/2-cluster && tofu init && tofu plan`(해설+승인 게이트)
-    → `apply` → `kubectl get nodes` Ready 확인 → **끝나면 반드시 `tofu destroy`**(destroy-after-use).
-    **로컬**에서만(CI 아님). 30~40분 통으로 필요. 착수 전 크레딧 잔여 재확인. 그 다음은 gitops 또는 Stage 1(ECR·앱 배포).
+    매트릭스 진입 차단.
+  - **✅ Task 8 apply 왕복 완료 (07-24, ★첫 과금):** `apply`(14 added, ~10분·컨트롤플레인 7m54s) →
+    `kubectl get nodes` **Ready**(v1.36.2·arm64 Graviton·공인IP 3.36.118.171·NAT 회피 확인) →
+    `destroy`(14 destroyed) → **teardown 전수검증 고아 0**(state 비움·EBS·SG·LB·NAT 없음). **비용 ~$0.1 이하**
+    (벽시계 ~50분). **2-cluster IaC 동작 실증 완료.** 검증 명령·개념 = `docs/eks-tutorial-steps.md` Step 8.
+    kubectl 설치(v1.36.3). 노드그룹 ON_DEMAND(#314) 정상 프로비저닝 확인.
+  - **➡️ 다음: Stage 1 = ECR + 앱 배포.** ⚠️ **선행: ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건, +lifecycle
+    policy). Stage 1부터 ALB Ingress·EBS PVC 생기면 **destroy 전 `kubectl delete ingress,pvc --all -A` 필수**
+    (K8s 생성 AWS 리소스는 tofu state 밖 = 고아 과금 위험). 그 다음 Stage 2(IRSA)·3(EBS CSI+StatefulSet, in-cluster Postgres)·4(ALB)·5(ArgoCD).
   - CI 관리 레이어 현재: `infra-deploy.yml` matrix `[0-bootstrap, 1-network]` (2-cluster는 로컬 전용이라 의도적 제외).
   - IaC-first라 **캡처 필요량 급감** — 단계가 코드+CLI 텍스트. 잔여는 서사/증빙 소수.
 - **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에

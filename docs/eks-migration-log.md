@@ -246,3 +246,29 @@
   별도 세션(사용자 승인 게이트). QA 리뷰 HIGH 0 — 머지 가능.
 - `[메모]` 아키텍처 다이어그램 상시 유지 시작 — mermaid 소스 `docs/architecture/eks-2-cluster.md`
   (repo, PR·블로그용) + 라이브 아티팩트(줌·전체화면). 이후 레이어/Stage마다 갱신.
+
+## 2026-07-24 — Task 8: 2-cluster apply 왕복 (★첫 과금)
+
+- `[메모]` 사전 점검(비용 $0): tofu v1.12.4·aws-cli 2.36.2·자격증명 `bootstrap-admin`(계정 536260290749)
+  전부 정상. **kubectl 미설치 발견 → `brew install kubectl` (v1.36.3) 설치** — 클러스터 1.36과 클라이언트
+  버전 일치. K8s 버전 재확인: `1.36` 여전히 표준지원 최신(릴리스 26-06-02, 표준지원 종료 27-08-02).
+  `1.33`은 5일 뒤(07-29) 종료 → 1.36 핀이 정확했음.
+- `[비용]` `tofu init`(S3 backend 재연결)·`tofu plan` = **`14 to add, 0 to change, 0 to destroy`**.
+  과금 리소스 2개뿐: 컨트롤플레인($0.10/hr) + 노드그룹 t4g.small×1 **ON_DEMAND**(#314로 SPOT→ON_DEMAND
+  변경, 신규계정 Spot vCPU 쿼터=0이라 SPOT이면 apply 필패였음). 합산 ~$0.13/hr, 왕복 40분 ≈ $0.09.
+  나머지 12개(애드온3·OIDC·IAM역할2·정책4·access2) $0.
+- `[해결]` **apply 성공 (13:05 시작).** 컨트롤플레인 `Creation complete after 7m54s`, 노드그룹 1m27s,
+  애드온(vpc-cni 14s·kube-proxy 24s·coredns 14s). 총 ~10분. `Apply complete! 14 added`.
+  검증: `kubectl get nodes` → `ip-10-0-8-101` **Ready** / v1.36.2-eks / **arm64**(Graviton 확인) /
+  EXTERNAL-IP 3.36.118.171(퍼블릭 IP = NAT 회피 설계 확인). kube-system: aws-node 2/2·coredns×2·
+  kube-proxy 전부 Running. cluster_endpoint OIDC id=565A7F97... 발급됨.
+- `[해결]` **destroy 성공.** 노드그룹 삭제 2m16s → 컨트롤플레인 1m23s → IAM 역할·정책·OIDC 순.
+  `Destroy complete! 14 destroyed`. **teardown 전수 검증**: `tofu state list` 비어있음 · EC2 `terminated` ·
+  `eks list-clusters` 비어있음 · **고아 리소스 0**(미연결 EBS·EKS 태그 SG·ELB/ALB·NAT 전부 없음).
+  NAT 회피 설계 덕에 destroy 후 잔존 비용 $0.
+- `[비용]` **첫 과금 왕복 결산**: 벽시계 apply-start(13:05)~teardown-verified(13:55) ≈ **50분**
+  (순수 tofu compute는 apply ~10분 + destroy 실행 ~5분, 나머지는 refresh·대기). 컨트롤플레인
+  ACTIVE ~40분 × $0.10/hr ≈ **$0.07** + 노드 t4g.small ON_DEMAND ~$0.01 + EBS 무시 = **총 ~$0.1 이하**.
+  크레딧 $199.81 대비 무시할 수준. **교훈 확정: 아낄 것은 크레딧이 아니라 "켜놓고 딴짓하는 시간".**
+- `[결정]` Task 8 완료 = **2-cluster IaC가 apply→검증→destroy 왕복으로 실증됨.** 코드가 실제로
+  동작함을 확인. 다음은 Stage 1(ECR + 앱 배포) — 그 전 ECR을 0-bootstrap에 편입 필요(현재 `.tf` 0건).
