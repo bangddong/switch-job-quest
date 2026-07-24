@@ -110,3 +110,81 @@ Billing 콘솔 좌측 **Cost Anomaly Detection** → **Create monitor**
 ## Step 1 — (예정) OpenTofu 설치 + 스캐폴딩
 
 <!-- Stage 0 착수 시 기록 -->
+
+## Step 8 — 2-cluster apply → 검증 → destroy 왕복 (첫 과금)
+
+> ⚠️ **선행 단계(Step 1~7: tofu 설치 · 0-bootstrap backend · 1-network VPC · 2-cluster `.tf` 작성)는
+> 아직 이 문서에 미작성.** 아래는 그 결과물이 준비된 상태에서 **실제로 동작 확인된 apply/destroy 명령
+> 시퀀스**다. 정답 경로로 검증됨(2026-07-24). 선행 단계는 추후 채운다.
+
+**이 단계가 하는 일**: EKS 컨트롤플레인 + 워커 노드 1대 + 애드온을 띄우고, kubectl로 노드가 뜬 걸
+확인한 뒤, **곧바로 부순다**. "떴다 부순다"를 한 세션에 왕복하는 것이 destroy-after-use 규율의 핵심 —
+클러스터를 켜둔 채 방치하는 시간이 곧 비용이기 때문이다(컨트롤플레인은 워크로드가 0이어도 $0.10/hr 고정).
+
+### 8-0. 사전 조건
+- `tofu`(OpenTofu) · `aws` CLI + 자격증명(`aws sts get-caller-identity` 성공) · **`kubectl`**
+  - kubectl 미설치 시: `brew install kubectl`. 클러스터 K8s 버전과 클라이언트 버전을 맞추면 경고가 적다(여기선 1.36).
+- 선행 레이어(`0-bootstrap`·`1-network`)가 이미 apply되어 S3 backend·VPC가 존재해야 함.
+- **K8s 버전 재확인**(비용 $0): 핀한 버전이 아직 표준지원인지 apply 직전에 본다.
+  ```bash
+  aws eks describe-cluster-versions --region ap-northeast-2 \
+    --query 'clusterVersions[?status==`STANDARD_SUPPORT`].[clusterVersion,endOfStandardSupportDate]' \
+    --output table
+  ```
+  확인: 핀한 버전(예: 1.36)이 목록에 있고 종료일이 넉넉해야 함. **필터 필드는 `status`**(오타 시 빈 출력).
+
+### 8-1. init + plan (비용 $0)
+```bash
+cd infra/aws-eks/2-cluster
+tofu init          # S3 backend 재연결 + 프로바이더 로드
+tofu plan          # 생성될 리소스 계획
+```
+확인: `Plan: 14 to add, 0 to change, 0 to destroy.` (컨트롤플레인·노드그룹·애드온3·OIDC·IAM역할2·정책4·access2)
+- **과금 리소스는 2개뿐**: `aws_eks_cluster`(컨트롤플레인 $0.10/hr) + `aws_eks_node_group`(t4g.small ×1).
+  나머지 12개는 IAM·RBAC·애드온으로 $0. plan에서 `capacity_type = "ON_DEMAND"` 확인
+  (신규 계정은 Spot vCPU 쿼터가 0이라 SPOT이면 apply가 실패한다).
+
+### 8-2. apply (★ 과금 시작)
+```bash
+tofu apply -auto-approve
+```
+확인: `Apply complete! Resources: 14 added.` — **약 10분**(컨트롤플레인 프로비저닝이 ~8분으로 대부분).
+Outputs로 `cluster_endpoint`·`oidc_provider_arn`이 나온다. **이 순간부터 과금.** 자리를 뜨지 말 것.
+
+### 8-3. 검증 — 노드 Ready (이 단계가 목표)
+```bash
+aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2
+kubectl get nodes -o wide
+kubectl get pods -n kube-system
+```
+확인:
+- 노드 1개 `STATUS=Ready`, `VERSION=v1.36.x`, 아키텍처 arm64(Graviton), `EXTERNAL-IP`에 공인 IP가 붙음
+  (퍼블릭 서브넷 + 공인 IP = NAT Gateway를 피한 설계. NAT는 월 $32라 학습 클러스터에선 회피).
+- `kube-system`에 `aws-node`(vpc-cni)·`coredns` ×2·`kube-proxy`가 전부 `Running`.
+
+### 8-4. destroy (★ 과금 종료 — 검증 직후 즉시)
+```bash
+tofu destroy -auto-approve
+```
+확인: `Destroy complete! Resources: 14 destroyed.` — 약 5분(노드그룹 ~2분 → 컨트롤플레인 ~1.5분 → IAM).
+
+### 8-5. teardown 전수 검증 (고아 리소스 = 계속 새는 비용)
+```bash
+tofu state list                                   # 비어 있어야 함
+aws eks list-clusters --region ap-northeast-2     # 비어 있어야 함
+aws ec2 describe-volumes --region ap-northeast-2 --filters "Name=status,Values=available" \
+  --query 'Volumes[].VolumeId'                     # 미연결 EBS 없어야 함
+aws elbv2 describe-load-balancers --region ap-northeast-2 \
+  --query 'LoadBalancers[].LoadBalancerName'       # 고아 LB 없어야 함
+aws ec2 describe-nat-gateways --region ap-northeast-2 \
+  --filter "Name=state,Values=available"           # NAT 없어야 함
+```
+- ⚠️ **왜 육안 확인이 필요한가**: `tofu destroy`는 **state에 있는 것만** 지운다. 이번 범위엔 Ingress·PVC가
+  없어 고아가 안 생기지만, **앱 배포 단계(ALB Ingress·EBS PVC)부터는 K8s가 만든 AWS 리소스가 state 밖에
+  남아 계속 과금**된다. 그때는 destroy 전에 `kubectl delete ingress,pvc --all -A`를 먼저 해야 한다.
+- EC2가 `terminated`로 잠시 보이는 건 정상(종료 인스턴스는 ~1시간 잔상만, 과금 없음).
+
+### 비용 결산 (실측, 2026-07-24)
+벽시계 apply-start ~ teardown-verified ≈ 50분(순수 compute는 apply 10분 + destroy 5분, 나머지 대기).
+컨트롤플레인 ACTIVE ~40분 × $0.10/hr ≈ $0.07 + 노드 ~$0.01 = **총 ~$0.1 이하.** 실패해도 재생성이 사실상
+공짜다 — **아낄 것은 크레딧이 아니라 "켜놓고 딴짓하는 시간".**
