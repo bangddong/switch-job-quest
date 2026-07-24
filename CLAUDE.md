@@ -89,6 +89,14 @@ EKS 관련 작업(계획: `infra/aws-eks/README.md`) 중에는 **`docs/eks-migra
 - 튜토리얼 문서(`eks-tutorial-steps.md`)에도 명령뿐 아니라 **개념 설명**을 함께 남긴다
   (블로그 독자가 복붙이 아니라 이해하도록). "왜 이 순서인지"가 명령보다 값지다.
 
+> **🔒 이해 검증은 기계로 강제된다 (구축 후 퀴즈).** 위 실시간 설명은 momentum에 밀려 누락되기 쉽다
+> (Task 8에서 실제 발생). 그래서 **강제 체크포인트는 "구축 후 이해도 퀴즈"** 다:
+> **학습 마일스톤 브랜치는 `stage/eks-*`** 로 만들고, 구축·검증이 끝나면 PR **전에**
+> `skills/universal/quiz.md`의 "EKS 학습 마일스톤 모드"로 퀴즈를 본다. 결과는
+> `docs/eks-quizzes/<브랜치>.md`에 기록하고 통과 시 `<!-- QUIZ-PASSED -->` 마커를 남긴다.
+> **`assert-eks-quiz.sh` 훅이 이 파일·마커가 없으면 `gh pr create`를 차단**한다 — 건너뛸 수 없다.
+> 퀴즈를 피하려 `chore/`로 브랜치를 바꾸지 말 것(학습 우회 = QA를 chore로 우회하는 것과 동급).
+
 EKS 이관 작업이 끝나면 이 섹션을 제거한다.
 
 ## 브랜치 규칙
@@ -105,6 +113,8 @@ git checkout -b <type>/<name> origin/main
 - `chore/`: 설정·인프라·툴링
 - `docs/` : 문서만 변경
 - `refactor/`: 리팩토링
+- `stage/eks-*` : **EKS 학습 마일스톤** (구축+검증). **PR 전 이해도 퀴즈 필수** — `assert-eks-quiz.sh` 훅이
+  `docs/eks-quizzes/<브랜치>.md` + `<!-- QUIZ-PASSED -->` 마커 없으면 `gh pr create` 차단. (위 "학습 설명 의무" 참조)
 
 main에서 Write/Edit 시도 시 → PreToolUse hook이 차단하고 브랜치 생성을 안내함.
 
