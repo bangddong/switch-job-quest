@@ -59,6 +59,7 @@
           { "type": "command", "command": ".claude/scripts/assert-eks-quiz.sh" },
           { "type": "command", "command": ".claude/scripts/assert-skill-safety.sh" },
           { "type": "command", "command": ".claude/scripts/assert-pr-reviewed.sh" },
+          { "type": "command", "command": ".claude/scripts/eks-session-marker.sh" },
           { "type": "command", "command": ".claude/scripts/log-event.sh PreToolUse main" }
         ]
       },
@@ -72,6 +73,7 @@
     "Stop": [
       {
         "hooks": [
+          { "type": "command", "command": ".claude/scripts/eks-heartbeat-reminder.sh" },
           { "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/.claude/monitor/generate-report.js\"" }
         ]
       }

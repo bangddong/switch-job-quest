@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  EKS dead man's switch — 30분마다 eks-reaper.sh 실행.
+  이 파일은 템플릿이다. install-reaper.sh가 __REAPER_SCRIPT__ / __LOG__ 를
+  실제 절대경로로 치환해 ~/Library/LaunchAgents/ 에 설치한다.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.devquest.eks-reaper</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__REAPER_SCRIPT__</string>
+    </array>
+
+    <!-- 30분마다. macOS가 자면 안 돌고, 깨어날 때 밀린 실행을 따라잡는다. -->
+    <key>StartInterval</key>
+    <integer>1800</integer>
+
+    <!-- 로드/부팅 시 1회 즉시 실행 (방치된 세션 즉시 점검) -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__LOG__</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG__</string>
+
+    <!-- 저우선순위 (백그라운드 유지관리 작업) -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>
