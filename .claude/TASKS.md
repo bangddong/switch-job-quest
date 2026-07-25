@@ -28,6 +28,18 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 - **알림 권장**: 만료 2주 전(2027-01-01) — 상시 데모 계획이 있으면 이때 Paid 업그레이드 판단
 - 별개 감시: 크레딧 잔액이 **$30 안전 예비**에 근접하면(현재 $199.81) 세션 빈도 조절
 
+### TASK-7: EKS 리퍼(dead man's switch) — 새 머신/클론 시 재설치 (2026-07-25)
+
+`.claude/eks-session/` 마커·하트비트·launchd 잡은 **머신 로컬**이라 gitignore된다. 즉 **이 맥에만
+설치돼 있고**, 다른 머신에서 clone하면 리퍼가 없어 "끄는 걸 잊음" 자동 방어가 안 걸린다.
+
+- **현재 맥(dhbangui-MacBook-Neo)**: ✅ 설치·로드 완료(07-25). `launchctl list | grep eks-reaper`로 확인.
+- **새 머신/재클론 시 1회 실행**:
+  ```bash
+  bash infra/aws-eks/reaper/install-reaper.sh
+  ```
+- 상세: `docs/eks-session-sop.md` §안전장치.
+
 ## 완료된 항목
 
 ### TASK-3: BE 서버 다운 — PR #231 배포 실패 후 헬스체크 미통과 (2026-07-01, 해결됨)

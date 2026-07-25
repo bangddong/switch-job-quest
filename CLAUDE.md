@@ -13,6 +13,7 @@
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
 | 멀티 에이전트 운영 | `.claude/docs/agent-workflow.md` |
 | 스킬 작성/수정 | `.claude/docs/skill-guide.md` |
+| **EKS 실습 세션 (apply→작업→destroy)** | `docs/eks-session-sop.md` ← 과금 시작 전 **반드시**. 시작/종료 체크리스트 + dead man's switch 안전장치 |
 | 사용자 직접 실행 필요한 작업 | `.claude/TASKS.md` ← 파일이 존재하면 미완료 작업 있음 |
 | 현재 작업 상태 / PR / 최근 결정 | `.claude/CONTEXT.md` ← 새 대화 시작 시 **먼저 읽기** |
 | 미해결 QA 지적 (미룬 것) | `.claude/review-ledger.md` ← PR에서 안 고치기로 한 지적의 유일한 영속 저장소 |
