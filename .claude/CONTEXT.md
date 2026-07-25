@@ -8,18 +8,20 @@
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#318 EKS 학습 퀴즈 게이트 머지 완료) |
+| 열린 PR | 없음 (#320 EKS 과금 안전장치 머지 완료) |
 
 > **🌙 다음 세션 시작점 (07-24 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
 >   24개를 REST로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
 > - **EKS 트랙**: #314(capacity_type ON_DEMAND) → **Task 8 apply 왕복 실증 완료(07-24, #316).**
 >   2-cluster IaC가 뜬다-부순다 왕복 동작 확인. kubectl 설치됨. 크레딧 $199.81(만료 2027-01-15).
->   → **#318: EKS 학습 퀴즈 게이트 도입.** 이제 학습 마일스톤은 **`stage/eks-*` 브랜치**로 만들고, 구축 후
->   `quiz.md` 퀴즈 + `docs/eks-quizzes/<br>.md`의 `<!-- QUIZ-PASSED -->` 없으면 `assert-eks-quiz.sh`가 PR 차단.
+>   → **#318: 학습 퀴즈 게이트** (`stage/eks-*` 브랜치 = 구축 후 퀴즈 필수, `assert-eks-quiz.sh`가 PR 차단).
+>   → **#320: 과금 안전장치(dead man's switch).** `tofu apply` 시 세션 마커, 매 턴 하트비트 갱신,
+>   **하트비트 2h stale이면 launchd 리퍼가 자동 `tofu destroy`**(끝 신호 못 줘도 과금 종료). 이 맥에 설치됨.
+>   **실습 프로세스 단일 출처 = `docs/eks-session-sop.md`(apply 전 필독).**
 > **다음 = 택1:**
 > - **① EKS Stage 1 (ECR + 앱 배포)** — ⚠️ 브랜치를 **`stage/eks-1-ecr`** 로 만들 것(퀴즈 게이트 발동).
->   선행: **ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건, +lifecycle).
+>   **apply 전 `docs/eks-session-sop.md` 체크리스트 따를 것.** 선행: **ECR을 `0-bootstrap`에 편입**(`.tf` 0건, +lifecycle).
 >   Stage 1부터 ALB/PVC 생기면 destroy 전 `kubectl delete ingress,pvc --all -A` 필수. (아래 EKS 섹션 상세)
 > - **② Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`.
 >   ⚠️ **착수 전 반드시**: ai-api를 **실제 네트워크에 처음 올리는 시점**이므로 `/internal/ai/**` **무인증**
@@ -75,6 +77,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #320 | **EKS 과금 안전장치 — dead man's switch (2026-07-25).** "apply하고 destroy 잊고 세션 종료"를 기계로 차단(사용자가 끝 신호 못 줘도 동작). 3조각: `eks-session-marker.sh`(PreToolUse, `tofu apply` 감지→마커) + `eks-heartbeat-reminder.sh`(Stop, 매 턴 하트비트 갱신+경고+자가청소) + `eks-reaper.sh`(launchd 30분, 하트비트 **2h stale**이면 실제 클러스터 확인 후 `tofu destroy`). Claude로 작업 중이면 하트비트 갱신돼 안 죽임, 사라지면 2h 뒤 자동 destroy. **tofu state 존중**(로컬 실행). 한계: macOS 잠들면 미실행(최악 주말 ~$6, $35 예산알람 backstop). 경계 12경우 전수 테스트. **이 맥에 launchd 설치·로드 완료**(새 머신=`install-reaper.sh`, TASKS.md TASK-7). SOP=`docs/eks-session-sop.md`. | 2026-07-25 |
 | #318 | **EKS 학습 퀴즈 게이트 — 이해 검증 기계 강제 (2026-07-24).** Task 8에서 CLAUDE.md "학습 설명 의무"(prose)가 momentum에 밀려 실제 누락된 것을 교정. QA 루프(`assert-qa-run.sh`)와 동일 철학으로 **구축 후 이해도 퀴즈를 훅으로 강제**. `assert-eks-quiz.sh`: `stage/eks-*` 브랜치 `gh pr create` 시 `docs/eks-quizzes/<br>.md` + `<!-- QUIZ-PASSED -->` 마커 없으면 차단(5경우 전수 테스트). `quiz.md`에 "EKS 학습 마일스톤 모드"(실측 로그 기반 문제·기록·마커), orchestrator 9.5단계 필수화, CLAUDE.md 브랜치 규칙에 `stage/eks-*` 추가. **첫 적용=Stage 1부터.** 리허설(Task 8 내용 5문제) 2/5 — 게이트 효용 실증(구축됐지만 이해 구멍 드러남). | 2026-07-24 |
 | Task 8 (문서 PR) | **★ EKS 첫 과금 왕복 실증 (2026-07-24).** `tofu apply`(14 added, ~10분) → `kubectl get nodes` **노드 Ready**(v1.36.2·arm64 Graviton·공인IP·NAT 회피 확인) → `tofu destroy`(14 destroyed) → **teardown 전수검증 고아 0**(state·EBS·SG·LB·NAT 전부 없음). **2-cluster IaC가 실제로 뜬다-부순다 왕복 동작함을 실증.** 비용 **~$0.1 이하**(벽시계 ~50분, 컨트롤플레인 40분×$0.10). 사전점검서 kubectl 미설치 발견→`brew install`(v1.36.3). K8s 1.36 표준지원 재확인. #314의 ON_DEMAND 노드 정상 프로비저닝. 문서: `eks-migration-log.md` 실측 + `eks-tutorial-steps.md` Step 8 정답경로. **다음=Stage 1(ECR 편입 후 앱 배포).** | 2026-07-24 |
 | #314 | **EKS node `capacity_type` 변수화 + Free Plan 실측 반영 (Task 8 선행).** `nodes.tf`의 `capacity_type="SPOT"` 하드코딩 → `var.node_capacity_type`(기본 **ON_DEMAND**) — 계정 API 실측 **Spot vCPU 쿼터=0**이라 SPOT이면 apply 필패. 스팟 학습 시 쿼터 증액 후 tfvars 주입(온디맨드↔스팟 650h 차 $13). **Free Plan 3자 대조 확정**(API·공식문서·한국어랜딩): 크레딧 **$199.81**/만료 **2027-01-15**/EKS 제한 대상 아님(쿼터 100). 🔴 **크레딧 소진도 계정 폐쇄 트리거**("depleted OR duration ends") → 안전예비 $30 규칙. 🟡 Organizations 등 자동 Paid 전환 주의·🟢 잔여크레딧 이월. tfstate 없음(apply 전)이라 replace 무. **prod(Fly+Neon) 무영향.** 만료일 캘린더 등록 = TASKS.md TASK-6 | 2026-07-23 |
