@@ -9,6 +9,8 @@
 # 비용: 저장만 과금($0.10/GB-Mo). 빈 레포는 $0. 아래 lifecycle policy로 무한 누적을 막는다.
 #   node가 이미지를 pull하는 권한은 이미 nodes.tf의 AmazonEC2ContainerRegistryReadOnly로 부여됨.
 
+# tfsec:ignore:aws-ecr-enforce-immutable-repository — 학습장: MUTABLE로 같은 태그(latest) 재푸시 허용. prod 전환 시 IMMUTABLE(변수로 전환 가능).
+# tfsec:ignore:aws-ecr-repository-customer-key — 학습장: KMS CMK는 월 $1+. 무료 AES256로 충분(backend-state.tf의 S3 KMS 생략과 동일 판단).
 resource "aws_ecr_repository" "app" {
   for_each = toset(var.ecr_repositories)
 
