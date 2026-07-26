@@ -96,9 +96,9 @@ Terraform 오픈소스 포크, 커뮤니티 기본값이 됨. **HCP Terraform �
 
 | 레이어 | 무엇 | 수명 | destroy |
 |:--:|------|------|:--:|
-| **0-bootstrap** | remote backend(S3+DynamoDB 락)·GitHub OIDC·IAM 베이스라인·**예산(`aws_budgets_budget`)**·이상탐지 | long-lived | ✗ (계정 상주, ~$0) |
+| **0-bootstrap** | remote backend(S3+DynamoDB 락)·GitHub OIDC·IAM 베이스라인·**예산(`aws_budgets_budget`)**·이상탐지·**ECR(+lifecycle)** | long-lived | ✗ (계정 상주, ~$0) |
 | **1-network** | VPC·서브넷·IGW (NAT 금지) | 김 | 보통 ✗ |
-| **2-cluster** | EKS·관리형 노드그룹(t4g.small Spot)·IRSA·애드온·ECR | 세션 | ⭐ **여기만 destroy** |
+| **2-cluster** | EKS·관리형 노드그룹(t4g.small)·IRSA·애드온 | 세션 | ⭐ **여기만 destroy** |
 | **gitops** | ArgoCD app-of-apps → 워크로드(Deployment·StatefulSet·Ingress) | GitOps | (앱) |
 
 - **두 평면 분리**: 클라우드 자원=OpenTofu / K8s 워크로드=GitOps(ArgoCD). terraform kubernetes provider로 워크로드 안 넣음.
@@ -143,9 +143,9 @@ Terraform 오픈소스 포크, 커뮤니티 기본값이 됨. **HCP Terraform �
 ```
 infra/aws-eks/
   README.md              # 이 문서 — 계획 + up/down 절차 + 비용 체크리스트
-  0-bootstrap/           # remote backend·OIDC·IAM·예산·이상탐지  (long-lived, 별도 state)
+  0-bootstrap/           # remote backend·OIDC·IAM·예산·이상탐지·ECR  (long-lived, 별도 state)
   1-network/             # VPC·서브넷·IGW  (별도 state)
-  2-cluster/             # EKS·노드그룹·IRSA·애드온·ECR  (별도 state; destroy 대상)
+  2-cluster/             # EKS·노드그룹·IRSA·애드온  (별도 state; destroy 대상)
   gitops/                # ArgoCD app-of-apps → 워크로드 매니페스트(Helm/Kustomize)
   # 각 레이어: providers.tf variables.tf outputs.tf backend.tf
   # *.tfstate*, *.tfvars → .gitignore (⚠️ public repo)
