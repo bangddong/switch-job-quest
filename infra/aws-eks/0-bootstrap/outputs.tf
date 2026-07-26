@@ -18,3 +18,8 @@ output "github_actions_role_arn" {
   description = "CI 워크플로가 assume할 역할 ARN (apply-plan 파이프라인에서 사용)"
   value       = aws_iam_role.github_actions.arn
 }
+
+output "ecr_repository_urls" {
+  description = "앱별 ECR 레포 URL (docker push 대상 · K8s 매니페스트 image: 값)"
+  value       = { for name, repo in aws_ecr_repository.app : name => repo.repository_url }
+}
