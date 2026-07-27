@@ -7,9 +7,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | fix/fe-tech-debt |
-| 열린 PR | #329 — FE tech-debt (머지 대기) |
+| 브랜치 | main (작업 없음) |
+| 열린 PR | 없음 (#326~#329 tech-debt 정리 머지 완료) |
 
+> **🧹 tech-debt 정리 세션 완료 (07-27)**: #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트)
+> · #329 FE(CompanyCard 가드·extractPdfText). **be/ 소스 Jackson 2 잔재 0건.** 남은 결정필요 항목(정리 아님):
+> ①FE 테스트 러너(vitest) 도입 — #329에서 순수함수 단위테스트 못 붙인 게 실제 갭으로 드러남
+> ②질문뱅크 category 활성화(제품 결정) ③질문뱅크 ORDER BY RANDOM(@DataJpaTest 선행) ④원장 L-8(전역 J2 kotlin 모듈, blast radius).
+>
 > **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
 >   24개를 REST로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
