@@ -7,13 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | chore/fe-vitest |
-| 열린 PR | #331 — FE 테스트 러너(vitest) 도입 (머지 대기) |
+| 브랜치 | docs/question-bank-decision |
+| 열린 PR | 진행 중 — 질문 뱅크 category 보류 결정 기록 |
 
 > **🧹 tech-debt 정리 세션 완료 (07-27)**: #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트)
 > · #329 FE(CompanyCard 가드·extractPdfText) · **#331 FE 테스트 러너(vitest) 도입 + CI 게이트**. **be/ 소스 Jackson 2 잔재 0건.**
-> 남은 결정필요 항목(정리 아님): ~~①FE 테스트 러너~~ **→ #331 완료**
-> ②질문뱅크 category 활성화(제품 결정) ③질문뱅크 ORDER BY RANDOM(@DataJpaTest 선행) ④원장 L-8(전역 J2 kotlin 모듈, blast radius).
+> 남은 결정필요 항목(정리 아님): ~~①FE 테스트 러너~~ **→ #331 완료** ·
+> ~~②질문뱅크 category 활성화~~ **→ 🔴 보류 확정(07-27): 뱅크 26개 중 `ai-llm`이 1개뿐이라 지금 켜면
+> AI 폴백↑ = 퇴보. 선행조건 = 카테고리당 10개 보강. 근거는 "다음 작업"에 기록, 재조사 불필요** ·
+> ③질문뱅크 ORDER BY RANDOM(@DataJpaTest 선행) ④원장 L-8(전역 J2 kotlin 모듈, blast radius).
+> **+ 신규 발견**: 질문 중복방지 윈도우가 "30일"이 아니라 "30행"이라 사용자 N명이면 30/N일로 축소(DISTINCT 없음).
 >
 > **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
@@ -158,8 +161,25 @@
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 - [ ] **#255 후속**: 다음 기능 작업에서 Blindspot Pass 실효성 확인 (Deviations→QA 집중검토 흐름은
       #259에서 1차 동작 확인. template 동기화는 07-10 완료 — orchestrator·clarify·quiz + 훅 스크립트 3종)
-- [ ] 질문 뱅크 category 파라미터 — 현재 DailyMailScheduler가 항상 null로 호출해 카테고리 분기가
-      죽은 경로 (QA MEDIUM, 의도적 보류). 향후 카테고리별 배분 쓸 계획 생기면 활성화
+- [ ] **질문 뱅크 category 파라미터 — 🔴 보류 확정 (2026-07-27 조사·결정). 재조사 불필요.**
+      **선행 조건 = 뱅크 보강. 그 전엔 활성화가 개선이 아니라 퇴보다.**
+  - **현상**: `TechQuestionBankPort.findUnused(exclude, category = null)`의 category는 프로덕션에서 항상 null.
+    호출부 전수 grep 결과 프로덕션은 `DailyMailScheduler.kt:45` **한 곳뿐**이고 2번째 인자를 생략한다.
+    → `TechQuestionBankAdapter`의 4분기 중 category 2분기(`findAllByCategoryAndQuestionNotIn`·`findAllByCategory`)는
+    **테스트만 밟는 죽은 경로**. 실제 동작 = 전 카테고리 균등 랜덤 1개를 전 사용자에게 동일 발송.
+  - 🔴 **보류 근거(실측): 데이터가 카테고리를 감당 못 한다.** 뱅크 총 **26개**(V10 5 + V11 21) 분포 —
+    `java-spring` 8(31%) · `system-design` 6(23%) · `database` 6(23%) · `concurrency` 5(19%) · **`ai-llm` 1(4%)**.
+    **`ai-llm`은 질문이 단 1개**라 요일 로테이션 등을 켜면 그날 1개 쓰고 즉시 소진 → `randomOrNull()`=null →
+    **AI 폴백**. 즉 **지금 켜면 AI 호출(비용)이 오히려 늘어난다.**
+  - **활성화 트리거**: V12 시드로 **카테고리당 최소 10개** 확보(특히 `ai-llm`·`concurrency`). 그 후에야
+    로테이션/배분이 의미를 갖는다. 보강 없이 켜지 말 것.
+  - **대안으로 검토했다 기각**: ①죽은 파라미터 제거 → 보강 계획이 살아있어 재작업 유발 ②요일 로테이션 즉시 도입 → 위 사유
+- [ ] 🟡 **질문 뱅크 중복 방지 윈도우 버그 (2026-07-27 발견, 별건)** — `DailyMailScheduler:45`가
+      `findRecentQuestions("TECH_INTERVIEW", 30)`으로 제외 목록을 만드는데, 이건 최근 **30일**이 아니라
+      최근 **30개 로그 행**이다. 로그는 `targets.forEach { save(userId, ...) }`로 **사용자당 1행/일** 쌓이고
+      쿼리(`DailyMailLogRepository:17`)에 **`DISTINCT`가 없다** → **사용자 N명이면 실제 중복방지 커버가 30/N일로 축소.**
+      지금은 사용자가 적어 안 아프지만 늘면 "며칠 전 질문 또 옴"으로 드러난다.
+      → 수정 방향: 쿼리에 `DISTINCT` 추가 **또는** 행 수가 아닌 **날짜 기준 조회**(최근 N일)로 전환.
 - [ ] 질문 뱅크 규모 확대 시(수백 건↑) `findAllBy...` 전체 로드 방식 재검토 — `ORDER BY RANDOM() LIMIT 1`
       native query 전환 고려 (단, `@DataJpaTest` 등 native query 검증 인프라 먼저 필요)
 
