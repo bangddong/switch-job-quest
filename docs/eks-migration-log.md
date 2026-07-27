@@ -249,7 +249,7 @@
 
 ## 2026-07-24 — Task 8: 2-cluster apply 왕복 (★첫 과금)
 
-- `[메모]` 사전 점검(비용 $0): tofu v1.12.4·aws-cli 2.36.2·자격증명 `bootstrap-admin`(계정 536260290749)
+- `[메모]` 사전 점검(비용 $0): tofu v1.12.4·aws-cli 2.36.2·자격증명 `bootstrap-admin`(계정 <ACCOUNT>)
   전부 정상. **kubectl 미설치 발견 → `brew install kubectl` (v1.36.3) 설치** — 클러스터 1.36과 클라이언트
   버전 일치. K8s 버전 재확인: `1.36` 여전히 표준지원 최신(릴리스 26-06-02, 표준지원 종료 27-08-02).
   `1.33`은 5일 뒤(07-29) 종료 → 1.36 핀이 정확했음.
@@ -272,3 +272,57 @@
   크레딧 $199.81 대비 무시할 수준. **교훈 확정: 아낄 것은 크레딧이 아니라 "켜놓고 딴짓하는 시간".**
 - `[결정]` Task 8 완료 = **2-cluster IaC가 apply→검증→destroy 왕복으로 실증됨.** 코드가 실제로
   동작함을 확인. 다음은 Stage 1(ECR + 앱 배포) — 그 전 ECR을 0-bootstrap에 편입 필요(현재 `.tf` 0건).
+
+## 2026-07-27 — Stage 1: ECR + 첫 앱 배포
+
+- `[메모]` 사전점검 통과(도구·자격증명·K8s 1.36 표준지원 유효·과금 리소스 0·리퍼 로드됨).
+  **준비물(무과금)**: ECR push 워크플로(OIDC→arm64 러너 네이티브 빌드→sha 태깅) + Dockerfile
+  `SERVICE` build-arg 파라미터화 + k8s Deployment/Service(ClusterIP) 매니페스트.
+- `[막힘]` **Dockerfile jar 글롭 함정 사전 발견**: `cp .../libs/*.jar`는 ai-api에서 깨진다.
+  ai-api는 parity 테스트 요구로 plain jar도 켜져 있어 산출물이 2개(`ai-api-x.jar` + `ai-api-x-plain.jar`).
+  → `-plain` 제외 + 개수 검증 후 복사로 수정. core-api는 plain 비활성이라 1개(실측 확인).
+- `[결정]` **DB 없이 배포(B안) 확정.** 이유: ①`application-local.yml`엔 datasource 없음(로컬은 H2)
+  ②Neon 크리덴셜은 Fly secrets에 있으나 **write-only라 되읽기 불가**(digest만 조회됨)
+  ③무엇보다 **학습 클러스터를 prod DB에 연결하는 것 자체가 금지**(Flyway 실행·커넥션 경합·비가역 위험).
+  → Stage 1 목표(ECR 이미지가 노드로 pull되어 파드가 뜨는가)는 DB 없이 100% 검증 가능.
+  DB 연결은 Stage 2에서 IRSA/External Secrets로 정식 처리. CrashLoopBackOff 진단도 교보재로 활용.
+- `[막힘]` **workflow_dispatch가 HTTP 404.** 원인: GitHub은 dispatch 워크플로 "정의"를 **기본 브랜치에서만**
+  찾는다 — `--ref stage/eks-1-ecr`를 줘도 main에 파일이 없으면 404. → push 트리거 추가로 우회 시도.
+- `[막힘]` **push 트리거로 돌리자 OIDC 거부**:
+  ```
+  X Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
+  ```
+  원인: 역할 신뢰정책의 sub 조건이 `refs/heads/main`·`pull_request` 두 개뿐(iam-github-oidc.tf).
+  브랜치 push의 sub은 `repo:...:ref:refs/heads/stage/eks-1-ecr`라 매칭 실패. **보안이 의도대로 작동한 것.**
+- `[해결]` 신뢰정책을 푸는 대신(역할이 AdministratorAccess라 위험) **PR 컨텍스트에서 빌드**.
+  워크플로+Dockerfile만 `chore/ecr-push-workflow` 브랜치로 분리해 PR #323 생성 → `pull_request`
+  이벤트 sub이 허용 목록과 일치 → OIDC 통과, 빌드·푸시 성공.
+  (정석은 ECR 전용 최소권한 역할을 분리해 브랜치를 넓히는 것 — Stage 2 주제로 기록.)
+- `[해결]` **ECR 푸시 성공**: `devquest/core-api:34a7a0ba...` + `latest`, ~166MB.
+  **아키텍처 실측 `arm64/linux`** — Graviton 노드와 일치(x86이면 `exec format error`로 CrashLoop).
+- `[메모]` 퀴즈 게이트 실동작 확인: `stage/eks-1-ecr`에서 `gh pr create` 시도 → 훅이 차단
+  (`docs/eks-quizzes/stage-eks-1-ecr.md` 없음). 설계대로 작동.
+- `[해결]` **apply 성공** (08:58 시작, 14 added). 노드 Ready(v1.36.2·arm64·EXTERNAL-IP 43.201.76.172).
+- `[해결]` **★ Stage 1 핵심 검증 통과 — ECR→노드 이미지 pull 성공**:
+  ```
+  Normal Pulled kubelet Successfully pulled image ".../devquest/core-api:34a7a0ba..." in 3.193s
+  Image size: 174153756 bytes
+  ```
+  **imagePullSecret 없이 성공** — 노드 IAM 역할의 AmazonEC2ContainerRegistryReadOnly가 작동(nodes.tf).
+  같은 리전이라 166MB가 3.2초. 아키텍처 일치(arm64)라 `exec format error` 없음.
+- `[막힘]` **CrashLoopBackOff — 원인이 DB가 아니었다.** 부팅 순서대로 숨은 환경 의존이 3단계로 드러남:
+  ① **Loki 로깅**: `IllegalArgumentException: URI with undefined scheme` at `Loki4jAppender.start`.
+     `logback-spring.xml`의 prod 프로파일이 LOKI appender를 **무조건** 참조하고
+     `${grafanaLokiUrl}`이 비면 **로깅 시스템 초기화 단계에서 앱이 죽는다**(DB에 도달조차 못 함).
+  ② **JWT_SECRET**: `Could not resolve placeholder 'JWT_SECRET'` → jwtProvider 빈 생성 실패.
+  ③ **DB**: `HikariPool-1 - Starting...` → `BeanCreationException: entityManagerFactory` (의도된 종착점).
+  → 교훈: **"Fly에서 잘 돌던 앱"은 Fly secrets가 가려주던 환경 의존을 갖고 있다.** 플랫폼을 옮기면
+    그게 부팅 순서대로 드러난다. 사전에 `grep -ohE '\$\{[A-Z_]+...\}' application*.yml`로 전수 파악하는
+    편이 두더지잡기보다 빠르다(실제로 그렇게 전환해 7개 필수 변수를 한 번에 확보).
+- `[메모]` prod 필수 환경변수(기본값 없음) 7개: DB_HOST/NAME/USERNAME/PASSWORD · JWT_SECRET ·
+  GITHUB_CLIENT_ID/SECRET. 그 외는 기본값 보유. Loki 3종은 logback에서 별도 요구.
+- `[해결]` **teardown 클린** (destroy 09:18, 14 destroyed). 고아 전수검증 0(state·클러스터·EC2·LB·EBS·NAT).
+  **ECR 이미지는 생존**(`34a7a0ba...`+latest) — 0-bootstrap 편입(#322) 결정이 작동: 클러스터를 부숴도
+  이미지가 남아 다음 세션에 재빌드 불필요.
+- `[비용]` **Stage 1 결산**: apply 08:58 ~ destroy 09:18 ≈ **20분, ~$0.05**. 크레딧 무손실.
+  ECR 저장(빈 레포→이미지 1개 166MB) ≈ $0.02/월. 실습 후 남는 유일한 비용.
