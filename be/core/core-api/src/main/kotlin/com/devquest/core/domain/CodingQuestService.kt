@@ -31,7 +31,7 @@ class CodingQuestService(
     private val codingHintPort: CodingHintPort,
     private val codingRoadmapProgressPort: CodingRoadmapProgressPort,
     private val codingRankPort: CodingRankPort,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
