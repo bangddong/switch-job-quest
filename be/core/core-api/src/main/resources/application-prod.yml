@@ -13,11 +13,6 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-server:
-  error:
-    include-stacktrace: never
-    include-message: never
-
 grafana:
   otlp:
     enabled: true

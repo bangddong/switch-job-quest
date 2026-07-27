@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#324 EKS Stage 1 머지 완료) |
+| 브랜치 | chore/remove-dead-config |
+| 열린 PR | #326 — 죽은 설정 키 제거 (머지 대기) |
 
 > **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
@@ -78,6 +78,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #326 | **죽은 설정 키 제거 (chore, 동작 무변경).** `be/` 소비처 0인 설정 3곳 삭제: `devquest.ai.pass-score`·`interview-questions`(@Value grep 0건) + prod `server.error` 블록(Boot 4는 `spring.web.error`로 이관, `server.error.*`는 무시되고 기본값 `never`로 동작 중이라 현재 값과 동일 → 삭제해도 불변). **`max-retry`는 유지**(AiCallExecutor 소비, Phase 3 전 제거 금지=inprocess 롤백 불변식). `./gradlew build` 239 tests 0 failures. 출처=백로그 #306·#308 QA LOW | 2026-07-27 |
 | #324 | **EKS Stage 1 — 첫 앱 배포 실증 (2026-07-27, ★과금 ~$0.05).** core-api를 EKS에 배포하는 매니페스트(`k8s/base/core-api.yaml`, Deployment+Service ClusterIP) + apply→배포→teardown 왕복. **핵심: ECR→노드 이미지 pull이 imagePullSecret 없이 노드 IAM 역할(`AmazonEC2ContainerRegistryReadOnly`)로 성공**(3.2s, arm64↔Graviton 실측 일치). DB 없이(B안) 진행 → **CrashLoop 3단계 진단**: 부팅 순서상 ①Loki 로깅(`grafanaLokiUrl` 미설정→`URI undefined scheme`) ②JWT_SECRET ③DB(HikariPool) — "Fly secrets가 가려주던 숨은 환경 의존이 플랫폼 이전 시 드러남". 클린 teardown(고아 0·ECR 이미지 생존=#322 결정 작동). **QA가 거짓 자신감 포착**: grep 팁이 실제 인시던트 원인이던 Loki env var를 놓친 것(F-4)을 재실행으로 발견→수정. 퀴즈 1.5/5(재검토 4). ClusterIP 선택=LoadBalancer의 NLB 고아 회피. 선행 #322(ECR 0-bootstrap 편입)·#323(arm64 CI 빌드 워크플로, OIDC 신뢰정책상 PR 컨텍스트 빌드) | 2026-07-27 |
 | #320 | **EKS 과금 안전장치 — dead man's switch (2026-07-25).** "apply하고 destroy 잊고 세션 종료"를 기계로 차단(사용자가 끝 신호 못 줘도 동작). 3조각: `eks-session-marker.sh`(PreToolUse, `tofu apply` 감지→마커) + `eks-heartbeat-reminder.sh`(Stop, 매 턴 하트비트 갱신+경고+자가청소) + `eks-reaper.sh`(launchd 30분, 하트비트 **2h stale**이면 실제 클러스터 확인 후 `tofu destroy`). Claude로 작업 중이면 하트비트 갱신돼 안 죽임, 사라지면 2h 뒤 자동 destroy. **tofu state 존중**(로컬 실행). 한계: macOS 잠들면 미실행(최악 주말 ~$6, $35 예산알람 backstop). 경계 12경우 전수 테스트. **이 맥에 launchd 설치·로드 완료**(새 머신=`install-reaper.sh`, TASKS.md TASK-7). SOP=`docs/eks-session-sop.md`. | 2026-07-25 |
 | #318 | **EKS 학습 퀴즈 게이트 — 이해 검증 기계 강제 (2026-07-24).** Task 8에서 CLAUDE.md "학습 설명 의무"(prose)가 momentum에 밀려 실제 누락된 것을 교정. QA 루프(`assert-qa-run.sh`)와 동일 철학으로 **구축 후 이해도 퀴즈를 훅으로 강제**. `assert-eks-quiz.sh`: `stage/eks-*` 브랜치 `gh pr create` 시 `docs/eks-quizzes/<br>.md` + `<!-- QUIZ-PASSED -->` 마커 없으면 차단(5경우 전수 테스트). `quiz.md`에 "EKS 학습 마일스톤 모드"(실측 로그 기반 문제·기록·마커), orchestrator 9.5단계 필수화, CLAUDE.md 브랜치 규칙에 `stage/eks-*` 추가. **첫 적용=Stage 1부터.** 리허설(Task 8 내용 5문제) 2/5 — 게이트 효용 실증(구축됐지만 이해 구멍 드러남). | 2026-07-24 |
@@ -162,11 +163,10 @@
 - [x] ~~**tech-debt(LOW, CI): `be-ci.yml` 테스트 리포트 업로드 범위**~~ → **2026-07-22 해결.**
       리포트 경로를 5개 모듈(core-api·ai-api·core-domain·db-core·client-ai)로 확장 + **`parityTest`를
       CI에 연결**(전용 소스셋이라 `check`/`test`에 자동으로 안 붙어 12개 parity 테스트가 죽어 있었음, #308 QA MEDIUM).
-- [ ] **tech-debt(LOW): `core-api/application-prod.yml`의 `server.error.*`가 Boot 3 잔재 키**
-      (#308 QA LOW). Boot 4는 `spring.web.error.*`로 이동 — 현재 값이 `never`(기본값과 동일)라 무해하지만
-      **죽은 설정**이다. ai-api에서 같은 버그가 실제 피해를 냈으므로(에러 메시지 미전달) 정리 권장.
-- [ ] **tech-debt(LOW): 죽은 설정 2건** — `devquest.ai.pass-score`(70)·`devquest.ai.interview-questions`(10)은
-      `be/` 전체에서 소비처 **0건**(#306 조사에서 발견, QA 독립 확인). 제거 또는 용도 복원 판단 필요.
+- [x] ~~**tech-debt(LOW): `application-prod.yml`의 `server.error.*` Boot 3 잔재 키**~~ → **2026-07-27 해결(#326).**
+      블록째 제거. Boot 4는 `spring.web.error.*`라 무시되던 죽은 키(값도 기본값 `never`와 동일해 동작 불변).
+- [x] ~~**tech-debt(LOW): 죽은 설정 2건** — `devquest.ai.pass-score`·`interview-questions`~~ → **2026-07-27 해결(#326).**
+      소비처 0건 확인 후 제거. `max-retry`는 살아있어 유지(AiCallExecutor 소비).
 - [ ] **tech-debt(LOW): Jackson 2 잔재** — `CodingQuestService`(`ObjectMapper()` 직접 생성)·
       `TechInterviewRateLimitInterceptor`·`DailyExplainRateLimitInterceptor`가 여전히 Jackson 2 사용.
       AI HTTP 경로는 J3로 통일됐으나(#308) 코드베이스 전체는 혼재. **위 인터셉터 2건은 요청마다
