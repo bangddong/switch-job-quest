@@ -46,6 +46,9 @@ cd be && ./gradlew test
 # BE 빌드
 cd be && ./gradlew build
 
+# FE 테스트 (vitest, #331 도입 — CI 게이트라 로컬에서 먼저 통과시킬 것)
+cd fe && npm test
+
 # FE 타입 체크
 cd fe && npx tsc --noEmit
 

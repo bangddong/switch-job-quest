@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | fix/daily-question-window |
-| 열린 PR | 진행 중 — 질문 중복방지 윈도우 버그 수정 |
+| 브랜치 | chore/sync-fe-test-docs |
+| 열린 PR | 진행 중 — FE 테스트 문서 동기화 |
 
 > **🧹 tech-debt 정리 세션 완료 (07-27)**: #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트)
 > · #329 FE(CompanyCard 가드·extractPdfText) · **#331 FE 테스트 러너(vitest) 도입 + CI 게이트**. **be/ 소스 Jackson 2 잔재 0건.**
