@@ -1,7 +1,6 @@
 package com.devquest.core.api.support
 
 import com.devquest.core.support.error.ErrorCode
-import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.bucket4j.Bandwidth
 import io.github.bucket4j.Bucket
 import jakarta.servlet.http.HttpServletRequest
@@ -11,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
+import tools.jackson.databind.ObjectMapper
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
@@ -21,10 +21,11 @@ import java.util.concurrent.ConcurrentHashMap
 @Component
 class DailyExplainRateLimitInterceptor(
     private val dailyExplainRateLimitBucketStore: DailyExplainRateLimitBucketStore,
+    private val objectMapper: ObjectMapper,
 ) : HandlerInterceptor {
 
     private val rateLimitResponseJson: String by lazy {
-        ObjectMapper().writeValueAsString(
+        objectMapper.writeValueAsString(
             mapOf(
                 "result" to "ERROR",
                 "data" to null,

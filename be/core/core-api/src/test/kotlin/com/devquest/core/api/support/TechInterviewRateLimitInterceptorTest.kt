@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import tools.jackson.databind.ObjectMapper
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -18,7 +19,7 @@ class TechInterviewRateLimitInterceptorTest {
     @BeforeEach
     fun setUp() {
         store = RateLimitBucketStore(capacity = 2, refillDays = 1)
-        interceptor = TechInterviewRateLimitInterceptor(store)
+        interceptor = TechInterviewRateLimitInterceptor(store, ObjectMapper())
     }
 
     private fun mockRequest(ip: String, flyClientIp: String? = null): HttpServletRequest {

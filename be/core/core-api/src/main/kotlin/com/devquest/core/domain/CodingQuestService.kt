@@ -19,6 +19,7 @@ import java.time.ZoneId
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
 
 @Service
 class CodingQuestService(
@@ -29,9 +30,9 @@ class CodingQuestService(
     private val judge0Port: Judge0Port,
     private val codingHintPort: CodingHintPort,
     private val codingRoadmapProgressPort: CodingRoadmapProgressPort,
-    private val codingRankPort: CodingRankPort
+    private val codingRankPort: CodingRankPort,
+    private val objectMapper: ObjectMapper
 ) {
-    private val objectMapper = com.fasterxml.jackson.databind.ObjectMapper()
     private val log = LoggerFactory.getLogger(javaClass)
 
     companion object {
