@@ -25,11 +25,15 @@ fun `재시도 3회 후 성공한다`() {
 ```
 
 ```typescript
-// FE 예시 (TypeScript)
-test('renders error state when fetch fails', () => {
-  // 실패하는 동작 정의
-  // assertions
-});
+// FE 예시 (TypeScript) — globals 미설정이라 vitest에서 명시 import 필수
+import { describe, it, expect } from 'vitest'
+import { normalizeExtractedText } from './extractPdfText'
+
+describe('normalizeExtractedText', () => {
+  it('CRLF를 \n으로 정규화한다', () => {
+    expect(normalizeExtractedText('a\r\nb')).toBe('a\nb')
+  })
+})
 ```
 
 ### Verify RED — 반드시 실패 확인 (절대 생략 불가)
@@ -38,7 +42,11 @@ test('renders error state when fetch fails', () => {
 # BE
 cd be && ./gradlew test --tests "com.devquest...ClassName.테스트명"
 
-# FE (테스트 러너 미도입 — 현재는 타입 체크 + 빌드로 검증)
+# FE — vitest (#331 도입)
+cd fe && npx vitest run src/features/.../xxx.test.ts
+
+# FE 컴포넌트 테스트는 러너에 jsdom·@testing-library가 없어 아직 불가 (#331 범위 밖).
+# 컴포넌트 변경은 타입 체크 + 빌드로만 검증한다.
 cd fe && npx tsc --noEmit && npm run build
 ```
 
