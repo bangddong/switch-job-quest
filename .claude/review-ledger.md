@@ -32,6 +32,8 @@
 | L-7 | `feat/phase1-core-http-adapter/F-4` | LOW | `be/clients/client-ai/build.gradle.kts`의 주석 *"core-api가 tools.jackson.databind.ObjectMapper 사용 중"*이 **1.4a 시점에 사실과 어긋났음** | ⚠️ **1.4b에서 Jackson 3로 되돌렸으므로 지금은 다시 사실일 가능성이 높다.** 확인 후 `obsolete` 처리 여부 판단 |
 | L-8 | `refactor/jackson3-db-core/F-2` | LOW | **root `build.gradle.kts`의 subprojects 블록이 전역 J2 `jackson-module-kotlin`을 모든 모듈에 적용** + db-core는 `spring-boot-starter-json`(J2 계열)까지 있어 J2/J3 kotlin 모듈이 클래스패스에 공존(dead weight). 소스 참조는 이미 J3 0건 확인됨 | **전역 빌드 변경이라 blast radius가 커서 이번 PR 범위에서 의도적으로 제외.** 후속으로 root subprojects J2 모듈 제거 + db-core를 `spring-boot-starter-jackson`으로 전환. → CONTEXT 백로그가 실행 항목 소유 |
 
+| L-9 | `fix/daily-question-window/F-2` | LOW | **시각 zone 불일치 — 저장은 zone 미지정, 조회는 `Asia/Seoul`.** `DailyMailScheduler`가 `save(..., LocalDateTime.now())`(시스템 기본 zone)로 저장하는데 신규 `since` 컷오프와 `existsTodayLog`의 `today`는 `LocalDate/DateTime.now(ZoneId.of("Asia/Seoul"))` 기준이다. **`be/Dockerfile`·`fly.toml` 어디에도 TZ 설정이 없어 컨테이너 기본은 UTC** → 최대 ~9시간 skew. 🔴 **더 위험한 쪽은 20일 윈도우가 아니라 `existsTodayLog`(1일 창)** — 지금은 cron이 `0 0 9 * * *` Asia/Seoul = **00:00 UTC라 UTC 날짜와 KST 날짜가 우연히 일치해서** 동작한다. **cron 시각을 바꾸면 저장값이 조회 범위 밖으로 나가 "오늘 이미 발송" 판정이 실패 → 중복 발송 가능.** | **이번 PR이 만든 결함이 아니다**(행 수 기준 시절엔 zone 무관이라 잠재해 있었고, 날짜 기준 전환으로 처음 의미를 가짐). 한 줄 수정으로 끝나지 않음 — zone 미지정 `LocalDateTime.now()`가 core-api main에만 4곳(`DailyMailScheduler`·`ProgressService`·`QuestProgressRecorder`×2)이라 **일관성 있게 고치려면 zone 처리 전반 감사 + 기존 저장 데이터 해석까지 봐야 한다**(blast radius). → 후속 단독 PR. **cron 시각을 변경할 일이 생기면 그 전에 반드시 처리할 것**(그때 잠재 버그가 발현한다) |
+
 ## 처리 완료 (closed / wontfix / obsolete)
 
 | ID | 출처 | 등급 | 내용 | 처리 |
