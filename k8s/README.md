@@ -86,5 +86,8 @@ tofu state 밖에 생겨 destroy 후에도 과금된다 — Stage 4에서 다룬
 >
 > prod 필수 환경변수(기본값 없음): `DB_HOST/NAME/USERNAME/PASSWORD` · `JWT_SECRET` ·
 > `GITHUB_CLIENT_ID/SECRET`, 그리고 logback이 요구하는 `GRAFANA_LOKI_URL`·`GRAFANA_LOKI_INSTANCE_ID`·`GRAFANA_API_KEY`.
-> **미리 `grep -ohE '\$\{[A-Z_]+' application*.yml logback*.xml`로 전수 파악**하는 편이 하나씩 재배포하는
-> 두더지잡기보다 빠르다.
+> **미리 전수 파악**하는 편이 하나씩 재배포하는 두더지잡기보다 빠르다 (설정 파일이 모듈별로 흩어져 있으니
+> `be/` 아래를 재귀로 훑는다):
+> ```bash
+> grep -rohE '\$\{[A-Z_][A-Z0-9_]*' be --include='application*.yml' --include='logback*.xml' | sort -u
+> ```
