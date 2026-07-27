@@ -86,8 +86,12 @@ tofu state 밖에 생겨 destroy 후에도 과금된다 — Stage 4에서 다룬
 >
 > prod 필수 환경변수(기본값 없음): `DB_HOST/NAME/USERNAME/PASSWORD` · `JWT_SECRET` ·
 > `GITHUB_CLIENT_ID/SECRET`, 그리고 logback이 요구하는 `GRAFANA_LOKI_URL`·`GRAFANA_LOKI_INSTANCE_ID`·`GRAFANA_API_KEY`.
-> **미리 전수 파악**하는 편이 하나씩 재배포하는 두더지잡기보다 빠르다 (설정 파일이 모듈별로 흩어져 있으니
-> `be/` 아래를 재귀로 훑는다):
+> **미리 전수 파악**하는 편이 하나씩 재배포하는 두더지잡기보다 빠르다. 단, 변수는 **두 가지 형식**으로
+> 참조된다 — yml은 `${ENV_VAR}`, logback은 `<springProperty source="ENV_VAR">`(참조는 camelCase `${grafanaLokiUrl}`).
+> **대문자 `${...}`만 훑으면 Loki 변수를 통째로 놓친다**(실제 인시던트 1번 원인이었음). 두 패턴을 함께:
 > ```bash
-> grep -rohE '\$\{[A-Z_][A-Z0-9_]*' be --include='application*.yml' --include='logback*.xml' | sort -u
+> grep -rhoE '\$\{[A-Z_][A-Z0-9_]*|source="[A-Z_][A-Z0-9_]*"' be \
+>   --include='application*.yml' --include='logback*.xml' \
+>   | grep -oE '[A-Z_][A-Z0-9_]+' | sort -u
 > ```
+> (검증: GRAFANA_LOKI_URL/INSTANCE_ID/API_KEY 포함 20개 매치. `ENV`는 무해한 오탐.)
