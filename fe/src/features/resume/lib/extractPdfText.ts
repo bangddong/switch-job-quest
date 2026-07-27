@@ -76,11 +76,18 @@ export async function extractPdfText(file: File): Promise<string> {
       }
       pageTexts.push(pageText)
     }
+  } catch (e) {
+    if (e instanceof PdfExtractError) throw e
+    throw new PdfExtractError(
+      'PDF를 읽을 수 없어요. 손상되었거나 암호가 걸린 파일일 수 있어요. 내용을 직접 붙여넣어 주세요.',
+      { cause: e },
+    )
   } finally {
     try {
       await doc.destroy()
-    } catch {
-      // cleanup 실패는 원 예외를 가리지 않도록 무시
+    } catch (e) {
+      // cleanup 실패는 원 예외를 가리지 않도록 무시하되 디버깅 단서는 남긴다
+      console.warn('PDF 리소스 정리 실패(무시하고 진행):', e)
     }
   }
 
