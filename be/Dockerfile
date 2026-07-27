@@ -47,6 +47,9 @@ EXPOSE 8080
 # - GC 로그(-Xlog:gc)는 배포 후 실제 사용 중인 GC 종류 확정용. 저트래픽 환경이라 로그량 미미.
 #   Metaspace OOME 진단에 이 로그가 결정적이었으므로 절대 제거하지 말 것
 # - 나머지는 스레드 오버헤드, 기타 네이티브 메모리용으로 여유 확보
+# - JVM 기본 zone: 단일 리전(한국) 서비스인데 저장(ambient `LocalDateTime.now()`)과 조회(명시적
+#   `ZoneId.of("Asia/Seoul")`)의 zone이 어긋나 있던 결함(fix/timezone-consistency) 수정. alpine에
+#   OS tzdata가 없어도 JDK가 자체 tzdb를 번들하므로 `Asia/Seoul` 해석에 문제 없음.
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=35.0", \
@@ -54,4 +57,5 @@ ENTRYPOINT ["java", \
   "-XX:ReservedCodeCacheSize=96m", \
   "-Xss512k", \
   "-Xlog:gc::time,level,tags", \
+  "-Duser.timezone=Asia/Seoul", \
   "-jar", "app.jar"]
