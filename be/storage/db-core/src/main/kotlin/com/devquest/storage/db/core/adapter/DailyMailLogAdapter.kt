@@ -30,8 +30,8 @@ class DailyMailLogAdapter(
         return repository.existsByUserIdAndMailTypeAndSentAtBetween(userId, mailType, start, end)
     }
 
-    override fun findRecentQuestions(mailType: String, limit: Int): List<String> =
-        repository.findRecentQuestionContents(mailType, PageRequest.of(0, limit))
+    override fun findQuestionsSince(mailType: String, since: LocalDateTime): List<String> =
+        repository.findQuestionContentsSince(mailType, since).distinct()
 
     override fun findTodayQuestion(mailType: String, date: LocalDate): String? {
         val start = date.atStartOfDay()

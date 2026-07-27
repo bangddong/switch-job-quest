@@ -24,6 +24,13 @@ class DailyMailScheduler(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    companion object {
+        // 질문 뱅크가 총 26개(V10 5개 + V11 21개)뿐이라, 최근 질문 제외 윈도우가 뱅크 크기 이상이면
+        // 뱅크가 주기적으로 완전히 소진되어 AI 폴백(generateDailyQuestion, 비용 발생)이 매일 돌게 된다.
+        // 20일로 두면 뱅크에서 항상 최소 6개 이상이 후보로 남아 폴백 없이 동작한다.
+        private const val RECENT_QUESTION_WINDOW_DAYS = 20L
+    }
+
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
     fun sendDailyTechInterviewMail() {
         val allUsers = userEmailPort.findAll()
@@ -41,7 +48,8 @@ class DailyMailScheduler(
             return
         }
 
-        val recentQuestions = dailyMailLogPort.findRecentQuestions("TECH_INTERVIEW", 30)
+        val since = LocalDateTime.now(ZoneId.of("Asia/Seoul")).minusDays(RECENT_QUESTION_WINDOW_DAYS)
+        val recentQuestions = dailyMailLogPort.findQuestionsSince("TECH_INTERVIEW", since)
         val bankQuestion = techQuestionBankPort.findUnused(recentQuestions)
         val question = if (bankQuestion != null) {
             log.info("질문 뱅크에서 질문 채택: category=${bankQuestion.category}")

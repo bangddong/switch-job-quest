@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | docs/question-bank-decision |
-| 열린 PR | 진행 중 — 질문 뱅크 category 보류 결정 기록 |
+| 브랜치 | fix/daily-question-window |
+| 열린 PR | 진행 중 — 질문 중복방지 윈도우 버그 수정 |
 
 > **🧹 tech-debt 정리 세션 완료 (07-27)**: #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트)
 > · #329 FE(CompanyCard 가드·extractPdfText) · **#331 FE 테스트 러너(vitest) 도입 + CI 게이트**. **be/ 소스 Jackson 2 잔재 0건.**
@@ -86,6 +86,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #333 | **데일리 질문 중복방지 윈도우 버그 수정 (fix).** `findRecentQuestions(type, 30)`의 30이 일수가 아니라 **행 수**였고, 로그는 `forEach { save(userId, ...) }`로 **사용자당 1행/일** 쌓이는데 쿼리에 `DISTINCT`가 없었다 → **커버 기간이 30/N일로 축소**(1명 30일 / 10명 3일 / 30명 1일=사실상 무력화). 포트를 `findQuestionsSince(type, since: LocalDateTime)`로 개명하고 JPQL을 `sentAt >= :since`로, 중복 제거는 **어댑터 Kotlin `.distinct()`**(Postgres는 `SELECT DISTINCT`+`ORDER BY 비선택컬럼`이 에러라 SQL DISTINCT 회피). **윈도우 20일 = 뱅크 26개보다 작아야 AI 폴백이 안 돈다**(≥26이면 주기적 소진 → AI 비용 신규 발생, 상수 주석에 근거 명시). TDD: 프로덕션 코드만 stash해 RED 확인 후 GREEN. 신규 `DailyMailLogAdapterTest`. QA가 **JPQL 문자열을 직접 읽어** 대체 검증(Mockito verify+argumentCaptor)이 거짓 안심이 아님을 판정. HIGH0·MED0·LOW2(F-1 wontfix=순서는 의미 갖는 소비처 없음 / **F-2 deferred→원장 L-9 = zone 불일치**). | 2026-07-27 |
 | #331 | **FE 테스트 러너(vitest) 도입 + CI 테스트 게이트 (chore).** #329에서 순수함수 단위테스트를 못 붙인 갭 해소. Vite 6 스택 재사용 → vitest ^3.2.7, 대상이 전부 순수함수라 `environment: 'node'`(jsdom·@testing-library 미도입, 컴포넌트 테스트는 범위 밖). `vite.config.ts`에 `test` 필드 병합(별도 config 안 만듦), 글로벌 대신 명시 import. `extractPdfText.ts` 순수함수 4개 **단위테스트 18개**: normalizeExtractedText(CRLF/lone CR·공백/빈줄 병합·trim·idempotent) 7 + truncateExtractedText(50000 경계) 3 + validatePdfFile 5 + PdfExtractError(cause 보존) 3. `test:"vitest run"`. **QA F-1(MED)=fixed**: fe-ci.yml에 `npm test` 게이트 없어 로컬만 초록불이던 것 → Lint·Build 사이 Test 스텝 추가(의도적 실패로 non-zero exit 게이트 동작 검증). QA 실측: 테스트가 실제 소스 import(tautology 아님)·전 케이스 정규식 순서와 일치. tsc0·build·lint(무관 warn 1)·18 passed. | 2026-07-27 |
 | #329 | **FE tech-debt 정리 (fix).** ①CompanyCard 연타 중복요청 가드(#259): `deleting`·`changingStatus` state + `busy` 확장으로 삭제·상태변경 중복 발사 방지(finally로 항상 복구). ②extractPdfText(#261): `doc.destroy()`가 원 예외 덮던 것→자체 try/catch+`console.warn`, `normalizeExtractedText`에 `\r\n?`→`\n` 선정규화(CRLF/lone CR), 실패 단계 3분(모듈로딩/파싱/페이지추출)을 각각 `PdfExtractError` 사용자 메시지로 구분. QA HIGH0·MED0·LOW4 전부 fixed(2건 초기+2건 재검토 발견). tsc0·build·eslint 통과. ⚠️ **FE 테스트 러너 부재로 단위 커버 없음**(알려진 갭). | 2026-07-27 |
 | #328 | **db-core 마지막 Jackson 2 잔재 제거 (refactor, 동작 무변경).** `CodingProblemAdapter`를 J3로: `build.gradle.kts` J2 kotlin 모듈→`tools.jackson.module`, 코드는 `jacksonObjectMapper()`+reified `readValue<List<TestCase>>()`. **QA 실측: J2 저장 JSON→J3 역직렬화→재직렬화 bit-identical 증명.** 회귀 가드 신설 `CodingProblemAdapterTest` 3케이스(레거시 J2 JSON 고정 문자열 파싱 포함, QA F-1 fixed). db-core 24 tests. **정정: client-ai evaluator들은 원래 J3였음**(#327 노트 오류) — be/ 소스 J2 잔재 이제 0건. QA F-2(전역 J2 kotlin 모듈 dead weight)=deferred→원장 L-8. | 2026-07-27 |
@@ -174,12 +175,9 @@
   - **활성화 트리거**: V12 시드로 **카테고리당 최소 10개** 확보(특히 `ai-llm`·`concurrency`). 그 후에야
     로테이션/배분이 의미를 갖는다. 보강 없이 켜지 말 것.
   - **대안으로 검토했다 기각**: ①죽은 파라미터 제거 → 보강 계획이 살아있어 재작업 유발 ②요일 로테이션 즉시 도입 → 위 사유
-- [ ] 🟡 **질문 뱅크 중복 방지 윈도우 버그 (2026-07-27 발견, 별건)** — `DailyMailScheduler:45`가
-      `findRecentQuestions("TECH_INTERVIEW", 30)`으로 제외 목록을 만드는데, 이건 최근 **30일**이 아니라
-      최근 **30개 로그 행**이다. 로그는 `targets.forEach { save(userId, ...) }`로 **사용자당 1행/일** 쌓이고
-      쿼리(`DailyMailLogRepository:17`)에 **`DISTINCT`가 없다** → **사용자 N명이면 실제 중복방지 커버가 30/N일로 축소.**
-      지금은 사용자가 적어 안 아프지만 늘면 "며칠 전 질문 또 옴"으로 드러난다.
-      → 수정 방향: 쿼리에 `DISTINCT` 추가 **또는** 행 수가 아닌 **날짜 기준 조회**(최근 N일)로 전환.
+- [x] ~~🟡 **질문 뱅크 중복 방지 윈도우 버그** (2026-07-27 발견)~~ → **당일 해결(#333).**
+      "최근 30**행**"이 사용자 수에 반비례해 축소되던 것(N명이면 30/N일)을 **"최근 20일"**로 전환.
+      **20일인 이유 = 뱅크 26개보다 작아야 AI 폴백이 안 돈다**(≥26이면 주기적 완전 소진 → AI 비용 발생).
 - [ ] 질문 뱅크 규모 확대 시(수백 건↑) `findAllBy...` 전체 로드 방식 재검토 — `ORDER BY RANDOM() LIMIT 1`
       native query 전환 고려 (단, `@DataJpaTest` 등 native query 검증 인프라 먼저 필요)
 

@@ -6,6 +6,8 @@ import com.devquest.core.domain.port.DailyMailLogPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.domain.port.TechQuestionBankPort
 import com.devquest.core.domain.port.UserEmailPort
+import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.within
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -13,11 +15,15 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 @ExtendWith(MockitoExtension::class)
 class DailyMailSchedulerTest {
@@ -67,7 +73,7 @@ class DailyMailSchedulerTest {
     @Test
     fun `오늘 발송 이력이 없는 사용자에게 메일을 발송하고 로그를 저장한다`() {
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
-        whenever(dailyMailLogPort.findRecentQuestions(any(), any())).thenReturn(emptyList())
+        whenever(dailyMailLogPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
         whenever(techInterviewPort.generateDailyQuestion(any(), any())).thenReturn("오늘의 질문")
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(false)
@@ -82,7 +88,7 @@ class DailyMailSchedulerTest {
     @Test
     fun `질문 뱅크에 미사용 질문이 있으면 뱅크 질문을 사용하고 AI 호출을 하지 않는다`() {
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
-        whenever(dailyMailLogPort.findRecentQuestions(any(), any())).thenReturn(emptyList())
+        whenever(dailyMailLogPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(false)
         whenever(techQuestionBankPort.findUnused(any(), anyOrNull()))
@@ -99,7 +105,7 @@ class DailyMailSchedulerTest {
     @Test
     fun `질문 뱅크가 소진되면 AI로 질문을 생성하는 폴백을 사용한다`() {
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
-        whenever(dailyMailLogPort.findRecentQuestions(any(), any())).thenReturn(emptyList())
+        whenever(dailyMailLogPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(false)
         whenever(techQuestionBankPort.findUnused(any(), anyOrNull())).thenReturn(null)
@@ -113,9 +119,30 @@ class DailyMailSchedulerTest {
     }
 
     @Test
+    fun `최근 질문 제외 목록을 20일 전 시각을 기준으로 조회한다`() {
+        whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
+        whenever(dailyMailLogPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
+        whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
+            .thenReturn(false)
+        whenever(techQuestionBankPort.findUnused(any(), anyOrNull()))
+            .thenReturn(TechQuestionBank(category = "java-spring", question = "뱅크 질문"))
+        whenever(mailService.sendDailyTechInterview(any(), any(), any())).thenReturn(true)
+
+        scheduler.sendDailyTechInterviewMail()
+
+        val mailTypeCaptor = argumentCaptor<String>()
+        val sinceCaptor = argumentCaptor<LocalDateTime>()
+        verify(dailyMailLogPort).findQuestionsSince(mailTypeCaptor.capture(), sinceCaptor.capture())
+        assertThat(mailTypeCaptor.firstValue).isEqualTo("TECH_INTERVIEW")
+
+        val expectedSince = LocalDateTime.now(ZoneId.of("Asia/Seoul")).minusDays(20)
+        assertThat(sinceCaptor.firstValue).isCloseTo(expectedSince, within(5, ChronoUnit.SECONDS))
+    }
+
+    @Test
     fun `메일 발송 실패 시 로그 저장도 하지 않는다`() {
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
-        whenever(dailyMailLogPort.findRecentQuestions(any(), any())).thenReturn(emptyList())
+        whenever(dailyMailLogPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
         whenever(techInterviewPort.generateDailyQuestion(any(), any())).thenReturn("오늘의 질문")
         whenever(dailyMailLogPort.existsTodayLog(any(), any(), any<LocalDate>())).thenReturn(false)
         whenever(mailService.sendDailyTechInterview(any(), any(), any()))
