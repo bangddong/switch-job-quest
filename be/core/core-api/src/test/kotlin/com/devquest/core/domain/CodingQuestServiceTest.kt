@@ -27,6 +27,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
+import tools.jackson.databind.ObjectMapper
 
 @ExtendWith(MockitoExtension::class)
 class CodingQuestServiceTest {
@@ -39,6 +40,7 @@ class CodingQuestServiceTest {
     @Mock lateinit var codingHintPort: CodingHintPort
     @Mock lateinit var codingRoadmapProgressPort: CodingRoadmapProgressPort
     @Mock lateinit var codingRankPort: CodingRankPort
+    @Mock lateinit var objectMapper: ObjectMapper
 
     @InjectMocks
     private lateinit var service: CodingQuestService
@@ -154,6 +156,7 @@ class CodingQuestServiceTest {
         whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
         whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(10L)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
         // solveCount 1 → 레벨업 조건 불충족
         whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(1)
 
@@ -168,6 +171,7 @@ class CodingQuestServiceTest {
         whenever(codingProblemPort.findById(1L)).thenReturn(sampleProblem)
         whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "wrong", status = "Wrong Answer", passed = false))
         whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(11L)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
 
         val result = service.submitCode("user1", 1L, "JAVA", "class Main {}")
 
@@ -347,6 +351,7 @@ class CodingQuestServiceTest {
         whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
         whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(12L)
+        whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
         // solveCount가 2이면 incrementSolveCount 후 3 → 레벨업
         whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(2)
 

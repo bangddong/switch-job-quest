@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | chore/remove-dead-config |
-| 열린 PR | #326 — 죽은 설정 키 제거 (머지 대기) |
+| 브랜치 | refactor/jackson3-cleanup |
+| 열린 PR | #327 — Jackson 2 잔재 제거 (머지 대기) |
 
 > **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
@@ -78,6 +78,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #327 | **core-api 잔여 Jackson 2 제거 (refactor, 동작 무변경).** `CodingQuestService`·`TechInterviewRateLimitInterceptor`·`DailyExplainRateLimitInterceptor` 3곳의 인라인 `com.fasterxml.jackson...ObjectMapper()` → Boot4 자동구성 J3(`tools.jackson.databind.ObjectMapper`) **생성자 주입**으로 통일(다른 서비스/어댑터와 동일 방식). 세 곳 다 `writeValueAsString(map)` 단순 직렬화뿐이라 wire JSON 불변(원시값 Map). `grep com.fasterxml.jackson core-api/src/main`=0건. **백로그 "요청마다 ObjectMapper 생성"은 부정확**이었음(전부 lazy/필드=인스턴스당 1회) → 실제 값은 잔재 제거. QA HIGH0·MED0·LOW1(trailing comma, `7d20d0e` fixed). 239 tests 0 failures. **범위 밖(후속): client-ai Evaluator·db-core CodingProblemAdapter는 J2 잔존**(AiHttpClientConfig 주석대로 core-api HTTP 계층만 J3 스코프) | 2026-07-27 |
 | #326 | **죽은 설정 키 제거 (chore, 동작 무변경).** `be/` 소비처 0인 설정 3곳 삭제: `devquest.ai.pass-score`·`interview-questions`(@Value grep 0건) + prod `server.error` 블록(Boot 4는 `spring.web.error`로 이관, `server.error.*`는 무시되고 기본값 `never`로 동작 중이라 현재 값과 동일 → 삭제해도 불변). **`max-retry`는 유지**(AiCallExecutor 소비, Phase 3 전 제거 금지=inprocess 롤백 불변식). `./gradlew build` 239 tests 0 failures. 출처=백로그 #306·#308 QA LOW | 2026-07-27 |
 | #324 | **EKS Stage 1 — 첫 앱 배포 실증 (2026-07-27, ★과금 ~$0.05).** core-api를 EKS에 배포하는 매니페스트(`k8s/base/core-api.yaml`, Deployment+Service ClusterIP) + apply→배포→teardown 왕복. **핵심: ECR→노드 이미지 pull이 imagePullSecret 없이 노드 IAM 역할(`AmazonEC2ContainerRegistryReadOnly`)로 성공**(3.2s, arm64↔Graviton 실측 일치). DB 없이(B안) 진행 → **CrashLoop 3단계 진단**: 부팅 순서상 ①Loki 로깅(`grafanaLokiUrl` 미설정→`URI undefined scheme`) ②JWT_SECRET ③DB(HikariPool) — "Fly secrets가 가려주던 숨은 환경 의존이 플랫폼 이전 시 드러남". 클린 teardown(고아 0·ECR 이미지 생존=#322 결정 작동). **QA가 거짓 자신감 포착**: grep 팁이 실제 인시던트 원인이던 Loki env var를 놓친 것(F-4)을 재실행으로 발견→수정. 퀴즈 1.5/5(재검토 4). ClusterIP 선택=LoadBalancer의 NLB 고아 회피. 선행 #322(ECR 0-bootstrap 편입)·#323(arm64 CI 빌드 워크플로, OIDC 신뢰정책상 PR 컨텍스트 빌드) | 2026-07-27 |
 | #320 | **EKS 과금 안전장치 — dead man's switch (2026-07-25).** "apply하고 destroy 잊고 세션 종료"를 기계로 차단(사용자가 끝 신호 못 줘도 동작). 3조각: `eks-session-marker.sh`(PreToolUse, `tofu apply` 감지→마커) + `eks-heartbeat-reminder.sh`(Stop, 매 턴 하트비트 갱신+경고+자가청소) + `eks-reaper.sh`(launchd 30분, 하트비트 **2h stale**이면 실제 클러스터 확인 후 `tofu destroy`). Claude로 작업 중이면 하트비트 갱신돼 안 죽임, 사라지면 2h 뒤 자동 destroy. **tofu state 존중**(로컬 실행). 한계: macOS 잠들면 미실행(최악 주말 ~$6, $35 예산알람 backstop). 경계 12경우 전수 테스트. **이 맥에 launchd 설치·로드 완료**(새 머신=`install-reaper.sh`, TASKS.md TASK-7). SOP=`docs/eks-session-sop.md`. | 2026-07-25 |
@@ -143,9 +144,8 @@
 - [x] ~~메타스페이스 누수 조사~~ → **2026-07-15 종결. 누수 없음.** 아래 "비자명적 결정" 참조.
       잔여 관찰(선택): 신규 기능으로 클래스가 늘면 작동점 134.6 MiB가 올라간다. 160 MiB 여유는
       25.4 MiB(16%)뿐이므로 **대형 의존성 추가 시 Grafana로 작동점 재확인**할 것.
-- [ ] tech-debt(LOW, BE): `DailyExplainRateLimitInterceptor`·`TechInterviewRateLimitInterceptor`가
-      **요청마다 `ObjectMapper()` 신규 생성** (07-15 조사 중 발견). 메타스페이스와 무관하나 힙·CPU 낭비 →
-      싱글턴 주입으로 교체
+- [x] ~~tech-debt(LOW, BE): 인터셉터 2건 `ObjectMapper()` 신규 생성~~ → **2026-07-27 해결(#327).**
+      원 관찰("요청마다 생성")은 부정확했음 — 실제로는 `by lazy`라 인스턴스당 1회였다. J3 생성자 주입으로 통일.
 - [ ] 에이전트 Disambiguation Gate / Closing Summary 미비점 보완 (Gate 횟수 상한, 트리거 기준 명시 — 실사용 경험 더 쌓은 뒤 결정)
 - [ ] **#255 후속**: 다음 기능 작업에서 Blindspot Pass 실효성 확인 (Deviations→QA 집중검토 흐름은
       #259에서 1차 동작 확인. template 동기화는 07-10 완료 — orchestrator·clarify·quiz + 훅 스크립트 3종)
@@ -167,10 +167,10 @@
       블록째 제거. Boot 4는 `spring.web.error.*`라 무시되던 죽은 키(값도 기본값 `never`와 동일해 동작 불변).
 - [x] ~~**tech-debt(LOW): 죽은 설정 2건** — `devquest.ai.pass-score`·`interview-questions`~~ → **2026-07-27 해결(#326).**
       소비처 0건 확인 후 제거. `max-retry`는 살아있어 유지(AiCallExecutor 소비).
-- [ ] **tech-debt(LOW): Jackson 2 잔재** — `CodingQuestService`(`ObjectMapper()` 직접 생성)·
-      `TechInterviewRateLimitInterceptor`·`DailyExplainRateLimitInterceptor`가 여전히 Jackson 2 사용.
-      AI HTTP 경로는 J3로 통일됐으나(#308) 코드베이스 전체는 혼재. **위 인터셉터 2건은 요청마다
-      `ObjectMapper()`를 새로 만드는 기존 tech-debt와 동일 대상** — 함께 정리하면 효율적.
+- [ ] **tech-debt(LOW): Jackson 2 잔재 — client-ai·db-core 잔여분** (#327에서 core-api 3곳은 J3 통일 완료).
+      아직 J2 사용: `client-ai`의 Evaluator들(`MockInterviewEvaluator`·`CompanyFitEvaluator`·`BaseAiEvaluator` 등
+      `jacksonObjectMapper()`/`registerKotlinModule()`) + `db-core`의 `CodingProblemAdapter`. `AiHttpClientConfig`
+      주석대로 지금까지 "core-api HTTP 계층만 J3" 스코프였다. 코드베이스 전체 J3 통일하려면 이 잔여분 정리 필요.
 - [x] ~~**tech-debt(LOW): `be/gradlew` 실행 권한 없음(mode 100644)**~~ → **2026-07-22 해결.**
       `git update-index --chmod=+x be/gradlew`로 100755 커밋. 이제 clone 직후 `./gradlew` 바로 실행 가능
       (에이전트마다 chmod 우회하던 낭비 제거 — Phase 0 회고 Try ④).
