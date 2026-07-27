@@ -1,0 +1,95 @@
+name: ECR Push
+
+# 앱 컨테이너 이미지를 빌드해 ECR에 푸시한다 (EKS Stage 1+ 배포용).
+#
+# 왜 CI에서 빌드하나: 로컬 머신에서 prod 이미지를 만들면 "그 사람 노트북 상태"가 이미지에 섞인다.
+#   CI는 매번 동일한 깨끗한 환경 + 감사 로그(누가/언제/어떤 커밋)가 남는다 = 실무 표준.
+#
+# 태깅 전략: <git-sha>(불변 식별자) + latest(편의용 별칭).
+#   배포 매니페스트는 **항상 sha 태그**를 쓴다. latest로 배포하면 "지금 뭐가 도는지" 알 수 없고
+#   롤백도 불가능해진다(ECR이 이전 latest를 기억하지 않음).
+#
+# 수동 실행 전용(workflow_dispatch): EKS는 destroy-after-use라 클러스터가 없는 동안
+#   자동 푸시는 낭비다. 실습 세션을 시작할 때 필요한 이미지만 만든다.
+
+# ⚠️ GitHub 제약: workflow_dispatch는 **기본 브랜치(main)에 이 파일이 있을 때만** 실행 가능하다
+#    (--ref로 브랜치를 줘도 워크플로 "정의"는 main에서 찾는다 → main에 없으면 HTTP 404).
+#    그래서 학습 브랜치(stage/eks-**)에서는 push 트리거로 동작시킨다. main 머지 후에는
+#    workflow_dispatch로 원하는 서비스를 골라 수동 실행하면 된다.
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "빌드할 서비스"
+        required: true
+        default: core-api
+        type: choice
+        options: [core-api, ai-api]
+  # PR 컨텍스트에서도 빌드한다. 이유는 편의가 아니라 **보안 경계** 때문:
+  #   OIDC 역할의 신뢰정책(0-bootstrap/iam-github-oidc.tf)은 sub이
+  #   `refs/heads/main` 또는 `pull_request`인 토큰만 허용한다. 임의 브랜치 push는 거부된다
+  #   (실측: stage/eks-1-ecr push → "Not authorized to perform sts:AssumeRoleWithWebIdentity").
+  #   역할이 AdministratorAccess를 갖고 있으므로 이 제한을 푸는 대신 PR에서 빌드하는 게 옳다.
+  #   (더 정석: ECR 전용 최소권한 역할을 따로 만들어 브랜치를 넓히기 — Stage 2 주제)
+  pull_request:
+    paths:
+      - "be/**"
+      - ".github/workflows/ecr-push.yml"
+
+concurrency:
+  group: ecr-push-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC로 AWS 역할 assume
+  contents: read
+
+# push 트리거에는 inputs가 없으므로 core-api로 폴백한다(|| 는 falsy일 때 우변 사용).
+env:
+  AWS_REGION: ap-northeast-2
+  SERVICE: ${{ github.event.inputs.service || 'core-api' }}
+
+jobs:
+  build-push:
+    name: Build & Push (${{ github.event.inputs.service || 'core-api' }})
+    # EKS 노드가 arm64(Graviton, AL2023_ARM_64_STANDARD)라 arm64 러너에서 네이티브 빌드한다.
+    # x86 러너 + QEMU 에뮬레이션은 Gradle/JVM 빌드에서 몇 배 느려진다.
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 이미지 빌드 & 푸시
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE="$REGISTRY/devquest/$SERVICE"
+          docker build \
+            --build-arg SERVICE="$SERVICE" \
+            -t "$IMAGE:$SHA" \
+            -t "$IMAGE:latest" \
+            -f be/Dockerfile be
+          docker push "$IMAGE:$SHA"
+          docker push "$IMAGE:latest"
+          echo "IMAGE_URI=$IMAGE:$SHA" >> "$GITHUB_ENV"
+
+      - name: 배포용 이미지 주소 출력
+        run: |
+          {
+            echo "### 푸시 완료 :ship:"
+            echo ""
+            echo '`'"$IMAGE_URI"'`'
+            echo ""
+            echo "K8s 매니페스트의 \`image:\` 값으로 이 **sha 태그**를 쓰세요 (latest 금지)."
+          } >> "$GITHUB_STEP_SUMMARY"

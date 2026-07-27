@@ -1,5 +1,10 @@
+# 빌드할 서비스 모듈 — 기본 core-api (Fly 배포는 인자 없이 이 기본값을 쓴다).
+# EKS/ECR 빌드는 --build-arg SERVICE=ai-api 처럼 지정해 같은 Dockerfile을 재사용한다.
+ARG SERVICE=core-api
+
 # Stage 1: Build
 FROM eclipse-temurin:21-jdk AS builder
+ARG SERVICE
 WORKDIR /app
 
 COPY gradle gradle
@@ -11,13 +16,21 @@ COPY support support
 COPY tests tests
 
 RUN chmod +x gradlew && \
-    ./gradlew :core:core-api:bootJar --no-daemon -x test
+    ./gradlew :core:${SERVICE}:bootJar --no-daemon -x test
+
+# 산출 jar를 서비스와 무관한 고정 위치로 정규화 (다음 스테이지에서 ARG 없이 COPY하기 위함).
+# ⚠️ `*.jar` 글롭 금지: ai-api는 plain jar도 켜져 있어(parity 테스트가 요구) 산출물이 2개다
+#    (ai-api-x.jar + ai-api-x-plain.jar). 실행 가능한 bootJar만 집어야 하므로 `-plain` 제외.
+RUN set -eu; \
+    jar="$(find /app/core/${SERVICE}/build/libs -maxdepth 1 -name '*.jar' ! -name '*-plain.jar')"; \
+    [ "$(printf '%s\n' "$jar" | wc -l)" -eq 1 ] || { echo "bootJar 특정 실패: $jar"; exit 1; }; \
+    cp "$jar" /app/app.jar
 
 # Stage 2: Run
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-COPY --from=builder /app/core/core-api/build/libs/*.jar app.jar
+COPY --from=builder /app/app.jar app.jar
 
 EXPOSE 8080
 
