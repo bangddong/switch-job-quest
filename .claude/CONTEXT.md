@@ -7,12 +7,12 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#326~#329 tech-debt 정리 머지 완료) |
+| 브랜치 | chore/fe-vitest |
+| 열린 PR | #331 — FE 테스트 러너(vitest) 도입 (머지 대기) |
 
 > **🧹 tech-debt 정리 세션 완료 (07-27)**: #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트)
-> · #329 FE(CompanyCard 가드·extractPdfText). **be/ 소스 Jackson 2 잔재 0건.** 남은 결정필요 항목(정리 아님):
-> ①FE 테스트 러너(vitest) 도입 — #329에서 순수함수 단위테스트 못 붙인 게 실제 갭으로 드러남
+> · #329 FE(CompanyCard 가드·extractPdfText) · **#331 FE 테스트 러너(vitest) 도입 + CI 게이트**. **be/ 소스 Jackson 2 잔재 0건.**
+> 남은 결정필요 항목(정리 아님): ~~①FE 테스트 러너~~ **→ #331 완료**
 > ②질문뱅크 category 활성화(제품 결정) ③질문뱅크 ORDER BY RANDOM(@DataJpaTest 선행) ④원장 L-8(전역 J2 kotlin 모듈, blast radius).
 >
 > **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
@@ -83,6 +83,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #331 | **FE 테스트 러너(vitest) 도입 + CI 테스트 게이트 (chore).** #329에서 순수함수 단위테스트를 못 붙인 갭 해소. Vite 6 스택 재사용 → vitest ^3.2.7, 대상이 전부 순수함수라 `environment: 'node'`(jsdom·@testing-library 미도입, 컴포넌트 테스트는 범위 밖). `vite.config.ts`에 `test` 필드 병합(별도 config 안 만듦), 글로벌 대신 명시 import. `extractPdfText.ts` 순수함수 4개 **단위테스트 18개**: normalizeExtractedText(CRLF/lone CR·공백/빈줄 병합·trim·idempotent) 7 + truncateExtractedText(50000 경계) 3 + validatePdfFile 5 + PdfExtractError(cause 보존) 3. `test:"vitest run"`. **QA F-1(MED)=fixed**: fe-ci.yml에 `npm test` 게이트 없어 로컬만 초록불이던 것 → Lint·Build 사이 Test 스텝 추가(의도적 실패로 non-zero exit 게이트 동작 검증). QA 실측: 테스트가 실제 소스 import(tautology 아님)·전 케이스 정규식 순서와 일치. tsc0·build·lint(무관 warn 1)·18 passed. | 2026-07-27 |
 | #329 | **FE tech-debt 정리 (fix).** ①CompanyCard 연타 중복요청 가드(#259): `deleting`·`changingStatus` state + `busy` 확장으로 삭제·상태변경 중복 발사 방지(finally로 항상 복구). ②extractPdfText(#261): `doc.destroy()`가 원 예외 덮던 것→자체 try/catch+`console.warn`, `normalizeExtractedText`에 `\r\n?`→`\n` 선정규화(CRLF/lone CR), 실패 단계 3분(모듈로딩/파싱/페이지추출)을 각각 `PdfExtractError` 사용자 메시지로 구분. QA HIGH0·MED0·LOW4 전부 fixed(2건 초기+2건 재검토 발견). tsc0·build·eslint 통과. ⚠️ **FE 테스트 러너 부재로 단위 커버 없음**(알려진 갭). | 2026-07-27 |
 | #328 | **db-core 마지막 Jackson 2 잔재 제거 (refactor, 동작 무변경).** `CodingProblemAdapter`를 J3로: `build.gradle.kts` J2 kotlin 모듈→`tools.jackson.module`, 코드는 `jacksonObjectMapper()`+reified `readValue<List<TestCase>>()`. **QA 실측: J2 저장 JSON→J3 역직렬화→재직렬화 bit-identical 증명.** 회귀 가드 신설 `CodingProblemAdapterTest` 3케이스(레거시 J2 JSON 고정 문자열 파싱 포함, QA F-1 fixed). db-core 24 tests. **정정: client-ai evaluator들은 원래 J3였음**(#327 노트 오류) — be/ 소스 J2 잔재 이제 0건. QA F-2(전역 J2 kotlin 모듈 dead weight)=deferred→원장 L-8. | 2026-07-27 |
 | #327 | **core-api 잔여 Jackson 2 제거 (refactor, 동작 무변경).** `CodingQuestService`·`TechInterviewRateLimitInterceptor`·`DailyExplainRateLimitInterceptor` 3곳의 인라인 `com.fasterxml.jackson...ObjectMapper()` → Boot4 자동구성 J3(`tools.jackson.databind.ObjectMapper`) **생성자 주입**으로 통일(다른 서비스/어댑터와 동일 방식). 세 곳 다 `writeValueAsString(map)` 단순 직렬화뿐이라 wire JSON 불변(원시값 Map). `grep com.fasterxml.jackson core-api/src/main`=0건. **백로그 "요청마다 ObjectMapper 생성"은 부정확**이었음(전부 lazy/필드=인스턴스당 1회) → 실제 값은 잔재 제거. QA HIGH0·MED0·LOW1(trailing comma, `7d20d0e` fixed). 239 tests 0 failures. **범위 밖(후속): client-ai Evaluator·db-core CodingProblemAdapter는 J2 잔존**(AiHttpClientConfig 주석대로 core-api HTTP 계층만 J3 스코프) | 2026-07-27 |
@@ -137,8 +138,10 @@
 - [ ] **Phase 4 후보 (실사용 후 판단)**: 면접 회고 메모(activity NOTE 타입), 같은 회사 카드
       그룹핑 뷰, JD 등록/수정 모달(현재 AddCompanyModal에서만 입력 가능), Phase 3c(JD URL 파싱)
 - [x] ~~tech-debt(LOW): CompanyCard busy 플래그(#259) + extractPdfText LOW 3건(#261)~~ → **2026-07-27 해결(#329).**
-- [ ] **결정 필요(정리 아님): FE 테스트 러너 미도입** (vitest 등). #329에서 `\r` 정규화·PdfExtractError 분기 등
-      순수 함수 로직에 단위 테스트를 못 붙인 게 실제 갭으로 드러남. 인프라 도입 여부 판단 필요(도입 시 별도 chore).
+- [x] ~~**결정 필요: FE 테스트 러너 미도입** (vitest 등)~~ → **2026-07-27 해결(#331).** vitest ^3.2.7 도입
+      (Vite 6 스택 재사용, environment=node), extractPdfText 순수함수 4개 단위테스트 18개 + fe-ci.yml에
+      `npm test` 게이트 추가. **다음 FE 순수함수/유틸은 이 패턴으로 `*.test.ts` 붙일 것**(컴포넌트 테스트는
+      jsdom+@testing-library 필요 = 아직 미도입, 필요해지면 그때 별도 chore).
 - [ ] **#261 후속**: 배포 후 실제 PDF 이력서로 추출 품질 확인(줄바꿈·표 레이아웃 깨짐 정도).
       BE 파싱(PDFBox) 구현은 로컬 `backup/be-pdf-parse` 브랜치 보존 — 스케일업 결정 시 재활용
 - [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
