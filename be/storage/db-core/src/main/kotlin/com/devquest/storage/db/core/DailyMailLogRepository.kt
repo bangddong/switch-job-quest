@@ -14,8 +14,17 @@ interface DailyMailLogRepository : JpaRepository<DailyMailLogEntity, Long> {
         end: LocalDateTime,
     ): Boolean
 
-    @Query("SELECT d.questionContent FROM DailyMailLogEntity d WHERE d.mailType = :mailType ORDER BY d.sentAt DESC")
-    fun findRecentQuestionContents(mailType: String, pageable: Pageable): List<String>
+    @Query(
+        """
+        SELECT d.questionContent FROM DailyMailLogEntity d
+        WHERE d.mailType = :mailType AND d.sentAt >= :since
+        ORDER BY d.sentAt DESC
+        """
+    )
+    fun findQuestionContentsSince(
+        @Param("mailType") mailType: String,
+        @Param("since") since: LocalDateTime,
+    ): List<String>
 
     @Query("""
         SELECT d.questionContent FROM DailyMailLogEntity d
