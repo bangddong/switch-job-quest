@@ -8,21 +8,21 @@
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#320 EKS 과금 안전장치 머지 완료) |
+| 열린 PR | 없음 (#324 EKS Stage 1 머지 완료) |
 
-> **🌙 다음 세션 시작점 (07-24 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
+> **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
 >   24개를 REST로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
-> - **EKS 트랙**: #314(capacity_type ON_DEMAND) → **Task 8 apply 왕복 실증 완료(07-24, #316).**
->   2-cluster IaC가 뜬다-부순다 왕복 동작 확인. kubectl 설치됨. 크레딧 $199.81(만료 2027-01-15).
->   → **#318: 학습 퀴즈 게이트** (`stage/eks-*` 브랜치 = 구축 후 퀴즈 필수, `assert-eks-quiz.sh`가 PR 차단).
->   → **#320: 과금 안전장치(dead man's switch).** `tofu apply` 시 세션 마커, 매 턴 하트비트 갱신,
->   **하트비트 2h stale이면 launchd 리퍼가 자동 `tofu destroy`**(끝 신호 못 줘도 과금 종료). 이 맥에 설치됨.
->   **실습 프로세스 단일 출처 = `docs/eks-session-sop.md`(apply 전 필독).**
+> - **EKS 트랙**: Task 8 왕복 실증(#316) → #318 퀴즈 게이트 · #320 과금 안전장치(dead man's switch,
+>   하트비트 2h stale→launchd 리퍼 자동 `tofu destroy`, 이 맥에 설치됨) · #322 ECR 0-bootstrap 편입 ·
+>   #323 ECR push 워크플로 · **#324 Stage 1 완료 — core-api가 EKS에서 실제로 떴다**(ECR→노드 pull 성공,
+>   imagePullSecret 없이 노드 IAM·arm64, CrashLoop 3단계 Loki→JWT→DB, 클린 teardown 고아 0·ECR 생존).
+>   크레딧 ~$199.8(만료 2027-01-15). 실습 SOP 단일 출처 = `docs/eks-session-sop.md`(apply 전 필독).
 > **다음 = 택1:**
-> - **① EKS Stage 1 (ECR + 앱 배포)** — ⚠️ 브랜치를 **`stage/eks-1-ecr`** 로 만들 것(퀴즈 게이트 발동).
->   **apply 전 `docs/eks-session-sop.md` 체크리스트 따를 것.** 선행: **ECR을 `0-bootstrap`에 편입**(`.tf` 0건, +lifecycle).
->   Stage 1부터 ALB/PVC 생기면 destroy 전 `kubectl delete ingress,pvc --all -A` 필수. (아래 EKS 섹션 상세)
+> - **① EKS Stage 2 (IRSA + External Secrets)** — Stage 1에서 미룬 **DB 연결을 정식으로**. 브랜치 `stage/eks-2-*`(퀴즈 게이트).
+>   IRSA(파드별 IAM)로 앱이 Secrets Manager 조회 또는 External Secrets Operator + securityContext 하드닝.
+>   ⚠️ Stage 1에서 **prod Neon에 학습 클러스터 연결 금지** 확정 → **학습용 DB**(Neon 새 브랜치/DB) 별도 필요.
+>   Stage 3부터 ALB/PVC 생기면 destroy 전 `kubectl delete ingress,pvc --all -A` 필수. (아래 EKS 섹션 상세)
 > - **② Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`.
 >   ⚠️ **착수 전 반드시**: ai-api를 **실제 네트워크에 처음 올리는 시점**이므로 `/internal/ai/**` **무인증**
 >   문제를 먼저 해결할 것(현재는 Fly가 core-api만 배포해서 노출 안 됨). `include-message: always`도 켜져 있다.
@@ -60,8 +60,9 @@
 > (EBS·SG·LB·NAT 전수 확인). **2-cluster IaC가 실제로 동작함이 검증됨.** 비용 **~$0.1 이하**(벽시계 ~50분,
 > 컨트롤플레인 40분×$0.10). **현재 AWS에 아무것도 안 떠 있음 = 비용 $0, 크레딧 $199.81 유지.**
 > teardown 명령·개념은 `docs/eks-tutorial-steps.md` Step 8(검증된 정답 경로), 실측은 `docs/eks-migration-log.md`.
-> - **➡️ 다음: Stage 1 = ECR + 앱 배포.** ⚠️ **선행: ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건 — 계획은
->   2-cluster 소속이라 destroy마다 이미지 전멸). Stage 1부터 ALB/PVC 생기면 **destroy 전 `kubectl delete
+> - **✅ Stage 1 완료(#324, 07-27)**: ECR 편입(#322)·CI 빌드(#323)·core-api 배포 실증. ECR→노드 pull 성공.
+>   **➡️ 다음: Stage 2 = IRSA + External Secrets**(Stage 1에서 미룬 DB 연결 정식화 + securityContext 하드닝).
+>   ⚠️ **학습용 DB 별도 필요**(prod Neon 연결 금지 확정). Stage 3부터 ALB/PVC 생기면 **destroy 전 `kubectl delete
 >   ingress,pvc --all -A` 필수**(K8s 생성 AWS 리소스는 tofu state 밖 = 고아 과금).
 > - kubectl 이 머신에 설치 완료(`brew install kubectl` v1.36.3, 07-24).
 > - K8s 1.36 핀 유효 재확인(07-24 실측: 표준지원 종료 27-08-02, 1.33은 07-29 종료).
@@ -77,6 +78,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #324 | **EKS Stage 1 — 첫 앱 배포 실증 (2026-07-27, ★과금 ~$0.05).** core-api를 EKS에 배포하는 매니페스트(`k8s/base/core-api.yaml`, Deployment+Service ClusterIP) + apply→배포→teardown 왕복. **핵심: ECR→노드 이미지 pull이 imagePullSecret 없이 노드 IAM 역할(`AmazonEC2ContainerRegistryReadOnly`)로 성공**(3.2s, arm64↔Graviton 실측 일치). DB 없이(B안) 진행 → **CrashLoop 3단계 진단**: 부팅 순서상 ①Loki 로깅(`grafanaLokiUrl` 미설정→`URI undefined scheme`) ②JWT_SECRET ③DB(HikariPool) — "Fly secrets가 가려주던 숨은 환경 의존이 플랫폼 이전 시 드러남". 클린 teardown(고아 0·ECR 이미지 생존=#322 결정 작동). **QA가 거짓 자신감 포착**: grep 팁이 실제 인시던트 원인이던 Loki env var를 놓친 것(F-4)을 재실행으로 발견→수정. 퀴즈 1.5/5(재검토 4). ClusterIP 선택=LoadBalancer의 NLB 고아 회피. 선행 #322(ECR 0-bootstrap 편입)·#323(arm64 CI 빌드 워크플로, OIDC 신뢰정책상 PR 컨텍스트 빌드) | 2026-07-27 |
 | #320 | **EKS 과금 안전장치 — dead man's switch (2026-07-25).** "apply하고 destroy 잊고 세션 종료"를 기계로 차단(사용자가 끝 신호 못 줘도 동작). 3조각: `eks-session-marker.sh`(PreToolUse, `tofu apply` 감지→마커) + `eks-heartbeat-reminder.sh`(Stop, 매 턴 하트비트 갱신+경고+자가청소) + `eks-reaper.sh`(launchd 30분, 하트비트 **2h stale**이면 실제 클러스터 확인 후 `tofu destroy`). Claude로 작업 중이면 하트비트 갱신돼 안 죽임, 사라지면 2h 뒤 자동 destroy. **tofu state 존중**(로컬 실행). 한계: macOS 잠들면 미실행(최악 주말 ~$6, $35 예산알람 backstop). 경계 12경우 전수 테스트. **이 맥에 launchd 설치·로드 완료**(새 머신=`install-reaper.sh`, TASKS.md TASK-7). SOP=`docs/eks-session-sop.md`. | 2026-07-25 |
 | #318 | **EKS 학습 퀴즈 게이트 — 이해 검증 기계 강제 (2026-07-24).** Task 8에서 CLAUDE.md "학습 설명 의무"(prose)가 momentum에 밀려 실제 누락된 것을 교정. QA 루프(`assert-qa-run.sh`)와 동일 철학으로 **구축 후 이해도 퀴즈를 훅으로 강제**. `assert-eks-quiz.sh`: `stage/eks-*` 브랜치 `gh pr create` 시 `docs/eks-quizzes/<br>.md` + `<!-- QUIZ-PASSED -->` 마커 없으면 차단(5경우 전수 테스트). `quiz.md`에 "EKS 학습 마일스톤 모드"(실측 로그 기반 문제·기록·마커), orchestrator 9.5단계 필수화, CLAUDE.md 브랜치 규칙에 `stage/eks-*` 추가. **첫 적용=Stage 1부터.** 리허설(Task 8 내용 5문제) 2/5 — 게이트 효용 실증(구축됐지만 이해 구멍 드러남). | 2026-07-24 |
 | Task 8 (문서 PR) | **★ EKS 첫 과금 왕복 실증 (2026-07-24).** `tofu apply`(14 added, ~10분) → `kubectl get nodes` **노드 Ready**(v1.36.2·arm64 Graviton·공인IP·NAT 회피 확인) → `tofu destroy`(14 destroyed) → **teardown 전수검증 고아 0**(state·EBS·SG·LB·NAT 전부 없음). **2-cluster IaC가 실제로 뜬다-부순다 왕복 동작함을 실증.** 비용 **~$0.1 이하**(벽시계 ~50분, 컨트롤플레인 40분×$0.10). 사전점검서 kubectl 미설치 발견→`brew install`(v1.36.3). K8s 1.36 표준지원 재확인. #314의 ON_DEMAND 노드 정상 프로비저닝. 문서: `eks-migration-log.md` 실측 + `eks-tutorial-steps.md` Step 8 정답경로. **다음=Stage 1(ECR 편입 후 앱 배포).** | 2026-07-24 |
@@ -388,9 +390,11 @@ Grafana Cloud push → **인프라 컴포넌트도 영속 볼륨을 요구하지
     `destroy`(14 destroyed) → **teardown 전수검증 고아 0**(state 비움·EBS·SG·LB·NAT 없음). **비용 ~$0.1 이하**
     (벽시계 ~50분). **2-cluster IaC 동작 실증 완료.** 검증 명령·개념 = `docs/eks-tutorial-steps.md` Step 8.
     kubectl 설치(v1.36.3). 노드그룹 ON_DEMAND(#314) 정상 프로비저닝 확인.
-  - **➡️ 다음: Stage 1 = ECR + 앱 배포.** ⚠️ **선행: ECR을 `0-bootstrap`에 편입**(현재 `.tf` 0건, +lifecycle
-    policy). Stage 1부터 ALB Ingress·EBS PVC 생기면 **destroy 전 `kubectl delete ingress,pvc --all -A` 필수**
-    (K8s 생성 AWS 리소스는 tofu state 밖 = 고아 과금 위험). 그 다음 Stage 2(IRSA)·3(EBS CSI+StatefulSet, in-cluster Postgres)·4(ALB)·5(ArgoCD).
+  - **✅ Stage 1 완료 (#324, 07-27):** ECR 0-bootstrap 편입(#322) + arm64 CI 빌드(#323) + core-api 배포.
+    ECR→노드 이미지 pull 성공(노드 IAM, imagePullSecret 없이). DB 없이 CrashLoop 3단계 진단(Loki→JWT→DB).
+    매니페스트 `k8s/base/core-api.yaml`(ClusterIP). teardown 고아 0·ECR 생존. ~$0.05.
+  - **➡️ 다음: Stage 2 = IRSA + External Secrets** (DB 연결 정식화 + securityContext 하드닝).
+    ⚠️ **학습용 DB 별도 필요**(prod Neon 연결 금지). 그 다음 Stage 3(EBS CSI+StatefulSet, in-cluster Postgres — 여기서 ALB/PVC 고아 규율 첫 적용)·4(ALB Ingress)·5(ArgoCD).
   - CI 관리 레이어 현재: `infra-deploy.yml` matrix `[0-bootstrap, 1-network]` (2-cluster는 로컬 전용이라 의도적 제외).
   - IaC-first라 **캡처 필요량 급감** — 단계가 코드+CLI 텍스트. 잔여는 서사/증빙 소수.
 - **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에
