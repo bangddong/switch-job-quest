@@ -510,12 +510,14 @@ export function CompanyCard({
   const [checkingResume, setCheckingResume] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [changingStatus, setChangingStatus] = useState(false)
 
   const [activitiesExpanded, setActivitiesExpanded] = useState(false)
   const [activities, setActivities] = useState<CompanyActivity[] | null>(null)
   const [activitiesLoading, setActivitiesLoading] = useState(false)
 
-  const busy = analyzing || checkingResume
+  const busy = analyzing || checkingResume || deleting || changingStatus
 
   const loadActivities = async () => {
     setActivitiesLoading(true)
@@ -600,6 +602,8 @@ export function CompanyCard({
   }
 
   const handleStatusChange = async (status: ApplicationStatus) => {
+    if (changingStatus) return
+    setChangingStatus(true)
     setActionError(null)
     try {
       await onStatusChange(company.id, status)
@@ -608,15 +612,21 @@ export function CompanyCard({
       // select는 company.status(상위 상태)로 다시 렌더링되어 실패 시 자동으로 이전 값으로 되돌아간다.
       // 사용자에게는 아래 actionError 배너로 실패 사실만 안내한다.
       setActionError('상태 변경에 실패했습니다. 다시 시도해주세요.')
+    } finally {
+      setChangingStatus(false)
     }
   }
 
   const handleDelete = async () => {
+    if (deleting) return
+    setDeleting(true)
     setActionError(null)
     try {
       await onDelete(company.id)
     } catch {
       setActionError('삭제에 실패했습니다. 다시 시도해주세요.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -849,7 +859,7 @@ export function CompanyCard({
             fontFamily: "'Courier New', monospace",
           }}
         >
-          삭제
+          {deleting ? '삭제 중...' : '삭제'}
         </button>
       </div>
 

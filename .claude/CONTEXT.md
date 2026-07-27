@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | refactor/jackson3-db-core |
-| 열린 PR | #328 — db-core Jackson 3 통일 (머지 대기) |
+| 브랜치 | fix/fe-tech-debt |
+| 열린 PR | #329 — FE tech-debt (머지 대기) |
 
 > **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
@@ -78,6 +78,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #329 | **FE tech-debt 정리 (fix).** ①CompanyCard 연타 중복요청 가드(#259): `deleting`·`changingStatus` state + `busy` 확장으로 삭제·상태변경 중복 발사 방지(finally로 항상 복구). ②extractPdfText(#261): `doc.destroy()`가 원 예외 덮던 것→자체 try/catch+`console.warn`, `normalizeExtractedText`에 `\r\n?`→`\n` 선정규화(CRLF/lone CR), 실패 단계 3분(모듈로딩/파싱/페이지추출)을 각각 `PdfExtractError` 사용자 메시지로 구분. QA HIGH0·MED0·LOW4 전부 fixed(2건 초기+2건 재검토 발견). tsc0·build·eslint 통과. ⚠️ **FE 테스트 러너 부재로 단위 커버 없음**(알려진 갭). | 2026-07-27 |
 | #328 | **db-core 마지막 Jackson 2 잔재 제거 (refactor, 동작 무변경).** `CodingProblemAdapter`를 J3로: `build.gradle.kts` J2 kotlin 모듈→`tools.jackson.module`, 코드는 `jacksonObjectMapper()`+reified `readValue<List<TestCase>>()`. **QA 실측: J2 저장 JSON→J3 역직렬화→재직렬화 bit-identical 증명.** 회귀 가드 신설 `CodingProblemAdapterTest` 3케이스(레거시 J2 JSON 고정 문자열 파싱 포함, QA F-1 fixed). db-core 24 tests. **정정: client-ai evaluator들은 원래 J3였음**(#327 노트 오류) — be/ 소스 J2 잔재 이제 0건. QA F-2(전역 J2 kotlin 모듈 dead weight)=deferred→원장 L-8. | 2026-07-27 |
 | #327 | **core-api 잔여 Jackson 2 제거 (refactor, 동작 무변경).** `CodingQuestService`·`TechInterviewRateLimitInterceptor`·`DailyExplainRateLimitInterceptor` 3곳의 인라인 `com.fasterxml.jackson...ObjectMapper()` → Boot4 자동구성 J3(`tools.jackson.databind.ObjectMapper`) **생성자 주입**으로 통일(다른 서비스/어댑터와 동일 방식). 세 곳 다 `writeValueAsString(map)` 단순 직렬화뿐이라 wire JSON 불변(원시값 Map). `grep com.fasterxml.jackson core-api/src/main`=0건. **백로그 "요청마다 ObjectMapper 생성"은 부정확**이었음(전부 lazy/필드=인스턴스당 1회) → 실제 값은 잔재 제거. QA HIGH0·MED0·LOW1(trailing comma, `7d20d0e` fixed). 239 tests 0 failures. **범위 밖(후속): client-ai Evaluator·db-core CodingProblemAdapter는 J2 잔존**(AiHttpClientConfig 주석대로 core-api HTTP 계층만 J3 스코프) | 2026-07-27 |
 | #326 | **죽은 설정 키 제거 (chore, 동작 무변경).** `be/` 소비처 0인 설정 3곳 삭제: `devquest.ai.pass-score`·`interview-questions`(@Value grep 0건) + prod `server.error` 블록(Boot 4는 `spring.web.error`로 이관, `server.error.*`는 무시되고 기본값 `never`로 동작 중이라 현재 값과 동일 → 삭제해도 불변). **`max-retry`는 유지**(AiCallExecutor 소비, Phase 3 전 제거 금지=inprocess 롤백 불변식). `./gradlew build` 239 tests 0 failures. 출처=백로그 #306·#308 QA LOW | 2026-07-27 |
@@ -130,10 +131,9 @@
       prod 테스트 완료) ② 테스트 데이터 정리 — 회사 "테스트-토스" 삭제, 임시 이력서를 실제로 교체
 - [ ] **Phase 4 후보 (실사용 후 판단)**: 면접 회고 메모(activity NOTE 타입), 같은 회사 카드
       그룹핑 뷰, JD 등록/수정 모달(현재 AddCompanyModal에서만 입력 가능), Phase 3c(JD URL 파싱)
-- [ ] tech-debt(LOW): CompanyCard 삭제/상태변경 진행 중 busy 플래그(연타 중복 요청 가드, #259 QA LOW),
-      FE 테스트 러너 미도입(vitest 등 — 인프라 도입 여부 별도 결정 필요, #259에서 확인),
-      extractPdfText LOW 3건(#261 QA — destroy 실패 시 원 예외 덮어쓰기, `\r` 정규식 엣지,
-      pdfjs 로딩/파싱 실패 메시지 미구분)
+- [x] ~~tech-debt(LOW): CompanyCard busy 플래그(#259) + extractPdfText LOW 3건(#261)~~ → **2026-07-27 해결(#329).**
+- [ ] **결정 필요(정리 아님): FE 테스트 러너 미도입** (vitest 등). #329에서 `\r` 정규화·PdfExtractError 분기 등
+      순수 함수 로직에 단위 테스트를 못 붙인 게 실제 갭으로 드러남. 인프라 도입 여부 판단 필요(도입 시 별도 chore).
 - [ ] **#261 후속**: 배포 후 실제 PDF 이력서로 추출 품질 확인(줄바꿈·표 레이아웃 깨짐 정도).
       BE 파싱(PDFBox) 구현은 로컬 `backup/be-pdf-parse` 브랜치 보존 — 스케일업 결정 시 재활용
 - [ ] Phase 3a MEDIUM 보류: UserResumeAdapter upsert read-then-write 경합 — 다중 기기 동시
