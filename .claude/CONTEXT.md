@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | refactor/jackson3-cleanup |
-| 열린 PR | #327 — Jackson 2 잔재 제거 (머지 대기) |
+| 브랜치 | refactor/jackson3-db-core |
+| 열린 PR | #328 — db-core Jackson 3 통일 (머지 대기) |
 
 > **🌙 다음 세션 시작점 (07-27 갱신)**: 두 트랙 진행 중. main clean, 열린 PR 없음, EKS 잔존물 0(비용 $0).
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
@@ -78,6 +78,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #328 | **db-core 마지막 Jackson 2 잔재 제거 (refactor, 동작 무변경).** `CodingProblemAdapter`를 J3로: `build.gradle.kts` J2 kotlin 모듈→`tools.jackson.module`, 코드는 `jacksonObjectMapper()`+reified `readValue<List<TestCase>>()`. **QA 실측: J2 저장 JSON→J3 역직렬화→재직렬화 bit-identical 증명.** 회귀 가드 신설 `CodingProblemAdapterTest` 3케이스(레거시 J2 JSON 고정 문자열 파싱 포함, QA F-1 fixed). db-core 24 tests. **정정: client-ai evaluator들은 원래 J3였음**(#327 노트 오류) — be/ 소스 J2 잔재 이제 0건. QA F-2(전역 J2 kotlin 모듈 dead weight)=deferred→원장 L-8. | 2026-07-27 |
 | #327 | **core-api 잔여 Jackson 2 제거 (refactor, 동작 무변경).** `CodingQuestService`·`TechInterviewRateLimitInterceptor`·`DailyExplainRateLimitInterceptor` 3곳의 인라인 `com.fasterxml.jackson...ObjectMapper()` → Boot4 자동구성 J3(`tools.jackson.databind.ObjectMapper`) **생성자 주입**으로 통일(다른 서비스/어댑터와 동일 방식). 세 곳 다 `writeValueAsString(map)` 단순 직렬화뿐이라 wire JSON 불변(원시값 Map). `grep com.fasterxml.jackson core-api/src/main`=0건. **백로그 "요청마다 ObjectMapper 생성"은 부정확**이었음(전부 lazy/필드=인스턴스당 1회) → 실제 값은 잔재 제거. QA HIGH0·MED0·LOW1(trailing comma, `7d20d0e` fixed). 239 tests 0 failures. **범위 밖(후속): client-ai Evaluator·db-core CodingProblemAdapter는 J2 잔존**(AiHttpClientConfig 주석대로 core-api HTTP 계층만 J3 스코프) | 2026-07-27 |
 | #326 | **죽은 설정 키 제거 (chore, 동작 무변경).** `be/` 소비처 0인 설정 3곳 삭제: `devquest.ai.pass-score`·`interview-questions`(@Value grep 0건) + prod `server.error` 블록(Boot 4는 `spring.web.error`로 이관, `server.error.*`는 무시되고 기본값 `never`로 동작 중이라 현재 값과 동일 → 삭제해도 불변). **`max-retry`는 유지**(AiCallExecutor 소비, Phase 3 전 제거 금지=inprocess 롤백 불변식). `./gradlew build` 239 tests 0 failures. 출처=백로그 #306·#308 QA LOW | 2026-07-27 |
 | #324 | **EKS Stage 1 — 첫 앱 배포 실증 (2026-07-27, ★과금 ~$0.05).** core-api를 EKS에 배포하는 매니페스트(`k8s/base/core-api.yaml`, Deployment+Service ClusterIP) + apply→배포→teardown 왕복. **핵심: ECR→노드 이미지 pull이 imagePullSecret 없이 노드 IAM 역할(`AmazonEC2ContainerRegistryReadOnly`)로 성공**(3.2s, arm64↔Graviton 실측 일치). DB 없이(B안) 진행 → **CrashLoop 3단계 진단**: 부팅 순서상 ①Loki 로깅(`grafanaLokiUrl` 미설정→`URI undefined scheme`) ②JWT_SECRET ③DB(HikariPool) — "Fly secrets가 가려주던 숨은 환경 의존이 플랫폼 이전 시 드러남". 클린 teardown(고아 0·ECR 이미지 생존=#322 결정 작동). **QA가 거짓 자신감 포착**: grep 팁이 실제 인시던트 원인이던 Loki env var를 놓친 것(F-4)을 재실행으로 발견→수정. 퀴즈 1.5/5(재검토 4). ClusterIP 선택=LoadBalancer의 NLB 고아 회피. 선행 #322(ECR 0-bootstrap 편입)·#323(arm64 CI 빌드 워크플로, OIDC 신뢰정책상 PR 컨텍스트 빌드) | 2026-07-27 |
@@ -167,10 +168,13 @@
       블록째 제거. Boot 4는 `spring.web.error.*`라 무시되던 죽은 키(값도 기본값 `never`와 동일해 동작 불변).
 - [x] ~~**tech-debt(LOW): 죽은 설정 2건** — `devquest.ai.pass-score`·`interview-questions`~~ → **2026-07-27 해결(#326).**
       소비처 0건 확인 후 제거. `max-retry`는 살아있어 유지(AiCallExecutor 소비).
-- [ ] **tech-debt(LOW): Jackson 2 잔재 — client-ai·db-core 잔여분** (#327에서 core-api 3곳은 J3 통일 완료).
-      아직 J2 사용: `client-ai`의 Evaluator들(`MockInterviewEvaluator`·`CompanyFitEvaluator`·`BaseAiEvaluator` 등
-      `jacksonObjectMapper()`/`registerKotlinModule()`) + `db-core`의 `CodingProblemAdapter`. `AiHttpClientConfig`
-      주석대로 지금까지 "core-api HTTP 계층만 J3" 스코프였다. 코드베이스 전체 J3 통일하려면 이 잔여분 정리 필요.
+- [ ] **tech-debt(LOW): Jackson 전역 빌드 정리 — 클래스패스 J2/J3 공존 (L-8)**. ⚠️ **정정**: #327 노트가
+      "client-ai evaluator들이 J2"라 했으나 **틀렸다** — client-ai는 이미 `tools.jackson.module.kotlin`(J3)이고
+      `ConferenceReferenceLoader`의 `com.fasterxml.jackson.annotation`은 J3가 유지하는 애노테이션 패키지라 정상이다.
+      **소스 코드의 J2 잔재는 전부 제거됨**(core-api #327, db-core는 아래 PR). 남은 건 **빌드 의존성**:
+      root `build.gradle.kts` subprojects 블록이 전역 J2 `jackson-module-kotlin`을 걸고, db-core는
+      `spring-boot-starter-json`까지 있어 J2/J3 kotlin 모듈이 클래스패스에 공존(dead weight, 소스는 J3만 씀).
+      → 후속: root subprojects J2 모듈 제거 + db-core `spring-boot-starter-jackson` 전환. blast radius 커서 별도 PR.
 - [x] ~~**tech-debt(LOW): `be/gradlew` 실행 권한 없음(mode 100644)**~~ → **2026-07-22 해결.**
       `git update-index --chmod=+x be/gradlew`로 100755 커밋. 이제 clone 직후 `./gradlew` 바로 실행 가능
       (에이전트마다 chmod 우회하던 낭비 제거 — Phase 0 회고 Try ④).

@@ -5,17 +5,16 @@ import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.domain.port.CodingProblemPort
 import com.devquest.storage.db.core.CodingProblemEntity
 import com.devquest.storage.db.core.CodingProblemRepository
-import com.fasterxml.jackson.core.type.TypeReference
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.springframework.stereotype.Component
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import tools.jackson.module.kotlin.readValue
 
 @Component
 class CodingProblemAdapter(
     private val repository: CodingProblemRepository
 ) : CodingProblemPort {
 
-    private val objectMapper = ObjectMapper().registerKotlinModule()
+    private val objectMapper = jacksonObjectMapper()
 
     override fun save(problem: CodingProblem): CodingProblem {
         val entity = CodingProblemEntity(
@@ -44,7 +43,7 @@ class CodingProblemAdapter(
 
     private fun CodingProblemEntity.toDomain(): CodingProblem {
         val testCaseList: List<TestCase> = runCatching {
-            objectMapper.readValue(this.testCases, object : TypeReference<List<TestCase>>() {})
+            objectMapper.readValue<List<TestCase>>(this.testCases)
         }.getOrElse { emptyList() }
 
         return CodingProblem(

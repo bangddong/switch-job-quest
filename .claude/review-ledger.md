@@ -30,6 +30,7 @@
 | L-5 | `feat/phase1-ai-api-config-migration/F-2` | LOW | `AiConfigBindingTest`가 `Environment.getProperty` 기반이라, 실제 빈(`AiCallExecutor.maxRetry`)의 주입값 확인보다 **한 단계 간접적** | 동일 병합 property source를 조회하므로 실질 위험 없음. 더 강한 검증으로 올릴 여지만 있음 |
 | L-6 | `feat/phase1-core-http-adapter/F-3` | LOW | `BaseAiHttpAdapter`가 응답을 항상 `String`으로 받은 뒤 파싱 → **메모리 이중화**(String + 파싱된 객체) | 406 회피를 위한 의도적 설계. AI 평가 결과 JSON 크기에선 실용상 무해. 응답이 커지면 재검토 |
 | L-7 | `feat/phase1-core-http-adapter/F-4` | LOW | `be/clients/client-ai/build.gradle.kts`의 주석 *"core-api가 tools.jackson.databind.ObjectMapper 사용 중"*이 **1.4a 시점에 사실과 어긋났음** | ⚠️ **1.4b에서 Jackson 3로 되돌렸으므로 지금은 다시 사실일 가능성이 높다.** 확인 후 `obsolete` 처리 여부 판단 |
+| L-8 | `refactor/jackson3-db-core/F-2` | LOW | **root `build.gradle.kts`의 subprojects 블록이 전역 J2 `jackson-module-kotlin`을 모든 모듈에 적용** + db-core는 `spring-boot-starter-json`(J2 계열)까지 있어 J2/J3 kotlin 모듈이 클래스패스에 공존(dead weight). 소스 참조는 이미 J3 0건 확인됨 | **전역 빌드 변경이라 blast radius가 커서 이번 PR 범위에서 의도적으로 제외.** 후속으로 root subprojects J2 모듈 제거 + db-core를 `spring-boot-starter-jackson`으로 전환. → CONTEXT 백로그가 실행 항목 소유 |
 
 ## 처리 완료 (closed / wontfix / obsolete)
 
