@@ -20,7 +20,7 @@ GitHub Actions → **ECR Push** 워크플로 수동 실행(`workflow_dispatch`) 
 완료되면 Step Summary에 이미지 주소가 찍힌다:
 
 ```
-536260290749.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<git-sha>
+<account>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<git-sha>
 ```
 
 **항상 sha 태그를 쓴다. `latest`로 배포하지 않는다** — 롤백 불가 + 지금 뭐가 도는지 추적 불가.
@@ -44,7 +44,7 @@ kubectl create secret generic core-api-db \
 ### 3. 배포
 
 ```bash
-IMAGE=536260290749.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<sha>
+IMAGE=<account>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<sha>
 sed "s|IMAGE_PLACEHOLDER|$IMAGE|" k8s/base/core-api.yaml | kubectl apply -f -
 ```
 
@@ -75,5 +75,16 @@ tofu state 밖에 생겨 destroy 후에도 과금된다 — Stage 4에서 다룬
 |------|------|------|
 | `ImagePullBackOff` | ECR 권한/주소 오타/아키텍처 불일치 | `kubectl describe pod` 이벤트. 노드는 arm64 — arm64 이미지여야 함 |
 | `Pending` | 노드 자원 부족(requests 합 > 노드 여유) | `kubectl describe pod` → `Insufficient cpu/memory` |
-| `CrashLoopBackOff` | DB 접속 실패·환경변수 누락 | `kubectl logs` — Secret 키 이름이 앱의 `${DB_*}`와 일치하는지 |
+| `CrashLoopBackOff` | 환경변수 누락 (부팅 순서대로 터진다) | `kubectl logs` — 아래 순서로 원인이 드러남 |
 | 무한 재시작(기동 중) | startupProbe 없이 liveness가 먼저 때림 | 본 매니페스트는 startupProbe로 방어 |
+
+> ⚠️ **CrashLoop 원인은 DB가 아닐 수 있다 (실측, 2026-07-27).** prod 프로파일은 부팅 순서상
+> **로깅 → 빈 생성 → DB** 로 초기화되므로, 누락된 환경변수가 **DB보다 먼저** 앱을 죽인다:
+> 1. **Loki 로깅** — `${GRAFANA_LOKI_URL}` 등 미설정 → `URI with undefined scheme` (로깅 단계, 제일 먼저)
+> 2. **`JWT_SECRET`** — `Could not resolve placeholder 'JWT_SECRET'` (빈 생성 단계)
+> 3. **DB** — `HikariPool → entityManagerFactory` (마지막)
+>
+> prod 필수 환경변수(기본값 없음): `DB_HOST/NAME/USERNAME/PASSWORD` · `JWT_SECRET` ·
+> `GITHUB_CLIENT_ID/SECRET`, 그리고 logback이 요구하는 `GRAFANA_LOKI_URL`·`GRAFANA_LOKI_INSTANCE_ID`·`GRAFANA_API_KEY`.
+> **미리 `grep -ohE '\$\{[A-Z_]+' application*.yml logback*.xml`로 전수 파악**하는 편이 하나씩 재배포하는
+> 두더지잡기보다 빠르다.
