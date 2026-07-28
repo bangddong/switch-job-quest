@@ -1,0 +1,565 @@
+<title>EKS 2-cluster 아키텍처</title>
+<style>
+  :root{
+    --paper:#faf8f5; --panel:#fff; --ink:#1c1b19; --muted:#6b675f; --hair:#e7e2da;
+    --accent:#ff9900;
+    --free:#0e8a6f; --free-bg:#e6f5ef;
+    --bill:#d8452f; --bill-bg:#fdeae5;
+    --sec:#a8760f;  --sec-bg:#fdf3de;
+    --canvas:#fcfbf9;
+    --shadow:0 1px 2px rgba(28,27,25,.05),0 8px 24px rgba(28,27,25,.06);
+    --mono: ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#17181a; --panel:#202225; --ink:#f0ede8; --muted:#a6a199; --hair:#313337;
+      --free:#4bc7a5; --free-bg:#163029;
+      --bill:#f08063; --bill-bg:#351a15;
+      --sec:#e0af52;  --sec-bg:#30240f;
+      --canvas:#1a1c1f;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#faf8f5; --panel:#fff; --ink:#1c1b19; --muted:#6b675f; --hair:#e7e2da;
+    --free:#0e8a6f; --free-bg:#e6f5ef; --bill:#d8452f; --bill-bg:#fdeae5;
+    --sec:#a8760f; --sec-bg:#fdf3de; --canvas:#fcfbf9;
+    --shadow:0 1px 2px rgba(28,27,25,.05),0 8px 24px rgba(28,27,25,.06);
+  }
+  :root[data-theme="dark"]{
+    --paper:#17181a; --panel:#202225; --ink:#f0ede8; --muted:#a6a199; --hair:#313337;
+    --free:#4bc7a5; --free-bg:#163029; --bill:#f08063; --bill-bg:#351a15;
+    --sec:#e0af52; --sec-bg:#30240f; --canvas:#1a1c1f;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:48px 24px 72px}
+
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;margin:0 0 10px;
+  }
+  h1{font-size:30px;line-height:1.15;margin:0 0 8px;text-wrap:balance;letter-spacing:-.01em}
+  .sub{color:var(--muted);margin:0 0 28px;font-size:15px;max-width:62ch}
+  .sub code,.foot code{font-family:var(--mono);font-size:13px;background:var(--free-bg);color:var(--free);padding:1px 6px;border-radius:5px}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 28px}
+  .tile{background:var(--panel);border:1px solid var(--hair);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+  .tile .k{font-size:12px;color:var(--muted);margin:0 0 6px}
+  .tile .v{font-family:var(--mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin:0}
+  .tile .v small{font-size:12px;font-weight:400;color:var(--muted)}
+  .tile.free .v{color:var(--free)}
+  .tile.bill .v{color:var(--bill)}
+
+  .card{background:var(--panel);border:1px solid var(--hair);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;margin:0 0 24px}
+  .card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+  .card-h h2{font-size:15px;margin:0;letter-spacing:-.01em}
+  .card-h .tag{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .card-b{padding:16px 18px}
+  .card-b p{margin:0 0 10px;font-size:14px}
+  .card-b p:last-child{margin-bottom:0}
+  .card-b ul{margin:0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:7px}
+  .card-b li::marker{color:var(--muted)}
+
+  .zoom-ctl{display:inline-flex;align-items:center;gap:4px}
+  .zoom-ctl button{
+    font:inherit;font-size:13px;line-height:1;cursor:pointer;
+    background:var(--paper);color:var(--ink);border:1px solid var(--hair);
+    border-radius:8px;padding:7px 10px;min-width:34px;
+  }
+  .zoom-ctl button:hover{border-color:var(--accent)}
+  .zoom-ctl button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .zoom-ctl .zlvl{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:46px;text-align:center;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;height:min(64vh,560px);overflow:hidden;background:var(--canvas);cursor:grab;touch-action:none}
+  .stage.sm{height:min(46vh,400px)}
+  .stage.grabbing{cursor:grabbing}
+  .pz{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  .pz .mermaid{padding:8px}
+  .hint{
+    position:absolute;right:12px;bottom:10px;z-index:5;
+    font-family:var(--mono);font-size:11px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--hair);border-radius:7px;padding:4px 9px;opacity:.9;
+  }
+  .fs-close{
+    position:absolute;right:12px;top:12px;z-index:6;display:none;
+    font:inherit;font-size:13px;cursor:pointer;background:var(--panel);color:var(--ink);
+    border:1px solid var(--hair);border-radius:8px;padding:7px 12px;
+  }
+  .stage.fs{position:fixed;inset:0;z-index:1000;height:100vh;border-radius:0}
+  .stage.fs .fs-close{display:block}
+
+  .legend{display:flex;flex-wrap:wrap;gap:16px;padding:14px 18px;border-top:1px solid var(--hair)}
+  .legend span{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .dot{width:13px;height:13px;border-radius:4px;border:1.5px solid;flex:none}
+  .dot.free{background:var(--free-bg);border-color:var(--free)}
+  .dot.bill{background:var(--bill-bg);border-color:var(--bill)}
+  .dot.sec{background:var(--sec-bg);border-color:var(--sec)}
+
+  .tablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 18px;border-bottom:1px solid var(--hair);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;white-space:nowrap}
+  td.mono,.mono{font-family:var(--mono);font-size:13px}
+  td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  td.ord{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+  .cost-free{color:var(--free);font-weight:600}
+  .cost-bill{color:var(--bill);font-weight:600}
+  tr:last-child td{border-bottom:none}
+
+  .note{margin:0;padding:12px 18px;font-size:13.5px;color:var(--muted);border-top:1px solid var(--hair);background:var(--canvas)}
+  .note strong{color:var(--ink)}
+  .note.warn{border-left:3px solid var(--bill)}
+  .note.key{border-left:3px solid var(--sec)}
+
+  .foot{color:var(--muted);font-size:13px;margin:22px 2px 0;line-height:1.8}
+  .foot strong{color:var(--ink)}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">AWS EKS 학습 놀이터 · Layer 2 · Stage 2</p>
+  <h1>EKS 2-cluster — 아키텍처</h1>
+  <p class="sub">
+    컨트롤플레인 + 관리형 노드그룹 + <strong>RDS · Secrets Manager · IRSA · External Secrets Operator</strong>.
+    <code>ap-northeast-2</code> · 핸드롤 OpenTofu · destroy-after-use. 빨간 노드만 과금된다.
+    수치는 전부 2026-07-28 세션 실측값.
+  </p>
+
+  <div class="tiles">
+    <div class="tile free"><p class="k">지금 살아있는 리소스</p><p class="v">0</p></div>
+    <div class="tile bill"><p class="k">실습 중 (apply 후)</p><p class="v">$0.153<small>/hr</small></p></div>
+    <div class="tile free"><p class="k">destroy 후</p><p class="v">$0</p></div>
+    <div class="tile"><p class="k">누적 사용 / 크레딧</p><p class="v">$0.39<small> / $200</small></p></div>
+  </div>
+
+  <!-- ───────── 1. 인프라 전경 ───────── -->
+  <div class="card">
+    <div class="card-h">
+      <h2>1 · 리소스 구성 &amp; 데이터 흐름</h2>
+      <div class="zoom-ctl" data-for="s1">
+        <button type="button" data-z="out" aria-label="축소">−</button>
+        <span class="zlvl">100%</span>
+        <button type="button" data-z="in" aria-label="확대">+</button>
+        <button type="button" data-z="fit">맞춤</button>
+        <button type="button" data-z="full">⛶ 전체화면</button>
+      </div>
+    </div>
+
+    <div class="stage" id="s1">
+      <button type="button" class="fs-close" data-z="full">✕ 닫기</button>
+      <div class="pz">
+<pre class="mermaid">
+flowchart TB
+  dev["kubectl · OpenTofu · helm<br/>bootstrap-admin"]
+
+  subgraph cloud["AWS Cloud · ap-northeast-2"]
+    direction TB
+
+    subgraph boot["0-bootstrap · 상시"]
+      direction LR
+      s3["S3 tfstate"]
+      ddb["DynamoDB lock"]
+      bud["Budgets"]
+      ecr["ECR core-api<br/>~$0.02/월"]
+    end
+
+    subgraph vpc["VPC 10.0.0.0/16 · 1-network · NAT 없음"]
+      direction LR
+      igw["Internet Gateway"]
+      n1["EC2 node<br/>t4g.small arm64<br/>공인 IP · 파드 상한 11"]
+    end
+
+    subgraph c2["2-cluster · 세션 수명 · 한 번의 apply = 26 리소스"]
+      direction TB
+      cp["EKS control plane 1.36"]
+      oidc["OIDC provider<br/>IRSA 토대"]
+      ng["Node group<br/>ON_DEMAND x1"]
+      addons["addons x3<br/>vpc-cni · kube-proxy · coredns"]
+      esorole["IAM role devquest-eks-eso<br/>시크릿 3개 ARN만 읽기"]
+      rds[("RDS PostgreSQL 17.10<br/>db.t4g.micro · gp3 20GB")]
+      sgrds["SG ingress 5432<br/>클러스터 SG 참조 · egress 없음"]
+      smdb["SM devquest-eks/db-connection<br/>host · dbname"]
+      smapp["SM devquest-eks/app<br/>JWT · OAuth · Grafana"]
+      smrds["SM rds!db-uuid<br/>username · password<br/>AWS 소유 · 자동 로테이션"]
+    end
+
+    subgraph k8s["클러스터 내부 · AWS 과금 없음"]
+      direction TB
+      eso["External Secrets Operator v2.8.0"]
+      es["ExternalSecret x2"]
+      ksec["K8s Secret x2 · 10키"]
+      app["core-api Pod<br/>Service ClusterIP"]
+    end
+  end
+
+  dev -->|"443"| cp
+  dev -.->|"state"| s3
+  igw --> n1
+  cp --> ng
+  ng --> n1
+  ng -.-> addons
+  cp -.-> oidc
+  oidc -.->|"신뢰"| esorole
+  esorole -.-> smdb
+  esorole -.-> smapp
+  esorole -.-> smrds
+  eso -->|"IRSA"| esorole
+  es --> eso
+  es ==> ksec
+  ksec ==>|"envFrom"| app
+  app -->|"5432 · sslmode=require"| rds
+  sgrds -.-> rds
+  rds -.->|"생성"| smrds
+  n1 -.->|"pull · 노드 IAM"| ecr
+
+  classDef bill fill:#fdeae5,stroke:#d8452f,stroke-width:1.5px,color:#5a1e14;
+  classDef free fill:#e6f5ef,stroke:#0e8a6f,stroke-width:1.5px,color:#0c3b32;
+  classDef sec fill:#fdf3de,stroke:#a8760f,stroke-width:1.5px,color:#5a4210;
+  classDef info fill:#eef1f4,stroke:#8a94a3,color:#232a33;
+  class cp,ng,n1,rds bill;
+  class s3,ddb,bud,ecr,igw,oidc,addons,sgrds free;
+  class smdb,smapp,smrds,esorole,eso,es,ksec sec;
+  class dev,app info;
+</pre>
+      </div>
+      <div class="hint">스크롤 = 확대 · 드래그 = 이동 · 더블클릭 = 맞춤</div>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot bill"></i> 과금 — 컨트롤플레인 $0.10/hr · 노드 $0.0208/hr · RDS $0.025/hr</span>
+      <span><i class="dot sec"></i> 시크릿 · IRSA</span>
+      <span><i class="dot free"></i> $0 또는 무시 가능</span>
+    </div>
+
+    <p class="note warn">
+      <strong>레이어와 스테이지는 1:1이 아니다.</strong> <span class="mono">2-cluster</span> 레이어 하나가
+      클러스터·RDS·시크릿·IRSA를 한 번의 <span class="mono">tofu apply</span>로 전부 만든다.
+      RDS를 별도 레이어로 빼지 않은 이유는 자동 정리 장치(리퍼)가 하드코딩된 <span class="mono">2-cluster</span>에서만
+      destroy를 돌리기 때문 — 밖에 두면 사각지대가 되어 영구 과금 위험이 생긴다.
+      <strong>“깔끔한 레이어 분리”보다 “안전장치 사정권”을 택한 것.</strong>
+    </p>
+  </div>
+
+  <!-- ───────── 2. IRSA ───────── -->
+  <div class="card">
+    <div class="card-h">
+      <h2>2 · IRSA — 정적 키 없이 AWS를 부르는 경로</h2>
+      <div class="zoom-ctl" data-for="s2">
+        <button type="button" data-z="out" aria-label="축소">−</button>
+        <span class="zlvl">100%</span>
+        <button type="button" data-z="in" aria-label="확대">+</button>
+        <button type="button" data-z="fit">맞춤</button>
+        <button type="button" data-z="full">⛶ 전체화면</button>
+      </div>
+    </div>
+
+    <div class="card-b">
+      <p>
+        파드가 AWS API를 부르려면 자격증명이 필요하다. 액세스 키를 Secret에 넣으면 정적 크리덴셜이
+        클러스터에 상주하고, 노드 IAM 역할을 쓰면 <strong>같은 노드의 모든 파드가 같은 권한</strong>을 갖는다.
+        IRSA는 그 경계를 <strong>ServiceAccount 단위</strong>로 좁힌다.
+      </p>
+    </div>
+
+    <div class="stage sm" id="s2">
+      <button type="button" class="fs-close" data-z="full">✕ 닫기</button>
+      <div class="pz">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant W as Pod Identity Webhook
+  participant P as ESO 파드
+  participant STS as AWS STS
+  participant SM as Secrets Manager
+  participant K as K8s API
+
+  Note over W,P: 우리가 한 건 SA에 애노테이션 1줄
+  W->>P: AWS_ROLE_ARN + 토큰 파일 경로 주입<br/>projected 볼륨 aws-iam-token 마운트
+  P->>STS: AssumeRoleWithWebIdentity
+  STS->>STS: OIDC 서명 검증 + 신뢰정책 조건 대조<br/>sub=system:serviceaccount:external-secrets:external-secrets<br/>aud=sts.amazonaws.com
+  STS-->>P: 임시 자격증명<br/>assumed-role/devquest-eks-eso/세션
+  Note over P,SM: 여기부터는 인가의 영역
+  P->>SM: GetSecretValue
+  SM-->>P: 시크릿 JSON (정책이 해당 ARN을 허용할 때만)
+  P->>K: K8s Secret 생성·동기화
+</pre>
+      </div>
+      <div class="hint">스크롤 = 확대 · 드래그 = 이동</div>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>에러</th><th>단계</th><th>원인</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono">Not authorized to perform<br>sts:AssumeRoleWithWebIdentity</td>
+            <td><strong>인증</strong></td>
+            <td>신뢰정책 <span class="mono">sub</span>/<span class="mono">aud</span> 불일치.<br><strong>IRSA 최다 실패 지점</strong></td>
+          </tr>
+          <tr>
+            <td class="mono">AccessDeniedException …<br>no identity-based policy allows</td>
+            <td><strong>인가</strong></td>
+            <td>assume는 성공. 권한 정책이 없거나 리소스 ARN이 안 맞는다</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note key">
+      후자의 에러 주체는 <span class="mono">arn:aws:sts::…:assumed-role/devquest-eks-eso/&lt;세션&gt;</span>으로 찍힌다.
+      <strong><span class="mono">assumed-role/</span>로 시작한다는 것 자체가 인증을 통과했다는 증거</strong>다.
+      여기서 신뢰정책을 의심하면 엉뚱한 데를 판다.
+    </p>
+    <p class="note">
+      권한을 고쳤는데도 계속 실패로 보이면 <strong>ESO의 지수 백오프</strong>(16s→32s→64s→128s)를 의심한다.
+      <span class="mono">kubectl annotate externalsecret &lt;name&gt; force-sync=$(date +%s) --overwrite</span>로 즉시 당길 수 있다.
+    </p>
+  </div>
+
+  <!-- ───────── 3. 시크릿 ───────── -->
+  <div class="card">
+    <div class="card-h">
+      <h2>3 · 시크릿이 두 갈래인 이유</h2>
+      <div class="zoom-ctl" data-for="s3d">
+        <button type="button" data-z="out" aria-label="축소">−</button>
+        <span class="zlvl">100%</span>
+        <button type="button" data-z="in" aria-label="확대">+</button>
+        <button type="button" data-z="fit">맞춤</button>
+        <button type="button" data-z="full">⛶ 전체화면</button>
+      </div>
+    </div>
+
+    <div class="stage sm" id="s3d">
+      <button type="button" class="fs-close" data-z="full">✕ 닫기</button>
+      <div class="pz">
+<pre class="mermaid">
+flowchart LR
+  r["rds!db-uuid<br/>소유자 AWS<br/>username · password<br/>자동 로테이션"]
+  d["devquest-eks/db-connection<br/>소유자 우리<br/>host · dbname"]
+  a["devquest-eks/app<br/>소유자 우리<br/>JWT · OAuth · Grafana"]
+  esdb["ExternalSecret<br/>core-api-db"]
+  esapp["ExternalSecret<br/>core-api-app"]
+  sdb["Secret core-api-db<br/>4키"]
+  sapp["Secret core-api-app<br/>6키"]
+  pod["core-api Pod<br/>envFrom x2 · 환경변수 10개"]
+
+  r --> esdb
+  d --> esdb
+  a --> esapp
+  esdb --> sdb
+  esapp --> sapp
+  sdb --> pod
+  sapp --> pod
+
+  classDef sec fill:#fdf3de,stroke:#a8760f,color:#5a4210;
+  classDef info fill:#eef1f4,stroke:#8a94a3,color:#232a33;
+  class r,d,a,sdb,sapp sec;
+  class esdb,esapp,pod info;
+</pre>
+      </div>
+      <div class="hint">스크롤 = 확대 · 드래그 = 이동</div>
+    </div>
+
+    <div class="card-b">
+      <ul>
+        <li><strong>왜 <span class="mono">core-api-db</span>가 두 곳을 읽나</strong> —
+          <span class="mono">manage_master_user_password = true</span>로 AWS가 만든 시크릿에는
+          <strong>크리덴셜만 있고 접속 좌표가 없다.</strong> host·dbname은 tofu가 따로 만들고 ExternalSecret이 합성한다.</li>
+        <li><strong>왜 소유자별로 쪼갰나</strong> — 자동 로테이션되는 값(AWS)과 수동 값(우리)을 한 덩어리에 섞으면,
+          Stage 3에서 DB만 in-cluster로 갈아끼울 때 앱 시크릿까지 건드려야 한다.</li>
+        <li><strong><span class="mono">DB_HOST</span>에는 포트가 없다</strong> — jdbc-url이
+          <span class="mono">jdbc:postgresql://${DB_HOST}/${DB_NAME}</span> 형태라 RDS의
+          <span class="mono">.address</span>를 쓴다. <span class="mono">.endpoint</span>는
+          <span class="mono">host:5432</span>라 URL이 깨진다.</li>
+        <li><strong>학습 클러스터에 prod 크리덴셜을 넣지 않는다</strong> — GitHub OAuth·Grafana는 자리표시.
+          실 크리덴셜을 넣으면 학습 클러스터가 진짜 사용자에게 유효한 토큰을 발급할 수 있게 된다.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ───────── 4. 리소스 26개 ───────── -->
+  <div class="card">
+    <div class="card-h"><h2>4 · 리소스 26개 — 생성 순서 = 의존 순서</h2><span class="tag">destroy는 역순</span></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th>리소스</th><th>파일</th><th>하는 일</th><th class="num">비용</th></tr></thead>
+        <tbody>
+          <tr><td class="ord">①</td><td>IAM 클러스터 역할 + 정책</td><td class="mono">iam.tf</td><td>컨트롤플레인이 ENI 등 만들 신원</td><td class="num cost-free">$0</td></tr>
+          <tr><td class="ord">②</td><td class="mono">aws_eks_cluster</td><td class="mono">cluster.tf</td><td>컨트롤플레인. public endpoint · auth=API</td><td class="num cost-bill">$0.10/hr</td></tr>
+          <tr><td class="ord">③</td><td>OIDC provider</td><td class="mono">cluster.tf</td><td>클러스터 OIDC를 IAM에 등록 = <strong>IRSA 토대</strong></td><td class="num cost-free">$0</td></tr>
+          <tr><td class="ord">④</td><td>IAM 노드 역할 + 정책 ×3</td><td class="mono">iam.tf</td><td>노드 조인 · CNI · <strong>ECR 이미지 pull</strong></td><td class="num cost-free">$0</td></tr>
+          <tr><td class="ord">⑤</td><td class="mono">aws_eks_node_group</td><td class="mono">nodes.tf</td><td>t4g.small <strong>ON_DEMAND</strong> ×1</td><td class="num cost-bill">$0.0208/hr</td></tr>
+          <tr><td class="ord">⑥</td><td>애드온 ×3</td><td class="mono">addons.tf</td><td>vpc-cni · kube-proxy · coredns</td><td class="num cost-free">$0</td></tr>
+          <tr><td class="ord">⑦</td><td>Access Entry + 연결</td><td class="mono">access.tf</td><td>bootstrap-admin → ClusterAdmin</td><td class="num cost-free">$0</td></tr>
+          <tr><td class="ord">⑧</td><td>DB 서브넷그룹 · SG · 인그레스</td><td class="mono">rds.tf</td><td>5432를 클러스터 SG 참조로만 개방. egress 없음</td><td class="num cost-free">$0</td></tr>
+          <tr><td class="ord">⑨</td><td class="mono">aws_db_instance</td><td class="mono">rds.tf</td><td>PostgreSQL 17.10 · gp3 20GB · 암호화</td><td class="num cost-bill">$0.025/hr</td></tr>
+          <tr><td class="ord">⑩</td><td>Secrets Manager ×2 + 버전 ×2</td><td class="mono">secrets.tf</td><td><span class="mono">recovery_window_in_days = 0</span></td><td class="num">$0.40/월</td></tr>
+          <tr><td class="ord">⑪</td><td class="mono">random_password</td><td class="mono">secrets.tf</td><td>JWT 키. 세션마다 새로 생성, prod와 무관</td><td class="num cost-free">$0</td></tr>
+          <tr><td class="ord">⑫</td><td>IRSA 역할 + 정책 + 연결</td><td class="mono">irsa-eso.tf</td><td>시크릿 <strong>정확히 3개 ARN</strong>만. 와일드카드 0</td><td class="num cost-free">$0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note warn">
+      <strong>⑤가 SPOT이 아닌 이유</strong> — 신규 계정은 Spot vCPU 쿼터가 <strong>0</strong>이라
+      SPOT이면 apply가 실패한다. 스팟 학습을 하려면 쿼터 증액이 선행돼야 한다.
+    </p>
+  </div>
+
+  <!-- ───────── 5. 세션 실측 ───────── -->
+  <div class="card">
+    <div class="card-h"><h2>5 · 세션별 실측</h2><span class="tag">destroy-after-use</span></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>세션</th><th class="num">리소스</th><th class="num">벽시계</th><th class="num">비용</th><th>도달점</th></tr></thead>
+        <tbody>
+          <tr><td>2026-07-24 · Stage 0</td><td class="num">14</td><td class="num">~50분</td><td class="num">~$0.10</td><td>노드 Ready</td></tr>
+          <tr><td>2026-07-27 · Stage 1</td><td class="num">14</td><td class="num">~20분</td><td class="num">~$0.05</td><td>ECR→노드 pull 성공</td></tr>
+          <tr><td><strong>2026-07-28 · Stage 2</strong></td><td class="num">26</td><td class="num">26분 35초</td><td class="num">≈$0.06</td><td><strong>/health 200</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      리소스를 86% 늘렸는데 비용은 07-24보다 <strong>낮다</strong> — destroy를 미루지 않았고,
+      생성 대기 시간에 다른 작업을 병렬로 처리해 벽시계 자체가 짧았기 때문이다.
+      <strong>비용의 65%는 여전히 컨트롤플레인</strong>이라, 아낄 대상은 “어떤 리소스를 쓰느냐”가 아니라
+      <strong>“몇 분 켜두느냐”</strong>다.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>destroy 후</th><th>대상</th></tr></thead>
+        <tbody>
+          <tr><td class="cost-free"><strong>사라짐</strong></td><td>컨트롤플레인 · 노드 · RDS(스냅샷 0) · Secrets Manager 3개 — <strong>AWS 관리형 <span class="mono">rds!db-…</span> 포함</strong>(실측 확인, 복구창 좀비 없음)</td></tr>
+          <tr><td><strong>남음</strong></td><td>ECR 이미지(<span class="mono">0-bootstrap</span> 소유 — 의도적) · S3 tfstate · Budgets</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ───────── 6. Stage 3 예고 ───────── -->
+  <div class="card">
+    <div class="card-h"><h2>6 · Stage 3에서 이 그림이 어떻게 바뀌나</h2><span class="tag">다음</span></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>바뀌는 것</th><th>영향</th></tr></thead>
+        <tbody>
+          <tr><td>RDS → <strong>in-cluster Postgres StatefulSet</strong></td><td>빨간 노드 하나가 사라지고, 대신 <strong>PVC → EBS</strong>가 생긴다</td></tr>
+          <tr><td><strong>EBS CSI 드라이버 + StorageClass</strong> 추가</td><td>애드온이 하나 늘고, IRSA 역할이 하나 더 필요하다</td></tr>
+          <tr><td class="cost-bill"><strong>K8s가 AWS 리소스를 만들기 시작</strong></td><td>PVC가 만든 EBS는 <strong>tofu state 밖</strong> → destroy 전 <span class="mono">kubectl delete pvc --all -A</span> 필수</td></tr>
+          <tr><td class="cost-bill">노드 파드 상한 <strong>11</strong></td><td>현재 8 사용(시스템 4 + ESO 3 + 앱 1). StatefulSet 여유 3개뿐</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note key">
+      <span class="mono">application-prod.yml</span>이 100% 환경변수 기반이라 <strong>앱 코드·이미지 변경 0</strong>으로 스왑된다.
+      그게 “관리형 ↔ 자체운영” 비교 실습을 가능하게 하는 전제다.
+    </p>
+  </div>
+
+  <p class="foot">
+    <strong>최종 갱신</strong> 2026-07-28 · Stage 2 완료(PR #339) 실측 반영<br>
+    mermaid 소스 <code>docs/architecture/eks-2-cluster.md</code> ·
+    정답 경로 <code>docs/eks-tutorial-steps.md</code> ·
+    실측 로그 <code>docs/eks-migration-log.md</code> ·
+    세션 절차 <code>docs/eks-session-sop.md</code>
+  </p>
+</div>
+
+<script>
+(function () {
+  function initStage(stage) {
+    var pz = stage.querySelector('.pz');
+    var ctl = document.querySelector('.zoom-ctl[data-for="' + stage.id + '"]');
+    var lvl = ctl ? ctl.querySelector('.zlvl') : null;
+    var s = 1, tx = 0, ty = 0;
+    var MIN = 0.2, MAX = 8;
+
+    function apply() {
+      pz.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
+      if (lvl) lvl.textContent = Math.round(s * 100) + '%';
+    }
+    function zoomAt(cx, cy, factor) {
+      var ns = Math.min(MAX, Math.max(MIN, s * factor));
+      var k = ns / s;
+      tx = cx - k * (cx - tx);
+      ty = cy - k * (cy - ty);
+      s = ns; apply();
+    }
+    function fit() {
+      var svg = pz.querySelector('svg');
+      if (!svg) return;
+      var w, h;
+      var vb = svg.viewBox && svg.viewBox.baseVal;
+      if (vb && vb.width) { w = vb.width; h = vb.height; }
+      else { var b = svg.getBoundingClientRect(); w = b.width; h = b.height; }
+      svg.style.maxWidth = 'none';
+      svg.style.width = w + 'px';
+      svg.style.height = h + 'px';
+      var r = stage.getBoundingClientRect();
+      s = Math.min((r.width - 32) / w, (r.height - 32) / h, 1.4);
+      if (!isFinite(s) || s <= 0) s = 1;
+      tx = (r.width - w * s) / 2;
+      ty = (r.height - h * s) / 2;
+      apply();
+    }
+
+    stage.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var r = stage.getBoundingClientRect();
+      zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+    }, { passive: false });
+
+    var drag = false, px = 0, py = 0;
+    stage.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('.fs-close')) return;
+      drag = true; px = e.clientX; py = e.clientY;
+      stage.setPointerCapture(e.pointerId); stage.classList.add('grabbing');
+    });
+    stage.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      tx += e.clientX - px; ty += e.clientY - py;
+      px = e.clientX; py = e.clientY; apply();
+    });
+    function endDrag() { drag = false; stage.classList.remove('grabbing'); }
+    stage.addEventListener('pointerup', endDrag);
+    stage.addEventListener('pointercancel', endDrag);
+    stage.addEventListener('dblclick', fit);
+
+    function ctr(f) { var r = stage.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, f); }
+    function bind(root) {
+      if (!root) return;
+      Array.prototype.forEach.call(root.querySelectorAll('[data-z]'), function (btn) {
+        btn.onclick = function () {
+          var a = btn.getAttribute('data-z');
+          if (a === 'in') ctr(1.25);
+          else if (a === 'out') ctr(1 / 1.25);
+          else if (a === 'fit') fit();
+          else if (a === 'full') { stage.classList.toggle('fs'); setTimeout(fit, 60); }
+        };
+      });
+    }
+    bind(ctl); bind(stage);
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && stage.classList.contains('fs')) {
+        stage.classList.remove('fs'); setTimeout(fit, 60);
+      }
+    });
+
+    // mermaid는 네이티브 렌더 → svg 등장까지 폴링 후 맞춤
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      if (pz.querySelector('svg')) { clearInterval(timer); fit(); }
+      else if (tries > 100) { clearInterval(timer); }
+    }, 120);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.stage'), initStage);
+})();
+</script>

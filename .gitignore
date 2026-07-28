@@ -64,3 +64,6 @@ out/
 # daily 리포트는 선택적으로 커밋 가능 (.claude/logs/daily/*.md)
 # daily 리포트는 로컬 전용 (Stop 훅 자동 생성 — repo 노이즈 방지)
 .claude/logs/daily/
+
+# 에이전트 임시 작업 디렉토리 (아티팩트 소스는 docs/architecture/에 커밋)
+.claude/scratch/
