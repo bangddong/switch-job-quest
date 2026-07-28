@@ -8,7 +8,7 @@
 | 항목 | 내용 |
 |------|------|
 | 브랜치 | `stage/eks-2-rds-secrets` |
-| 열린 PR | 진행 중 — EKS Stage 2 (RDS + Secrets Manager + IRSA + External Secrets Operator) |
+| 열린 PR | **#339 — EKS Stage 2 실증 완료 (RDS + IRSA + External Secrets Operator) · 머지 대기** |
 
 > ✅ **EKS Stage 2 완료 (07-28, ★과금 26분 35초 ≈ $0.06).** apply→검증→teardown→퀴즈 전부 끝.
 > **현재 AWS에 아무것도 안 떠 있음 = 비용 $0, 고아 0건.** 퀴즈 통과(`docs/eks-quizzes/stage-eks-2-rds-secrets.md`).
