@@ -47,14 +47,18 @@ EXPOSE 8080
 # - GC 로그(-Xlog:gc)는 배포 후 실제 사용 중인 GC 종류 확정용. 저트래픽 환경이라 로그량 미미.
 #   Metaspace OOME 진단에 이 로그가 결정적이었으므로 절대 제거하지 말 것
 # - 나머지는 스레드 오버헤드, 기타 네이티브 메모리용으로 여유 확보
-# - JVM 기본 zone: 이 앱의 도메인 TZ는 KST(단일 리전 서비스). 저장은 ambient `LocalDateTime.now()`,
-#   조회는 명시적 `ZoneId.of("Asia/Seoul")`로 되어 있어 둘의 기본 zone이 어긋나면 "오늘의 질문" 조회·
-#   코딩 스트릭이 하루씩 밀리는 결함이 난다(fix/timezone-consistency에서 실제 발현 확인).
-#   `TZ` 환경변수(fly.toml 등에 이미 설정돼 있었음)만으로는 부족하다 — 이 베이스(alpine)에는
-#   `tzdata` 패키지가 없어 `TZ`가 에러 없이 조용히 무시되고 UTC로 폴백한다. `-Duser.timezone`은
-#   OS tzdata가 아니라 JDK가 자체 번들하는 tzdb로 해석되므로 `apk add tzdata` 없이도 동작한다.
-#   `apk add tzdata` 대신 이 방식을 택한 이유: 이미지 크기를 늘리지 않고, 배포 환경(Fly·k8s)의
-#   설정에도 의존하지 않는다 — 지우면 컨테이너가 다시 UTC로 조용히 되돌아가 위 결함이 재발한다.
+# - JVM 기본 zone(-Duser.timezone): 이 앱의 도메인 TZ는 KST(단일 리전). 저장은 ambient
+#   `LocalDateTime.now()`, 조회는 명시적 `ZoneId.of("Asia/Seoul")`이라 기본 zone이 KST가 아니면
+#   "오늘의 질문" 조회·코딩 스트릭이 하루씩 밀린다.
+#   ⚠️ **이건 버그 수정이 아니라 이중 안전장치다.** `TZ=Asia/Seoul`이 이미 fly.toml(#210)과
+#   k8s 매니페스트에 있고, **그것만으로도 이미 정상 동작한다** — 아래는 이 이미지로 직접 실측한 값:
+#     TZ 미설정                → ZoneId.systemDefault() = GMT
+#     TZ=Asia/Seoul            → Asia/Seoul  ✅ (eclipse-temurin alpine에는 tzdata가 포함돼 있다)
+#     -Duser.timezone만        → Asia/Seoul
+#   ("Alpine엔 tzdata가 없어 TZ가 무시된다"는 통설은 이 베이스 이미지엔 해당되지 않는다. #336에서
+#    실측 없이 그 통설을 적었다가 #337에서 정정 — 일반론으로 특정 이미지의 사실을 대체하지 말 것.)
+#   그럼 왜 남기나: `TZ`는 **배포 환경 설정**이라 새 배포 타깃에서 빠뜨리면 조용히 GMT가 된다.
+#   `-Duser.timezone`은 이미지 안에 있어 어디에 배포하든 따라간다. 둘 다 있으면 한쪽이 사라져도 버틴다.
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=35.0", \
