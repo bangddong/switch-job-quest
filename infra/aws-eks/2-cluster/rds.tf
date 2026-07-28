@@ -33,9 +33,18 @@ resource "aws_db_subnet_group" "main" {
 #   EKS가 만든 cluster security group이 붙는다. 따라서 이 규칙 하나로
 #   "이 클러스터의 파드만 DB 접근 가능"이 정확히 표현된다.
 #   CIDR(10.0.0.0/16)로 열면 VPC 안 아무 리소스나 접근 가능해져 의미가 흐려진다.
+#
+# 🔴 description은 **반드시 ASCII만** (07-28 apply에서 실측한 함정).
+#    EC2 보안그룹 description의 허용 문자는 a-zA-Z0-9와 ` ._-:/()#,@[]+=&;{}!$*` 뿐이다.
+#    한글을 넣으면 CreateSecurityGroup이 `Client.InvalidParameterValue`로 거부되는데,
+#    **tofu validate·plan·tfsec은 전부 통과시킨다** (AWS API를 호출해야만 드러남).
+#    게다가 provider가 재시도하느라 에러가 즉시 안 뜨고 몇 분간 "Creating..."으로 멈춰 있어
+#    원인이 안 보인다 → CloudTrail lookup-events 원문의 errorCode로 확정했다.
+#    ⚠️ 같은 제약이 aws_vpc_security_group_ingress_rule.description에도 적용된다(아래).
+#    반면 Secrets Manager·IAM·ECR의 description은 한글을 받는다 — "AWS 전체"가 아니라 EC2 계열만.
 resource "aws_security_group" "rds" {
   name        = "${var.cluster_name}-rds"
-  description = "RDS PostgreSQL - EKS 클러스터 파드에서만 접근 허용"
+  description = "RDS PostgreSQL - access allowed only from EKS cluster pods"
   vpc_id      = data.terraform_remote_state.network.outputs.vpc_id
 
   tags = {
@@ -45,7 +54,9 @@ resource "aws_security_group" "rds" {
 
 resource "aws_vpc_security_group_ingress_rule" "rds_from_cluster" {
   security_group_id            = aws_security_group.rds.id
-  description                  = "EKS 클러스터 보안그룹(노드 ENI)에서 오는 PostgreSQL 트래픽만 허용"
+  # ASCII만 (위 aws_security_group.rds 주석 참조)
+  # 의미: EKS 클러스터 보안그룹(노드 ENI)에서 오는 PostgreSQL 트래픽만 허용
+  description                  = "PostgreSQL from EKS cluster security group (node ENI)"
   referenced_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
   from_port                    = 5432
   to_port                      = 5432

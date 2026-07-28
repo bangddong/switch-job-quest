@@ -107,3 +107,27 @@ variable "github_client_secret_placeholder" {
   type        = string
   default     = "learning-placeholder-not-a-real-secret"
 }
+
+# ── Grafana Loki (관측) 자리표시 3종 ──
+# 🔴 prod Grafana 스택의 실제 URL·instance id·API 키를 **여기 넣지 말 것.**
+#    ① 학습 클러스터에 실 크리덴셜을 두지 않는다 ② prod 로그 스트림이 학습 로그로 오염된다
+#    ③ 이 레포는 퍼블릭이라 기본값이 그대로 공개된다.
+# URL은 문법적으로 유효해야 한다 — loki4j가 시작 시 URI를 파싱하기 때문.
+# 전송은 실패하지만 비동기 경고로만 남고 앱은 정상 동작한다.
+variable "grafana_loki_url_placeholder" {
+  description = "학습 클러스터용 Loki push URL 자리표시. 도달 불가 주소를 의도적으로 사용한다."
+  type        = string
+  default     = "http://127.0.0.1:3100/loki/api/v1/push"
+}
+
+variable "grafana_loki_instance_id_placeholder" {
+  description = "Loki instance id 자리표시. 학습 전용."
+  type        = string
+  default     = "0"
+}
+
+variable "grafana_api_key_placeholder" {
+  description = "Grafana API 키 자리표시. 실제 키 아님."
+  type        = string
+  default     = "learning-placeholder-not-a-real-api-key"
+}

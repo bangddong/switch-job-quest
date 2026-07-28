@@ -58,9 +58,18 @@ data "aws_iam_policy_document" "eso_trust" {
   }
 }
 
+# 🔴 IAM description도 한글 불가 (07-28 apply 실측). AWS 문서의 [\p{L}...]와 달리
+#    실제 API가 강제하는 패턴은 유니코드 이스케이프로 쓰면:
+#      [\u0009\u000A\u000D\u0020-\u007E\u00A1-\u00FF]*
+#    즉 탭·개행·ASCII 출력가능 문자·Latin-1 보충뿐이고 한글(U+AC00~)은 범위 밖이다.
+#    실패 시 `ValidationError: Value at 'description' failed to satisfy constraint`.
+#    같은 제약이 aws_iam_policy.description에도 적용된다(아래).
+#    ⚠️ 단, Secrets Manager description은 한글이 통과한다(같은 apply에서 2건 성공) —
+#       "AWS는 한글 불가"가 아니라 **서비스마다 다르다**.
+# 의미: External Secrets Operator가 Secrets Manager를 읽기 위한 IRSA 역할
 resource "aws_iam_role" "eso" {
   name               = "${var.cluster_name}-eso"
-  description        = "External Secrets Operator가 Secrets Manager를 읽기 위한 IRSA 역할"
+  description        = "IRSA role for External Secrets Operator to read Secrets Manager"
   assume_role_policy = data.aws_iam_policy_document.eso_trust.json
 }
 
@@ -88,7 +97,9 @@ data "aws_iam_policy_document" "eso_read_secrets" {
 
 resource "aws_iam_policy" "eso_read_secrets" {
   name        = "${var.cluster_name}-eso-read-secrets"
-  description = "ESO: 이 클러스터용 Secrets Manager 시크릿 3개 읽기 전용"
+  # ASCII만 (위 aws_iam_role.eso 주석 참조)
+  # 의미: ESO — 이 클러스터용 Secrets Manager 시크릿 3개 읽기 전용
+  description = "ESO read-only access to 3 Secrets Manager secrets of this cluster"
   policy      = data.aws_iam_policy_document.eso_read_secrets.json
 }
 

@@ -131,10 +131,18 @@ Terraform 오픈소스 포크, 커뮤니티 기본값이 됨. **HCP Terraform �
 
 ### 진행 현황
 
-| Stage | Status |
-|:--:|:--:|
-| 0 | ⬜ |
-| 1~5 | ⬜ |
+| Stage | Status | 완료일 | 실측 결과 |
+|:--:|:--:|---|---|
+| **0** — VPC·클러스터·노드그룹·kubectl | ✅ | 07-24 | 왕복 ~50분. NAT 0개 유지 |
+| **1** — ECR 이미지로 Deployment·Service | ✅ | 07-27 | 이미지 풀 성공. DB 미연결이라 CrashLoop로 종료(의도) |
+| **2** — Secret/Config + **IRSA** | ✅ | 07-28 | RDS + Secrets Manager + ESO. 아래 주석 참조 |
+| **3** — Postgres StatefulSet + EBS CSI + PVC | ⬜ | — | Stage 2의 RDS를 in-cluster로 갈아끼워 "관리형↔자체운영" 비교 |
+| **4** — AWS LB Controller → ALB Ingress | ⬜ | — | — |
+| **5** — metrics-server·HPA·Karpenter·ArgoCD | ⬜ | — | 선택 |
+
+> **Stage 2가 Stage 3를 대체하지 않는다.** RDS(관리형)는 EBS·PVC·StorageClass를 안 건드리므로
+> Stage 3의 학습 목표와 겹치지 않는다. Stage 3에서 DB를 in-cluster StatefulSet으로 바꾸면
+> 앱 코드 변경 0으로 두 방식을 비교하는 실습이 된다(`application-prod.yml`이 100% 환경변수 기반).
 
 ---
 

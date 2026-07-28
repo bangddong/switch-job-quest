@@ -9,9 +9,21 @@
    | 구성 | 왕복 소요(벽시계) |
    |---|---|
    | Stage 0~1 (EKS만) | 30~40분 (실측: Task 8 ~50분, Stage 1 ~20분) |
-   | **Stage 2~ (EKS + RDS)** | **45~60분** — RDS 생성 ~10분·삭제 ~5분이 추가된다 🟡 미실측 |
-   > RDS는 EKS와 의존관계가 없어 같은 apply에서 **병렬로** 생성되므로 증분이 온전히 더해지진 않는다.
-   > 첫 세션에서 실측해 이 표를 갱신할 것.
+   | **Stage 2~ (EKS + RDS)** | **40~50분** (실측 07-28: apply~검증~destroy 전체 ~45분) |
+
+   > 07-28 실측 세부 — 추정보다 빨랐다:
+   > | 단계 | 실측 |
+   > |---|---|
+   > | EKS 컨트롤플레인 생성 | ~6분 |
+   > | 노드그룹 | 2분 48초 |
+   > | 애드온(vpc-cni·kube-proxy) | 55초 / coredns 24초 |
+   > | **RDS db.t4g.micro 생성** | **4분 50초** (추정 ~10분의 절반) |
+   > | ESO helm install --wait | ~40초 |
+   > | 앱 기동(Flyway 12개 포함) | 26초 |
+   >
+   > ⚠️ **RDS는 EKS와 병렬 생성되지 않는다.** RDS 보안그룹의 인그레스가 EKS 클러스터
+   > 보안그룹 ID를 참조하므로 의존 사슬이 생겨 `클러스터 → SG → RDS` 순서로 직렬화된다.
+   > 즉 RDS 시간은 EKS 시간에 **더해진다**(예전 표의 "병렬" 서술은 틀렸다).
 2. **사전 점검** (전부 무료):
    ```bash
    command -v tofu kubectl aws            # 도구 존재
@@ -37,6 +49,9 @@
    # ① ESO가 관리하는 Secret부터 (Stage 2~)
    #    ⚠️ `kubectl delete secret core-api-db`만 하면 ESO가 **즉시 재생성**한다.
    #       소유자인 ExternalSecret을 먼저 지워야 한다(creationPolicy: Owner).
+   #    ✅ 07-28 실측으로 확인: 삭제 후 8초 만에 부활, UID가 바뀌어 있었다
+   #       (94fe931e-… → db35e78b-… = 같은 이름의 다른 객체).
+   #       반대로 ExternalSecret을 지우면 K8s Secret도 함께 사라진다(소유자 GC).
    kubectl delete externalsecret --all -A
    kubectl delete secretstore --all -A
 
@@ -73,9 +88,13 @@
      --query 'SecretList[].{Name:Name,DeletedDate:DeletedDate}'
    ```
 
-   > 🟡 **미검증**: RDS가 `manage_master_user_password`로 만든 마스터 시크릿(`rds!db-...`)이
-   > 인스턴스 삭제와 함께 자동 정리되는지는 아직 실측하지 않았다. 첫 teardown 때
-   > 위 `list-secrets` 출력으로 **직접 확인하고 이 문서를 갱신할 것.**
+   > ✅ **실측 완료(07-28)**: RDS가 `manage_master_user_password`로 만든 마스터 시크릿(`rds!db-...`)은
+   > **인스턴스 삭제와 함께 완전히 정리된다.** teardown 후 `--include-planned-deletion`으로 조회해도
+   > 빈 결과 — 복구창 좀비도, 이름 점유도 남지 않는다. (우리가 만든 시크릿 2개는
+   > `recovery_window_in_days = 0` 덕분에 즉시 소멸)
+   >
+   > 📌 **07-28 teardown 실측: 위 항목 전부 0건 = 고아 없음.** destroy 4분 34초(26 destroyed).
+   > 단계별: 노드그룹 2분 16초 · **RDS 3분 53초** · 컨트롤플레인 2분 9초.
 10. 일지에 destroy 시각·총 과금 시간·비용 결산 append.
 11. **구축 후 이해도 퀴즈** — 학습 마일스톤(`stage/eks-*` 브랜치)이면 `quiz.md`로 진행,
     `docs/eks-quizzes/<브랜치>.md` + `<!-- QUIZ-PASSED -->`. (`assert-eks-quiz.sh`가 PR 차단으로 강제)

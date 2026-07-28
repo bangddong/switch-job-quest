@@ -86,5 +86,19 @@ resource "aws_secretsmanager_secret_version" "app" {
     JWT_SECRET           = random_password.jwt_secret.result
     GITHUB_CLIENT_ID     = var.github_client_id_placeholder
     GITHUB_CLIENT_SECRET = var.github_client_secret_placeholder
+
+    # ── 관측(Grafana Loki) 3종 ──
+    # prod(Fly.io)도 이 3개를 시크릿으로 주입한다. 즉 여기 두는 게 원래 맞는 설계다.
+    # 값은 **더미**다. 학습 클러스터 로그를 실제 Grafana 스택으로 보내지 않는다
+    #   (① 실 크리덴셜을 학습 환경에 두지 않는다 ② prod 로그 스트림 오염 방지).
+    # loki4j 어펜더는 전송 실패를 비동기 경고로만 남기고 앱을 죽이지 않는다.
+    #
+    # 🟡 왜 지금 필요한가: ECR 최신 이미지(07-28 09:05 푸시)가 logback 수정 커밋
+    #    5cf76da(10:37)보다 **먼저** 만들어져서, 이 3개가 없으면 구버전 로직이
+    #    `URI with undefined scheme`로 부팅 실패한다. 수정본 이미지가 빌드되면
+    #    이 값들이 없어도 되지만, 그때도 제거할 이유는 없다(원래 있어야 할 자리).
+    GRAFANA_LOKI_URL         = var.grafana_loki_url_placeholder
+    GRAFANA_LOKI_INSTANCE_ID = var.grafana_loki_instance_id_placeholder
+    GRAFANA_API_KEY          = var.grafana_api_key_placeholder
   })
 }
