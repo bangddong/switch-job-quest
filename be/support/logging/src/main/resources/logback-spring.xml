@@ -35,30 +35,57 @@
             </encoder>
         </appender>
 
-        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
-            <http>
-                <url>${grafanaLokiUrl}</url>
-                <auth>
-                    <username>${grafanaLokiInstanceId}</username>
-                    <password>${grafanaApiKey}</password>
-                </auth>
-                <requestTimeoutMs>15000</requestTimeoutMs>
-            </http>
-            <!-- loki4j 1.x: batchMaxBytes는 <batch> wrapper 없이 appender 최상위에 위치 -->
-            <!-- <batch> 섹션은 2.0.0에서 도입됨 — 1.6.0에서는 unknown property 오류 발생 -->
-            <batchMaxBytes>65536</batchMaxBytes>
-            <format>
-                <label>
-                    <pattern>app=devquest-api,level=%level</pattern>
-                </label>
-                <message class="com.github.loki4j.logback.JsonLayout"/>
-            </format>
-        </appender>
+        <!--
+            GRAFANA_LOKI_URL이 비어 있으면 LOKI appender 정의 자체를 건너뛴다.
+            Loki4jAppender.start()는 URL이 비어 있으면 IllegalArgumentException(URI with
+            undefined scheme)을 던지고, 이게 Joran 설정 로딩 단계에서 그대로 전파되어
+            애플리케이션 부팅 자체를 막는다(2026-07-27 EKS CrashLoopBackOff 인시던트).
+            관측(observability) 설정 하나가 빠졌다고 앱이 못 뜨는 건 잘못된 결합이므로,
+            Loki 미설정 시에는 STDOUT 로깅만으로 정상 부팅하도록 한다.
+        -->
+        <if condition='property("grafanaLokiUrl").length() > 0'>
+            <then>
+                <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+                    <http>
+                        <url>${grafanaLokiUrl}</url>
+                        <auth>
+                            <username>${grafanaLokiInstanceId}</username>
+                            <password>${grafanaApiKey}</password>
+                        </auth>
+                        <requestTimeoutMs>15000</requestTimeoutMs>
+                    </http>
+                    <!-- loki4j 1.x: batchMaxBytes는 <batch> wrapper 없이 appender 최상위에 위치 -->
+                    <!-- <batch> 섹션은 2.0.0에서 도입됨 — 1.6.0에서는 unknown property 오류 발생 -->
+                    <batchMaxBytes>65536</batchMaxBytes>
+                    <format>
+                        <label>
+                            <pattern>app=devquest-api,level=%level</pattern>
+                        </label>
+                        <message class="com.github.loki4j.logback.JsonLayout"/>
+                    </format>
+                </appender>
+            </then>
+        </if>
 
-        <root level="INFO">
-            <appender-ref ref="STDOUT"/>
-            <appender-ref ref="LOKI"/>
-        </root>
+        <!--
+            <if>를 <root> 안에 중첩하면 Joran이 경고를 낸다("<if> elements cannot be nested
+            within an <appender>, <logger> or <root> element") — 2단계(second phase) 요소
+            내부의 <if> 평가는 신뢰할 수 없다는 공식 경고다. 대신 <root> 블록 전체를 <if>로
+            감싸는, logback이 문서화한 패턴을 쓴다.
+        -->
+        <if condition='property("grafanaLokiUrl").length() > 0'>
+            <then>
+                <root level="INFO">
+                    <appender-ref ref="STDOUT"/>
+                    <appender-ref ref="LOKI"/>
+                </root>
+            </then>
+            <else>
+                <root level="INFO">
+                    <appender-ref ref="STDOUT"/>
+                </root>
+            </else>
+        </if>
     </springProfile>
 
 </configuration>

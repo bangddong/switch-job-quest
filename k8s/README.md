@@ -25,21 +25,53 @@ GitHub Actions → **ECR Push** 워크플로 수동 실행(`workflow_dispatch`) 
 
 **항상 sha 태그를 쓴다. `latest`로 배포하지 않는다** — 롤백 불가 + 지금 뭐가 도는지 추적 불가.
 
-### 2. DB 접속 Secret 생성 (클러스터 기동 후)
+> ⚠️ **CLI로 태그를 뽑을 땐 `imageTags[0]`을 쓰지 마라 (07-28에 실제로 밟은 함정).**
+> 한 이미지는 태그를 여러 개 갖고(`<sha>` + `latest`) **배열 순서는 보장되지 않는다** —
+> 그대로 쓰면 금지된 `latest`로 배포된다. 40자리 hex만 골라야 한다:
+> ```bash
+> SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \
+>   --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \
+>   | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}')
+> ```
+
+### 2. Secret 주입 — External Secrets Operator (Stage 2~)
 
 `application-prod.yml`이 100% 환경변수 기반이라 **코드 변경 없이** DB를 갈아끼운다.
 
+> **Stage 1까지는 `kubectl create secret`으로 손수 만들었다. Stage 2부터는 하지 않는다.**
+> 손으로 만든 Secret은 ① 누가 언제 넣었는지 기록이 없고 ② 값이 셸 히스토리에 남고
+> ③ 로테이션되지 않으며 ④ 클러스터를 재생성할 때마다 사람이 다시 쳐야 한다.
+> ESO가 AWS Secrets Manager를 단일 출처로 삼아 K8s Secret을 **자동 생성·동기화**한다.
+
 ```bash
-kubectl create secret generic core-api-db \
-  --from-literal=DB_HOST='<neon-host>' \
-  --from-literal=DB_NAME='<db>' \
-  --from-literal=DB_USERNAME='<user>' \
-  --from-literal=DB_PASSWORD='<password>'
+# ① ESO 설치 (IRSA 역할을 ServiceAccount에 연결 — 정적 액세스키 없음)
+ESO_ROLE=$(tofu -chdir=infra/aws-eks/2-cluster output -raw eso_role_arn)
+helm repo add external-secrets https://charts.external-secrets.io && helm repo update
+helm install external-secrets external-secrets/external-secrets \
+  --version 2.8.0 --namespace external-secrets --create-namespace \
+  --set installCRDs=true \
+  --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$ESO_ROLE" \
+  --wait --timeout 5m
+
+# ② SecretStore + ExternalSecret 적용
+kubectl apply -f k8s/eso/secretstore.yaml
+kubectl apply -f k8s/eso/externalsecret-app.yaml
+
+# ③ db용은 RDS가 만든 마스터 시크릿 ARN을 치환해야 한다(이름을 AWS가 정하므로 코드에 못 박음)
+ARN=$(tofu -chdir=infra/aws-eks/2-cluster output -raw db_master_secret_arn)
+sed "s|RDS_MASTER_SECRET_PLACEHOLDER|$ARN|" k8s/eso/externalsecret-db.yaml | kubectl apply -f -
+
+# ④ 동기화 확인 — Ready=True 여야 한다
+kubectl get externalsecret
 ```
 
-> ⚠️ **이 명령을 레포/일지/PR에 값과 함께 남기지 말 것.** Secret 값은 커밋되는 어디에도 쓰지 않는다.
-> (K8s Secret은 기본 base64일 뿐 암호화가 아니다. 실무에선 External Secrets Operator + AWS Secrets
-> Manager, 또는 IRSA로 앱이 직접 조회. Stage 2의 학습 주제.)
+> ⚠️ **Secret 값을 레포/일지/PR 어디에도 쓰지 않는다.** K8s Secret은 base64일 뿐 암호화가 아니다.
+>
+> 🔎 **ExternalSecret이 `SecretSyncedError`면 두 층을 구분해서 본다** (07-28 실측):
+> - `Not authorized to perform sts:AssumeRoleWithWebIdentity` → **인증** 실패.
+>   신뢰정책의 `sub`가 `system:serviceaccount:<ns>:<sa>`와 다르다. IRSA 최다 실패 지점.
+> - `AccessDeniedException ... no identity-based policy allows` → **인가** 실패.
+>   assume는 됐고 권한 정책이 없거나 리소스 ARN이 안 맞는다.
 
 ### 3. 배포
 
@@ -61,13 +93,28 @@ curl -s localhost:8080/health          # 200 기대
 ### 5. 정리 (destroy 전 필수)
 
 ```bash
+# ① ESO가 소유한 것부터 — 순서가 중요하다
+kubectl delete externalsecret --all -A
+kubectl delete secretstore --all -A
+
+# ② 워크로드
 kubectl delete -f k8s/base/ --ignore-not-found
-kubectl delete secret core-api-db --ignore-not-found
 ```
+
+> 🔴 **`kubectl delete secret core-api-db`로 지우면 안 된다.** ExternalSecret이 `creationPolicy: Owner`라
+> **Secret이 즉시 되살아난다.** 07-28 실측 — 삭제 8초 뒤 같은 이름의 **다른 객체**로 부활했다:
+> ```
+> 삭제 전 UID: 94fe931e-42d4-4a3f-9715-8337b3266142
+> 8초 후 UID : db35e78b-2fa5-44e6-9b13-d2eda253580e
+> ```
+> 반대로 **소유자인 ExternalSecret을 지우면 K8s Secret도 함께 GC된다**(`core-api-db`·`core-api-app` 둘 다).
+> ESO 자체(Helm 릴리스)는 클러스터와 함께 사라지므로 따로 지울 필요 없다.
 
 이번 Stage는 **ClusterIP만 쓰므로 AWS 고아 리소스가 생기지 않는다**(LoadBalancer/Ingress를 쓰면 NLB/ALB가
 tofu state 밖에 생겨 destroy 후에도 과금된다 — Stage 4에서 다룬다). 그래도 습관화를 위해 위 정리를 먼저 하고
 `tofu destroy`로 넘어간다.
+
+> 전체 세션의 teardown 순서·고아 전수 검증은 `docs/eks-session-sop.md` §8~§9가 단일 출처다.
 
 ## 자주 만나는 실패
 

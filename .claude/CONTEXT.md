@@ -7,8 +7,44 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#326~#338 전부 머지 완료) |
+| 브랜치 | `stage/eks-2-rds-secrets` |
+| 열린 PR | **#339 — EKS Stage 2 실증 완료 (RDS + IRSA + External Secrets Operator) · 머지 대기** |
+
+> ✅ **EKS Stage 2 완료 (07-28, ★과금 26분 35초 ≈ $0.06).** apply→검증→teardown→퀴즈 전부 끝.
+> **현재 AWS에 아무것도 안 떠 있음 = 비용 $0, 고아 0건.** 퀴즈 통과(`docs/eks-quizzes/stage-eks-2-rds-secrets.md`).
+>
+> **핵심 성과 — `/health` 200.** Stage 1에서 CrashLoopBackOff로 끝났던 core-api가 **코드 변경 0으로**
+> 정상 기동했다(바뀐 건 환경변수 주입 경로뿐 — `application-prod.yml`이 100% 환경변수 기반인 설계의 배당금).
+> `jdbc:postgresql://devquest-eks-db.<...>.rds.amazonaws.com/devquest?sslmode=require (PostgreSQL 17.10)`,
+> Flyway 12개 마이그레이션 적용, 26.3초 기동. 시크릿은 **손으로 안 만들었다** — ESO가 AWS Secrets
+> Manager에서 K8s Secret 2개(10키)를 자동 생성.
+>
+> 🔴 **가장 값진 실패: 한글 description으로 apply가 2개 리소스에서 깨졌다.**
+> `tofu validate`·`plan`·`tfsec`이 **셋 다 통과시킨다** — AWS API를 호출하지 않으니까.
+> 게다가 OpenTofu는 에러를 **apply 종료 시점에 몰아서** 출력해 진행 중엔 "Creating..."에서 멈춘 것처럼
+> 보인다 → **CloudTrail 이벤트 원문**으로 확정했다(`lookup-events` 요약의 `ErrorCode`는 `None`으로 나와 오독 유발).
+> 제약은 **서비스마다 다르다**: EC2 보안그룹·IAM = 한글 ❌ / Secrets Manager·ECR lifecycle = ✅.
+> `resource` 블록의 description만 위험하고 `variable`/`output`은 로컬 메타데이터라 무관.
+>
+> ✅ **미검증 5건 전부 해소** — ①kubectl 서버측 스키마 검증 통과 ②ESO CRD는 `v1`만 served
+> (**v1beta1은 served조차 false** — 예상과 다름) ③IRSA `sub` 일치 확인 ④**RDS 관리형 시크릿
+> (`rds!db-...`)은 인스턴스 삭제와 함께 완전 자동 정리**(복구창 좀비 없음) ⑤RDS 생성 4분 50초·삭제 3분 53초.
+>
+> 🔑 **IRSA 두 실패 모드 구분(실측)** — 이번 세션 최대 학습:
+> `Not authorized to perform sts:AssumeRoleWithWebIdentity` = **인증**(신뢰정책 sub/aud 불일치, 최다 실패) /
+> `AccessDeniedException ... no identity-based policy allows` = **인가**(권한 정책). 후자는 주체가
+> `assumed-role/<롤>/<세션>`으로 찍히는데, 그 자체가 **assume는 성공했다는 증거**다.
+> 부수 교훈: ExternalSecret이 실패로 보일 때 권한을 의심하기 전에 **마지막 시도 시각**을 먼저 봐라 —
+> ESO 백오프가 16s→32s→64s→128s로 벌어져 정책 부착 후에도 한동안 실패 표시가 남는다
+> (`kubectl annotate es <name> force-sync=$(date +%s) --overwrite`로 즉시 당김).
+>
+> 🔴 **착수 전 Blindspot Pass가 잡았던 과금 안전장치 구멍 3개가 전부 실전에서 값을 했다**:
+> ①`skip_final_snapshot`(없었으면 destroy 실패 → 리퍼 벽돌) ②리퍼 생존 판정 **EKS OR RDS**
+> (teardown 후 마커 자가청소 정상 동작 확인) ③RDS를 `2-cluster` 안에 배치(리퍼 사정권).
+>
+> **후속**: ⓐ logback 수정본(5cf76da) 이미지는 아직 ECR에 없다 — PR 머지 시 CI가 빌드하며,
+> 다음 세션에 `GRAFANA_*` 없이도 부팅되는지 보면 실환경 검증 완료. 지금은 더미 3키를 시크릿으로 주입해 우회.
+> ⓑ Stage 3 = RDS → in-cluster Postgres StatefulSet 스왑("관리형↔자체운영" 비교, EBS·PVC·StorageClass).
 
 > **🧹 tech-debt 정리 세션 완료 (07-27) — 9 PR 머지, 전부 CI 그린.**
 > #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트) · #329 FE(CompanyCard 가드·extractPdfText)

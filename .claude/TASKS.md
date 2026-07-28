@@ -63,3 +63,19 @@ CONTEXT.md 고정 내용(비자명적 결정, 참조 문서) 상단 배치, 동�
 ### [Observability] Sentry → 포기, Logtail 연동 완료
 - **Sentry**: Spring Boot 4.x 미지원으로 포기 (PR #52에서 의존성 제거)
 - **Logtail (Better Stack)**: 연동 완료 (fly.io log drain 등록)
+
+## TASK-9: prod(Neon)의 PostgreSQL 메이저 버전 확인
+
+**왜**: EKS 학습 RDS의 `db_engine_version`을 기본 `17.10`으로 뒀는데, prod(Neon)의 메이저를
+모르는 상태다. 메이저가 다르면 Flyway 마이그레이션 12개를 EKS에서 돌려봐도
+"prod에서도 된다"는 근거가 약해진다(학습 가치는 유지되나 회귀 검증 가치가 떨어짐).
+
+**하는 법** (Neon 콘솔 또는 psql):
+```sql
+SELECT version();
+```
+또는 Neon 대시보드 → 프로젝트 → Settings에서 Postgres 버전 확인.
+
+**결과 반영**: `infra/aws-eks/2-cluster/variables.tf`의 `db_engine_version` 기본값을
+prod와 같은 메이저로 맞춘다(예: prod가 16이면 `"16.x"`).
+지원 버전 확인: `aws rds describe-db-engine-versions --region ap-northeast-2 --engine postgres`

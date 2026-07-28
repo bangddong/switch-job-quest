@@ -21,10 +21,17 @@ LASTCHK=0
 # (2) AWS 조회는 5분에 한 번만
 if [ $((NOW - LASTCHK)) -ge 300 ]; then
   CLUSTERS=$(aws eks list-clusters --region "$REGION" --query 'clusters' --output text 2>/dev/null)
+  # 🔴 RDS도 함께 본다. 클러스터만 보면 "EKS는 지워졌는데 RDS는 남은" 부분 실패 상태에서
+  #    마커를 자가 삭제해 감시를 끝내버린다(= 리퍼도 더는 안 돈다) → RDS 영구 과금.
+  #    reaper.sh의 생존 판정과 반드시 동일한 기준을 유지할 것.
+  RDS=$(aws rds describe-db-instances --region "$REGION" \
+    --query 'DBInstances[?starts_with(DBInstanceIdentifier, `devquest`)].DBInstanceIdentifier' \
+    --output text 2>/dev/null)
   echo "$NOW" > "$DIR/lastcheck" 2>/dev/null
-  echo "$CLUSTERS" > "$DIR/state.cache" 2>/dev/null
-  if [ -z "$CLUSTERS" ]; then
-    # 클러스터 없음 → 세션 종료됨. 마커 자가 치유.
+  # 캐시에 둘 다 기록 — 아래 경고 메시지가 무엇이 살아있는지 보여줘야 하므로.
+  printf 'EKS[%s] RDS[%s]' "${CLUSTERS:-없음}" "${RDS:-없음}" > "$DIR/state.cache" 2>/dev/null
+  if [ -z "$CLUSTERS" ] && [ -z "$RDS" ]; then
+    # 과금 리소스 전부 없음 → 세션 종료됨. 마커 자가 치유.
     rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
     exit 0
   fi
@@ -36,7 +43,8 @@ CACHE=$(cat "$DIR/state.cache" 2>/dev/null || echo "")
 APPLIED=$(grep '^applied_at=' "$MARKER" 2>/dev/null | cut -d= -f2)
 MINS=0; [ -n "$APPLIED" ] && MINS=$(( (NOW - APPLIED) / 60 ))
 
-echo "⚠️  EKS 클러스터가 살아있습니다 ($CACHE · ~${MINS}분 · 과금 중)." >&2
+echo "⚠️  과금 리소스가 살아있습니다 ($CACHE · ~${MINS}분 · 과금 중)." >&2
 echo "   오늘 끝이면 → cd infra/aws-eks/2-cluster && tofu destroy" >&2
+echo "   destroy 후 고아 전수 검증 필수(RDS 스냅샷·시크릿 포함) → docs/eks-session-sop.md §9" >&2
 echo "   방치 시 로컬 리퍼가 하트비트 2h stale에서 자동 destroy합니다." >&2
 exit 0

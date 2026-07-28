@@ -16,9 +16,26 @@
 
 | 리소스 | 시작일 | 종료일 | 예상 비용 | 크레딧 잔여 |
 |--------|--------|--------|----------|------------|
-| (없음 — 착수 전) | — | — | $0 | $200.00 (실측, 07-16 콘솔 Credits — $100+$20×5, 만료 2027-07-15) |
+| (현재 살아있는 것 없음) | — | — | $0/h | **≈ $199.6 / $200** |
 
-> 크레딧 잔여는 **추정치**. AWS Cost Explorer 실측값 확인 시 `(실측)` 표기로 갱신.
+**누적 실사용 (Cost Explorer 실측, 07-28 조회):**
+
+| 기간 | 실사용량 | 비고 |
+|---|---|---|
+| 2026-01 ~ 06 | $0 | 계정 개설~착수 전 |
+| 2026-07 (07-28 세션 전까지) | **$0.3283** | Task 8 · Stage 1 등 EKS 세션 3회 |
+| 2026-07-28 Stage 2 세션 | ~$0.06 (추정) | 26분 35초 · CE 반영 ~24h 지연 |
+| **누적** | **≈ $0.39** | 크레딧의 **0.2%** |
+
+> 🔎 **조회 시 함정**: `RECORD_TYPE` 분리 없이 Cost Explorer를 보면 크레딧이 상계돼
+> **순액 $0.00000004**만 나온다 — "아직 아무것도 안 썼네"로 오독하게 된다. 실사용량은 이렇게:
+> ```
+> aws ce get-cost-and-usage --time-period Start=YYYY-MM-01,End=YYYY-MM-DD \
+>   --granularity MONTHLY --metrics UnblendedCost \
+>   --filter '{"Dimensions":{"Key":"RECORD_TYPE","Values":["Usage","Credit"]}}' \
+>   --group-by Type=DIMENSION,Key=RECORD_TYPE
+> ```
+> 크레딧 총액 $200 (07-16 콘솔 실측 — $100+$20×5, 만료 2027-01-15).
 
 ---
 
@@ -326,3 +343,348 @@
   이미지가 남아 다음 세션에 재빌드 불필요.
 - `[비용]` **Stage 1 결산**: apply 08:58 ~ destroy 09:18 ≈ **20분, ~$0.05**. 크레딧 무손실.
   ECR 저장(빈 레포→이미지 1개 166MB) ≈ $0.02/월. 실습 후 남는 유일한 비용.
+
+## 2026-07-28 — Stage 2 준비: RDS 재검토 + ESO 설계 (무과금 세션)
+
+- `[메모]` **무과금 세션**. apply 없음. 사전 점검: tofu v1.12.4 · kubectl v1.36.3 ·
+  aws-cli 2.36.2 정상. **helm 미설치 발견 → `brew install helm` (v4.2.3)** — ESO 설치에 필요.
+  (Task 8의 kubectl 미설치와 같은 패턴: 도구 공백은 실제 세션 직전이 아니라 준비 단계에서 드러난다.)
+  과금 리소스 전수 0 확인: EKS 클러스터·RDS 인스턴스·수동 스냅샷·실행중 EC2·LB 전부 없음.
+- `[결정]` **RDS를 destroy-after-use로 Stage 2에 편입.** 07-22 "DB 전략 환경별 분리"(#313)에서
+  RDS를 기각했던 3개 사유를 재판정한 결과:
+  | 사유 | 재판정 |
+  |---|---|
+  | ① 클러스터를 꺼도 상시 과금 → 15%만 쓰고 100% 지불 | 🔴 **무효.** 클러스터와 함께 destroy하면 성립하지 않는다. 원래 기각안이 "RDS 상시 가동"만 상정했던 것 |
+  | ② 클러스터 밖 관리형 Postgres는 Neon이 이미 그거고 공짜 | 🟡 **절반만 유효.** prod DB 대체 목적엔 맞으나 **학습 목적엔 틀렸다** — Neon은 AWS를 안 가르친다 |
+  | ③ RDS는 EBS·PVC를 안 건드려 Stage 3 목표와 불일치 | 🔴 **여전히 유효** |
+  → 결론: **RDS는 in-cluster Postgres의 대체가 아니라 Stage 2를 완성시키는 조각.**
+  Stage 3에서 in-cluster StatefulSet+EBS로 스왑해 "관리형 ↔ 자체운영" 비교 실습으로 잇는다.
+- `[비용]` **AWS Pricing API 실측** (ap-northeast-2, 일반론 아님):
+  ```
+  db.t4g.micro PostgreSQL Single-AZ : $0.0250/hr
+  db.t4g.small PostgreSQL Single-AZ : $0.0510/hr
+  db.t3.micro  PostgreSQL Single-AZ : $0.0280/hr
+  RDS gp3 스토리지                   : $0.131/GB-Mo   (참고: EBS gp3 $0.0912/GB-Mo)
+  t4g.small ON_DEMAND (EC2)          : $0.0208/hr
+  ```
+  3시간 세션 환산: 컨트롤플레인 $0.300 + 노드 $0.062 = **$0.36**,
+  여기에 RDS db.t4g.micro $0.075 + gp3 20GB 시간환산 $0.011 = **$0.45**.
+  **증분 $0.086/세션. 30세션 돌려도 $2.6 = 크레딧의 1.3%.** → **비용은 결정 요인이 아니다.**
+- `[비용]` 🔴 **이 계정엔 RDS 프리티어가 없다** (실측: `aws freetier get-free-tier-usage` 9건 —
+  Glue·KMS·Lambda·SNS·SQS·CloudWatch뿐, RDS 항목 없음). 2025-07 이후 신규계정은 12개월
+  750시간 무료가 아니라 크레딧 구조라서. 위 단가가 그대로 청구된다는 뜻. (그래도 무의미한 금액)
+- `[결정]` 시크릿 주입 도구 = **External Secrets Operator**. 기각안: ①Secrets Store CSI Driver
+  (파드 재시작 없이 회전 반영은 강점이나 앱이 파일에서 읽어야 해 Spring 설정 변경 수반)
+  ②IRSA + SDK 직접 호출(원리는 가장 선명하나 BE 코드 변경 필요 + Fly 배포 경로와 갈라져
+  "코드 변경 0" 원칙이 깨짐). ESO는 기존 `k8s/base/core-api.yaml`의 `envFrom.secretRef`를
+  그대로 두고 K8s Secret만 채워주므로 **앱·매니페스트 변경 0**.
+- `[결정]` RDS 마스터 크리덴셜은 `manage_master_user_password = true` — AWS가 Secrets Manager에
+  직접 생성/로테이션한다. 이러면 이번 Stage의 파이프라인이 한 줄로 이어진다:
+  `RDS → (AWS 자동 생성) Secrets Manager → (IRSA 인증) ESO → K8s Secret → 앱 envFrom`.
+  손으로 넣은 값을 다시 꺼내는 인위적 구성이 아니라 **AWS가 소유한 진짜 시크릿**이 대상이 된다.
+- `[메모]` 착수 전 식별한 **새 리스크 3종** (설계에 미리 반영할 것):
+  ① **새 고아 클래스** — `tofu destroy` 후에도 final snapshot·automated backup이 남아 과금된다.
+     현재 SOP §9 고아 검증 목록에 RDS 스냅샷 항목이 **없다**. → `skip_final_snapshot`,
+     `delete_automated_backups`, `backup_retention_period=0` + SOP 체크리스트 보강 필요.
+  ② **tfsec 게이트 충돌 가능성** — 1-network는 퍼블릭 서브넷 2개(2a/2c)뿐이고 프라이빗이 없다.
+     퍼블릭에 RDS를 두면 tfsec이 잡을 공산이 크다. → 프라이빗 서브넷 신설이 정답
+     (RDS는 아웃바운드 인터넷이 불필요하므로 **NAT 없이 가능 = $0**). 서브넷 티어링도 학습 대상.
+  ③ **리퍼 사각지대** 🔴 — dead man's switch(#320)는 `2-cluster`를 destroy한다. RDS를 다른
+     레이어에 두면 **리퍼가 RDS를 안 죽여 방치 시 계속 과금**된다. 반드시 리퍼 사정권에 넣을 것.
+- `[메모]` 🟡 helm이 **v4** 메이저다. ESO 차트가 Helm 4에서 렌더되는지 미확인 —
+  `helm template`은 클러스터 없이 로컬에서 도므로 **무과금으로 선검증 가능**.
+- `[막힘]` **Blindspot Pass(착수 전 불일치 진단)에서 계획을 바꿔야 할 결함 다수 발견.** 요약:
+  - 🔴 **dead man's switch가 RDS 때문에 벽돌이 된다.** `aws_db_instance.skip_final_snapshot` 기본값이
+    `false`라 그대로 두면 destroy가 **에러로 실패**한다. 리퍼는 `tofu destroy -auto-approve`를 통째로
+    돌리므로(`.claude/scripts/eks-reaper.sh:75`) RDS 하나 때문에 **EKS 컨트롤플레인·노드그룹까지 살아남고**
+    마커는 유지된 채 30분마다 같은 실패를 반복한다. 과금 안전장치가 RDS 때문에 죽는 구조.
+  - 🔴 **그 실패를 감지할 수단이 없다.** 리퍼·하트비트의 생존 판정이 `aws eks list-clusters` 하나뿐
+    (`eks-reaper.sh:48-54`, `eks-heartbeat-reminder.sh:23-31`). destroy가 EKS만 지우고 RDS에서 실패하면
+    다음 주기에 "이미 정리됨"으로 오판 → **마커 자가삭제 → 감시 종료 → RDS 영구 과금.**
+  - 🔴 **RDS는 반드시 `2-cluster` 레이어 안.** 리퍼가 대상 디렉토리를 하드코딩
+    (`eks-session-marker.sh:22` → `eks-reaper.sh:57,73,75`). `3-data` 등으로 분리하면 리퍼 사각지대.
+    추가로 `infra-ci.yml:55`의 `guard-local-layers`도 `2-cluster` 문자열만 막으므로, 새 레이어를
+    `infra-deploy.yml` 매트릭스에 넣으면 **main 머지 순간 CI가 RDS를 자동 apply**해 버린다.
+  - 🔴 **SOP §9 고아 검증에 RDS가 통째로 없다.** 인스턴스·수동 스냅샷(**final snapshot은 destroy 후에도
+    남아 과금**)·서브넷그룹·Secrets Manager(삭제 대기 중도 $0.40/mo) 전부 미검증.
+- `[막힘]` **"prod 필수 환경변수 7개"는 틀렸다 — 실제 10개.** logback이 `GRAFANA_LOKI_URL`·
+  `GRAFANA_LOKI_INSTANCE_ID`·`GRAFANA_API_KEY`를 추가로 요구한다. yml은 `${VAR}`이고 logback은
+  `source="VAR"` 형식이라 **Stage 1에서 자랑했던 `${...}` grep 팁이 정확히 이 3개를 놓쳤다.**
+  (`k8s/README.md` 하단에 이미 실측 기록돼 있었는데 계획에 반영 안 됨 — 문서를 안 읽은 대가.)
+- `[막힘]` **`manage_master_user_password=true`가 만드는 시크릿엔 `username`/`password`뿐.**
+  `DB_HOST`·`DB_NAME`이 없어 ExternalSecret 하나로 4키를 못 만든다 → 별도 시크릿 또는 ESO `template` 합성 필요.
+- `[결정]` **RDS를 프라이빗 서브넷이 아니라 기존 퍼블릭 서브넷 + `publicly_accessible=false` + SG 제한으로.**
+  프라이빗 신설이 정석처럼 보였지만 실제로는 악수다: ①`1-network`는 **CI 자동 apply 대상**
+  (`infra-deploy.yml:36`)이라 머지 즉시 적용되고 **리퍼 사정권 밖** ②`2-cluster`의
+  `data.terraform_remote_state.network`는 **이미 apply된 state**를 읽으므로, 출력만 추가하고 apply 안 하면
+  `tofu plan`이 `This object does not have an attribute named ...`로 실패(순서 의존성).
+  RDS 서브넷그룹은 2 AZ만 요구하고 이미 2a/2c가 있다. 인터넷 도달 불가는 동일하게 성립.
+- `[결정]` **logback을 조건부로 수정한다** (환경변수 주입 회피가 아니라 결함 수정).
+  `logback-spring.xml:16-62`는 prod 프로파일이면 LOKI appender를 **무조건** 정의하고 `:60`에서 root에
+  **무조건** 붙인다. `:18`의 `defaultValue=""`는 안전장치가 아니라 빈 URL을 주입할 뿐이고,
+  Loki4jAppender가 `URI with undefined scheme`으로 **로깅 초기화 단계에서 앱을 죽인다**(DB에 도달조차 못 함).
+  → **"관측 설정 하나가 빠졌다고 앱 전체가 못 뜨는 것" 자체가 결함**이므로 prod에도 이득. BE 코드 변경.
+- `[결정]` **시크릿은 출처별로 2개 분리.** `core-api-db`(AWS 소유 — RDS 관리형 크리덴셜 + 엔드포인트) /
+  `core-api-app`(내가 넣는 값 — JWT·GitHub OAuth). 소유자와 로테이션 주기가 다르므로 한 덩어리로
+  묶지 않는다. Stage 3에서 RDS→in-cluster Postgres로 갈아낄 때 db쪽만 교체하면 되는 이점도 있다.
+  대가는 `k8s/base/core-api.yaml`의 envFrom을 2개로 늘리는 것(1줄씩).
+- `[메모]` **ESO 실측**(클러스터 없이 `helm template`으로 검증, 무과금):
+  차트 `external-secrets/external-secrets` **v2.8.0**이 **Helm 4.2.3에서 정상 렌더**(44 리소스, 33,542줄).
+  API 버전은 **`external-secrets.io/v1`** (v1beta1도 served되지만 v1이 storage). CRD 44개 중 대부분은
+  generators(v1alpha1). Deployment 3개(controller·webhook·cert-controller) 전부 **resources.requests 없음**
+  = BestEffort QoS. t4g.small 파드 상한은 **11**(3 ENI × (4−1) + 2, `describe-instance-types` 실측)이고
+  현재 사용 5(aws-node·kube-proxy·coredns×2·core-api) + ESO 3 = **8, 여유 3**.
+- `[메모]` `2-cluster`는 **CI에서 `tofu plan`이 돌지 않는다**(`infra-deploy.yml` 매트릭스가
+  `[0-bootstrap, 1-network]`뿐). RDS 코드의 문법·참조 오류는 **로컬 plan에서만** 잡힌다 —
+  CI 초록불이 2-cluster 코드가 유효하다는 뜻이 아니다.
+- `[해결]` **무과금 구현 완료.** 작성물: `2-cluster/{rds.tf,secrets.tf,irsa-eso.tf}` +
+  variables/outputs/versions 확장, `k8s/eso/{secretstore,externalsecret-db,externalsecret-app}.yaml`,
+  `k8s/base/core-api.yaml` envFrom 2개화, 리퍼·하트비트 훅 RDS 대응, SOP §1·§8·§9 보강.
+  검증(전부 클러스터 없이): `tofu validate` Success · `tofu fmt` 적용 · YAML 파싱 4/4 ·
+  ESO 차트 Helm 4 렌더 성공.
+- `[막힘]` **tfsec이 `REAL_EXIT_CODE=1`로 떨어졌다 — 로컬에서 안 돌렸으면 CI에서 PR이 막혔을 것.**
+  (`2-cluster`는 CI plan 대상이 아니라서 tfsec만이 유일한 자동 게이트다.)
+  4건: `AVD-AWS-0177`(deletion protection)·`AVD-AWS-0176`(IAM DB auth)·`AVD-AWS-0098`×2(시크릿 CMK).
+- `[해결]` **원인: ignore ID 표기법.** tfsec 1.28에서 이 규칙들은 Rego(AVD) 기반이라
+  레거시 문자열 ID(`aws-rds-enable-deletion-protection` 등)로 쓰면 **조용히 무시된다** —
+  ignore가 안 먹는데 에러도 안 난다. `tfsec --include-ignored --format json`으로 실제 rule_id를
+  뽑아 `AVD-AWS-XXXX` 형식으로 교체. 부수 발견: 내가 쓴 ignore 중
+  `aws-rds-performance-insights-encryption-customer-key`는 **애초에 발동하지 않는 규칙**이었다
+  (없는 위험을 무시하는 것처럼 읽히므로 삭제).
+- `[해결]` 🔴 **`AVD-AWS-0177`은 블록이 아니라 *속성 라인*에 지적을 건다.** 리소스 상단에 둔 ignore가
+  안 먹어서, `deletion_protection = false` **바로 위 줄**로 옮겨야 통과했다(실측).
+- `[결정]` `AVD-AWS-0176`(IAM DB 인증)은 ignore로 덮지 않고 **실제로 켰다**
+  (`iam_database_authentication_enabled = true`). 추가 비용 0이고 비밀번호 인증과 배타적이지 않으며,
+  나중에 "파드가 IRSA 신원으로 DB에 직접 인증"하는 확장을 코드 변경만으로 실습할 수 있게 된다.
+  → 최종 `tfsec REAL_EXIT_CODE=0` / `No problems detected!` (20 passed, 25 ignored).
+- `[해결]` **리퍼 회귀 검증 (목 주입).** `aws`를 목으로 바꿔 "EKS 없음 + RDS 생존" 상태를 흉내:
+  ```
+  [수정 전] 마커: 삭제됨 → RDS 감시 종료 = 영구 과금
+            로그: "마커 있으나 클러스터 없음 — 마커 자가 청소."
+  [수정 후] 마커: 유지됨 (올바름)
+            로그: "⚠️ 부분 잔존 감지 — EKS는 없는데 RDS 생존 [devquest-eks-db]."
+  ```
+  **수정 전 코드가 실제로 이 시나리오에서 감시를 끊는다는 것을 증명하고 고쳤다.**
+- `[해결]` **logback 조건부화 완료** (`fix(be)` 커밋). 부수 발견: logback 1.5.32의 **신형
+  `<condition>` 요소 문법이 실제로는 동작하지 않는다** — `class` 속성을 요구하는 다른 액션에
+  매핑돼 `ActionException: current model is null`로 부팅이 깨진다. 검증된 구형 `condition` 속성
+  (deprecated 경고만 남음)으로 회귀했다. **"신형이 항상 낫다"가 아니라 실제로 돌려본 게 근거.**
+  RED가 실제 인시던트 예외와 동일 재현:
+  ```
+  Caused by: java.lang.IllegalArgumentException: URI with undefined scheme
+      at com.github.loki4j.logback.Loki4jAppender.start(Loki4jAppender.java:171)
+  ```
+  janino 의존성 추가(+1.13MB, 설정 로딩 시 1회 컴파일뿐이라 런타임 힙 영향 무시 가능).
+- `[메모]` **다음 세션(과금)에서 확인할 미검증 항목 5가지**:
+  ① `kubectl` 스키마 검증 — 이번엔 kubeconfig가 삭제된 클러스터를 가리켜 못 했다(YAML 파싱만 통과)
+  ② ESO CRD `external-secrets.io/v1`이 실제 클러스터에서 수락되는지
+  ③ IRSA `sub` 조건 일치 여부 — 불일치 시 `Not authorized to perform sts:AssumeRoleWithWebIdentity`
+  ④ RDS 마스터 시크릿(`rds!db-...`)이 인스턴스 삭제와 함께 자동 정리되는지 (SOP §9에 미검증 표기)
+  ⑤ RDS 생성/삭제 실소요 — SOP §1의 "45~60분" 추정 검증
+
+---
+
+## 2026-07-28 (Stage 2 과금 세션)
+
+- `[메모]` 세션 시작 10:5x KST. 목표: 07-28 무과금 세션에서 짠 Stage 2(RDS + Secrets Manager
+  + IRSA + ESO)를 **실제로 apply해 검증**하고 같은 세션 안에서 destroy까지. 예상 $0.45 / 45~60분.
+- `[비용]` **크레딧 잔여 실측 확보.** Cost Explorer를 `RECORD_TYPE`으로 쪼개 조회:
+  ```
+  $ aws ce get-cost-and-usage --time-period Start=2026-07-01,End=2026-07-29 \
+      --granularity MONTHLY --metrics UnblendedCost \
+      --filter '{"Dimensions":{"Key":"RECORD_TYPE","Values":["Usage","Credit"]}}' \
+      --group-by Type=DIMENSION,Key=RECORD_TYPE
+    Usage   0.3282654451
+    Credit -0.3282654047
+  ```
+  2026년 1~6월 사용량 0, 7월 $0.3283 → **누적 총 사용량 $0.33 = 크레딧 잔여 ≈ $199.67.**
+  지금까지 EKS 세션 전부 합쳐 33센트, 크레딧의 **0.16%**.
+  ⚠️ 함정: `RECORD_TYPE` 분리 없이 조회하면 크레딧이 상계돼 **순액 $0.00000004**만 나온다.
+  "아직 아무것도 안 썼네"로 오독하기 딱 좋다. 실사용량을 보려면 반드시 `Usage`로 필터.
+- `[메모]` 사전 점검 통과: tofu v1.12.4 / kubectl v1.36.3 / aws-cli 2.36.2 / helm v4.2.3.
+  EKS 지원 버전 확인 결과 **1.33은 표준 지원이 2026-07-29(내일) 종료**, 우리 설정은 `1.36`
+  (지원 2027-08-02까지)이라 안전. kubectl 1.36과 컨트롤플레인 1.36이 정확히 일치.
+- `[막힘]` **apply가 SG 생성에서 조용히 멈춤.** 13:34 apply 시작 후 `aws_security_group.rds`가
+  "Creating..."에서 2분 넘게 진행 없음. 완료 로그도, 에러도 없음. AWS 측 조회도 비어 있음:
+  ```
+  $ aws ec2 describe-security-groups --region ap-northeast-2 \
+      --filters Name=group-name,Values=devquest-eks-rds --query 'SecurityGroups[].GroupId'
+  (빈 결과)
+  $ tofu state list      # apply 중이라 remote state는 아직 pre-apply 상태 → 0건. 중간 판단에 못 씀.
+  ```
+  로그·state 둘 다 무용 → **CloudTrail로 API 호출 실체 확인**.
+- `[해결]` **원인: 보안그룹 description에 한글.** CloudTrail 이벤트 원문:
+  ```
+  errorCode        = Client.InvalidParameterValue
+  groupName        = devquest-eks-rds
+  groupDescription = "RDS PostgreSQL - EKS 클러스터 파드에서만 접근 허용"
+  ```
+  EC2 보안그룹 description 허용 문자는 `a-zA-Z0-9`와 ` ._-:/()#,@[]+=&;{}!$*` 뿐. 한글 불가.
+  → `rds.tf`의 `aws_security_group.rds`와 `aws_vpc_security_group_ingress_rule.rds_from_cluster`
+  description 2개를 영문으로 교체(한글 설명은 주석으로 이전).
+  - ⚠️ **`lookup-events`의 요약 필드 `ErrorCode`는 `None`으로 나온다.** 요약만 보면 "정상 호출"로
+    오독한다. `CloudTrailEvent` **원문 JSON**을 파싱해야 `errorCode`가 보인다.
+  - **이 버그는 `tofu validate` / `tofu plan` / `tfsec`을 전부 통과한다.** AWS API가 거부하는 값은
+    실제 호출 전까지 드러나지 않는다 — "plan이 깨끗하다"가 "apply가 된다"를 의미하지 않는 실례.
+  - 범위 확인: `aws_secretsmanager_secret` 2개는 **한글 description으로 생성 성공**(같은 apply 안에서).
+    ECR lifecycle policy도 과거 한글로 성공. 즉 제약은 **EC2 계열 한정**이지 AWS 전역이 아니다.
+    IAM은 description 규칙이 `[\p{L}\p{M}\p{Z}\p{S}\p{N}\p{P}]*`라 한글 허용 —
+    이번 apply의 `aws_iam_role.eso`(한글 description)가 그대로 검증 케이스가 된다.
+- `[막힘]` **apply #1 결과: EXIT=1, 24 성공 / 2 실패.** OpenTofu는 리소스 에러를 즉시 찍지 않고
+  **apply 종료 시점에 모아서 출력**한다 — 그래서 중간엔 "Creating..."에서 멈춘 것처럼 보였다.
+  (중간 진단에 `tofu state list`도 못 쓴다: apply 중 remote state는 pre-apply 상태라 0건)
+  ```
+  Error: creating IAM Role (devquest-eks-eso): api error ValidationError:
+    Value at 'description' failed to satisfy constraint: Member must satisfy regular
+    expression pattern: [	
+ -~¡-ÿ]*
+  Error: creating Security Group (devquest-eks-rds): api error InvalidParameterValue:
+    Value (RDS PostgreSQL - EKS 클러스터 파드에서만 접근 허용) for parameter
+    GroupDescription is invalid. Character sets beyond ASCII are not supported.
+  ```
+- `[해결]` **예상이 틀린 지점: IAM도 한글 description 불가.** 직전 엔트리에서 "IAM은 문서상
+  `[\p{L}\p{M}\p{Z}\p{S}\p{N}\p{P}]*`라 한글 허용"이라고 적었는데 **실제 API는 다른 패턴을 강제**한다:
+  `[	
+ -~¡-ÿ]*` = 탭·개행·ASCII 출력가능·Latin-1 보충뿐.
+  한글(U+AC00~)은 범위 밖. **문서 regex ≠ API가 강제하는 regex.**
+  → `irsa-eso.tf`의 role/policy description 2개도 영문화. 최종 정리:
+
+  | 서비스 | description 한글 | 근거 |
+  |---|---|---|
+  | EC2 보안그룹 / 인그레스 규칙 | ❌ | `Character sets beyond ASCII are not supported` |
+  | IAM 역할 / 정책 | ❌ | `ValidationError` 정규식 |
+  | Secrets Manager | ✅ | 같은 apply에서 2건 생성 성공 |
+  | ECR lifecycle policy | ✅ | 0-bootstrap 기존 apply 성공 |
+
+  → "AWS는 한글 불가"가 아니라 **서비스마다 다르다**. `resource` 블록의 description만 위험하고
+    `variable`/`output`의 description은 로컬 메타데이터라 무관.
+- `[결정]` **GRAFANA_* 3개를 app 시크릿에 추가.** ECR 최신 이미지(07-28 09:05)가 logback 수정
+  커밋 5cf76da(10:37)보다 **먼저** 빌드돼서, 구버전 로직이 이 값 없이는 부팅에 실패한다.
+  이미지 재빌드(Docker 기동+Gradle, 10~15분 과금)와 저울질한 끝에 시크릿 주입을 택했다 —
+  prod(Fly.io)도 이 3개를 시크릿으로 주입하므로 **원래 맞는 설계**이고, ESO 검증도 3키→6키로 두터워진다.
+  값은 도달 불가 더미(127.0.0.1). 실 Grafana 스택으로 학습 로그를 보내지 않는다.
+- `[메모]` **apply #2 (수정 후) 시작 13:45.** plan = 8 add / 1 destroy.
+  destroy 1건은 `secretsmanager_secret_version.app` 교체(시크릿 버전은 불변 객체라 키 추가 시 재생성).
+- `[해결]` **노드 파드 상한 실측 = 11.** `kubectl get node -o jsonpath='{...allocatable.pods}'` → `11`.
+  지난 세션 이론 계산 `3*(4-1)+2 = 11`(t4g.small ENI 3 × IPv4 4)과 **정확히 일치**.
+  시스템 파드 4(aws-node·kube-proxy·coredns×2) + ESO 3 + core-api 1 = 8/11.
+- `[해결]` **미검증 ② 해소 — ESO CRD 버전.** 차트 2.8.0 실측:
+  ```
+  $ kubectl get crd externalsecrets.external-secrets.io -o jsonpath=...
+  v1       served=true  storage=true
+  v1beta1  served=false storage=false
+  ```
+  지난 세션 파악("v1=storage, v1beta1=served")과 다르다. **v1beta1은 served조차 아니다** →
+  매니페스트를 `external-secrets.io/v1`로 쓴 것이 유일한 정답이었다.
+- `[해결]` **미검증 ① 해소 — 매니페스트 서버 측 스키마 검증 통과.**
+  `kubectl apply --dry-run=server`로 secretstore/externalsecret-app 둘 다 통과(지난 세션엔
+  kubeconfig가 삭제된 클러스터를 가리켜 불가했음).
+- `[해결]` **미검증 ③ 해소 — IRSA `sub` 조건 일치 확인.** ESO 파드에 Pod Identity Webhook이
+  자동 주입한 값:
+  ```
+  AWS_ROLE_ARN=arn:aws:iam::<account>:role/devquest-eks-eso
+  AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token
+  volume: aws-iam-token (projected SA token)
+  ```
+  SecretStore 상태 `Ready=True reason=Valid msg=store validated` → **AssumeRoleWithWebIdentity 성공.**
+  이 시점에 권한 정책은 아직 미부착(RDS 마스터 시크릿 ARN에 의존)이라 ExternalSecret만 실패했는데,
+  그 에러가 오히려 결정적 증거다:
+  ```
+  User: arn:aws:sts::<account>:assumed-role/devquest-eks-eso/<session>
+    is not authorized to perform: secretsmanager:GetSecretValue
+    because no identity-based policy allows the action
+  ```
+  `assumed-role/...`로 찍혔다 = **인증(assume)은 통과, 인가(정책)에서 막힘.**
+  IRSA 두 실패 모드 구분:
+
+  | 에러 | 층 | 원인 |
+  |---|---|---|
+  | `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 인증 | 신뢰정책 sub/aud 불일치 |
+  | `AccessDeniedException ... no identity-based policy` | 인가 | 권한 정책 미부착 |
+
+  ESO는 22초에 5회 재시도 → `refreshInterval: 1h`와 무관하게 정책 부착 즉시 자가 복구된다.
+- `[해결]` **apply #2 성공 — `Apply complete! 8 added, 0 changed, 1 destroyed.` (13:45→13:50:33)**
+  - **RDS 생성 실소요 ≈ 4분 50초** (SOP §1 추정 "~10분"보다 빠름 → 미검증 ⑤ 데이터 확보).
+- `[막힘]` **정책은 붙었는데 `core-api-app`만 계속 `SecretSyncedError`.** 같은 롤·같은 정책인데
+  `core-api-db`는 `SecretSynced=True`로 성공. 정책 문서를 직접 확인해 권한 문제를 배제:
+  ```
+  Resource: [ "...:secret:rds!db-73d7eb86-...-dOT1e1",
+              "...:secret:devquest-eks/db-connection-NPrett",
+              "...:secret:devquest-eks/app-6L2Qjr" ]     ← app 포함되어 있음
+  ```
+- `[해결]` **원인은 ESO의 지수 백오프.** 실패 이벤트 간격이 16s→32s→64s→128s로 벌어져서
+  정책 부착 후에도 다음 재시도 차례가 안 온 것뿐이었다. 강제 동기화로 즉시 해소:
+  ```
+  kubectl annotate externalsecret core-api-app force-sync="$(date +%s)" --overwrite
+  → SecretSynced True (16s)
+  ```
+  **교훈**: ExternalSecret이 실패 상태로 보일 때 "권한이 틀렸나" 의심하기 전에
+  **마지막 시도 시각(`kubectl describe`의 이벤트 age)**을 먼저 본다. 백오프 대기 중일 수 있다.
+- `[해결]` **시크릿 주입 완료 — K8s Secret 2개 자동 생성.** 손으로 `kubectl create secret` 하지 않았다.
+  ```
+  core-api-db  (4키): DB_HOST DB_NAME DB_PASSWORD DB_USERNAME
+  core-api-app (6키): JWT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
+                      GRAFANA_API_KEY GRAFANA_LOKI_INSTANCE_ID GRAFANA_LOKI_URL
+  ```
+  합 10키 = 지난 세션에 "7개가 아니라 10개"로 교정했던 필수 환경변수 수와 일치.
+  `DB_HOST`에 포트 없음 확인(`devquest-eks-db.<...>.rds.amazonaws.com`) — `.endpoint` 대신
+  `.address`를 쓴 설계가 맞았다. 포트가 붙었으면 jdbc-url이 깨졌다.
+- `[막힘]` **배포 시 `latest` 태그를 잡을 뻔했다.** `imageTags[0]`가 하필 `latest`를 집어서
+  레포 규칙("항상 sha 태그, latest 배포 금지")을 어길 뻔. 40자리 hex만 고르도록 수정해 재배포:
+  ```
+  ruby -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}'
+  → 878850a8d23f5be72b0b4a76d8687d7f369212c9
+  ```
+  **교훈**: ECR 이미지는 태그를 여러 개 갖는다. `imageTags[0]`은 순서 보장이 없다.
+- `[해결]` **🎉 Stage 2 end-to-end 성공.** core-api 파드 `Running 1/1`, 로그:
+  ```
+  Database: jdbc:postgresql://devquest-eks-db.<...>.ap-northeast-2.rds.amazonaws.com/devquest
+            ?sslmode=require (PostgreSQL 17.10)
+  Successfully validated 12 migrations
+  Current version of schema "public": 12
+  Started DevQuestApplicationKt in 26.331 seconds
+  ```
+  `/health` → **HTTP 200** `{"result":"SUCCESS","data":"DevQuest API is running"}`
+  - RDS 접속이 `sslmode=require`로 TLS 적용됨(설정 안 했는데 기본값).
+  - Flyway 12개 마이그레이션이 **빈 RDS에 처음부터 실행**되어 스키마가 만들어졌다.
+  - 더미 Loki URL(127.0.0.1)로 인한 로그가 **0줄** — 앱을 죽이지도, 경고를 쏟지도 않았다.
+- `[메모]` **Stage 1 대비 달라진 점**: Stage 1은 DB 미연결로 CrashLoopBackOff에서 끝났다.
+  Stage 2는 같은 이미지가 **코드 변경 0으로** 정상 기동했다 — 바뀐 건 환경변수 주입 경로뿐.
+  이것이 `application-prod.yml`을 100% 환경변수 기반으로 유지한 설계의 배당금.
+- `[해결]` **teardown 완료 — `Destroy complete! Resources: 26 destroyed.` EXIT=0 (13:55:38→14:00:12, 4분 34초)**
+  단계별 실측: 노드그룹 **2분 16초** · **RDS 3분 53초** · 컨트롤플레인 **2분 9초**.
+- `[해결]` **SOP §8 ①번 주장 실증 — "Secret만 지우면 ESO가 즉시 재생성한다".**
+  ```
+  삭제 전 UID: 94fe931e-42d4-4a3f-9715-8337b3266142
+  8초 후 UID : db35e78b-2fa5-44e6-9b13-d2eda253580e   ← 같은 이름의 다른 객체
+  ```
+  반대로 ExternalSecret(소유자)을 지우니 K8s Secret 2개도 함께 GC됐다(`NotFound`).
+  → teardown 순서가 "ExternalSecret → SecretStore → 인프라"여야 하는 이유가 실측으로 확정.
+- `[해결]` **미검증 ④ 해소 — RDS 관리형 시크릿은 자동 정리된다.**
+  teardown 후 `list-secrets --include-planned-deletion` 결과 **완전히 빈 목록**.
+  `manage_master_user_password`가 만든 `rds!db-73d7eb86-...`가 인스턴스 삭제와 함께 사라졌고
+  복구창 좀비도, 이름 점유도 없다. (우리 시크릿 2개는 `recovery_window_in_days = 0` 효과)
+- `[해결]` **고아 전수 검증 = 0건.** state 0 / EKS 0 / ELB 0 / 미사용 EBS 0 / NAT 0 / 실행중 EC2 0 /
+  RDS 인스턴스 0 / 수동·자동 스냅샷 0 / DB 서브넷그룹 0 / Secrets Manager 0.
+- `[해결]` **리퍼 마커 자가청소 동작 확인.** teardown 후 `eks-heartbeat-reminder.sh`를 직접 실행하니
+  `active` 마커가 제거됐다(하트비트만 잔존). 지난 세션에 EKS→**EKS OR RDS**로 고친 생존 판정이
+  "둘 다 없음" 케이스에서도 올바르게 동작. 리퍼 자동 발동 로그(`DEAD MAN`) **0건** = 사람이 정상 종료.
+- `[비용]` **세션 결산.** 과금 구간 = apply 시작 13:33:37 → destroy 종료 14:00:12 = **26분 35초**.
+  | 리소스 | 생존 시간 | 단가 | 소계 |
+  |---|---|---|---|
+  | EKS 컨트롤플레인 | ~27분 | $0.10/h | $0.045 |
+  | t4g.small On-Demand ×1 | ~24분 | $0.0208/h | $0.008 |
+  | RDS db.t4g.micro | ~15분 (13:45~14:00) | $0.025/h | $0.006 |
+  | gp3 스토리지·시크릿 | — | 월정액 일할 | <$0.002 |
+  | **합계(추정)** | | | **≈ $0.06** |
+  **예상 $0.45의 1/7.** 이유: ① destroy를 미루지 않음 ② RDS가 추정 10분이 아니라 5분에 생성
+  ③ 대기 시간에 문서·ESO 설치를 병렬로 처리해 벽시계 자체가 짧았다.
+  크레딧 잔여 ≈ **$199.6 / $200** (Cost Explorer 반영은 ~24h 지연되므로 다음 세션에 실측 확인).
+- `[메모]` **예상과 달랐던 것 3건 (문서를 고친 것들)**:
+  ① IAM description은 한글 허용일 것 → **불가**(API가 문서와 다른 패턴 강제)
+  ② RDS와 EKS가 병렬 생성될 것 → **직렬화됨**(RDS 보안그룹 인그레스가 클러스터 SG를 참조 →
+     `클러스터 → SG → RDS` 사슬). SOP §1의 "병렬" 서술을 정정.
+  ③ ESO CRD가 `v1`(storage) + `v1beta1`(served)일 것 → **v1beta1은 served조차 false**.
+- `[메모]` **Stage 2 완료. 남은 후속**: ⓐ logback 수정본 이미지는 아직 ECR에 없다(PR 머지 시 CI가 빌드).
+  그때 GRAFANA_* 없이도 부팅되는지 확인하면 5cf76da가 실환경에서 검증된다.
+  ⓑ Stage 3에서 RDS → in-cluster Postgres StatefulSet으로 스왑해 "관리형↔자체운영" 비교.

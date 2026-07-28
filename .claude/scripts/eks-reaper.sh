@@ -44,20 +44,35 @@ if [ "$STALE" -lt "$TTL" ]; then
 fi
 
 # 여기부터: 하트비트가 TTL 이상 stale = 사람이 사라졌다고 판단.
-# 실제 클러스터가 있는지 AWS로 확인.
+# 실제 과금 리소스가 남아있는지 AWS로 확인.
+#
+# 🔴 EKS 클러스터만 보면 안 된다 (Stage 2에서 RDS가 추가되며 드러난 구멍):
+#   destroy가 부분 실패해 "EKS는 지워졌는데 RDS는 남은" 상태가 되면,
+#   클러스터만 보는 판정은 "이미 정리됨"으로 오판하고 **마커를 지워 감시를 끝낸다.**
+#   그러면 RDS가 아무도 안 보는 채로 계속 과금된다($0.025/hr = 방치 1주일 $4.2).
+#   → 생존 판정은 **과금되는 모든 리소스의 OR**여야 한다.
 CLUSTERS=$(aws eks list-clusters --region "$REGION" --query 'clusters' --output text 2>/dev/null)
+# 이름 prefix로 우리 리소스만 대상으로 한다 — 같은 계정의 무관한 DB를 건드리지 않기 위해.
+RDS=$(aws rds describe-db-instances --region "$REGION" \
+  --query 'DBInstances[?starts_with(DBInstanceIdentifier, `devquest`)].DBInstanceIdentifier' \
+  --output text 2>/dev/null)
 
-if [ -z "$CLUSTERS" ]; then
-  # 이미 클러스터 없음 → 마커만 청소.
-  log "마커 있으나 클러스터 없음 — 마커 자가 청소."
+if [ -z "$CLUSTERS" ] && [ -z "$RDS" ]; then
+  # 과금 리소스 전부 없음 → 마커만 청소.
+  log "마커 있으나 과금 리소스 없음(EKS·RDS 모두) — 마커 자가 청소."
   rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
   exit 0
+fi
+
+# 한쪽만 남은 경우 = 이전 destroy가 부분 실패했다는 신호. 눈에 띄게 남긴다.
+if [ -z "$CLUSTERS" ] && [ -n "$RDS" ]; then
+  log "⚠️ 부분 잔존 감지 — EKS는 없는데 RDS 생존 [$RDS]. 이전 destroy가 중간에 실패했을 가능성."
 fi
 
 CLUSTER_DIR=$(grep '^cluster_dir=' "$MARKER" 2>/dev/null | cut -d= -f2-)
 APPLIED_H=$(grep '^applied_at_h=' "$MARKER" 2>/dev/null | cut -d= -f2-)
 
-log "🔴 DEAD MAN'S SWITCH 발동 — 하트비트 ${STALE}s stale(TTL ${TTL}s), 클러스터 [$CLUSTERS] 생존."
+log "🔴 DEAD MAN'S SWITCH 발동 — 하트비트 ${STALE}s stale(TTL ${TTL}s), 생존: EKS[${CLUSTERS:-없음}] RDS[${RDS:-없음}]."
 log "   apply 시각: ${APPLIED_H:-미상} / destroy 실행: $CLUSTER_DIR"
 
 if [ "${EKS_REAPER_DRYRUN:-0}" = "1" ]; then
@@ -77,6 +92,10 @@ if tofu destroy -auto-approve -no-color >> "$LOG" 2>&1; then
   rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
 else
   log "   ⛔ tofu destroy 실패 — 마커 유지, 다음 주기 재시도. 수동 확인 권장."
+  # 무엇이 살아남았는지 즉시 남긴다. destroy가 실패하면 다음 주기까지 30분이 비는데,
+  # 그때 로그에 "실패"만 있으면 무엇이 과금 중인지 알 수 없다.
+  log "   잔존 확인: EKS[$(aws eks list-clusters --region "$REGION" --query 'clusters' --output text 2>/dev/null || echo '조회실패')]"
+  log "   잔존 확인: RDS[$(aws rds describe-db-instances --region "$REGION" --query 'DBInstances[].DBInstanceIdentifier' --output text 2>/dev/null || echo '조회실패')]"
   exit 1
 fi
 exit 0
