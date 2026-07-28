@@ -15,6 +15,24 @@
 > 실측이 없다 = 낼 문제가 없다.** `chore/`로 바꿔 우회하는 건 CLAUDE.md가 금지한 학습 우회이므로,
 > **한 브랜치에 코드를 쌓아두고 다음 세션에 apply→검증→퀴즈까지 마친 뒤 PR을 만든다.**
 > 이어받는 법: `git checkout stage/eks-2-rds-secrets` 후 `docs/eks-session-sop.md` §1부터.
+>
+> **07-28 무과금 세션에서 끝낸 것** (커밋 2개, apply 0, 비용 $0):
+> `5cf76da` logback 조건부화(Loki URL 없으면 앱이 죽던 결함) · `14f9a87` RDS+Secrets Manager+IRSA+ESO 일체.
+> **RDS를 destroy-after-use로 편입** — #313의 RDS 기각 사유 ①("클러스터를 꺼도 상시 과금")이
+> 무효임을 확인(함께 destroy하면 성립 안 함). 단 사유 ③(EBS·PVC를 안 건드림)은 유효하므로
+> **RDS는 in-cluster Postgres의 대체가 아니라 Stage 2의 조각**이고, Stage 3에서 in-cluster로
+> 스왑해 "관리형↔자체운영" 비교 실습으로 잇는다.
+>
+> 🔴 **착수 전 Blindspot Pass가 과금 안전장치 구멍 3개를 잡았다**(안 잡았으면 돈이 샜다):
+> ①`skip_final_snapshot` 누락 시 destroy가 에러로 실패해 **EKS까지 살아남고 리퍼가 벽돌**이 됨
+> ②리퍼·하트비트의 생존 판정이 `list-clusters` 하나뿐이라 "EKS 없음+RDS 생존"에서 **마커를 지워
+> 감시를 끊음**(목 주입으로 수정 전 코드가 실제로 그런다는 걸 증명하고 고침)
+> ③RDS를 별도 레이어로 빼면 리퍼가 하드코딩된 `2-cluster`만 destroy해 사각지대
+>
+> 🟡 **다음 세션(과금)에서 반드시 실측할 미검증 5가지** — 일지 07-28 마지막 엔트리 참조:
+> kubectl 스키마 검증 / ESO `v1` CRD 수락 / IRSA `sub` 조건 일치 / RDS 마스터 시크릿 자동정리 /
+> RDS 생성·삭제 실소요(SOP §1의 45~60분 추정 검증).
+> **퀴즈 게이트는 그 세션에서 통과해야 PR을 만들 수 있다**(`docs/eks-quizzes/stage-eks-2-rds-secrets.md`).
 
 > **🧹 tech-debt 정리 세션 완료 (07-27) — 9 PR 머지, 전부 CI 그린.**
 > #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트) · #329 FE(CompanyCard 가드·extractPdfText)
