@@ -25,6 +25,15 @@ GitHub Actions → **ECR Push** 워크플로 수동 실행(`workflow_dispatch`) 
 
 **항상 sha 태그를 쓴다. `latest`로 배포하지 않는다** — 롤백 불가 + 지금 뭐가 도는지 추적 불가.
 
+> ⚠️ **CLI로 태그를 뽑을 땐 `imageTags[0]`을 쓰지 마라 (07-28에 실제로 밟은 함정).**
+> 한 이미지는 태그를 여러 개 갖고(`<sha>` + `latest`) **배열 순서는 보장되지 않는다** —
+> 그대로 쓰면 금지된 `latest`로 배포된다. 40자리 hex만 골라야 한다:
+> ```bash
+> SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \
+>   --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \
+>   | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}')
+> ```
+
 ### 2. Secret 주입 — External Secrets Operator (Stage 2~)
 
 `application-prod.yml`이 100% 환경변수 기반이라 **코드 변경 없이** DB를 갈아끼운다.
@@ -84,13 +93,28 @@ curl -s localhost:8080/health          # 200 기대
 ### 5. 정리 (destroy 전 필수)
 
 ```bash
+# ① ESO가 소유한 것부터 — 순서가 중요하다
+kubectl delete externalsecret --all -A
+kubectl delete secretstore --all -A
+
+# ② 워크로드
 kubectl delete -f k8s/base/ --ignore-not-found
-kubectl delete secret core-api-db --ignore-not-found
 ```
+
+> 🔴 **`kubectl delete secret core-api-db`로 지우면 안 된다.** ExternalSecret이 `creationPolicy: Owner`라
+> **Secret이 즉시 되살아난다.** 07-28 실측 — 삭제 8초 뒤 같은 이름의 **다른 객체**로 부활했다:
+> ```
+> 삭제 전 UID: 94fe931e-42d4-4a3f-9715-8337b3266142
+> 8초 후 UID : db35e78b-2fa5-44e6-9b13-d2eda253580e
+> ```
+> 반대로 **소유자인 ExternalSecret을 지우면 K8s Secret도 함께 GC된다**(`core-api-db`·`core-api-app` 둘 다).
+> ESO 자체(Helm 릴리스)는 클러스터와 함께 사라지므로 따로 지울 필요 없다.
 
 이번 Stage는 **ClusterIP만 쓰므로 AWS 고아 리소스가 생기지 않는다**(LoadBalancer/Ingress를 쓰면 NLB/ALB가
 tofu state 밖에 생겨 destroy 후에도 과금된다 — Stage 4에서 다룬다). 그래도 습관화를 위해 위 정리를 먼저 하고
 `tofu destroy`로 넘어간다.
+
+> 전체 세션의 teardown 순서·고아 전수 검증은 `docs/eks-session-sop.md` §8~§9가 단일 출처다.
 
 ## 자주 만나는 실패
 
