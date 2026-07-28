@@ -21,13 +21,18 @@
 > AI 폴백↑ = 퇴보. 선행조건 = 카테고리당 10개 보강. 근거 기록 완료, 재조사 불필요** ·
 > **③질문뱅크 ORDER BY RANDOM(미착수 — `@DataJpaTest` 인프라 선행) ④원장 L-8(미착수 — 전역 J2 kotlin 모듈, blast radius 큼).**
 >
-> **✅ 원장 L-9 (zone 불일치) — #336에서 해결.** JVM 기본 zone을 `-Duser.timezone=Asia/Seoul`로 고정.
-> 🔴 **여기서 얻은 교훈이 크다**: 최초 진단에서 *"TZ 설정이 없다"* 고 적었으나 **틀렸다** —
-> `be/fly.toml:14`·`k8s/base/core-api.yaml:42`에 **`TZ=Asia/Seoul`이 이미 있었다**(루트 `fly.toml`을 grep해
-> 파일 부재 → `||` 폴백의 "없음"을 사실로 오인). 진짜 원인은 미설정이 아니라 **Alpine에 `tzdata`가 없어
-> `TZ`가 에러 없이 무시되고 UTC로 폴백**한 것 = **"설정했다고 믿었는데 안 먹던"** 부류.
-> → **`-Duser.timezone`은 JDK 번들 tzdb로 해석돼 tzdata 없이 동작**하므로 이게 정답. 함정 재발 방지 주석을
-> Dockerfile·fly.toml·k8s 매니페스트 3곳에 남김. **⚠️ 배포 후 1회 실측 필요 = TASKS.md TASK-8(원장 L-10).**
+> 🔴 **원장 L-9 (zone 불일치)는 오진이었다 — #337에서 실측으로 반증.** prod는 `TZ=Asia/Seoul`(#210)로
+> **처음부터 KST**였고 저장·조회가 어긋난 적이 없다. 주장했던 "데일리 메일 마진 0"·"스트릭 과소 계산"은
+> **둘 다 사실이 아니다.** 실측: `eclipse-temurin:21-*-alpine`에서 TZ 미설정→`GMT`, **`TZ=Asia/Seoul`→`Asia/Seoul`**
+> (이 이미지엔 tzdata가 **포함**돼 있다 — "Alpine엔 tzdata 없음" 통설이 여기 해당 안 됨).
+> **오진 경로**: ①루트 `fly.toml`(존재하지 않는 경로)을 grep → `||` 폴백의 "없음"을 사실로 보고
+> ②QA가 TZ 존재를 찾은 뒤 **이미지를 재보는 대신 웹 검색 일반론을 채택**(기존 결론을 살려주는 방향이라 더 위험).
+> **교훈: 일반론으로 특정 환경의 사실을 대체하지 말 것 — `docker run` 한 줄이면 30초.**
+> **✅ #336 코드는 유지**(원장 L-9-c): `build.gradle.kts` 테스트 zone 인자는 **실재하던 CI≢prod 갭**
+> (CI는 UTC, prod는 KST)을 닫았고, `TimezoneConsistencyTest`가 회귀 가드. Dockerfile `-Duser.timezone`은
+> 배포 설정 유실 대비 이중 안전장치로 유지.
+> **🐳 이 세션에서 colima+docker CLI 로컬 설치** — 이제 이미지 빌드/실행을 로컬에서 검증할 수 있다
+> (`colima start` 필요, 안 쓸 땐 `colima stop`). 이번 오진을 잡아낸 게 정확히 이 도구다.
 >
 > **🌙 다음 세션 시작점 (07-27 세션 종료 시점 갱신)**: main clean, 미커밋 0, 열린 PR 0, EKS 잔존물 0(비용 $0).
 > **작은 것부터 집으려면**: ⓐ원장 **L-9** zone 불일치(위 ⚠️, core-api 4곳 감사) ⓑ**L-8** 전역 J2 kotlin 모듈 제거

@@ -40,27 +40,12 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
   ```
 - 상세: `docs/eks-session-sop.md` §안전장치.
 
-### TASK-8: timezone 수정 배포 후 1회 실측 (사용자, 2026-07-28)
-
-#336에서 JVM 기본 zone을 `-Duser.timezone=Asia/Seoul`로 고정했다. **로컬 Temurin JDK로는 검증했으나
-실제 Alpine 이미지로는 검증하지 못했다**(개발 머신에 docker 없음). 원장 L-10.
-
-배포 후 **아래 중 하나만** 확인하면 확정된다:
-
-1. **Grafana 로그 타임스탬프 오프셋이 `+09:00`인지** (가장 쉬움 — 기존 로그와 비교하면 `+00:00`→`+09:00`으로 바뀌어야 함)
-2. 또는 터미널에서:
-   ```bash
-   fly ssh console -a <app> -C "java -XshowSettings:properties -version" 2>&1 | grep user.timezone
-   ```
-   → `user.timezone = Asia/Seoul` 이면 성공
-
-**만약 여전히 UTC라면**: `-Duser.timezone`이 안 먹은 것이므로 `be/Dockerfile`에 `RUN apk add --no-cache tzdata`
-추가로 폴백(이미지 크기 소폭 증가). 확인 결과를 알려주면 처리한다.
-
-> 참고: 배포 전 저장된 행은 UTC naive, 이후는 KST naive로 **불연속**이 생긴다(의도적, 백필 안 함).
-> 스트릭은 매일 재계산되어 self-healing이므로 영향은 배포 당일 경계 건에 한정.
-
 ## 완료된 항목
+
+### TASK-8: timezone 배포 후 실측 → **불필요해져 종결 (2026-07-28)**
+로컬에 colima+docker를 설치해 **배포 전에 이미지로 직접 실측**해버렸으므로 prod 확인이 필요 없다.
+결과: `TZ=Asia/Seoul`만으로 이미 `ZoneId.systemDefault()=Asia/Seoul`(temurin alpine에 tzdata 포함)
+→ prod는 #210부터 쭉 KST였고 **L-9은 오진**이었음이 확정. 상세는 원장 L-9/L-10, PR #337.
 
 ### TASK-3: BE 서버 다운 — PR #231 배포 실패 후 헬스체크 미통과 (2026-07-01, 해결됨)
 `https://api.quest.dhbang.co.kr/health` 503 → 완전 타임아웃. Grafana Loki 스냅샷 로그로 원인 확정:
