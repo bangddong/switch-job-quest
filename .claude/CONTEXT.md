@@ -159,6 +159,9 @@
 > **🖼️ 아키텍처 다이어그램 상시 유지 (07-20 도입)**: 매 레이어/Stage마다 갱신. ① mermaid 소스
 > `docs/architecture/eks-2-cluster.md`(repo·PR·블로그용, GitHub 자동 렌더) ② 라이브 아티팩트
 > (줌·전체화면·과금 색구분) https://claude.ai/code/artifact/0d4a3aa3-74eb-46c3-a598-96228686b311
+> **둘 다 07-28 Stage 2 기준으로 갱신됨** — 다이어그램 3종(인프라 전경 / IRSA 시퀀스 / 시크릿 2갈래),
+> 리소스 26개 표, 세션별 실측 비용. 아티팩트는 3개 다이어그램 각각 줌·전체화면 가능.
+> ⚠️ **Stage 3 착수 시 두 벌 모두 갱신할 것**(RDS 제거 → StatefulSet+PVC, EBS CSI 추가).
 >
 > **🔒 CI 가드 (07-20 #287)**: `infra-ci.yml`의 `guard-local-layers` 잡이 `infra-deploy.yml` 매트릭스에
 > `2-cluster` 진입 시 CI 실패시킴 — 로컬 전용 레이어가 CI 자동 apply로 과금 새는 것 기계 차단.
