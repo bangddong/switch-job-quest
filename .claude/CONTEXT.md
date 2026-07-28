@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | fix/timezone-consistency |
-| 열린 PR | 진행 중 — zone 불일치 수정(L-9) |
+| 브랜치 | main (작업 없음) |
+| 열린 PR | 없음 (#326~#338 전부 머지 완료) |
 
 > **🧹 tech-debt 정리 세션 완료 (07-27) — 9 PR 머지, 전부 CI 그린.**
 > #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트) · #329 FE(CompanyCard 가드·extractPdfText)
@@ -34,9 +34,12 @@
 > **🐳 이 세션에서 colima+docker CLI 로컬 설치** — 이제 이미지 빌드/실행을 로컬에서 검증할 수 있다
 > (`colima start` 필요, 안 쓸 땐 `colima stop`). 이번 오진을 잡아낸 게 정확히 이 도구다.
 >
-> **🌙 다음 세션 시작점 (07-27 세션 종료 시점 갱신)**: main clean, 미커밋 0, 열린 PR 0, EKS 잔존물 0(비용 $0).
-> **작은 것부터 집으려면**: ⓐ원장 **L-9** zone 불일치(위 ⚠️, core-api 4곳 감사) ⓑ**L-8** 전역 J2 kotlin 모듈 제거
-> ⓒ질문뱅크 `ORDER BY RANDOM`(`@DataJpaTest` 인프라 선행). **큰 트랙은 아래 "다음 = 택1".**
+> **🌙 다음 세션 시작점 (07-28 세션 종료 시점 갱신)**: main clean, 미커밋 0, 열린 PR 0, EKS 잔존물 0(비용 $0).
+> colima는 **정지 상태** — 컨테이너 검증이 필요하면 `colima start`(안 쓸 땐 `colima stop`).
+> **작은 것부터 집으려면**: ⓐ**L-8** 전역 J2 kotlin 모듈 제거(blast radius 큼)
+> ⓑ질문뱅크 `ORDER BY RANDOM`(`@DataJpaTest` 인프라 선행) ⓒ질문뱅크 시드 보강(카테고리당 10개 → 그래야
+> category 활성화가 의미를 가짐, #332 참조). **큰 트랙은 아래 "다음 = 택1".**
+> ~~L-9 zone 불일치~~ → **오진으로 종결(#337).**
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
 >   24개를 REST로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
 > - **EKS 트랙**: Task 8 왕복 실증(#316) → #318 퀴즈 게이트 · #320 과금 안전장치(dead man's switch,
@@ -104,6 +107,8 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| #336 · #337 | **timezone — 오진과 정정 (교훈이 본체).** #336에서 "저장은 ambient zone·조회는 KST라 어긋난다"며 데일리 메일 마진0·스트릭 과소계산을 주장하고 `-Duser.timezone=Asia/Seoul`을 넣었으나, **#337에서 로컬 docker(colima) 설치 후 실측하니 오진**: `eclipse-temurin:*-alpine`엔 tzdata가 **있고** `TZ=Asia/Seoul`만으로 `systemDefault()=Asia/Seoul`. prod는 **#210부터 쭉 KST**였고 불일치는 존재한 적 없음(실제 앱 이미지 빌드·부팅 → GC 로그 `+0900` 확인). **오진 경로 2단계**: ①없는 경로(루트 `fly.toml`) grep → `\|\| echo "없음"` 폴백을 사실로 보고 ②QA가 TZ 존재를 찾은 뒤에도 **이미지 실측 대신 웹 검색 일반론 채택**(기존 결론을 살려주는 방향이라 더 위험). → 두 패턴을 `systematic-debugging` 스킬에 등재. **잔존 가치(L-9-c)**: `build.gradle.kts` 테스트 zone 인자는 **실재하던 CI≢prod 갭**(CI=UTC, prod=KST)을 닫았고 `TimezoneConsistencyTest`가 가드. 원장 L-9/L-9-b는 obsolete 재분류. **🐳 colima+docker CLI 로컬 설치됨.** | 2026-07-28 |
+| #335 | **CONTEXT 클린 클로즈 (07-27 세션 종료).** | 2026-07-27 |
 | #334 | **FE 테스트 문서 동기화 (chore, 코드 변경 0).** #331이 남긴 문서 부채 정리. `tdd.md`가 여전히 *"FE 테스트 러너 미도입"*이라 단언 중이었는데, 이 스킬은 orchestrator가 FE 작업 시 **전문을 주입**하는 파일이라 방치하면 에이전트가 러너를 안 쓴다(만들어놓고 사장). ①`tdd.md` 문구 교정 + FE 예시를 **globals 미설정 기준 명시 import**로 교체(기존 예시는 그대로 쓰면 `tsc` 깨짐) ②`verification-before-completion.md`에 `npm test` 추가(CI 게이트 명시) ③**`fe/CLAUDE.md`에 테스트 섹션 신설**(기존엔 테스트 언급 전무) — 러너·실행법·CI 게이트·명시 import 필수·파일 위치 + **한계**(`environment:'node'`라 컴포넌트 테스트 불가, jsdom 미도입 → `tsc`+`build`로 대체). 문서 주장을 실행으로 검증(예시 단언을 임시 테스트로 실제 통과 확인 후 삭제). | 2026-07-27 |
 | #333 | **데일리 질문 중복방지 윈도우 버그 수정 (fix).** `findRecentQuestions(type, 30)`의 30이 일수가 아니라 **행 수**였고, 로그는 `forEach { save(userId, ...) }`로 **사용자당 1행/일** 쌓이는데 쿼리에 `DISTINCT`가 없었다 → **커버 기간이 30/N일로 축소**(1명 30일 / 10명 3일 / 30명 1일=사실상 무력화). 포트를 `findQuestionsSince(type, since: LocalDateTime)`로 개명하고 JPQL을 `sentAt >= :since`로, 중복 제거는 **어댑터 Kotlin `.distinct()`**(Postgres는 `SELECT DISTINCT`+`ORDER BY 비선택컬럼`이 에러라 SQL DISTINCT 회피). **윈도우 20일 = 뱅크 26개보다 작아야 AI 폴백이 안 돈다**(≥26이면 주기적 소진 → AI 비용 신규 발생, 상수 주석에 근거 명시). TDD: 프로덕션 코드만 stash해 RED 확인 후 GREEN. 신규 `DailyMailLogAdapterTest`. QA가 **JPQL 문자열을 직접 읽어** 대체 검증(Mockito verify+argumentCaptor)이 거짓 안심이 아님을 판정. HIGH0·MED0·LOW2(F-1 wontfix=순서는 의미 갖는 소비처 없음 / **F-2 deferred→원장 L-9 = zone 불일치**). | 2026-07-27 |
 | #331 | **FE 테스트 러너(vitest) 도입 + CI 테스트 게이트 (chore).** #329에서 순수함수 단위테스트를 못 붙인 갭 해소. Vite 6 스택 재사용 → vitest ^3.2.7, 대상이 전부 순수함수라 `environment: 'node'`(jsdom·@testing-library 미도입, 컴포넌트 테스트는 범위 밖). `vite.config.ts`에 `test` 필드 병합(별도 config 안 만듦), 글로벌 대신 명시 import. `extractPdfText.ts` 순수함수 4개 **단위테스트 18개**: normalizeExtractedText(CRLF/lone CR·공백/빈줄 병합·trim·idempotent) 7 + truncateExtractedText(50000 경계) 3 + validatePdfFile 5 + PdfExtractError(cause 보존) 3. `test:"vitest run"`. **QA F-1(MED)=fixed**: fe-ci.yml에 `npm test` 게이트 없어 로컬만 초록불이던 것 → Lint·Build 사이 Test 스텝 추가(의도적 실패로 non-zero exit 게이트 동작 검증). QA 실측: 테스트가 실제 소스 import(tautology 아님)·전 케이스 정규식 순서와 일치. tsc0·build·lint(무관 warn 1)·18 passed. | 2026-07-27 |
