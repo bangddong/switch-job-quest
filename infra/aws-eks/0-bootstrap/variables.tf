@@ -35,6 +35,13 @@ variable "budget_alert_thresholds_usd" {
   default     = [10, 50, 150]
 }
 
+# 이상탐지는 예산보다 먼저 울려야 의미가 있다 → budget 1단계($10)보다 낮게.
+variable "anomaly_threshold_usd" {
+  type        = string
+  description = "Cost Anomaly Detection 알림 임계값 (USD, 누적 영향액 절대값)"
+  default     = "5"
+}
+
 # 공개 정보(레포 URL) — default 허용. OIDC 신뢰정책의 sub 조건에 쓰인다.
 variable "github_repo" {
   type        = string

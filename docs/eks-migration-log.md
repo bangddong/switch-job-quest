@@ -688,3 +688,51 @@
 - `[메모]` **Stage 2 완료. 남은 후속**: ⓐ logback 수정본 이미지는 아직 ECR에 없다(PR 머지 시 CI가 빌드).
   그때 GRAFANA_* 없이도 부팅되는지 확인하면 5cf76da가 실환경에서 검증된다.
   ⓑ Stage 3에서 RDS → in-cluster Postgres StatefulSet으로 스왑해 "관리형↔자체운영" 비교.
+
+## 2026-07-29
+
+- `[결정]` **콘솔 스크린샷 체계 전면 폐기 — "IaC-first면 캡처가 왜 필요하냐"는 지적에서 출발.**
+  사용자 질문: *"우리 어차피 IaC 기반이니까 글 작성시에도 캡쳐는 별도 필요없지 않을까?"*
+  점검해보니 맞는 지적일 뿐 아니라 **더 큰 부채가 밑에 있었다**: 튜토리얼 G-1이 콘솔 클릭 5단계로
+  예산 만드는 법을 가르치고 있었는데, `0-bootstrap/budget.tf`가 **이미 그 절차를 대체**한 상태였다.
+  즉 **캡처는 죽은 절차의 부속품**이었다. 캡처만 지우면 "IaC로 대체된 절차를 가르치는" 모순은 남는다.
+  → 캡처 + 콘솔 절차를 함께 폐기하고 IaC 절차로 교체.
+- `[결정]` **코드화의 효용은 자동화가 아니라 함정 차단이었다.** 튜토리얼이 경고하던 콘솔 함정 2개가
+  코드에선 **표현 자체가 불가능**해진다:
+
+  | 콘솔 함정 | 코드 |
+  |---|---|
+  | 크레딧이 청구액을 가려 알림이 영영 안 울림 | `cost_types { include_credit = false }` |
+  | 임계값 단위 기본이 `%` → 10/50/150이 $20/$100/$300 | `threshold_type = "ABSOLUTE_VALUE"` |
+
+  "조심하세요"를 문서에 쓰는 것과 틀린 값을 못 쓰게 만드는 것의 차이. 문서에서 함정 해설을 지운 게
+  아니라 **함정을 밟을 기회를 없앤 경위**로 다시 썼다.
+- `[해결]` **Cost Anomaly Detection을 IaC로 편입** — `0-bootstrap/cost-anomaly.tf` 신규
+  (`aws_ce_anomaly_monitor` DIMENSIONAL/SERVICE + `aws_ce_anomaly_subscription`).
+  그동안 `TASKS.md` 상단은 "이상탐지는 `aws_ce_anomaly_monitor`로 처리"라고 적혀 있었지만
+  **실제 `.tf`는 없었다**(grep 결과 `budget.tf` 단독). 문서가 코드보다 앞서 있던 상태를 해소.
+- `[막힘]` **`frequency = "IMMEDIATE"`를 쓸 뻔했다 — EMAIL 구독자에겐 금지된 조합.**
+  AWS 문서 확인 결과 **개별 즉시 알림(IMMEDIATE)은 SNS 구독자 전용**이고 EMAIL은 `DAILY`/`WEEKLY`만
+  가능하다. 스키마에는 이 제약이 없어(`frequency`는 그냥 required string) **`validate`·`plan`·`tfsec`이
+  전부 통과시킨다** — 07-28의 한글 `description` 함정과 **정확히 같은 계열**이다(API만 거부하는 제약).
+  → 애초에 안전한 `DAILY`로 확정. 어느 해석이 맞든 통과하는 값을 고르는 쪽이 옳다.
+- `[해결]` **프로바이더 스키마를 로컬에서 덤프해 인자 구조를 확인**했다(추측 대신 실측).
+  `.terraform`에 프로바이더가 캐시돼 있어 네트워크·과금 없이 가능:
+  ```bash
+  tofu providers schema -json | ruby -rjson -e '...resource_schemas["aws_ce_anomaly_subscription"]...'
+  ```
+  → `threshold_expression`이 list 블록이고 그 안에 `dimension`/`and`/`or`/`not`이 중첩된다는 걸 확인.
+- `[비용]` **이번 변경 $0.** `tofu plan`(읽기 전용) = `Plan: 2 to add, 0 to change, 0 to destroy`,
+  기존 리소스 드리프트 0. 이상탐지·예산 모두 **무료 리소스**라 apply해도 과금 없음.
+  로컬 apply는 하지 않았다 — `infra-deploy.yml`이 `0-bootstrap`을 **머지 시 자동 apply**하므로
+  PR plan → 머지 → CI apply 흐름을 탄다.
+- `[해결]` **미작성이던 "레이어 스캐폴딩" 섹션을 채웠다** — 재현 검증의 첫 번째 구멍이었다.
+  07-18 일지의 검증된 명령을 근거로 닭-달걀 2단계(로컬 state apply → `backend.tf` 복원 →
+  `tofu init -migrate-state -force-copy`)를 정리. 다만 우리는 코드를 점진 작성하며 여러 번 나눠
+  apply했으므로 **"한 번에" 통합 순서 자체는 아직 재현해보지 않았다** — 문서에 🟡로 명시.
+- `[막힘]` **크레딧 만료일이 문서마다 다르다 — 미해결.**
+  `2027-01-15` (튜토리얼·SOP·`TASKS.md`, "계정 API 실측") vs `2027-07-15` (`infra/README.md`,
+  일지 07-16 원본 기록 "가입 +1년"). **일지 내부에서도 어긋난다** (최상단 요약 = 01-15,
+  원본 실측 항목 = 07-15). CLI로는 크레딧 만료를 조회할 수 없다
+  (`aws freetier`는 프리티어 사용량만, 크레딧 목록 API 없음).
+  → **추측으로 고치지 않고 그대로 뒀다.** 콘솔 Billing → Credits에서 확인 필요. `TASKS.md` TASK-6에 기록.

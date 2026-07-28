@@ -187,7 +187,11 @@ tofu state list                         # ③ 비었는지 확인
 ## 비용 가드레일 (크레딧이라도 필수)
 
 - **AWS Budgets 알림** $10 / $50 / $150 + **Cost Anomaly Detection** — 착수 전 먼저 설정
-  (IaC-first: 예산은 `0-bootstrap`의 `aws_budgets_budget`로 코드화. 콘솔판은 부트스트랩 프롤로그)
+  → **둘 다 `0-bootstrap` 코드로 생성된다** (`budget.tf` / `cost-anomaly.tf`). 콘솔 절차는 폐기.
+  코드화의 핵심 효용은 자동화가 아니라 **함정 차단**이다 — `include_credit=false`(크레딧 상계 방지),
+  `threshold_type=ABSOLUTE_VALUE`(콘솔 기본값 %의 함정)를 사람이 틀릴 여지 없이 고정한다.
+  - ⚠️ 둘 다 **실시간 아님** (예산=ACTUAL 청구 반영 ~24h, 이상탐지 EMAIL=`DAILY`가 최선.
+    `IMMEDIATE`는 SNS 전용). 30분 세션의 실시간 방어는 **리퍼**가 하고, 이 둘은 마지막 그물.
 - **NAT Gateway 절대 회피** (+$32/mo 폭탄) → **퍼블릭 서브넷 + 노드 공인IP**로 구성
 - **ARM64** (t4g / Graviton) — 우리 alpine 이미지 arm64 호환, x86보다 ~20% 저렴
 - **Spot 인스턴스** 노드그룹 — 학습용이라 중단 감내 가능

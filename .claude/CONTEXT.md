@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` (clean) |
-| 열린 PR | 없음 |
+| 브랜치 | `chore/eks-docs-iac-first` |
+| 열린 PR | 진행 중 — 튜토리얼 IaC-first 정합화(콘솔 절차·캡처 폐기) + 이상탐지 코드화 |
 
 > **🌙 다음 세션 시작점**: main clean · 미커밋 0 · 열린 PR 0 · **AWS 잔존물 0 (비용 $0)** ·
 > 크레딧 ≈ $199.6/$200 · 세션 마커 없음.
@@ -469,8 +469,8 @@ Grafana Cloud push → **인프라 컴포넌트도 영속 볼륨을 요구하지
 - **계획 문서: `infra/aws-eks/README.md`** — 착수 전 반드시 읽을 것 (비용 분석·기각안 포함)
 - **작업 일지: `docs/eks-migration-log.md` 실시간 유지 의무** — 규칙은 루트 `CLAUDE.md`
   "EKS 작업 일지 규칙" 참조. 블로그 원고 소스. 서브에이전트 위임 시 규칙 전파 필수
-- **정답 경로 튜토리얼: `docs/eks-tutorial-steps.md`** — 성공 확인된 절차만. 최상단 캡처 체크리스트로
-  이미지 추적.
+- **정답 경로 튜토리얼: `docs/eks-tutorial-steps.md`** — 성공 확인된 절차만.
+  **캡처 없음**(07-29 폐기, 아래 참조) — 모든 확인은 명령어 + 기대 출력으로.
 - **🎯 방향 확정 (07-16): IaC-first — "인프라 전부를 코드로, 콘솔 클릭 0".** 레이어별 state 분리
   `0-bootstrap`(remote backend·OIDC·IAM·예산·이상탐지) / `1-network` / `2-cluster`(destroy 대상) /
   `gitops`(ArgoCD). CI: plan-on-PR+tfsec, apply-on-merge(OIDC). 상세: `infra/aws-eks/README.md`.
@@ -499,12 +499,11 @@ Grafana Cloud push → **인프라 컴포넌트도 영속 볼륨을 요구하지
   - **➡️ 다음: Stage 3 = EBS CSI + StatefulSet(in-cluster Postgres)** — **여기서 PVC가 처음 생긴다**
     → destroy 전 `kubectl delete ingress,pvc --all -A` 규율 첫 적용. 그 다음 4(ALB Ingress)·5(ArgoCD).
   - CI 관리 레이어 현재: `infra-deploy.yml` matrix `[0-bootstrap, 1-network]` (2-cluster는 로컬 전용이라 의도적 제외).
-  - IaC-first라 **캡처 필요량 급감** — 단계가 코드+CLI 텍스트. 잔여는 서사/증빙 소수.
-- **🖼️ remote 세션 스크린샷 넣는 법 (헷갈리지 말 것)**: 채팅 인라인 이미지·파일은 실행 디스크에
-  **안 닿고** 클립보드도 격리됨. → 사용자가 **캡처를 GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된
-  `user-attachments` URL을 채팅에 전달** → 에이전트가 받아서 `docs/images/eks-tutorial/`에 저장.
-  익명 접근은 404라 **`gh` 토큰 필요**: `curl -sSL -H "Authorization: token $(gh auth token)" -o <경로> <url>`.
-  (PS5.1 `Invoke-WebRequest`는 실패 — curl 쓸 것.)
+- **🖼️ 스크린샷 체계 전면 폐기 (07-29 확정)**: IaC-first라 게시물에 콘솔 캡처가 필요 없다는 결론.
+  캡처 체크리스트·`<!-- 캡처 필요 -->` 자리표시·`docs/images/eks-tutorial/`·휘발성 캡처 알림 규칙 전부 제거.
+  **콘솔로만 되는 절차를 만나면 캡처가 아니라 IaC 이관을 먼저 검토**한다(그렇게 예산·이상탐지가 코드가 됨).
+  시각 자료가 필요하면 mermaid 다이어그램(`docs/architecture/`) — 버전 관리되고 diff가 보인다.
+  규칙 전문은 루트 `CLAUDE.md` "스크린샷 규칙".
 - 한 줄: **EKS를 OpenTofu로 세웠다 부수는 K8s 학습 놀이터.** destroy-after-use + $200 크레딧.
   **prod는 Fly($0) 그대로** (prod 이전은 검토 후 명시적 기각 — Fargate 상시 월 $35 = 크레딧 5.7개월 → 절벽)
 - 착수 순서(IaC-first): 0-bootstrap(backend·OIDC·예산 코드) → CI(plan/apply) → 1-network →
