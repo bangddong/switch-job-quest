@@ -5,7 +5,13 @@
 
 ## 🟢 시작 (여기까진 $0)
 
-1. **통시간 확보 확인** — destroy까지 붙어있을 수 있나? (30~40분+) 중간 이탈 = 과금 누수.
+1. **통시간 확보 확인** — destroy까지 붙어있을 수 있나? 중간 이탈 = 과금 누수.
+   | 구성 | 왕복 소요(벽시계) |
+   |---|---|
+   | Stage 0~1 (EKS만) | 30~40분 (실측: Task 8 ~50분, Stage 1 ~20분) |
+   | **Stage 2~ (EKS + RDS)** | **45~60분** — RDS 생성 ~10분·삭제 ~5분이 추가된다 🟡 미실측 |
+   > RDS는 EKS와 의존관계가 없어 같은 apply에서 **병렬로** 생성되므로 증분이 온전히 더해지진 않는다.
+   > 첫 세션에서 실측해 이 표를 갱신할 것.
 2. **사전 점검** (전부 무료):
    ```bash
    command -v tofu kubectl aws            # 도구 존재
@@ -28,18 +34,48 @@
 
 8. **teardown 순서 엄수** (Stage 1+ ALB/PVC 생기면 필수):
    ```bash
-   kubectl delete ingress,pvc --all -A    # K8s가 만든 ALB·EBS 회수 (state 밖 고아 방지)
+   # ① ESO가 관리하는 Secret부터 (Stage 2~)
+   #    ⚠️ `kubectl delete secret core-api-db`만 하면 ESO가 **즉시 재생성**한다.
+   #       소유자인 ExternalSecret을 먼저 지워야 한다(creationPolicy: Owner).
+   kubectl delete externalsecret --all -A
+   kubectl delete secretstore --all -A
+
+   # ② K8s가 만든 ALB·EBS 회수 (state 밖 고아 방지)
+   kubectl delete ingress,pvc --all -A
    # 콘솔/CLI로 ALB·EBS 사라졌나 확인
+
+   # ③ 인프라
    cd infra/aws-eks/2-cluster && tofu destroy
    ```
+   > ESO 자체(Helm 릴리스)는 클러스터와 함께 사라지므로 별도 삭제 불필요.
 9. **고아 전수 검증** = 0:
    ```bash
+   R=ap-northeast-2
    tofu state list                                   # 비어야 함
-   aws eks list-clusters --region ap-northeast-2     # 비어야 함
-   aws elbv2 describe-load-balancers --region ap-northeast-2 --query 'LoadBalancers[].LoadBalancerName'
-   aws ec2 describe-volumes --region ap-northeast-2 --filters Name=status,Values=available --query 'Volumes[].VolumeId'
-   aws ec2 describe-nat-gateways --region ap-northeast-2 --filter Name=state,Values=available
+   aws eks list-clusters --region $R                 # 비어야 함
+   aws elbv2 describe-load-balancers --region $R --query 'LoadBalancers[].LoadBalancerName'
+   aws ec2 describe-volumes --region $R --filters Name=status,Values=available --query 'Volumes[].VolumeId'
+   aws ec2 describe-nat-gateways --region $R --filter Name=state,Values=available
+
+   # ── RDS 계열 (Stage 2에서 추가) ──
+   # ⚠️ 인스턴스가 사라져도 **스냅샷은 남아 계속 과금**된다. 가장 놓치기 쉬운 고아다.
+   aws rds describe-db-instances --region $R --query 'DBInstances[].DBInstanceIdentifier'
+   aws rds describe-db-snapshots --region $R --snapshot-type manual   --query 'DBSnapshots[].DBSnapshotIdentifier'
+   aws rds describe-db-snapshots --region $R --snapshot-type automated --query 'DBSnapshots[].DBSnapshotIdentifier'
+   aws rds describe-db-subnet-groups --region $R --query 'DBSubnetGroups[].DBSubnetGroupName'
+
+   # ── Secrets Manager ──
+   # 🔴 --include-planned-deletion 없이 조회하면 "삭제 대기" 상태 시크릿이 안 보인다.
+   #    복구창(기본 30일) 동안 시크릿당 $0.40/월이 계속 과금되고, 이름이 점유돼
+   #    다음 세션 apply가 InvalidRequestException으로 실패한다.
+   #    (그래서 코드에서 recovery_window_in_days = 0 으로 둔다 — secrets.tf ⑨)
+   aws secretsmanager list-secrets --region $R --include-planned-deletion \
+     --query 'SecretList[].{Name:Name,DeletedDate:DeletedDate}'
    ```
+
+   > 🟡 **미검증**: RDS가 `manage_master_user_password`로 만든 마스터 시크릿(`rds!db-...`)이
+   > 인스턴스 삭제와 함께 자동 정리되는지는 아직 실측하지 않았다. 첫 teardown 때
+   > 위 `list-secrets` 출력으로 **직접 확인하고 이 문서를 갱신할 것.**
 10. 일지에 destroy 시각·총 과금 시간·비용 결산 append.
 11. **구축 후 이해도 퀴즈** — 학습 마일스톤(`stage/eks-*` 브랜치)이면 `quiz.md`로 진행,
     `docs/eks-quizzes/<브랜치>.md` + `<!-- QUIZ-PASSED -->`. (`assert-eks-quiz.sh`가 PR 차단으로 강제)
@@ -54,8 +90,12 @@
 | 조각 | 파일 | 역할 |
 |------|------|------|
 | 마커 | `eks-session-marker.sh` (PreToolUse) | `tofu apply` 감지 → `.claude/eks-session/active` 생성 |
-| 하트비트+리마인더 | `eks-heartbeat-reminder.sh` (Stop) | 매 턴 하트비트 touch("사람 활동 중") + 클러스터 살아있으면 경고 + 클러스터 없으면 마커 자가청소 |
-| 리퍼 | `eks-reaper.sh` (launchd 30분) | 마커 있고 **하트비트 2h stale**(=사람 사라짐)이면 → 실제 클러스터 확인 후 `tofu destroy` |
+| 하트비트+리마인더 | `eks-heartbeat-reminder.sh` (Stop) | 매 턴 하트비트 touch("사람 활동 중") + **과금 리소스**(EKS·RDS) 살아있으면 경고 + 전부 없으면 마커 자가청소 |
+| 리퍼 | `eks-reaper.sh` (launchd 30분) | 마커 있고 **하트비트 2h stale**(=사람 사라짐)이면 → 실제 리소스 확인 후 `tofu destroy` |
+
+> 🔴 **생존 판정은 EKS·RDS의 OR이다 (Stage 2에서 교정).** 클러스터만 보면 "EKS는 지워졌는데
+> RDS는 남은" 부분 실패 상태에서 **마커를 자가 삭제해 감시를 끝내버린다** → RDS 영구 과금.
+> 두 스크립트가 같은 기준을 쓰도록 유지할 것. 목 주입 테스트로 회귀 검증됨.
 
 **동작 요지**: 네가 Claude로 작업 중이면 매 턴 하트비트가 갱신돼 리퍼가 안 건드린다.
 네가 **끝 신호 없이 사라지면** 하트비트가 2시간 뒤 stale → 리퍼가 자동 `tofu destroy` → 과금 종료.

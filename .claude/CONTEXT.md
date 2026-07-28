@@ -7,8 +7,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#326~#338 전부 머지 완료) |
+| 브랜치 | `stage/eks-2-rds-secrets` |
+| 열린 PR | 진행 중 — EKS Stage 2 (RDS + Secrets Manager + IRSA + External Secrets Operator) |
+
+> ⚠️ **이 브랜치는 세션을 넘겨 살아있다. PR은 아직 안 만들었다 — 의도된 것이다.**
+> `stage/eks-*`는 퀴즈 게이트(`assert-eks-quiz.sh`) 대상인데 **오늘은 $0 준비만 하고 apply를 안 해서
+> 실측이 없다 = 낼 문제가 없다.** `chore/`로 바꿔 우회하는 건 CLAUDE.md가 금지한 학습 우회이므로,
+> **한 브랜치에 코드를 쌓아두고 다음 세션에 apply→검증→퀴즈까지 마친 뒤 PR을 만든다.**
+> 이어받는 법: `git checkout stage/eks-2-rds-secrets` 후 `docs/eks-session-sop.md` §1부터.
 
 > **🧹 tech-debt 정리 세션 완료 (07-27) — 9 PR 머지, 전부 CI 그린.**
 > #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트) · #329 FE(CompanyCard 가드·extractPdfText)
