@@ -79,3 +79,8 @@ SELECT version();
 **결과 반영**: `infra/aws-eks/2-cluster/variables.tf`의 `db_engine_version` 기본값을
 prod와 같은 메이저로 맞춘다(예: prod가 16이면 `"16.x"`).
 지원 버전 확인: `aws rds describe-db-engine-versions --region ap-northeast-2 --engine postgres`
+
+**07-28 실측 보강 (#339 세션)**: RDS **PostgreSQL 17.10**에 대해 Flyway **12개 마이그레이션이
+전부 정상 적용**됐다(`Successfully validated 12 migrations` / `Current version of schema "public": 12`).
+즉 17.x에서 스키마가 깨지지 않는 것은 확인됐다. 남은 건 "prod와 **같은** 메이저인가"뿐이고,
+다르더라도 **학습 진행에는 지장 없다**(회귀 검증의 강도만 낮아진다). 우선순위 낮음.
