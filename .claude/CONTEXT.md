@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | main (작업 없음) |
-| 열린 PR | 없음 (#326~#334 전부 머지 완료) |
+| 브랜치 | fix/timezone-consistency |
+| 열린 PR | 진행 중 — zone 불일치 수정(L-9) |
 
 > **🧹 tech-debt 정리 세션 완료 (07-27) — 9 PR 머지, 전부 CI 그린.**
 > #326 죽은 설정 · #327 core-api Jackson3 · #328 db-core Jackson3(+회귀테스트) · #329 FE(CompanyCard 가드·extractPdfText)
@@ -21,11 +21,13 @@
 > AI 폴백↑ = 퇴보. 선행조건 = 카테고리당 10개 보강. 근거 기록 완료, 재조사 불필요** ·
 > **③질문뱅크 ORDER BY RANDOM(미착수 — `@DataJpaTest` 인프라 선행) ④원장 L-8(미착수 — 전역 J2 kotlin 모듈, blast radius 큼).**
 >
-> **⚠️ 이 세션이 새로 만든 숙제 = 원장 L-9 (zone 불일치)**: `save()`는 zone 미지정 `LocalDateTime.now()`,
-> 조회는 `Asia/Seoul` 기준. 컨테이너 TZ 미설정(=UTC)이라 ~9시간 skew. **20일 윈도우엔 무해하지만
-> `existsTodayLog`(1일 창)는 cron `0 0 9 * * *` KST = 00:00 UTC라 날짜가 우연히 일치해 동작 중** —
-> 🔴 **cron 시각을 바꾸려면 그 전에 반드시 L-9를 처리할 것**(안 그러면 중복 발송). zone 미지정 `now()`가
-> core-api main에만 4곳이라 일관 수정하려면 별도 감사 필요.
+> **✅ 원장 L-9 (zone 불일치) — #336에서 해결.** JVM 기본 zone을 `-Duser.timezone=Asia/Seoul`로 고정.
+> 🔴 **여기서 얻은 교훈이 크다**: 최초 진단에서 *"TZ 설정이 없다"* 고 적었으나 **틀렸다** —
+> `be/fly.toml:14`·`k8s/base/core-api.yaml:42`에 **`TZ=Asia/Seoul`이 이미 있었다**(루트 `fly.toml`을 grep해
+> 파일 부재 → `||` 폴백의 "없음"을 사실로 오인). 진짜 원인은 미설정이 아니라 **Alpine에 `tzdata`가 없어
+> `TZ`가 에러 없이 무시되고 UTC로 폴백**한 것 = **"설정했다고 믿었는데 안 먹던"** 부류.
+> → **`-Duser.timezone`은 JDK 번들 tzdb로 해석돼 tzdata 없이 동작**하므로 이게 정답. 함정 재발 방지 주석을
+> Dockerfile·fly.toml·k8s 매니페스트 3곳에 남김. **⚠️ 배포 후 1회 실측 필요 = TASKS.md TASK-8(원장 L-10).**
 >
 > **🌙 다음 세션 시작점 (07-27 세션 종료 시점 갱신)**: main clean, 미커밋 0, 열린 PR 0, EKS 잔존물 0(비용 $0).
 > **작은 것부터 집으려면**: ⓐ원장 **L-9** zone 불일치(위 ⚠️, core-api 4곳 감사) ⓑ**L-8** 전역 J2 kotlin 모듈 제거

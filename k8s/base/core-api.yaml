@@ -39,6 +39,11 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: prod
+            # ⚠️ 이 값만으로는 zone이 안 바뀐다. 베이스 이미지가 alpine인데 tzdata가 없어서
+            #    musl이 zone 파일을 못 찾고 **에러 없이 UTC로 폴백**한다(설정한 줄 알았는데 안 먹는 함정).
+            #    실제 zone 고정은 Dockerfile의 `-Duser.timezone=Asia/Seoul`이 담당한다
+            #    (JDK 번들 tzdb로 해석되므로 OS tzdata가 없어도 동작).
+            #    이 줄은 의도 문서화 + 향후 tzdata 추가/베이스 이미지 교체 시 유효해지므로 남겨둔다.
             - name: TZ
               value: Asia/Seoul
           # DB 접속 정보는 코드에 없다(application-prod.yml이 100% 환경변수 기반).

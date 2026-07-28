@@ -62,7 +62,10 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
-        jvmArgs("-Dfile.encoding=UTF-8")
+        // -Duser.timezone=Asia/Seoul: CI(우분투 러너, 기본 UTC)와 prod(Dockerfile ENTRYPOINT에서
+        // 동일 설정)가 같은 zone에서 돌게 해서 "CI는 초록인데 prod에서만 다르게 동작"을 막는다.
+        // fix/timezone-consistency — 회귀 가드: TimezoneConsistencyTest.
+        jvmArgs("-Dfile.encoding=UTF-8", "-Duser.timezone=Asia/Seoul")
         finalizedBy(tasks.named("jacocoTestReport"))
     }
 

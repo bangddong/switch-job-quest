@@ -47,6 +47,14 @@ EXPOSE 8080
 # - GC 로그(-Xlog:gc)는 배포 후 실제 사용 중인 GC 종류 확정용. 저트래픽 환경이라 로그량 미미.
 #   Metaspace OOME 진단에 이 로그가 결정적이었으므로 절대 제거하지 말 것
 # - 나머지는 스레드 오버헤드, 기타 네이티브 메모리용으로 여유 확보
+# - JVM 기본 zone: 이 앱의 도메인 TZ는 KST(단일 리전 서비스). 저장은 ambient `LocalDateTime.now()`,
+#   조회는 명시적 `ZoneId.of("Asia/Seoul")`로 되어 있어 둘의 기본 zone이 어긋나면 "오늘의 질문" 조회·
+#   코딩 스트릭이 하루씩 밀리는 결함이 난다(fix/timezone-consistency에서 실제 발현 확인).
+#   `TZ` 환경변수(fly.toml 등에 이미 설정돼 있었음)만으로는 부족하다 — 이 베이스(alpine)에는
+#   `tzdata` 패키지가 없어 `TZ`가 에러 없이 조용히 무시되고 UTC로 폴백한다. `-Duser.timezone`은
+#   OS tzdata가 아니라 JDK가 자체 번들하는 tzdb로 해석되므로 `apk add tzdata` 없이도 동작한다.
+#   `apk add tzdata` 대신 이 방식을 택한 이유: 이미지 크기를 늘리지 않고, 배포 환경(Fly·k8s)의
+#   설정에도 의존하지 않는다 — 지우면 컨테이너가 다시 UTC로 조용히 되돌아가 위 결함이 재발한다.
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=35.0", \
@@ -54,4 +62,5 @@ ENTRYPOINT ["java", \
   "-XX:ReservedCodeCacheSize=96m", \
   "-Xss512k", \
   "-Xlog:gc::time,level,tags", \
+  "-Duser.timezone=Asia/Seoul", \
   "-jar", "app.jar"]
