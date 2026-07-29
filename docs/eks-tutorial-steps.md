@@ -8,8 +8,7 @@
 > - 각 명령어에 기대 출력/확인 방법, 단계별 사전 조건(도구 버전·AWS 권한·앞 단계 산출물) 명시
 > - 💰 비용 발생 시작 지점 표시 + 각 단계 cleanup 명령어
 > - 방식이 바뀌면 과거 단계도 최종 방식으로 소급 갱신
-> - 캡처는 사용자가 직접 — 필요 지점에 `<!-- 캡처 필요: ... -->` 자리표시, 아래 체크리스트로 추적
-> - 터미널 출력은 이미지 금지, 텍스트 코드블록
+> - **스크린샷 없음** — 전 과정이 IaC+CLI라 모든 확인을 명령어와 기대 출력으로 한다 ("이 문서에 스크린샷이 없는 이유" 참조)
 >
 > **최종 검증**: 이관 완료 후 클러스터 destroy → 이 문서만으로 처음부터 재현 성공해야 완료.
 
@@ -35,30 +34,18 @@
 
 ---
 
-## 캡처 체크리스트
+## 이 문서에 스크린샷이 없는 이유
 
-> 위치: `docs/images/eks-tutorial/`. 캡처 넣으면 완료 체크 + 본문 자리표시를 이미지 참조로 교체.
-> ⚠️ = 휘발성 (지금 아니면 못 찍음)
+의도적으로 없다. 전 과정이 **IaC(OpenTofu) + CLI**로 돌아가기 때문이다.
 
-| 파일명 | 필요한 화면 | 완료 |
-|--------|------------|:----:|
-| ~~step-00-credits.png~~ | 🔴 **영구 소실.** Billing → Credits의 `$200.00 / 사용 $0.00` 화면은 Stage 0 apply(07-24)로 크레딧 소비가 시작되면서 **재현 불가**가 됐다. 대체: 현재 잔여 화면 + 아래 "사전 조건"의 실측 수치를 텍스트로 인용 | 🔴 |
-| step-00-budget-amount.png | Set your budget — name·Monthly/Recurring·Fixed·$200 | ☑ |
-| step-00-budget-scope.png | Budget scope — All AWS services / Unblended costs | ☑ |
-| step-00-budget-alerts.png | 예산 알림 설정 화면 — Threshold **Absolute value** 10/50/150, Trigger **Actual**, Email recipients (자리표시 `your_email@example.com`로 캡처 권장) | ☑ |
-| step-00-budgets.png | Budgets 목록에 `eks-credit-guard` + 임계값 알림 표시 | ☐ |
-| step-00-anomaly.png | Cost Anomaly Detection 모니터 생성 완료 화면 | ☐ |
-| stage-1-ecr-images.png | ECR → `devquest/core-api` 이미지 목록 — sha 태그 + `latest`, 크기(~166MB), 푸시 시각 | ☐ |
-| stage-2-secrets-list.png | ⚠️ Secrets Manager 목록에 3개가 **동시에** 보이는 화면(`devquest-eks/db-connection` · `devquest-eks/app` · `rds!db-<uuid>`). **destroy하면 전부 사라진다** — 클러스터 살아있을 때만 가능 | ☐ |
-| stage-2-rds-instance.png | ⚠️ RDS → `devquest-eks-db` 상세 — Status `Available`, Engine `PostgreSQL 17.10`, Class `db.t4g.micro`, Publicly accessible `No`. **destroy 후 재현 불가** | ☐ |
-| stage-2-cost-explorer.png | Cost Explorer에서 세션 당일 비용 — 서비스별(EKS/EC2/RDS) 분해. **CE 반영은 ~24h 지연**되므로 세션 다음 날 촬영 | ☐ |
+- 콘솔 클릭 순서는 **개념이 아니라 UI 트리비아**다. 같은 내용을 `budget.tf` 한 파일이 더 정확하게 말한다 —
+  `include_credit = false`가 왜 필요한지는 코드 한 줄과 주석으로 보이지만, 스크린샷으로는 안 보인다.
+- **AWS 콘솔 UI는 자주 바뀐다.** 캡처는 코드보다 훨씬 빨리 썩고, 썩은 캡처는 없느니만 못하다.
+- 리소스 상태는 `aws ... describe-*` 출력으로 **텍스트로 확인**할 수 있고, 그게 복사·검색·비교가 된다.
 
-> 🔴 **휘발성 캡처를 놓친 사례가 이미 있다**(위 `step-00-credits.png`). 규칙을 만들어두고도 놓쳤다.
-> **Stage 2의 ⚠️ 2건은 클러스터가 살아있는 30분 안에만 찍을 수 있다** — 다음 과금 세션에서 destroy 전에 확보할 것.
-
-> **remote 세션 이미지 전송법** (확정): 채팅 인라인 이미지·파일은 실행 디스크에 안 닿고 클립보드도
-> 격리됨. → **캡처 → GitHub 댓글창에 Ctrl+V(자동 업로드) → 생성된 URL을 채팅에 전달 → `gh` 토큰으로
-> 다운로드**. (익명 접근은 404, `Authorization: token $(gh auth token)` 헤더 필요.)
+그래서 이 문서는 **모든 확인 절차를 명령어와 기대 출력으로** 제시한다. 화면을 보고 눈으로 맞추는
+단계는 없다. 실제로 이 프로젝트도 초기엔 콘솔로 예산을 만들고 캡처를 남겼는데,
+그 절차가 통째로 `budget.tf`로 대체되면서 캡처도 함께 폐기했다(B-3 참조).
 
 ---
 
@@ -86,7 +73,8 @@
   EC2·Bedrock·Lambda·Budgets·RDS)**. 전 건 만료 **2027-01-15**. 개설 시점 사용 $0.00
 - 🔴 **RDS 프리티어 없음** — 2025-07 이후 신규 계정은 프리티어가 아니라 크레딧 구조다.
   `aws freetier get-free-tier-usage`로 확인했고, RDS는 단가가 그대로 청구된다.
-- AWS Budgets 알림 + Cost Anomaly Detection 설정 (아래 "비용 가드레일" — `tofu apply` 전 필수)
+- AWS Budgets 알림 + Cost Anomaly Detection은 **코드로 생성된다** — 아래 "레이어 스캐폴딩" B-3 참조.
+  Stage 0(첫 과금)보다 반드시 먼저 apply한다.
 
 **크레딧 잔여를 정확히 보는 법** (⚠️ 함정 있음):
 
@@ -106,80 +94,154 @@ Credit -0.3282654047
 
 ---
 
-## 비용 가드레일 (예산 알림 + 이상 탐지) — apply 전 필수
+## 레이어 스캐폴딩 — `0-bootstrap` (💰 $0, 비용 가드레일이 여기서 생긴다)
 
-> **사전 조건**: AWS 계정 로그인 (신규 학습 계정이면 루트로 진행해도 무방).
-> **왜 먼저 하나**: EKS는 시간당 과금이라, `tofu apply` 전에 폭주 감지 장치부터 건다.
-> **💰 비용**: 예산은 계정당 **2개까지 무료**(이후 $0.02/budget/day). 이상 탐지는 무료. → 이 단계 과금 $0.
+Stage 0의 첫 과금 apply를 하기 **전에** 반드시 끝내야 하는 단계다. 이유는 두 가지:
 
-### G-1. 예산(Budget) 생성
+1. **state 저장소가 있어야 한다** — 이후 모든 레이어가 여기 만든 S3 버킷에 state를 둔다.
+2. **예산·이상탐지 가드레일이 여기서 생긴다** — 돈이 나가기 시작하는 건 Stage 0부터인데,
+   감시 장치는 그 **전에** 켜져 있어야 의미가 있다.
 
-Billing and Cost Management 콘솔 → 좌측 **Budgets** → **Create budget**
+> 💰 **이 레이어는 전부 $0이다.** S3에 든 tfstate는 수 KB, DynamoDB는 온디맨드라 유휴 시 $0,
+> 예산·이상탐지는 무료, ECR은 이미지 없으면 $0, IAM은 항상 무료.
+> **그래서 상시 켜 둔다** — Stage 0~5를 destroy해도 이 레이어는 남긴다.
 
-1. **Choose budget type**
-   - Budget setup: **Customize (advanced)**
-   - Budget types: **Cost budget - Recommended** → Next
-2. **Set your budget**
-   - Details → Budget name: `eks-credit-guard`
-   - Set budget amount → Period **Monthly** / Budget renewal type **Recurring budget** /
-     Budgeting method **Fixed** / Enter your budgeted amount **`200`** (= 크레딧 총액)
+### B-0. 무엇이 만들어지는가
 
-     ![Set your budget](images/eks-tutorial/step-00-budget-amount.png)
-   - Budget scope → **All AWS services (Recommended)** / Aggregate costs by **Unblended costs**
-     - ⚠️ **크레딧 제외는 신규 계정에서 지금 불가** — 아래 "함정 ①" 참조. 24h 뒤 편집으로 추가.
+| 파일 | 리소스 | 왜 필요한가 |
+|---|---|---|
+| `backend-state.tf` | S3 버킷 + DynamoDB 락 테이블 | 원격 state 저장소와 동시 실행 잠금 |
+| `backend.tf` | `backend "s3"` 블록 | 이 레이어가 **자기 state를 자기가 만든 버킷에** 두게 함 |
+| `budget.tf` | Budget + 알림 3단계 | 절대 금액 초과 감시 |
+| `cost-anomaly.tf` | 이상탐지 모니터 + 구독 | 패턴 이탈 감시 (예산이 못 잡는 것) |
+| `ecr.tf` | ECR 레포 + lifecycle | Stage 1의 이미지 보관소 |
+| `iam-github-oidc.tf` | OIDC 공급자 + 역할 | CI가 장기 액세스키 없이 AWS를 만지게 함 |
 
-     ![Budget scope](images/eks-tutorial/step-00-budget-scope.png)
-   - Next
-3. **Configure alerts** → **Add alert threshold** 3개 (전부 아래처럼):
+### B-1. 닭-달걀 문제 — state 저장소를 state 없이 만든다
 
-   | Threshold 값 | 단위 | Trigger | Email recipients |
-   |:---:|---|---|---|
-   | `10` | **Absolute value** | Actual | `<your-email>` |
-   | `50` | **Absolute value** | Actual | `<your-email>` |
-   | `150` | **Absolute value** | Actual | `<your-email>` |
+여기 이 레이어만의 함정이 있다. **원격 state를 쓰려면 S3 버킷이 있어야 하는데, 그 버킷을 만드는 게
+바로 이 코드다.** 아직 없는 버킷을 backend로 지정하면 `tofu init`이 실패한다.
 
-   - ⚠️ **단위 반드시 `Absolute value`** — 기본값 `% of budgeted amount`이면 150이 **$300**(크레딧 $200 초과 → 영영 안 울림). "함정 ②" 참조.
-   - 확인: Alert #1 Summary가 `When your actual cost is greater than $10.00 (5.00%)...`로 뜨면 정상.
+→ **2단계로 푼다. 먼저 로컬 state로 버킷을 만들고, 그 다음 state를 그 버킷으로 이사시킨다.**
 
-     ![예산 알림 설정](images/eks-tutorial/step-00-budget-alerts.png)
-4. **Attach actions** — Optional, 건너뛰기 → Next
-5. **Review** → **Create budget**
+```bash
+cd infra/aws-eks/0-bootstrap
 
-<!-- 캡처 필요: step-00-budgets.png — Budgets 목록에 eks-credit-guard와 알림이 보이는 상태 -->
+# ① backend 블록을 잠시 비활성화 — 아직 버킷이 없으므로
+mv backend.tf backend.tf.disabled
 
-#### 함정 ① — 신규 계정은 크레딧 charge type을 아직 못 고른다
-크레딧이 청구액을 $0으로 가려 알림이 안 울리는 것을 막으려면 원래
-`Budget scope → Filter specific AWS cost dimensions → Dimension: Charge type → Excludes → Credit, Refund`로
-크레딧/환불을 제외해야 한다. **그러나 계정 생성 직후엔** 이 Values 드롭다운이
-`Data is not available. Please try to adjust the time period. If just enabled Cost Explorer,
-data might not be ingested yet`를 띄우며 비어 있다 — Cost Explorer 데이터가 아직 수집 전(최대 24h).
-→ **일단 All AWS services로 예산을 만들고, ~24h 뒤 예산을 편집해 이 필터를 추가한다.**
-(첫 실제 과금은 Stage 0 `tofu apply` 때라 순서 여유 있음.)
+# ② 값 채우기: 이메일은 커밋되지 않는 tfvars에 둔다
+cp terraform.tfvars.example terraform.tfvars
+#    → terraform.tfvars 를 열어 budget_notification_email 을 본인 주소로
 
-#### 함정 ② — 알림 단위 기본값이 퍼센트다
-Configure alerts의 Threshold 단위 기본값은 `% of budgeted amount`. 여기에 10/50/150을 넣으면
-예산 $200 기준 **$20/$100/$300**이 된다 (150%=$300은 크레딧 초과라 무의미). 반드시 각 알림에서
-단위를 **`Absolute value`**로 바꿔 10/50/150 = **$10/$50/$150 달러**가 되게 한다.
+# ③ 버킷 이름은 S3 전역에서 유일해야 한다 — 그대로 쓰면 충돌한다
+#    variables.tf 의 state_bucket_name 기본값을 본인 것으로 변경
+#    (backend.tf.disabled 안의 리터럴 버킷명도 같이 바꿔야 한다 — 아래 ⚠️ 참조)
 
-### G-2. Cost Anomaly Detection (이상 탐지)
+# ④ 로컬 state로 apply
+tofu init
+tofu apply
+```
 
-Billing 콘솔 좌측 **Cost Anomaly Detection** → **Create monitor**
+기대 출력: `Apply complete! Resources: N added` — 그리고 **로컬에 `terraform.tfstate` 파일이 생긴다**
+(실측 4950B). 이 파일이 지금 이 레이어의 유일한 state다.
 
-<!-- 절차 확정 후 기입 — 진행 중 -->
-<!-- 캡처 필요: step-00-anomaly.png — 모니터 생성 완료 화면 -->
+검증:
+```bash
+aws s3 ls | grep tfstate            # 버킷 생성 확인
+aws dynamodb list-tables --query 'TableNames' --output text | tr '\t' '\n' | grep tflock
+```
 
-### G-3. Cleanup
-- 예산·이상 탐지는 **삭제 불필요** (무료, 상시 유지가 목적). 학습 종료 후에도 남겨둔다.
+> ⚠️ **`backend` 블록에는 변수를 못 쓴다.** OpenTofu가 backend를 읽는 시점은 변수 평가 **전**이라
+> `bucket = var.state_bucket_name` 같은 참조가 불가능하다. 버킷·테이블 이름은 리터럴이어야 하고,
+> 그래서 이름을 바꿀 때 `variables.tf`와 `backend.tf` **두 곳을 손으로 맞춰야** 한다.
+> 처음 하는 사람이 제일 자주 밟는 지점이다.
 
----
+### B-2. state를 S3로 이관
 
-## (미작성) 레이어 스캐폴딩 — `0-bootstrap` · `1-network` · `2-cluster` `.tf` 작성
+```bash
+mv backend.tf.disabled backend.tf
+tofu init -migrate-state -force-copy
+```
 
-> ⚠️ **아직 이 문서에 미작성.** OpenTofu 설치 → S3 backend + DynamoDB 락 부트스트랩 →
-> VPC/서브넷 → `2-cluster` `.tf` 작성까지가 여기 들어간다. 레포의 `infra/aws-eks/` 코드가
-> 사실상의 정답이며, 아래 Stage 0부터는 **그 코드가 준비된 상태**를 전제한다.
+기대 출력: `Successfully configured the backend "s3"!`
+
+검증 — **세 가지를 다 봐야 이관이 진짜 끝난 것이다**:
+```bash
+aws s3 ls s3://<본인-버킷>/0-bootstrap/   # terraform.tfstate 가 있어야 함 (실측 4950B)
+ls -l terraform.tfstate                    # 0바이트로 비어야 함 (.backup 은 남는다 — 정상)
+tofu plan                                  # No changes. 여야 함 (드리프트 0)
+```
+
+> `-force-copy`는 "state를 복사할까요?"라는 대화형 확인을 자동 통과시킨다. 로컬 `.backup`이 남으므로
+> 되돌릴 수 있어 안전하다. 이 플래그가 없으면 비대화형 셸에서 `EOF` 에러로 멈춘다.
 >
-> **재현 검증(이 문서만 보고 처음부터) 시 여기가 첫 번째 구멍이다.** 채울 때까지는 재현 검증 불가.
+> **이제 이 스택은 자기 state를 자기가 만든 버킷에 둔다**(자기참조 backend). state 키에 레이어명을
+> prefix로 주기 때문에(`0-bootstrap/terraform.tfstate`) 1-network·2-cluster와 **버킷 하나를 공유하되
+> 충돌하지 않는다.**
+
+### B-3. 비용 가드레일이 왜 코드인가 (콘솔로 하지 않는 이유)
+
+예산은 콘솔에서 클릭으로도 만들 수 있다. 실제로 이 프로젝트도 처음엔 그렇게 했다.
+**그런데 콘솔 절차에는 사람이 반드시 밟는 함정이 두 개 있었다:**
+
+| 함정 | 콘솔에서 벌어지는 일 | 코드에서는 |
+|---|---|---|
+| **크레딧 상계** | 크레딧이 청구액을 $0으로 가려 **알림이 영영 안 울린다** | `cost_types { include_credit = false }` |
+| **임계값 단위** | 기본값이 `% of budgeted amount` → 10/50/150이 **$20/$100/$300**이 된다 ($200 예산 기준 150%는 크레딧 초과라 무의미) | `threshold_type = "ABSOLUTE_VALUE"` |
+
+즉 **코드로 옮기니 함정이 사라진 게 아니라, 함정을 밟을 기회 자체가 없어졌다.**
+"조심하세요"라고 문서에 쓰는 것과, 틀린 값을 애초에 표현할 수 없게 만드는 것의 차이다.
+`budget.tf`·`cost-anomaly.tf`의 주석이 각 설정이 왜 그 값인지 설명하니 **코드를 읽는 게 곧 학습**이다.
+
+**두 장치의 역할이 다르다**:
+- **예산** = 절대 금액 감시. `$10 / $50 / $150` 초과 시 이메일.
+- **이상탐지** = 패턴 감시. 금액이 작아도 "안 쓰던 서비스가 갑자기 켜졌다"를 잡는다. 즉 **끄는 걸 잊은 리소스** 탐지용.
+
+> 🔴 **둘 다 실시간이 아니다 — 기대치를 정확히 해 둘 것.** 예산은 `ACTUAL` 비용 기준이라 AWS 청구
+> 반영(~24h)을 기다리고, 이상탐지는 이메일 구독자에게 **`DAILY` 요약이 최선**이다
+> (`IMMEDIATE` 즉시 알림은 SNS 구독자에게만 허용된다 — EMAIL로 지정하면 apply가 거부한다).
+> **30분짜리 세션을 지키는 실시간 장치가 아니다.** 그 역할은 리퍼(dead man's switch)가 하고,
+> 이 둘은 **리퍼까지 실패했을 때 걸리는 마지막 그물**이다.
+
+검증 (apply 후):
+```bash
+aws budgets describe-notifications-for-budget \
+  --account-id "$(aws sts get-caller-identity --query Account --output text)" \
+  --budget-name devquest-eks-monthly \
+  --query 'Notifications[].[ComparisonOperator,Threshold,ThresholdType]' --output table
+aws ce get-anomaly-monitors --query 'AnomalyMonitors[].[MonitorName,MonitorDimension]' --output table
+```
+기대: 알림 3건이 전부 `ABSOLUTE_VALUE` `10 / 50 / 150`, 모니터 1건이 `SERVICE`.
+
+### B-4. 이후는 CI가 apply한다
+
+여기까지가 사람이 손으로 하는 유일한 부트스트랩이다. 그 다음부터 `0-bootstrap`·`1-network`는
+**PR을 열면 `tofu plan`, main에 머지되면 `tofu apply`**가 자동으로 돈다
+(`.github/workflows/infra-deploy.yml`, GitHub OIDC로 역할 assume — 장기 액세스키 없음).
+
+> 🔴 **`2-cluster`는 이 자동 목록에 절대 넣지 않는다.** 머지 순간 CI가 EKS 컨트롤플레인($0.10/hr)을
+> 띄우고 아무도 destroy하지 않으면 상시 과금이 샌다. Infra CI의 `guard-local-layers` 잡이 이 실수를
+> **기계적으로 차단**한다 — 규율을 사람 기억에 맡기지 않는다.
+
+### B-5. `1-network` · `2-cluster`
+
+이 둘은 닭-달걀이 없어 평범하다 — backend가 이미 있으므로 `init` → `plan` → `apply`가 전부다.
+
+```bash
+tofu -chdir=infra/aws-eks/1-network init && tofu -chdir=infra/aws-eks/1-network apply
+```
+
+`1-network`(VPC·서브넷·IGW)도 **$0**이다 — NAT 게이트웨이를 쓰지 않기 때문이다(퍼블릭 서브넷 + 노드에
+퍼블릭 IP 부여로 대체). NAT는 시간당 $0.045 + 데이터 처리 요금이라 켜 두면 학습 계정에서 가장 조용히
+크레딧을 갉아먹는 리소스다.
+
+`2-cluster`는 **과금 대상**이므로 Stage 0에서 다룬다.
+
+> 🟡 **재현 검증 상태**: 위 명령들은 전부 실제로 실행해 출력을 확인한 것이다. 다만 우리는 코드를
+> **점진적으로 작성하며 여러 번 나눠 apply**했고, 위 B-1은 "코드가 이미 다 있는 상태에서 한 번에"로
+> 정리한 순서다. 이 통합 순서 그대로의 처음부터 재현은 아직 해 보지 않았다
+> (`docs/eks-migration-log.md`의 07-16~07-18 항목이 원본 기록).
 
 ---
 
@@ -419,7 +481,6 @@ GitHub Actions의 **ECR Push** 워크플로로 빌드한다.
 <account>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<git-sha>
 ```
 
-<!-- 캡처 필요: stage-1-ecr-images.png — ECR devquest/core-api 이미지 목록, sha 태그+latest, 크기 -->
 
 > 🔴 **CLI로 태그를 뽑을 땐 `imageTags[0]`을 쓰지 마라.** 한 이미지는 태그를 여러 개 갖고
 > (`<sha>` + `latest`) **배열 순서는 보장되지 않는다** — 그대로 쓰면 금지된 `latest`로 배포된다.
@@ -623,8 +684,6 @@ done
 > ① 누가 언제 넣었는지 기록이 없고 ② 값이 셸 히스토리에 남고 ③ 로테이션되지 않으며
 > ④ 클러스터를 재생성할 때마다 사람이 다시 쳐야 한다.
 
-<!-- 캡처 필요: stage-2-secrets-list.png — Secrets Manager 목록 3개 동시 표시 (⚠️ destroy 전에만 가능) -->
-<!-- 캡처 필요: stage-2-rds-instance.png — RDS devquest-eks-db 상세, Available/17.10/db.t4g.micro/Publicly accessible No (⚠️ destroy 전에만 가능) -->
 
 #### 함정 — `SecretSyncedError`가 보일 때 두 층을 구분하라
 
