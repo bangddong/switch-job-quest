@@ -7,11 +7,16 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `chore/eks-docs-iac-first` |
-| 열린 PR | #342 — 튜토리얼 IaC-first 정합화 + 이상탐지 코드화 (머지 대기) |
+| 브랜치 | `main` (clean) |
+| 열린 PR | 없음 |
 
 > **🌙 다음 세션 시작점**: main clean · 미커밋 0 · 열린 PR 0 · **AWS 잔존물 0 (비용 $0)** ·
 > 크레딧 ≈ $199.6/$200 · 세션 마커 없음.
+>
+> **🛡️ 가드레일이 이제 실제로 작동한다 (07-29 실측 확인)**:
+> 예산 `$10/$50/$150 ABSOLUTE_VALUE` + 이상탐지 `devquest-eks-anomaly-alerts / DAILY / 임계값 $5`.
+> **이전엔 AWS 기본값 `$100 AND 40%`라 크레딧 절반이 날아간 뒤에야 울렸다** — 콘솔에는 "켜짐"으로
+> 보였다는 점에서 꺼진 것보다 나빴다. 코드화하지 않았으면 몰랐을 것.
 > **➡️ 다음 = EKS Stage 3** (사용자가 "조금 이따" 진행하기로 함, 07-28).
 > RDS → **in-cluster Postgres StatefulSet** 스왑으로 EBS CSI·PVC·StorageClass 학습 +
 > "관리형 ↔ 자체운영" 비교(앱 코드 변경 0로 가능 — `application-prod.yml`이 100% 환경변수 기반).
@@ -170,9 +175,9 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
-| **#339** | **★ EKS Stage 2 실증 완료 — RDS + IRSA + External Secrets Operator (2026-07-28, 과금 26분 35초 ≈ $0.06).** apply→검증→teardown 왕복. **Stage 1에서 CrashLoop로 끝났던 core-api가 코드 변경 0으로 `/health` 200** (RDS `sslmode=require` 접속, Flyway 12개 적용, 26.3초 기동) — 바뀐 건 환경변수 주입 경로뿐. 시크릿은 **손으로 안 만들었다**: ESO(v2.8.0)가 Secrets Manager에서 K8s Secret 2개(10키) 자동 생성. **🔴 가장 값진 실패 = 한글 `description`으로 apply가 리소스 2개에서 깨짐 — `validate`·`plan`·`tfsec`이 셋 다 통과시킨다**(AWS API 미호출). 게다가 OpenTofu는 에러를 **종료 시점에 몰아 출력**해 "Creating..."에 멈춘 것처럼 보였고 `tofu state list`도 apply 중엔 무용 → **CloudTrail 원문**으로 확정(요약 `ErrorCode`는 `None`이라 오독 유발). 제약은 **서비스마다 다름**: EC2 SG·IAM ❌ / Secrets Manager·ECR ✅. **미검증 5건 전부 해소**(kubectl 스키마·ESO CRD는 `v1`만 served·IRSA `sub` 일치·**RDS 관리형 시크릿 자동 정리**·RDS 생성 4m50s/삭제 3m53s). **🔑 IRSA 두 실패 모드 실측 구분**: `sts:AssumeRoleWithWebIdentity` 거부=**인증**(sub/aud) vs `no identity-based policy`=**인가** — 후자는 주체가 `assumed-role/...`로 찍히는 것 자체가 assume 성공 증거. **teardown 고아 0건.** Blindspot Pass가 잡았던 과금 구멍 3개 전부 실전 유효. QA HIGH0·MED1·LOW2 전부 fixed. 퀴즈 3/4+재검토 통과. ⚠️ `be/` 변경(logback 조건부화) 포함 → **prod에도 배포됨**(prod는 LOKI URL이 설정돼 동작 무변경) | 2026-07-28 |
-| #336 · #337 | **timezone — 오진과 정정 (교훈이 본체).** #336에서 "저장은 ambient zone·조회는 KST라 어긋난다"며 데일리 메일 마진0·스트릭 과소계산을 주장하고 `-Duser.timezone=Asia/Seoul`을 넣었으나, **#337에서 로컬 docker(colima) 설치 후 실측하니 오진**: `eclipse-temurin:*-alpine`엔 tzdata가 **있고** `TZ=Asia/Seoul`만으로 `systemDefault()=Asia/Seoul`. prod는 **#210부터 쭉 KST**였고 불일치는 존재한 적 없음(실제 앱 이미지 빌드·부팅 → GC 로그 `+0900` 확인). **오진 경로 2단계**: ①없는 경로(루트 `fly.toml`) grep → `\|\| echo "없음"` 폴백을 사실로 보고 ②QA가 TZ 존재를 찾은 뒤에도 **이미지 실측 대신 웹 검색 일반론 채택**(기존 결론을 살려주는 방향이라 더 위험). → 두 패턴을 `systematic-debugging` 스킬에 등재. **잔존 가치(L-9-c)**: `build.gradle.kts` 테스트 zone 인자는 **실재하던 CI≢prod 갭**(CI=UTC, prod=KST)을 닫았고 `TimezoneConsistencyTest`가 가드. 원장 L-9/L-9-b는 obsolete 재분류. **🐳 colima+docker CLI 로컬 설치됨.** | 2026-07-28 |
-| #335 | **CONTEXT 클린 클로즈 (07-27 세션 종료).** | 2026-07-27 |
+| **#342 · #343** | **★ IaC-first 정합화 — 그리고 가드레일이 사실은 꺼져 있었다는 발견 (07-29, 비용 $0).** 사용자 지적("IaC 기반인데 캡처가 필요하냐")에서 출발했으나 밑에 더 큰 부채가 있었다: 튜토리얼 G-1이 **콘솔 클릭으로 예산 만드는 법**을 가르치는데 `budget.tf`가 **이미 그 절차를 대체**한 상태 → 캡처는 죽은 절차의 부속품. 캡처 체계 전면 폐기 + 콘솔 절차를 IaC로 교체 + **미작성이던 레이어 스캐폴딩(재현 검증 첫 구멍) 작성**. 이상탐지를 `cost-anomaly.tf`로 코드화(TASKS는 "코드로 처리"라 적었지만 **실제 .tf가 없었다**). **🔴 머지 후 CI apply 실패 — `Limit exceeded on dimensional spend monitor creation`**: AWS가 신규 계정에 `Default-Services-Monitor`를 미리 만들어 두고 DIMENSIONAL은 **계정당 1개** → 생성이 아니라 **인수(import)**가 정답. plan은 내 코드만 보므로 못 잡는다(**plan이 못 잡는 실패 3번째** — ①한글 description ②EMAIL+IMMEDIATE ③계정당 한도). **진짜 수확**: 인수해 보니 AWS 기본 임계값이 **$100 AND 40%** — 크레딧 $200 계정에서 **절반 날아간 뒤에야 울림**. 콘솔엔 "켜짐"으로 보여 **꺼진 것보다 나빴다**. $5로 하향, 실측 확인 완료. 부수 발견: **크레딧 만료일이 문서마다 달랐고**(01-15 vs 07-15) 사용자 확인으로 **2027-01-15 확정** — 07-16의 "가입 +1년" **추론이 콘솔 값을 덮어쓴 오독**이었다. **크레딧 수명이 1년이 아니라 6개월.** | 2026-07-29 |
+| #341 | **EKS 게시용 자료 부채 상환 (+1,429/−94).** 튜토리얼 2스테이지·다이어그램 3스테이지 뒤처진 것을 Stage 1~2로 갱신. 라이브 아티팩트 줌/전체화면 보존(덮어쓸 뻔한 것을 도구가 차단). | 2026-07-28 |
+| #340 | **CONTEXT 클린 클로즈 (Stage 2 종료).** 최근완료 19건 아카이브 이관, "Stage 2가 다음" 잔존 참조 3건 정정. | 2026-07-28 |
 
 ## 다음 작업
 
