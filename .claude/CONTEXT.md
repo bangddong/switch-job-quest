@@ -182,6 +182,14 @@
 ## 다음 작업
 
 ### 🎯 서비스 분해 에픽 (신규 대방향, #289 설계 확정) — 여러 세션짜리
+> 📌 **D-003** · 상태 `🚧진행중` · 영향 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`, `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md`, `be/core/ai-api`, `infra/aws-eks/2-cluster/addons.tf`, `.claude/review-ledger.md`, Stage 3~5
+
+> ⚠️ **가장 많이 바뀔 결정이다** — Phase 0~1만 구현됐고 2~3은 계획 상태다. 계획과 구현이 갈라지기
+> 가장 쉬운 지점이므로, **Phase를 넘길 때마다 이 블록을 갱신**한다(완료 표시가 아니라 *계획이 바뀌었는지*).
+> 특히 아래 두 가지는 **아직 코드가 없는 약속**이라 드리프트 1순위다:
+> ① `enableNetworkPolicy` (vpc-cni addon 현재 맨몸) ② t4g.small → medium 상향.
+> 상태가 `🚧진행중`인 동안에는 이 블록의 서술을 **"확정된 것"으로 인용하지 말 것.**
+
 - **설계 문서: `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`** (착수 전 필독)
 - **방향**: 무거운 앱 → 라이트 데일리 도구 재정렬 + EKS 다중서비스 학습. **daily + ai-service + core 3분리.**
 - **strangler 이관**: Phase 0(준비: ai-api 스캐폴드+HTTP어댑터 피처플래그) → 1(ai-service 추출, 포트 어댑터 HTTP화, AI parity 검증) → 2(daily-service 추출 +경량 FE, 무로그인 e2e) → 3(EKS 배포: Deployment×3·Ingress·NetworkPolicy)
@@ -307,6 +315,13 @@
 "인스턴스를 줄여서 버티기"가 통하지 않는 구조.
 
 #### 상시 운영은 기각 — 자기 선례와 충돌
+> 📌 **D-002** · 상태 `✅유효` · 영향 `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `infra/aws-eks/2-cluster`, `infra/aws-eks/README.md`, Stage 0~5 전체
+
+> ⚠️ **이 결정이 뒤집히면 destroy-after-use 규율 전체가 무너진다.** 리퍼(dead man's switch)·SOP의
+> 세션 왕복 절차·`2-cluster`를 CI 매트릭스에서 빼둔 `guard-local-layers`가 전부 이 결정의 파생물이다.
+> **재채택 유혹이 실재하는 결정**이다 — "잠깐만 켜두면 편한데"가 곧 월 $122~174다.
+> 크레딧 잔액이 남아 보일 때 특히 흔들린다. 뒤집으려면 아래 표의 숫자를 **다시 실측**하고
+> `design-change-procedure.md` 전 단계를 밟을 것.
 | | Fargate (이미 명시적 기각) | EKS 상시 |
 |---|---|---|
 | 월 비용 | $35 | **$122~174** |
