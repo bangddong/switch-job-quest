@@ -49,6 +49,6 @@
 아래는 `.claude/CONTEXT.md`의 **백로그 / 다음 작업** 섹션이 소유한다. 원장에 이중 등재하지 않는다.
 
 - `CodingQuestService.generateProblem`/`submitCode` 트랜잭션 재배치 보류 (#308 MEDIUM) → CONTEXT "서비스 분해 에픽" 잔존 리스크
-- `core-api/application-prod.yml`의 Boot 3 잔재 키 `server.error.*` (#308 LOW) → CONTEXT 백로그
+- `be/core/core-api/src/main/resources/application-prod.yml`의 Boot 3 잔재 키 `server.error.*` (#308 LOW) → CONTEXT 백로그
 - 죽은 설정 `devquest.ai.pass-score`·`interview-questions` (#306 부수 발견) → CONTEXT 백로그
 - Jackson 2 잔재 (`CodingQuestService`·인터셉터 2종) (#308 LOW) → CONTEXT 백로그

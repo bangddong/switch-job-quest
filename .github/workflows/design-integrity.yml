@@ -1,0 +1,30 @@
+name: Design Integrity
+
+# 설계 기록이 코드와 어긋나는 것을 기계로 잡는다.
+#
+# 배경(07-29 전수 점검): 결정은 CONTEXT.md에, 재판정은 일지에 따로 살아서
+# "이미 뒤집힌 결정"을 유효한 것으로 읽는 사고가 실제로 발생했다.
+# 사람 기억에 맡기지 않고 PR마다 검사한다.
+#
+# 경로 필터를 두지 않는다 — 코드 파일 삭제가 문서를 깨뜨리는 경우를 잡아야 하므로
+# "문서를 안 건드린 PR"이 오히려 위험하다.
+
+on:
+  pull_request:
+
+concurrency:
+  group: design-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Design Integrity / 결정-코드 정합성
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 설계 무결성 검사
+        run: bash .claude/scripts/check-design-integrity.sh
