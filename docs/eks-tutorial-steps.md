@@ -221,11 +221,28 @@ DIMENSIONAL(SERVICE) 모니터는 **계정당 1개**만 허용된다. 없는 걸
 
 ```bash
 cd infra/aws-eks/0-bootstrap
-MON=$(aws ce get-anomaly-monitors      --query 'AnomalyMonitors[0].MonitorArn'        --output text)
-SUB=$(aws ce get-anomaly-subscriptions --query 'AnomalySubscriptions[0].SubscriptionArn' --output text)
+
+# ① 먼저 "무엇이 있는지" 눈으로 본다 — 인수는 되돌리기 번거로우니 대상을 확인하고 시작한다
+aws ce get-anomaly-monitors      --query 'AnomalyMonitors[].[MonitorName,MonitorType,MonitorDimension]' --output table
+aws ce get-anomaly-subscriptions --query 'AnomalySubscriptions[].[SubscriptionName,Frequency]'          --output table
+
+# ② 이름으로 특정해서 ARN을 뽑는다 (인덱스 [0]을 쓰지 않는 이유는 아래 ⚠️)
+MON=$(aws ce get-anomaly-monitors \
+  --query "AnomalyMonitors[?MonitorName=='Default-Services-Monitor'].MonitorArn | [0]" --output text)
+SUB=$(aws ce get-anomaly-subscriptions \
+  --query "AnomalySubscriptions[?SubscriptionName=='Default-Services-Subscription'].SubscriptionArn | [0]" --output text)
+
+# ③ 제대로 잡혔는지 확인 — None 이면 이름이 다르다는 뜻이니 ①의 출력을 보고 이름을 맞춘다
+[ "$MON" != "None" ] && [ "$SUB" != "None" ] && echo "OK" || echo "이름 불일치 — ①의 목록에서 확인할 것"
+
 tofu import aws_ce_anomaly_monitor.services    "$MON"
 tofu import aws_ce_anomaly_subscription.alerts "$SUB"
 ```
+
+> ⚠️ **`AnomalyMonitors[0]` 같은 인덱스 접근을 쓰지 마라.** 신규 계정은 모니터가 1개뿐이라 우연히
+> 맞지만, **커스텀 모니터가 이미 있는 계정**(회사 계정, 또는 이 튜토리얼을 한 번 돌린 계정)에서는
+> **엉뚱한 리소스를 인수**하게 된다. 그러면 이후 apply가 그 리소스의 이름을 바꾸거나 재생성해
+> 남의 설정을 망가뜨린다. 이름으로 특정하고, ①에서 눈으로 확인하고 시작할 것.
 
 인수 후 `tofu plan`이 무엇을 하려는지 **반드시 확인한다** — 여기서 갈린다:
 

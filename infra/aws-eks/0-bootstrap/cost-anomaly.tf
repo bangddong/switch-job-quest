@@ -41,6 +41,11 @@ resource "aws_ce_anomaly_monitor" "services" {
 }
 
 # 감지된 이상을 누구에게 어떻게 보낼지.
+# ℹ️ `create_before_destroy`를 **의도적으로 넣지 않았다**(07-29 판단 기록).
+#    이름 변경이 replace를 유발하므로 destroy→create 사이에 알림 공백이 생기지만:
+#    ① 이 replace는 인수 전환 1회성이고(이후 apply부터 drift 0),
+#    ② 구독은 무료·즉시 재생성이며, ③ 실패해도 예산 알림(budget.tf)과 리퍼가 남는 보조 그물이다.
+#    반대로 create_before_destroy는 "구독 2개가 잠시 공존"하는 상태를 만든다 — 이 계층에선 과한 방어.
 resource "aws_ce_anomaly_subscription" "alerts" {
   name             = "devquest-eks-anomaly-alerts"
   monitor_arn_list = [aws_ce_anomaly_monitor.services.arn]
