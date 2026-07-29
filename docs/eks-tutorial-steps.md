@@ -204,6 +204,66 @@ tofu plan                                  # No changes. 여야 함 (드리프�
 > **30분짜리 세션을 지키는 실시간 장치가 아니다.** 그 역할은 리퍼(dead man's switch)가 하고,
 > 이 둘은 **리퍼까지 실패했을 때 걸리는 마지막 그물**이다.
 
+#### 🔴 apply 전에 반드시 — 이상탐지는 **만드는 게 아니라 인수한다**
+
+`cost-anomaly.tf`를 그대로 apply하면 **실패한다**. 실제로 밟은 에러:
+
+```
+Error: creating Cost Explorer Anomaly Monitor (devquest-eks-service-monitor):
+api error ValidationException: Limit exceeded on dimensional spend monitor creation
+```
+
+**원인**: AWS가 신규 계정에 `Default-Services-Monitor`를 **미리 만들어 둔다.** 그리고
+DIMENSIONAL(SERVICE) 모니터는 **계정당 1개**만 허용된다. 없는 걸 만드는 게 아니라 **이미 있는 걸
+중복 생성**하려 한 것이다.
+
+→ **먼저 state로 인수(import)한 뒤 apply한다:**
+
+```bash
+cd infra/aws-eks/0-bootstrap
+
+# ① 먼저 "무엇이 있는지" 눈으로 본다 — 인수는 되돌리기 번거로우니 대상을 확인하고 시작한다
+aws ce get-anomaly-monitors      --query 'AnomalyMonitors[].[MonitorName,MonitorType,MonitorDimension]' --output table
+aws ce get-anomaly-subscriptions --query 'AnomalySubscriptions[].[SubscriptionName,Frequency]'          --output table
+
+# ② 이름으로 특정해서 ARN을 뽑는다 (인덱스 [0]을 쓰지 않는 이유는 아래 ⚠️)
+MON=$(aws ce get-anomaly-monitors \
+  --query "AnomalyMonitors[?MonitorName=='Default-Services-Monitor'].MonitorArn | [0]" --output text)
+SUB=$(aws ce get-anomaly-subscriptions \
+  --query "AnomalySubscriptions[?SubscriptionName=='Default-Services-Subscription'].SubscriptionArn | [0]" --output text)
+
+# ③ 제대로 잡혔는지 확인 — None 이면 이름이 다르다는 뜻이니 ①의 출력을 보고 이름을 맞춘다
+[ "$MON" != "None" ] && [ "$SUB" != "None" ] && echo "OK" || echo "이름 불일치 — ①의 목록에서 확인할 것"
+
+tofu import aws_ce_anomaly_monitor.services    "$MON"
+tofu import aws_ce_anomaly_subscription.alerts "$SUB"
+```
+
+> ⚠️ **`AnomalyMonitors[0]` 같은 인덱스 접근을 쓰지 마라.** 신규 계정은 모니터가 1개뿐이라 우연히
+> 맞지만, **커스텀 모니터가 이미 있는 계정**(회사 계정, 또는 이 튜토리얼을 한 번 돌린 계정)에서는
+> **엉뚱한 리소스를 인수**하게 된다. 그러면 이후 apply가 그 리소스의 이름을 바꾸거나 재생성해
+> 남의 설정을 망가뜨린다. 이름으로 특정하고, ①에서 눈으로 확인하고 시작할 것.
+
+인수 후 `tofu plan`이 무엇을 하려는지 **반드시 확인한다** — 여기서 갈린다:
+
+| 리소스 | 계획 | 왜 |
+|---|---|---|
+| 모니터 | `updated in-place` | 이름 변경은 in-place ✅ |
+| 구독 | `must be replaced` | `name`이 `forces replacement` — 무료·재생성 가능이라 안전 |
+
+> ⚠️ **모니터가 `replaced`로 나오면 멈춰라.** 재생성은 삭제 후 생성이라 **위 한도 에러를 다시 밟는다.**
+>
+> 💡 **왜 `import` 블록으로 코드화하지 않았나**: 리소스 UUID가 계정마다 달라 코드에 박으면 이식되지
+> 않는다(게다가 ARN에 계정 ID가 들어가 공개 레포에 못 쓴다). 이 단계는 계정당 한 번, 사람이 하는 게 맞다.
+
+#### 🔴 AWS 기본값을 그대로 두면 안 된다
+
+인수해 온 **기본 구독의 임계값은 `$100 이상 AND 40% 이상`**이었다.
+크레딧 총액이 $200인 학습 계정에서 **절반이 날아간 뒤에야 울리는** 값이다.
+
+**"기본값이 있으니 됐다"가 가장 위험한 상태다** — 켜져 있는데 안 울린다.
+그래서 `$5`(예산 1단계 $10보다 낮게)로 낮춘다.
+
 검증 (apply 후):
 ```bash
 aws budgets describe-notifications-for-budget \
@@ -211,8 +271,12 @@ aws budgets describe-notifications-for-budget \
   --budget-name devquest-eks-monthly \
   --query 'Notifications[].[ComparisonOperator,Threshold,ThresholdType]' --output table
 aws ce get-anomaly-monitors --query 'AnomalyMonitors[].[MonitorName,MonitorDimension]' --output table
+aws ce get-anomaly-subscriptions \
+  --query 'AnomalySubscriptions[].[SubscriptionName,Frequency,ThresholdExpression.Dimensions.Values[0]]' \
+  --output table
 ```
-기대: 알림 3건이 전부 `ABSOLUTE_VALUE` `10 / 50 / 150`, 모니터 1건이 `SERVICE`.
+기대: 알림 3건이 전부 `ABSOLUTE_VALUE` `10 / 50 / 150`, 모니터 1건이 `SERVICE`,
+구독 1건이 `DAILY` + 임계값 `5`(기본 `100.0`이 아니라).
 
 ### B-4. 이후는 CI가 apply한다
 

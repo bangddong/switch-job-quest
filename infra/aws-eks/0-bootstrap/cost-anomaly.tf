@@ -12,9 +12,28 @@
 #   즉 이 장치가 알려주는 시점엔 이미 하루치가 과금돼 있다. 30분 세션을 지키는 실시간 장치는
 #   리퍼(dead man's switch)이고, 이건 **리퍼까지 실패했을 때의 마지막 그물**이다.
 
+# 🔴 이 두 리소스는 **새로 만드는 게 아니라 이미 있는 것을 인수(import)한 것이다.**
+#    (07-29 apply 실패로 알게 됨 — 아래가 그 에러다)
+#
+#      Error: creating Cost Explorer Anomaly Monitor: ValidationException:
+#      Limit exceeded on dimensional spend monitor creation
+#
+#    원인: **AWS가 신규 계정에 `Default-Services-Monitor`를 미리 만들어 둔다.** 그리고
+#    DIMENSIONAL(SERVICE) 모니터는 **계정당 1개만** 허용된다 → 같은 걸 또 만들 수 없다.
+#    `tofu plan`은 이걸 못 잡는다(기존 리소스를 모르니 그냥 "2 to add"라고 한다).
+#
+#    → 해결: 로컬에서 state로 인수한 뒤 우리 값으로 갱신했다.
+#      tofu import aws_ce_anomaly_monitor.services      <monitor-arn>
+#      tofu import aws_ce_anomaly_subscription.alerts   <subscription-arn>
+#      (ARN은 `aws ce get-anomaly-monitors` / `get-anomaly-subscriptions`로 조회. 계정ID 포함이라 레포에 안 적는다.)
+#
+#    ⚠️ 다른 계정에서 재현할 때도 **똑같이 import부터** 해야 한다. UUID가 계정마다 달라
+#    `import` 블록으로 코드화해도 이식되지 않으므로, 이 단계는 사람이 한 번 하는 게 맞다.
+
 # 무엇을 감시할지 — SERVICE 차원으로 계정 내 모든 서비스를 각각 감시한다.
 # (monitor_type=CUSTOM으로 특정 태그/계정만 볼 수도 있으나, 학습 계정은 "전부"가 맞다:
 #  어떤 서비스가 샐지 모르는 게 애초에 문제이므로 감시 범위를 좁히면 목적을 잃는다.)
+# name만 우리 것으로 바꾼다 — 이름 변경은 in-place라 안전하다(재생성이면 위 한도에 또 걸린다).
 resource "aws_ce_anomaly_monitor" "services" {
   name              = "devquest-eks-service-monitor"
   monitor_type      = "DIMENSIONAL"
@@ -22,6 +41,11 @@ resource "aws_ce_anomaly_monitor" "services" {
 }
 
 # 감지된 이상을 누구에게 어떻게 보낼지.
+# ℹ️ `create_before_destroy`를 **의도적으로 넣지 않았다**(07-29 판단 기록).
+#    이름 변경이 replace를 유발하므로 destroy→create 사이에 알림 공백이 생기지만:
+#    ① 이 replace는 인수 전환 1회성이고(이후 apply부터 drift 0),
+#    ② 구독은 무료·즉시 재생성이며, ③ 실패해도 예산 알림(budget.tf)과 리퍼가 남는 보조 그물이다.
+#    반대로 create_before_destroy는 "구독 2개가 잠시 공존"하는 상태를 만든다 — 이 계층에선 과한 방어.
 resource "aws_ce_anomaly_subscription" "alerts" {
   name             = "devquest-eks-anomaly-alerts"
   monitor_arn_list = [aws_ce_anomaly_monitor.services.arn]
@@ -37,6 +61,11 @@ resource "aws_ce_anomaly_subscription" "alerts" {
 
   # 얼마나 튀어야 알릴지. 예산 1단계($10)보다 낮게 잡아 "예산이 울기 전에" 먼저 걸리게 한다.
   # ANOMALY_TOTAL_IMPACT_ABSOLUTE = 이상 구간의 누적 영향액(USD, 절대값).
+  #
+  # 🔴 **AWS 기본값을 그대로 두면 안 되는 이유** (07-29 실측): 인수해 온 기본 구독은
+  #    `$100 이상 AND 40% 이상`이었다. 크레딧 총액이 $200인 학습 계정에서
+  #    **절반이 날아간 뒤에야 울리는** 값이라 사실상 꺼진 것과 같다.
+  #    "기본값이 있으니 됐다"가 가장 위험한 상태 — 켜져 있는데 안 울린다.
   threshold_expression {
     dimension {
       key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
