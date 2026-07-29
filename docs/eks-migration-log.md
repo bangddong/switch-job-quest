@@ -747,3 +747,38 @@
 - `[메모]` **이 건이 남긴 교훈: "정정"이 항상 개선은 아니다.** 07-16에 계획서의 "6개월"을 실측이라며
   "1년"으로 고쳤는데 그게 오히려 오류였고, 그 뒤 13일간 두 날짜가 문서에 공존했다.
   값을 덮어쓸 때 **관측값인지 추론값인지 구분해 적었다면** 생기지 않았을 모순이다.
+- `[막힘]` **머지 후 CI apply 실패 — `Limit exceeded on dimensional spend monitor creation`.**
+  PR #342 머지 직후 `infra-deploy.yml`이 main에서 `0-bootstrap`을 apply하다 죽었다. 에러 원문:
+  ```
+  Error: creating Cost Explorer Anomaly Monitor (devquest-eks-service-monitor):
+  operation error Cost Explorer: CreateAnomalyMonitor, https response error StatusCode: 400,
+  api error ValidationException: Limit exceeded on dimensional spend monitor creation
+  ```
+  당시 상태 확인:
+  ```
+  $ aws ce get-anomaly-monitors --query 'AnomalyMonitors[].[MonitorName,MonitorType,MonitorDimension]'
+  Default-Services-Monitor   DIMENSIONAL   SERVICE
+  ```
+- `[해결]` **원인: AWS가 신규 계정에 모니터·구독을 미리 만들어 둔다.** `Default-Services-Monitor` +
+  `Default-Services-Subscription`(DAILY)이 이미 존재했고, **DIMENSIONAL(SERVICE) 모니터는 계정당 1개**만
+  허용된다. 즉 "없는 걸 만드는" 게 아니라 **있는 걸 중복 생성**하려던 것.
+  → 로컬에서 `tofu import`로 둘 다 state에 인수한 뒤 우리 값으로 갱신하는 구조로 변경.
+  ```
+  tofu import aws_ce_anomaly_monitor.services      <monitor-arn>
+  tofu import aws_ce_anomaly_subscription.alerts   <subscription-arn>
+  ```
+  인수 후 plan: **모니터 = `updated in-place`(이름 변경), 구독 = `must be replaced`(`name` forces
+  replacement)**. 모니터가 in-place인 게 중요하다 — replace였으면 삭제 후 생성이라 **같은 한도 에러를
+  다시 밟았을 것**이다. 구독 재생성은 무료·즉시라 안전.
+- `[결정]` **`import` 블록으로 코드화하지 않았다.** 리소스 UUID가 계정마다 달라 코드에 박으면 이식되지
+  않고, ARN에 계정 ID가 들어가 공개 레포에 쓸 수도 없다. → 계정당 1회 사람이 하는 단계로 두고
+  튜토리얼에 명시. 이식성 없는 값을 코드에 넣어 "자동화한 척"하는 것보다 정직하다.
+- `[막힘]` **AWS 기본 구독의 임계값이 사실상 꺼진 값이었다 — 이번 건의 진짜 수확.**
+  인수해 보니 `$100 이상 AND 40% 이상`이었다. **크레딧 총액이 $200인 계정에서 절반이 날아간 뒤에야
+  울린다.** 콘솔에서 "이상탐지 켜져 있음"으로 보이지만 학습 계정 기준으로는 무용지물.
+  → `$5`(예산 1단계 $10보다 낮게)로 하향. **"기본값이 있으니 됐다"가 가장 위험한 상태** —
+  꺼진 것보다 나쁘다. 꺼진 건 없는 줄 알지만, 이건 있는 줄 안다.
+- `[메모]` **`plan`이 못 잡는 실패의 3번째 사례다** (① 한글 `description` 문자셋 ② EMAIL+IMMEDIATE
+  조합 ③ 이번 계정당 리소스 한도). 공통점: **셋 다 "이미 있는 것"이나 "AWS 쪽 제약"을 봐야만 알 수 있고,
+  plan은 내 코드만 본다.** plan 초록불 = apply 성공이 아니다. 특히 **계정당 한도가 걸린 리소스**는
+  apply 전에 `aws <service> list/get-*`으로 실물을 먼저 조회하는 습관이 필요하다.
