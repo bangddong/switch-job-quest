@@ -13,6 +13,7 @@
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
 | 멀티 에이전트 운영 | `.claude/docs/agent-workflow.md` |
 | 스킬 작성/수정 | `.claude/docs/skill-guide.md` |
+| **설계·전략 결정을 바꿀 때** | `.claude/docs/design-change-procedure.md` ← 영향 범위를 기억 아닌 조회로. **기각했던 선택지를 다시 채택할 때 특히** |
 | **EKS 실습 세션 (apply→작업→destroy)** | `docs/eks-session-sop.md` ← 과금 시작 전 **반드시**. 시작/종료 체크리스트 + dead man's switch 안전장치 |
 | 사용자 직접 실행 필요한 작업 | `.claude/TASKS.md` ← 파일이 존재하면 미완료 작업 있음 |
 | 현재 작업 상태 / PR / 최근 결정 | `.claude/CONTEXT.md` ← 새 대화 시작 시 **먼저 읽기** |
@@ -98,7 +99,7 @@ EKS 관련 작업(계획: `infra/aws-eks/README.md`) 중에는 **`docs/eks-migra
 > **🔒 이해 검증은 기계로 강제된다 (구축 후 퀴즈).** 위 실시간 설명은 momentum에 밀려 누락되기 쉽다
 > (Task 8에서 실제 발생). 그래서 **강제 체크포인트는 "구축 후 이해도 퀴즈"** 다:
 > **학습 마일스톤 브랜치는 `stage/eks-*`** 로 만들고, 구축·검증이 끝나면 PR **전에**
-> `skills/universal/quiz.md`의 "EKS 학습 마일스톤 모드"로 퀴즈를 본다. 결과는
+> `.claude/skills/universal/quiz.md`의 "EKS 학습 마일스톤 모드"로 퀴즈를 본다. 결과는
 > `docs/eks-quizzes/<브랜치>.md`에 기록하고 통과 시 `<!-- QUIZ-PASSED -->` 마커를 남긴다.
 > **`assert-eks-quiz.sh` 훅이 이 파일·마커가 없으면 `gh pr create`를 차단**한다 — 건너뛸 수 없다.
 > 퀴즈를 피하려 `chore/`로 브랜치를 바꾸지 말 것(학습 우회 = QA를 chore로 우회하는 것과 동급).
@@ -177,6 +178,9 @@ main에서 Write/Edit 시도 시 → PreToolUse hook이 차단하고 브랜치 �
 | "설계는 나중에, 일단 코딩" | `brainstorming` 스킬 |
 | "아마 이런 뜻이겠지" | `clarify-before-execute` 스킬 적용 |
 | "됐어요! 완료!" | 검증 증거 없으면 금지 |
+| **"전에 이렇게 하기로 했었지"** | **결정 블록을 직접 열어 `상태`를 확인.** 기억은 뒤집힌 결정을 유효한 것으로 재생한다 (07-29 실제 오답) |
+| **"이건 일지에 적어뒀으니 됐어"** | **일지는 기록이지 반영이 아니다.** 원본 결정에 되돌아가 표시 → `design-change-procedure.md` 4단계 |
+| **"문서에 그렇게 적혀 있으니 코드도 그럴 거야"** | 열어서 확인. 이상탐지는 "코드로 처리된다"고 적혀 있었지만 **`.tf`가 없었다** |
 
 ## 설계·판단 규칙
 

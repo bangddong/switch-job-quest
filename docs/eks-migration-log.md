@@ -539,7 +539,8 @@
   Error: creating IAM Role (devquest-eks-eso): api error ValidationError:
     Value at 'description' failed to satisfy constraint: Member must satisfy regular
     expression pattern: [	
- -~¡-ÿ]*
+
+ -~¡-ÿ]*
   Error: creating Security Group (devquest-eks-rds): api error InvalidParameterValue:
     Value (RDS PostgreSQL - EKS 클러스터 파드에서만 접근 허용) for parameter
     GroupDescription is invalid. Character sets beyond ASCII are not supported.
@@ -547,7 +548,8 @@
 - `[해결]` **예상이 틀린 지점: IAM도 한글 description 불가.** 직전 엔트리에서 "IAM은 문서상
   `[\p{L}\p{M}\p{Z}\p{S}\p{N}\p{P}]*`라 한글 허용"이라고 적었는데 **실제 API는 다른 패턴을 강제**한다:
   `[	
- -~¡-ÿ]*` = 탭·개행·ASCII 출력가능·Latin-1 보충뿐.
+
+ -~¡-ÿ]*` = 탭·개행·ASCII 출력가능·Latin-1 보충뿐.
   한글(U+AC00~)은 범위 밖. **문서 regex ≠ API가 강제하는 regex.**
   → `irsa-eso.tf`의 role/policy description 2개도 영문화. 최종 정리:
 
@@ -791,3 +793,30 @@
   남의 설정을 재생성·개명해버린다. `?MonitorName=='Default-Services-Monitor'`로 특정하고, 인수 전
   목록을 눈으로 확인하는 단계를 앞에 뒀다. "다른 계정에서도 똑같이 하라"고 써놓고 인덱스에 의존한
   자기모순이었다.
+- `[결정]` **설계 드리프트를 구조로 막는 장치 도입 — 1차 전수 점검 + 절차화.**
+  사용자 지적: *"설계는 실제 구현시 계속 바뀔 수 있는데 바뀌는 부분에 대한 대비가 전혀 되어있지 않아
+  계속 틀어진다."* 하루 만에 같은 유형이 4번 나온 것이 방증(이상탐지 갭·예산 절차·만료일·RDS 전략).
+  **근본 원인**: 결정은 `CONTEXT.md`에, 재판정은 이 일지에 따로 산다. **일지는 append-only 시계열이라
+  "지금 유효한 결정"을 알려주지 않는다** → CONTEXT만 읽으면 뒤집힌 결정을 유효한 것으로 읽는다.
+  실제로 07-29에 "RDS 재탈락"을 근거로 잘못된 답을 했고, 07-28 재판정이 일지에만 있었던 게 원인.
+- `[해결]` **1차 전수 점검 결과 3건 (D-1~D-3).**
+  | ID | 등급 | 내용 |
+  |---|---|---|
+  | D-3 | 🔴 HIGH | `CONTEXT.md` "RDS 재탈락" 3개 사유 중 ①이 07-28에 무효화됐는데 **역참조 없음** — 실제 오답 유발 |
+  | D-1 | LOW | `CLAUDE.md` 퀴즈 스킬 경로가 `.claude/` 누락 |
+  | D-2 | LOW | `review-ledger.md`의 `application-prod.yml` 경로 축약형 |
+  정합 확인돼 **문제 없던 축**: K8s 1.36·t4g.small·db.t4g.micro 코드값 일치, 매니페스트 4종 실재,
+  크레딧 만료일(01-15) 전 문서 일치, 비용 모델 수치 일관.
+- `[결정]` **결정 메타 줄 + 주장-검증 마커 도입.** 전략 결정에 한 줄을 붙인다:
+  `> 📌 **D-001** · 상태 `🔄부분무효` · 영향 `경로들` · 재판정 `근거``
+  **모든 결정에 붙이지 않는다** — "GC는 SerialGC다" 같은 관측 사실은 뒤집히면 그냥 틀린 것이라
+  메타가 불필요. 대상은 **다르게 고를 수 있었던 전략 결정**뿐.
+  코드 존재를 전제하는 서술에는 `<!-- verify: <경로> -->` — 이상탐지 갭을 잡았을 장치.
+- `[막힘]` **검사기 첫 버전이 "에러는 찍히는데 exit 0"이었다.** 반증 테스트 3케이스를 돌리다 발견.
+  원인: `... | while read` 파이프가 **서브셸**이라 루프 안의 `FAIL=1`이 밖으로 안 나간다.
+  → `<<<` here-string으로 교체. **통과했다고 믿게 만드는 검사기는 없는 것보다 나쁘다** —
+  검사기를 만들면 반드시 "일부러 깨뜨려 보는" 테스트를 함께 할 것.
+- `[결정]` **CI 워크플로 `design-integrity.yml`에 경로 필터를 두지 않았다.** 문서를 안 건드린 PR이
+  오히려 위험하기 때문 — **코드 파일 삭제가 문서를 깨뜨리는 경우**를 잡아야 하므로.
+- `[메모]` **검사기가 못 잡는 것을 문서에 명시했다**(영향 목록 자체의 불완전성, 문서 내용과 코드의
+  의미적 불일치, 문서 간 숫자 충돌). 기계가 확실히 아는 것만 검사한다 — **오탐이 나는 검사기는 곧 무시된다.**

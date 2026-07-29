@@ -4,8 +4,10 @@
 > 콘솔이 아니라 `0-bootstrap`의 코드로 처리한다.
 >
 > - ✅ 예산 — `budget.tf` (`cost_types.include_credit=false`, `ABSOLUTE_VALUE`). 07-18 apply 완료.
+>   <!-- verify: infra/aws-eks/0-bootstrap/budget.tf -->
 > - ✅ 이상탐지 — `cost-anomaly.tf` (`aws_ce_anomaly_monitor` + `_subscription`). **07-29 코드 추가**,
->   머지 시 CI(`infra-deploy.yml`)가 apply. 그전까지 이 줄은 "코드로 처리"라고 적혀 있었지만
+>   머지 시 CI(`infra-deploy.yml`)가 apply. <!-- verify: infra/aws-eks/0-bootstrap/cost-anomaly.tf -->
+>   그전까지 이 줄은 "코드로 처리"라고 적혀 있었지만
 >   **실제 `.tf`가 없었다** — 문서가 코드보다 앞서 있던 상태였고 07-29에 해소.
 
 ### TASK-4: 0-bootstrap 착수 준비 — AWS 자격증명 (사용자, 2026-07-16, 진행 중)
