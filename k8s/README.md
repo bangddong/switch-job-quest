@@ -8,7 +8,18 @@
 k8s/
   base/
     core-api.yaml      # Deployment + Service (ClusterIP)
+    postgres.yaml      # StorageClass + Headless Service + StatefulSet (Stage 3a)
+  eso/
+    secretstore.yaml
+    externalsecret-app.yaml
+    externalsecret-db.yaml            # Stage 2 (RDS 모드) — ARN 치환 필요
+    externalsecret-db-incluster.yaml  # Stage 3a (in-cluster 모드) — 치환 없음
+    externalsecret-postgres-tls.yaml  # Stage 3a — Postgres 서버 인증서
 ```
+
+> ⚠️ **`externalsecret-db.yaml`과 `externalsecret-db-incluster.yaml`은 배타적이다.**
+> 둘 다 `core-api-db`라는 같은 이름의 Secret을 만든다 — 동시에 적용하면 두 소유자가 다퉈
+> 값이 왔다갔다 한다. `db_mode`에 맞는 **하나만** 적용할 것.
 
 ## 배포 절차 (과금 세션 중)
 
@@ -57,13 +68,40 @@ helm install external-secrets external-secrets/external-secrets \
 kubectl apply -f k8s/eso/secretstore.yaml
 kubectl apply -f k8s/eso/externalsecret-app.yaml
 
-# ③ db용은 RDS가 만든 마스터 시크릿 ARN을 치환해야 한다(이름을 AWS가 정하므로 코드에 못 박음)
+# ③ db용 — 🔴 db_mode에 따라 갈린다 (둘 중 하나만!)
+
+#   [Stage 2 / db_mode=rds] RDS가 만든 마스터 시크릿 ARN을 치환해야 한다
+#   (이름을 AWS가 rds!db-<uuid> 형태로 정하므로 코드에 못 박는다)
 ARN=$(tofu -chdir=infra/aws-eks/2-cluster output -raw db_master_secret_arn)
 sed "s|RDS_MASTER_SECRET_PLACEHOLDER|$ARN|" k8s/eso/externalsecret-db.yaml | kubectl apply -f -
+
+#   [Stage 3a / db_mode=in-cluster] 치환이 필요 없다 — 시크릿 이름을 우리가 정했으므로.
+#   + Postgres 서버 인증서도 함께 (tofu가 발급, 아래 §2.5 참조)
+kubectl apply -f k8s/eso/externalsecret-db-incluster.yaml
+kubectl apply -f k8s/eso/externalsecret-postgres-tls.yaml
 
 # ④ 동기화 확인 — Ready=True 여야 한다
 kubectl get externalsecret
 ```
+
+> 🔑 **"관리형이 편한 대신 이름을 못 정한다"는 트레이드오프를 양쪽에서 겪게 된다.**
+> Stage 2에서 `sed` 치환이 귀찮았던 이유가, 3a에서 그게 사라지는 것으로 증명된다.
+> 반대로 잃은 것도 있다 — RDS는 비밀번호를 **자동 로테이션**했지만 우리 건 안 한다.
+
+### 2.5 in-cluster Postgres 배포 (Stage 3a~)
+
+```bash
+kubectl apply -f k8s/base/postgres.yaml   # StorageClass + Headless Service + StatefulSet
+kubectl get pvc                            # 처음엔 Pending이 정상 (WaitForFirstConsumer)
+kubectl get pvc -w                         # Bound 까지 (~11초)
+```
+
+> 🔴 **앱보다 먼저 띄워야 한다.** StatefulSet이 `core-api-db` Secret에서 비밀번호를 읽으므로
+> ESO 동기화(위 ③)가 끝난 뒤여야 하고, core-api는 이 DB에 붙으므로 그 뒤여야 한다.
+>
+> 🔴 **TLS가 필요하다.** `application-prod.yml`의 jdbc-url이 `?sslmode=require`로 **하드코딩**돼
+> 있는데 맨 postgres 이미지는 TLS를 안 켠다 → `PSQLException: The server does not support SSL.`
+> RDS는 켜진 채로 오기 때문에 Stage 2에서는 드러나지 않았다. **관리형이 공짜로 주던 것.**
 
 > ⚠️ **Secret 값을 레포/일지/PR 어디에도 쓰지 않는다.** K8s Secret은 base64일 뿐 암호화가 아니다.
 >
@@ -99,6 +137,16 @@ kubectl delete secretstore --all -A
 
 # ② 워크로드
 kubectl delete -f k8s/base/ --ignore-not-found
+
+# ③ 🔴 PVC (Stage 3a~) — 이게 없으면 EBS가 고아로 남아 계속 과금된다
+#    StatefulSet을 지워도 volumeClaimTemplates가 만든 PVC는 **의도적으로 남는다**(데이터 보호).
+#    그리고 그 볼륨은 tofu state 밖이라 destroy가 못 지운다. 07-30 실측:
+#      StatefulSet 삭제 직후  → vol-0c327...  in-use   ← 살아있다
+#      PVC 삭제 후 7초        → 볼륨 없음              ← reclaimPolicy:Delete가 회수
+kubectl delete pvc --all -A
+aws ec2 describe-volumes --region ap-northeast-2 \
+  --filters "Name=tag:ebs.csi.aws.com/cluster,Values=true" \
+  --query 'Volumes[].[VolumeId,State]' --output text     # 비어야 한다
 ```
 
 > 🔴 **`kubectl delete secret core-api-db`로 지우면 안 된다.** ExternalSecret이 `creationPolicy: Owner`라

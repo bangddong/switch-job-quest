@@ -17,16 +17,36 @@
 > 예산 `$10/$50/$150 ABSOLUTE_VALUE` + 이상탐지 `devquest-eks-anomaly-alerts / DAILY / 임계값 $5`.
 > **이전엔 AWS 기본값 `$100 AND 40%`라 크레딧 절반이 날아간 뒤에야 울렸다** — 콘솔에는 "켜짐"으로
 > 보였다는 점에서 꺼진 것보다 나빴다. 코드화하지 않았으면 몰랐을 것.
-> **➡️ 다음 = EKS Stage 3** (사용자가 "조금 이따" 진행하기로 함, 07-28).
-> RDS → **in-cluster Postgres StatefulSet** 스왑으로 EBS CSI·PVC·StorageClass 학습 +
-> "관리형 ↔ 자체운영" 비교(앱 코드 변경 0로 가능 — `application-prod.yml`이 100% 환경변수 기반).
-> 브랜치는 `stage/eks-3-*`(퀴즈 게이트 대상). 착수 전 `docs/eks-session-sop.md` §1부터.
+> ✅ **EKS Stage 3a 완료 (07-30, ★과금 27분 ≈ $0.06, 고아 0).** RDS → in-cluster Postgres 스왑 성공.
+> `/health` 200 · Flyway 12개 적용 · **파드 죽여도 데이터 유지 확인**(UID 변경, 볼륨·26행 동일).
+> `Destroy complete! 30 destroyed` · tofu state 0 · EKS·EC2·EBS·LB·NAT·RDS·스냅샷·시크릿 전부 비어 있음.
 >
-> **Stage 3 첫 작업으로 딱 좋은 것**: PR #339의 CI가 만든 이미지
-> **`e74147f8094d35238e83470672b31fbd4fe7a35b`** 로 배포해 **`GRAFANA_*` 3키 없이 뜨는지** 확인.
-> 이게 통과하면 logback 조건부화(`5cf76da`)의 실환경 검증이 끝난다. 검증됨: ECR 태그 == PR 머지 커밋
-> SHA, `5cf76da`가 조상, 해당 트리 `logback-spring.xml`에 조건부 처리 존재.
-> (3키를 제거하라는 뜻이 아니다 — prod도 시크릿으로 주입하는 값이라 자리는 유지. **의존하지 않음**을 확인하는 것)
+> 🔴 **발견 ①: `GRAFANA_API_KEY` 소비처가 둘이었다 — 전제가 틀렸다.**
+> ~~"3키 없이 뜨는지 확인하면 logback 조건부화(`5cf76da`) 검증 끝"~~ → **불완전한 전제였다.**
+> logback(로깅)은 고쳐졌지만 **`OtlpMetricsConfig`(메트릭)**가 `@Value("\${GRAFANA_API_KEY}")`를
+> 생성자에서 요구한다. 가드 `@ConditionalOnProperty("grafana.otlp.enabled")`는 있으나
+> 그 스위치가 `application-prod.yml`에 **하드코딩 `true`** — 즉 **키 유무가 아니라 "켜라고 했는가"만 본다.**
+> → 아래 "코드 작업"에 후속 항목 등재. **실환경에 안 올려봤으면 계속 "검증만 남았다"고 믿었을 것.**
+>
+> 🔴 **발견 ②: 관리형이 공짜로 주던 것에 TLS가 있었다.**
+> `jdbc-url: ...?sslmode=require`가 **상수로 하드코딩**돼 있다(호스트·DB명·계정은 전부 환경변수인데).
+> RDS는 TLS가 켜진 채로 와서 안 드러났다 → in-cluster로 바꾸자 `PSQLException: The server does not
+> support SSL.` **자동 백업·PITR 같은 눈에 띄는 기능이 아니라 아무도 언급 안 하는 기본값이 사라진다.**
+> 해결: tofu `tls_self_signed_cert` → Secrets Manager → ESO (손으로 만든 시크릿 금지 규칙 유지, 새 개념 0).
+>
+> ⭐ **예방 성공 1건 — "plan이 못 잡는 실패"를 사후가 아니라 사전에 막은 첫 사례.**
+> apply 전 `aws eks describe-addon-configuration`으로 `controller.replicaCount` 기본값이 **2**임을
+> 확인하고 1로 낮췄다. 안 했으면 12 > 11(t4g.small 상한)로 파드가 Pending에 갇혔다.
+> **어제 일지에 적은 교훈("apply 전 `aws ... describe-*`로 실물 조회")이 실제로 작동했다.**
+>
+> ⚠️ **파드 상한 11/11 — 여유 0.** `kubectl rollout restart`가 실패한다(롤링이 새 파드를 먼저 띄움 →
+> `0/1 nodes are available: 1 Insufficient memory, 1 Too many pods`). 이번엔 `scale 0→1`로 우회.
+> **3b 착수 전 셋 중 택1**: ①`coredns` replicaCount 1(`addons.tf`에 주석으로 준비됨)
+> ②`strategy: Recreate` ③t4g.medium(상한 17, $0.13→$0.16/h).
+>
+> **➡️ 다음 = Stage 3b** (terraform 소유 EBS + static PV, 6개월 영속). **3a의 정답이 3b의 함정이 된다** —
+> `reclaimPolicy: Delete`는 3a에서 고아를 막았지만 3b에선 데이터를 지우고, `volumeClaimTemplates`는
+> static PV와 충돌한다(실패 6종 ②⑤). 상세는 D-004.
 
 > ✅ **EKS Stage 2 완료 — PR #339 머지 (07-28, ★과금 26분 35초 ≈ $0.06).** apply→검증→teardown→퀴즈 전부 끝.
 > **현재 AWS에 아무것도 안 떠 있음 = 비용 $0, 고아 0건.** 퀴즈 통과(`docs/eks-quizzes/stage-eks-2-rds-secrets.md`).
@@ -220,6 +240,19 @@
 - CI 메모: `tfsec` 잡이 릴리스 다운로드 시 GitHub API rate-limit(403)로 간헐 실패 → `github_token` 주입으로 근본해결 가능(미적용, 재실행으로 우회 중)
 
 ### 코드 작업
+- [ ] 🔴 **BE: `OtlpMetricsConfig`가 `GRAFANA_API_KEY` 없으면 앱을 죽인다 (07-30 EKS Stage 3a 실측 발견)**
+  - **증상**: 3키 없이 뜨면 `PlaceholderResolutionException: Could not resolve placeholder 'GRAFANA_API_KEY'`
+    → 컨텍스트 초기화 실패 → CrashLoopBackOff. logback(`5cf76da`)만 고쳐졌고 **메트릭 경로는 남아 있었다.**
+  - **원인**: `@ConditionalOnProperty("grafana.otlp.enabled", havingValue="true")` 가드는 있으나
+    `application-prod.yml`에 `grafana.otlp.enabled: true`가 **하드코딩**이라 항상 켜진다.
+    가드가 "키가 있는가"가 아니라 **"켜라고 했는가"**만 본다.
+  - **방향(택1, 미결정)**: ①`enabled: ${GRAFANA_OTLP_ENABLED:false}`로 환경변수화
+    ②`@Value("\${GRAFANA_API_KEY:}")` 기본값 + `enabled`를 키 존재와 연동 ③관측 설정 전체를 별도 프로파일로
+  - ⚠️ **prod에 영향 있다** — prod는 3키를 주입하므로 동작은 안 바뀌지만, 배포 시 실수로 키가 빠지면
+    지금은 **앱 전체가 죽는다**. "관측 설정 하나가 빠졌다고 앱이 못 뜨는 것은 결함"이라는
+    `secrets.tf ⑨`의 판단이 로깅에만 적용됐고 메트릭엔 안 됐다.
+  - 📌 관측: `application-prod.yml:17`에 Grafana `instance-id: "1680166"`이 평문으로 있다(퍼블릭 레포).
+    시크릿은 아니지만 스택 식별자다 — 위 작업 시 함께 환경변수화 검토.
 - [ ] **파이프라인 후속 (사용자 확인 대기)**: ① 모바일 실기기 확인 (데스크톱 시나리오는 Claude가
       prod 테스트 완료) ② 테스트 데이터 정리 — 회사 "테스트-토스" 삭제, 임시 이력서를 실제로 교체
 - [ ] **Phase 4 후보 (실사용 후 판단)**: 면접 회고 메모(activity NOTE 타입), 같은 회사 카드

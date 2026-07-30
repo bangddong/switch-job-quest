@@ -416,7 +416,8 @@ InvalidParameterValue: Value (...) for parameter GroupDescription is invalid.
 
 ValidationError: Value at 'description' failed to satisfy constraint:
   Member must satisfy regular expression pattern: [	
- -~¡-ÿ]*
+
+ -~¡-ÿ]*
 ```
 
 제약은 **서비스마다 다르다** (같은 apply 안에서 대조 확인):
@@ -875,15 +876,301 @@ tofu -chdir=infra/aws-eks/2-cluster destroy -auto-approve
 
 ---
 
-## Stage 3~5 — (예정)
+## Stage 3a — RDS를 in-cluster Postgres로 갈아끼우기 (EBS CSI + 동적 PVC)
+
+**목표**: `kubectl get pvc`가 `Bound`가 되고, 그때 AWS에 EBS가 **자동으로** 생겨 있는 것을 확인한다.
+그리고 파드를 죽여도 데이터가 남는 것까지.
+
+**Stage 2와 바뀌는 것은 DB 하나뿐이다.** 앱 이미지는 같은 sha를 쓴다 —
+`application-prod.yml`이 100% 환경변수 기반이라 코드를 안 고치고 갈아끼울 수 있기 때문이다.
+(단 한 군데 예외가 있는데, 그게 3a-5의 발견이다.)
+
+### 3a-0. 개념 — PV / PVC / StorageClass가 각각 뭔가
+
+처음 보면 셋이 왜 필요한지 헷갈린다. **역할이 다르다**:
+
+| | 무엇 | 비유 |
+|---|---|---|
+| **PVC** (PersistentVolumeClaim) | "10GiB짜리 디스크 하나 주세요" — **요청서** | 주문서 |
+| **PV** (PersistentVolume) | 실제로 배정된 디스크 — **자원** | 배송된 물건 |
+| **StorageClass** | 요청이 오면 **어떻게 만들지**의 규칙 | 주문 처리 방침 |
+
+정적(static) 방식은 관리자가 PV를 미리 만들어 두고 PVC가 그중 맞는 걸 골라 쓴다.
+**동적(dynamic) 방식**은 PVC가 오면 StorageClass가 PV를 **그 자리에서 만든다.** 3a는 동적이다.
+
+그 "만드는" 일을 실제로 하는 게 **CSI 드라이버**다. K8s 자체는 EBS가 뭔지 모른다 —
+CSI(Container Storage Interface)는 K8s가 스토리지 벤더 코드를 코어에서 걷어내고 표준 인터페이스로
+뺀 결과물이라, EBS·EFS·GCP PD가 전부 같은 방식으로 붙는다.
+
+### 3a-1. EBS CSI 드라이버 — 애드온만 추가하면 안 된다
+
+```bash
+aws eks describe-addon-versions --addon-name aws-ebs-csi-driver --region ap-northeast-2 \
+  --query 'addons[0].addonVersions[0].[addonVersion,requiresIamPermissions]' --output text
+```
+기대 출력:
+```
+v1.63.1-eksbuild.1      True
+```
+
+🔴 **`requiresIamPermissions: True`** — 이게 핵심이다. 이 드라이버는 값을 읽기만 하는 게 아니라
+**AWS 리소스를 만들고 지운다**(CreateVolume/DeleteVolume/AttachVolume). 권한 없이 애드온만 달면
+PVC가 영원히 `Pending`이다.
+
+그래서 IRSA 역할이 함께 필요하다(`infra/aws-eks/2-cluster/irsa-ebs-csi.tf`).
+Stage 2의 ESO IRSA와 **구조는 같고 의미가 다르다**:
+
+| | ESO (Stage 2) | EBS CSI (Stage 3a) |
+|---|---|---|
+| 하는 일 | AWS에서 **값을 읽는다** | AWS **리소스를 만들고 지운다** |
+| 실패하면 | 앱이 못 뜬다 | 인프라가 안 생긴다 + **고아 과금의 발원지** |
+| 권한 범위 | 시크릿 ARN 3개로 한정 | 관리형 정책 `AmazonEBSCSIDriverPolicy` |
+
+권한 범위가 다른 이유: 아직 만들어지지 않은 볼륨의 ARN을 미리 알 수 없다(동적 프로비저닝의 본질).
+그래서 이 정책은 **리소스가 아니라 태그로 경계를 긋는다** — `aws:RequestTag/ebs.csi.aws.com/cluster`.
+"CSI가 만든 볼륨만 CSI가 지운다". 최소권한을 ARN으로 못 그을 때 쓰는 실례다.
+
+### 3a-2. 🔴 apply 전에 파드 상한을 계산한다
+
+**이 단계를 건너뛰면 apply는 성공하는데 파드가 Pending에 갇힌다.**
+
+```bash
+# 애드온의 기본 설정값을 apply 전에 조회한다
+aws eks describe-addon-configuration --addon-name aws-ebs-csi-driver \
+  --addon-version v1.63.1-eksbuild.1 --region ap-northeast-2 \
+  --query 'configurationSchema' --output text | grep -o '"replicaCount"[^}]*}'
+```
+기대 출력:
+```
+"replicaCount":{"default":2,"description":"Number of replicas in the controller Deployment","minimum":1,...}
+```
+
+t4g.small의 파드 상한은 **11** (= ENI 3 × (IP 4 − 1) + 2). 계산해 보면:
+
+| 무엇 | 개수 |
+|---|---|
+| 시스템 (aws-node·kube-proxy·coredns ×2) | 4 |
+| ebs-csi-controller **(기본값 2)** + ebs-csi-node | **3** |
+| ESO (controller·webhook·cert-controller) | 3 |
+| postgres + core-api | 2 |
+| **합계** | **12 > 11** ❌ |
+
+→ `configuration_values`로 컨트롤러를 1개로 낮춘다. 노드 1대짜리 학습 클러스터에서
+컨트롤러 2개는 어차피 HA가 아니다(같은 노드에 떠서 함께 죽는다).
+
+```hcl
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name             = aws_eks_cluster.main.name
+  addon_name               = "aws-ebs-csi-driver"
+  service_account_role_arn = aws_iam_role.ebs_csi.arn
+  configuration_values     = jsonencode({ controller = { replicaCount = 1 } })
+  depends_on               = [aws_eks_node_group.main]
+}
+```
+
+> 💡 **왜 이 조회가 중요한가**: `tofu plan`은 **자기 코드만 본다.** AWS 쪽 기본값·제약·한도는
+> apply해야 드러난다. 이 프로젝트에서 그렇게 깨진 적이 세 번 있었다(한글 description /
+> EMAIL+IMMEDIATE 조합 / 계정당 모니터 한도). **apply 전에 `aws ... describe-*`로 실물을 조회하는 것**이
+> 유일한 예방책이다.
+
+### 3a-3. StorageClass — 두 줄이 전부를 결정한다
+
+```yaml
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+```
+
+**`volumeBindingMode`**
+- `Immediate` = PVC를 만들자마자 EBS 생성. **AZ가 아무 데나 정해진다.**
+- `WaitForFirstConsumer` = 파드가 스케줄될 때까지 기다렸다가 **그 노드와 같은 AZ에** 만든다.
+
+🔴 EBS는 AZ에 묶인 리소스라 다른 AZ 노드에 붙일 수 없다. 노드그룹이 여러 서브넷에 걸쳐 있으면
+`Immediate`는 **운 나쁜 날에만 터지는** 버그가 된다. `WaitForFirstConsumer`가 이걸 원천 제거한다.
+
+**`reclaimPolicy`** — PVC를 지웠을 때 EBS를 어떻게 할지.
+`Delete`면 함께 삭제된다. 학습 클러스터에서는 **이게 맞다** — `Retain`으로 두면
+destroy 후에도 볼륨이 남아 조용히 과금된다.
+
+### 3a-4. Postgres StatefulSet — 두 개의 함정
+
+```bash
+kubectl apply -f k8s/base/postgres.yaml
+kubectl get pvc          # 처음엔 Pending이 정상이다 (WaitForFirstConsumer)
+```
+
+**함정 ① `lost+found`** — EBS를 ext4로 포맷하면 마운트 지점에 이 디렉토리가 생긴다.
+postgres 엔트리포인트는 PGDATA가 "비어 있을 때만" initdb를 돌리므로, 비어있지 않다고 판단해
+건너뛴 뒤 PG_VERSION이 없다며 죽는다. → **PGDATA를 하위 디렉토리로 내린다**:
+```yaml
+- name: PGDATA
+  value: /var/lib/postgresql/data/pgdata   # mountPath의 하위
+```
+
+**함정 ② 프로브에서 `$(VAR)`는 치환되지 않는다.** K8s의 변수 확장은 컨테이너의
+`command`/`args`/`env.value`에만 적용되고 **프로브의 exec에는 적용되지 않는다.**
+exec은 셸을 거치지 않으므로 문자열이 그대로 넘어간다. 더 나쁜 건 `pg_isready`가 인증을 하지 않아
+엉뚱한 사용자명으로도 0을 반환할 수 있다는 점 — **틀린 채로 통과하는 프로브**가 된다.
+```yaml
+command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+```
+
+### 3a-5. 🔴 관리형이 공짜로 주던 것 — TLS
+
+여기서 앱이 죽는다:
+```
+Caused by: org.postgresql.util.PSQLException: The server does not support SSL.
+```
+
+원인은 `application-prod.yml`이다:
+```yaml
+jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
+```
+호스트·DB명·계정은 전부 환경변수인데 **`sslmode=require`만 상수**다.
+RDS는 TLS가 켜진 채로 오기 때문에 그동안 이게 드러나지 않았다.
+
+> 🔑 **이게 Stage 3의 진짜 교훈이다.** 관리형에서 자체운영으로 옮길 때 사라지는 것은
+> 자동 백업·PITR처럼 **눈에 띄는 기능**만이 아니다. **아무도 언급하지 않는 기본값**이 함께 사라진다.
+> 그리고 그건 문서를 읽어서가 아니라 **실제로 붙여봐야** 드러난다.
+
+인증서는 **손으로 만들지 않는다.** tofu가 만들어 Stage 2의 Secrets Manager → ESO 파이프로 흘린다
+(`infra/aws-eks/2-cluster/postgres-tls.tf`) — 새 개념이 하나도 안 늘고 세션마다 자동 재생성된다.
+`postgres:17-alpine`에는 openssl이 없어서 initContainer 방식은 쓸 수 없다(실측).
+
+**자기서명으로 충분한 이유**: `sslmode=require`는 **암호화만 요구하고 인증서 검증을 하지 않는다.**
+검증하려면 `verify-ca`/`verify-full`이어야 하고 그때는 CA를 클라이언트에 심어야 한다.
+⚠️ 즉 **이 구성은 MITM을 막지 못한다.** 실운영이라면 cert-manager로 CA 체계를 세울 자리다.
+
+**파일 권한 함정** — PostgreSQL은 키 파일이 group/world에 열려 있으면 기동을 거부한다.
+예외가 하나 있는데 **"root 소유 + group read(0640)"** 다. K8s Secret 볼륨은 kubelet이
+`root:fsGroup` 소유로 마운트하므로 **0600(=postgres 소유)을 만들 수 없다.** 그래서:
+```yaml
+securityContext:
+  fsGroup: 70            # postgres:17-alpine의 postgres uid
+volumes:
+  - name: certs
+    secret:
+      secretName: postgres-tls
+      defaultMode: 0640  # ⚠️ 앞의 0을 빼면 10진수 640으로 읽힌다
+```
+확인:
+```bash
+kubectl exec postgres-0 -- sh -c 'ls -l /certs/..data/; psql -U "$POSTGRES_USER" -tAc "SHOW ssl;"'
+```
+기대 출력:
+```
+-rw-r-----  1 root  postgres  1294  server.crt
+-rw-r-----  1 root  postgres  1675  server.key
+on
+```
+
+### 3a-6. 검증 — 동적 프로비저닝이 실제로 일어났나
+
+```bash
+kubectl describe pvc data-postgres-0 | tail -6
+```
+기대 출력(이 4줄이 전 과정이다):
+```
+Normal  WaitForFirstConsumer   waiting for first consumer to be created before binding
+Normal  Provisioning           ebs.csi.aws.com_ebs-csi-controller-...
+Normal  ExternalProvisioning   Waiting for a volume to be created either by the external provisioner ...
+Normal  ProvisioningSucceeded  Successfully provisioned volume pvc-09b2533e-...
+```
+
+AWS 쪽 실물 확인:
+```bash
+aws ec2 describe-volumes --region ap-northeast-2 \
+  --filters "Name=tag:kubernetes.io/created-for/pvc/name,Values=data-postgres-0" \
+  --query 'Volumes[].[VolumeId,Size,VolumeType,AvailabilityZone,Encrypted,State]' --output table
+```
+기대: 10 / gp3 / **노드와 같은 AZ** / Encrypted `True` / `in-use`
+
+앱까지:
+```bash
+kubectl port-forward svc/core-api 8080:8080 &
+curl -s localhost:8080/health     # {"result":"SUCCESS","data":"DevQuest API is running","error":null}
+```
+
+**★ 이 Stage의 합격선** — 파드를 죽여도 데이터가 남는가:
+```bash
+kubectl exec postgres-0 -- psql -U devquest -d devquest -tAc "select count(*) from tech_question_bank;"
+kubectl get pod postgres-0 -o jsonpath='{.metadata.uid}'; echo
+kubectl delete pod postgres-0        # 강제로 죽인다
+# 재생성 대기 후
+kubectl get pod postgres-0 -o jsonpath='{.metadata.uid}'; echo    # UID가 달라야 한다
+kubectl get pvc data-postgres-0 -o jsonpath='{.spec.volumeName}'; echo  # 볼륨은 같아야 한다
+kubectl exec postgres-0 -- psql -U devquest -d devquest -tAc "select count(*) from tech_question_bank;"
+```
+기대: **UID는 바뀌고, 볼륨과 행 수는 그대로.** Deployment였다면 보장되지 않는다.
+
+### 3a-7. teardown — 🔴 순서가 돈이다
+
+```bash
+kubectl delete externalsecret --all -A     # ① 소유자부터 (Secret이 부활하지 않게)
+kubectl delete secretstore --all -A
+kubectl delete -f k8s/base/ --ignore-not-found   # ② 워크로드
+```
+
+여기서 **멈추고 확인해 본다**:
+```bash
+aws ec2 describe-volumes --region ap-northeast-2 \
+  --filters "Name=tag:ebs.csi.aws.com/cluster,Values=true" --query 'Volumes[].[VolumeId,State]' --output text
+```
+```
+vol-0c32788ebc4a95cb0   in-use     ← StatefulSet을 지웠는데 EBS는 살아있다
+```
+
+🔴 **StatefulSet 삭제 ≠ 볼륨 삭제.** `volumeClaimTemplates`가 만든 PVC는 데이터 보호를 위해
+의도적으로 남는다. 그리고 이 볼륨은 **tofu state 밖**이라(`tofu state list`에 `aws_ebs_volume` 0건)
+`tofu destroy`가 못 지운다. **여기서 끝내면 월 $0.0912/GB가 영원히 나간다.**
+
+```bash
+kubectl delete pvc --all -A        # ③ 🔴 이게 있어야 EBS가 회수된다
+# 7초 내에 사라지는 것을 확인
+cd infra/aws-eks/2-cluster && tofu destroy    # ④ 인프라
+```
+
+### Stage 3a 결산 (실측, 2026-07-30)
+
+과금 구간 = **약 27분** (15:17:58 → 15:45)
+
+| 단계 | 실측 |
+|---|---|
+| 컨트롤플레인 생성 | 5분 48초 |
+| 노드그룹 | 1분 57초 |
+| EBS CSI 애드온 | 35초 |
+| PVC Pending → Bound | **11초** |
+| PVC 삭제 → EBS 회수 | **7초** |
+| Flyway 12개 마이그레이션 | 0.161초 |
+| **합계 비용** | **≈ $0.06** ($0.13/h) |
+
+| | Stage 2 (RDS) | Stage 3a (in-cluster) |
+|---|---|---|
+| DB 생성 시간 | 4분 50초 | **즉시** (이미지 pull만) |
+| 시간당 단가 | $0.155 | **$0.13** |
+| 시크릿 출처 | 2군데 (AWS 소유 + tofu) | **1군데** (전부 tofu) |
+| apply 절차 | ARN을 `sed`로 치환 | **치환 없음** |
+| TLS | 공짜 | **직접 발급·마운트** |
+| 백업·PITR·로테이션 | 관리형 제공 | **없음** |
+
+> **결론**: 자체운영이 더 싸고 빠르지만, **관리형이 조용히 해주던 일**(TLS·백업·로테이션)을
+> 전부 떠안는다. 학습 클러스터에서는 맞는 거래고, prod에서는 대체로 아니다.
+
+---
+
+## Stage 3b~5 — (예정)
 
 | Stage | 세울 것 | 새로 배우는 것 |
 |:--:|---|---|
-| **3** | Postgres StatefulSet + EBS CSI + PVC | StorageClass, 동적 EBS 프로비저닝. **RDS를 in-cluster로 스왑해 "관리형↔자체운영" 비교** |
+| **3b** | 같은 StatefulSet을 **terraform 소유 EBS + static PV**로 전환 | `volumeHandle`·`claimRef`, PV 재바인딩, AZ 종속, 6개월 영속 |
 | **4** | AWS Load Balancer Controller → ALB Ingress | IngressClass, ALB target-type |
 | **5** | metrics-server·HPA, Karpenter, ArgoCD | 오토스케일, GitOps |
 
-> ⚠️ **Stage 3부터 K8s가 AWS 리소스를 만든다**(PVC → EBS, Ingress → ALB). 이들은 **tofu state 밖**이라
-> `tofu destroy`가 못 지운다. **destroy 전에 반드시** `kubectl delete ingress,pvc --all -A`.
-> ⚠️ **노드 파드 상한 11**(Stage 0-3 참조)에서 이미 8개를 쓴다(시스템 4 + ESO 3 + 앱 1).
-> StatefulSet을 얹을 여유가 3개뿐이다 — 부족하면 인스턴스 타입을 키워야 한다.
+> ⚠️ **3b에서는 3a의 정답이 함정이 된다.** `reclaimPolicy: Delete`는 3a에서 고아를 막는 장치였지만
+> 3b(영속 볼륨)에서는 **데이터를 지우는 사고**가 된다. `volumeClaimTemplates`도 마찬가지로
+> static PV와 충돌한다. **같은 설정의 옳고 그름이 목적에 따라 뒤집히는 것**이 3b의 학습 포인트다.
+> ⚠️ **파드 상한 여유가 0이다**(11/11). 3b 착수 전에 셋 중 하나를 정해야 한다:
+> ①`coredns` replicaCount 1 ②`strategy: Recreate` ③t4g.medium(상한 17, $0.13→$0.16/h).
