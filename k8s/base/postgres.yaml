@@ -1,0 +1,192 @@
+# in-cluster PostgreSQL — StorageClass + Headless Service + StatefulSet (EKS Stage 3a)
+#
+# 이 파일이 하는 일: "EBS를 자동으로 만들어 붙이는 Postgres 한 대를, 이름이 안 변하게 띄워라."
+# Stage 2의 RDS를 대체한다. **앱(core-api.yaml)은 한 글자도 안 바뀐다** —
+# core-api는 `core-api-db` Secret만 보고, 그 안의 DB_HOST가 RDS 엔드포인트에서
+# `postgres`(K8s Service 이름)로 바뀔 뿐이다.
+#
+# 적용:
+#   kubectl apply -f k8s/base/postgres.yaml
+#   (core-api.yaml과 달리 치환할 PLACEHOLDER가 없다 — 이미지 태그를 고정 버전으로 쓰기 때문)
+---
+# ── ① StorageClass — "PVC가 오면 어떤 볼륨을 어떻게 만들지"의 템플릿 ──
+#
+# 애드온의 defaultStorageClass는 켜지 않았다(addons.tf 참조). 직접 쓰는 게 이번 학습이다.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com # 이 이름으로 EBS CSI 드라이버가 요청을 받아간다
+parameters:
+  type: gp3
+  # 암호화는 켠다. 추가 비용이 없고(기본 aws/ebs 키), 끄면 tfsec류 검사에서도 걸린다.
+  encrypted: "true"
+
+# ── 🔴 이번 Stage에서 가장 중요한 두 줄 ──
+#
+# reclaimPolicy: PVC를 지웠을 때 **EBS를 어떻게 할지.**
+#   Delete = 볼륨도 함께 삭제. 3a에서는 이게 **맞다** — 세션마다 부수는 학습용이고,
+#            Retain으로 두면 destroy 후 EBS가 남아 조용히 과금된다(고아의 정의).
+#   ⚠️ 3b(영속 EBS)에서는 정반대가 된다. "실패 6종 ②reclaimPolicy 실수로 볼륨 동반 삭제"가
+#      바로 이 줄을 3a 감각으로 두고 3b를 하다 겪는 사고다.
+reclaimPolicy: Delete
+
+# volumeBindingMode: 볼륨을 **언제** 만들지.
+#   Immediate           = PVC를 만드는 즉시 EBS 생성. 이때 AZ는 아무 데나 정해진다.
+#   WaitForFirstConsumer = 파드가 스케줄될 때까지 기다렸다가, **그 노드와 같은 AZ에** 만든다.
+#
+# 🔴 Immediate로 두면 "실패 6종 ①AZ 불일치 → 파드 영구 Pending"을 밟는다.
+#    EBS는 AZ에 묶인 리소스라 다른 AZ 노드에 attach할 수 없다. 우리 노드그룹은
+#    2a/2c 두 서브넷에 걸쳐 있어 노드가 매번 같은 AZ에 뜬다는 보장이 없다 —
+#    즉 **운 나쁜 날에만 터지는** 버그가 된다. WaitForFirstConsumer가 이 문제를 원천 제거한다.
+volumeBindingMode: WaitForFirstConsumer
+
+# 나중에 크기를 늘릴 수 있게. 줄이는 건 EBS가 지원하지 않는다(늘리기만 가능).
+allowVolumeExpansion: true
+---
+# ── ② Headless Service — StatefulSet에 안정적인 이름을 준다 ──
+#
+# clusterIP: None이라 가상 IP가 없다. DNS가 파드 IP를 직접 돌려준다.
+# StatefulSet은 `serviceName`으로 이걸 가리켜야 파드마다 고정 DNS 이름이 생긴다:
+#   postgres-0.postgres.default.svc.cluster.local
+#
+# 왜 core-api.yaml의 Service처럼 ClusterIP를 안 쓰나:
+#   DB는 "아무 파드나 하나"로 로드밸런싱하면 안 되는 워크로드다. 복제본이 늘면
+#   primary/replica를 이름으로 구분해야 하는데, ClusterIP는 그걸 못 한다.
+#   지금은 1대뿐이라 차이가 안 나지만, StatefulSet을 쓰는 이유 자체가 여기 있다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  clusterIP: None
+  # 🔴 파드가 Ready가 되기 전에도 DNS 레코드를 발행한다.
+  #    없으면 postgres가 뜨는 동안 `postgres` 이름이 NXDOMAIN이 되고,
+  #    먼저 뜬 core-api가 UnknownHostException으로 CrashLoop에 빠진다.
+  #    (기동 순서 의존을 initContainer 없이 푸는 가장 싼 방법)
+  publishNotReadyAddresses: true
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+# ── ③ StatefulSet — Deployment와 무엇이 다른가 ──
+#
+#   Deployment  : 파드가 서로 대체 가능. 이름·볼륨이 매번 랜덤.
+#   StatefulSet : 파드마다 **고정 순번(postgres-0)** + **고정 볼륨**. 순서대로 뜨고 역순으로 죽는다.
+#
+# DB에 이게 필요한 이유는 단순하다 — postgres-0이 쓰던 디스크에 postgres-0이 다시 붙어야 한다.
+# Deployment로 하면 재시작 때 다른 볼륨을 잡을 수 있고, 그건 데이터 손실이다.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres # 위 headless Service 이름과 반드시 일치
+  replicas: 1 # 학습장. 복제는 Postgres 자체 설정(streaming replication)이 필요해 Stage 범위 밖.
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      # graceful shutdown: Postgres에 SIGTERM이 가면 fast shutdown을 시작한다.
+      # 기본 30초로는 체크포인트가 안 끝날 수 있어 넉넉히 준다(그래도 학습용이라 60초).
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          # 태그를 고정 버전으로 박는다. RDS에서 쓰던 engine_version 17.10과 메이저를 맞췄다 —
+          # Flyway 마이그레이션 12개가 같은 메이저에서 도는지 비교하는 게 이번 실습의 일부다.
+          # alpine: arm64(Graviton) 멀티아치 지원 + 이미지가 작아 pull이 빠르다.
+          image: postgres:17-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            # 🔑 DB도 앱과 **같은 Secret**에서 크리덴셜을 받는다.
+            #    core-api-db는 ESO가 Secrets Manager에서 만들어 준 것이고,
+            #    tofu가 random_password로 생성한 값이 그 안에 들어 있다(secrets.tf).
+            #    → "DB와 앱이 같은 진실의 원천을 본다" = 비밀번호 불일치가 구조적으로 불가능.
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: core-api-db, key: DB_USERNAME }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: core-api-db, key: DB_PASSWORD }
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef: { name: core-api-db, key: DB_NAME }
+            # 🔴 **PGDATA를 하위 디렉토리로 내리는 이유 — 이게 없으면 초기화가 실패한다.**
+            #    EBS를 ext4로 포맷하면 마운트 지점에 `lost+found`가 생긴다.
+            #    postgres 엔트리포인트는 PGDATA가 "비어 있을 때만" initdb를 돌리는데,
+            #    lost+found 때문에 비어 있지 않다고 판단해 initdb를 건너뛰고,
+            #    그 다음 PG_VERSION이 없다며 죽는다. 하위 디렉토리를 쓰면 이 충돌이 사라진다.
+            #    (postgres 공식 이미지 문서가 볼륨 마운트 시 권장하는 방식)
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: TZ
+              value: Asia/Seoul
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            # t4g.small(2GiB)에 core-api(512Mi 요청)와 시스템 파드가 이미 얹혀 있다.
+            # Postgres는 shared_buffers 기본값이 128MB라 256Mi 요청으로 충분하다.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          # pg_isready: "접속을 받을 준비가 됐나"를 Postgres가 직접 답한다.
+          # TCP 포트가 열린 것만으로는 부족하다 — 복구 중에도 포트는 열려 있다.
+          #
+          # 🔴 **`sh -c`로 감싼 이유 — K8s는 프로브에서 `$(VAR)`를 치환하지 않는다.**
+          #    변수 확장은 컨테이너의 `command`/`args`/`env.value`에만 적용되고
+          #    `livenessProbe.exec.command`에는 적용되지 않는다. exec은 셸을 거치지 않으므로
+          #    `["pg_isready","-U","$(POSTGRES_USER)"]`라고 쓰면 **문자열 그대로** 넘어간다.
+          #    더 나쁜 건 pg_isready가 인증을 하지 않아 엉뚱한 사용자명으로도 0을 반환할 수 있다는 점 —
+          #    **틀린 채로 통과하는 프로브**가 된다(있으나 마나 한 헬스체크).
+          #    셸로 감싸면 `$VAR`가 정상 확장된다.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+
+  # ── ④ volumeClaimTemplates — 동적 프로비저닝이 실제로 일어나는 곳 ──
+  #
+  # 파드마다 PVC를 **자동으로** 만들어 준다. 이름은 <템플릿명>-<파드명> = `data-postgres-0`.
+  # 그 PVC를 보고 EBS CSI가 AWS에 CreateVolume을 날린다. 여기가
+  # "K8s가 tofu state 밖의 AWS 리소스를 만드는" 지점이다.
+  #
+  # 🔴 **StatefulSet을 지워도 이 PVC는 안 지워진다** — 의도된 동작이다(데이터 보호).
+  #    그래서 SOP §8의 `kubectl delete pvc --all -A`가 필수다. 이걸 빼먹으면
+  #    tofu destroy 후에도 EBS가 남아 월 $0.0912/GB로 계속 과금된다.
+  #    ⚠️ 실패 6종 ⑤ "volumeClaimTemplates가 PVC를 자동 생성 → static PV와 충돌"이
+  #       3b에서 이 블록 때문에 발생한다. 3a에서는 이게 정답, 3b에서는 이게 함정.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"] # EBS는 한 번에 한 노드에만 붙는다(RWO가 유일한 선택)
+        storageClassName: gp3 # 위 ①에서 정의한 것
+        resources:
+          requests:
+            # 10GiB × $0.0912/GB-Mo ≈ $0.91/월 ≈ 45분 세션당 $0.001.
+            # Flyway 마이그레이션 12개 + 학습 데이터엔 과할 정도로 넉넉하다.
+            # (너무 작게 잡으면 WAL이 금방 채운다 — gp3 최소는 1GiB지만 실용 하한은 아니다)
+            storage: 10Gi
