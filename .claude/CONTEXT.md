@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` (clean) |
-| 열린 PR | 없음 |
+| 브랜치 | `stage/eks-3a-postgres-dynamic-pvc` |
+| 열린 PR | 진행 중 — EKS Stage 3a (Postgres StatefulSet + EBS CSI + 동적 PVC) |
 
 > **🌙 다음 세션 시작점**: main clean · 미커밋 0 · 열린 PR 0 · **AWS 잔존물 0 (비용 $0)** ·
 > 크레딧 ≈ $199.6/$200 · 세션 마커 없음.
@@ -109,7 +109,8 @@
 >   imagePullSecret 없이 노드 IAM·arm64, CrashLoop 3단계 Loki→JWT→DB, 클린 teardown 고아 0·ECR 생존).
 >   크레딧 ~$199.8(만료 2027-01-15). 실습 SOP 단일 출처 = `docs/eks-session-sop.md`(apply 전 필독).
 > **다음 = 택1:**
-> - **① EKS Stage 3 (Postgres StatefulSet + EBS CSI + PVC)** ← **사용자가 다음으로 지목(07-28)**.
+> - **① EKS Stage 3 (Postgres StatefulSet + EBS CSI + PVC)** ← **착수함(07-30, `stage/eks-3a-*`)**.
+>   🔴 **3a(동적 PVC) / 3b(static PV·영속) 두 세션으로 분할 확정 — D-004 재판정 참조.**
 >   ~~Stage 2~~는 **#339로 완료**(RDS+IRSA+ESO, `/health` 200, 고아 0). 브랜치 `stage/eks-3-*`(퀴즈 게이트).
 >   **Stage 2의 RDS를 in-cluster Postgres로 스왑** → StorageClass·동적 EBS 프로비저닝을 배우면서
 >   "관리형 ↔ 자체운영"을 **앱 코드 변경 0**으로 비교(`application-prod.yml`이 100% 환경변수 기반).
@@ -348,6 +349,24 @@ README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3
   끝나면 destroy → 영구 비용 0, prod는 Fly 복귀.
 
 #### 영속 레이어 — 싸다, 반드시 분리할 것
+> 📌 **D-004** · 상태 `🔄부분무효` · 영향 `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/README.md`, `docs/eks-session-sop.md`, `k8s/base`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
+
+> 🔄 **07-30 재판정 — "동적 PVC 아님"이라는 배제가 무효화됐다.** 이 블록은 static PV를 택하면서
+> **동적 프로비저닝을 명시적으로 배제**했는데, 같은 CONTEXT의 Stage 3 서술과 `README:128`은
+> *"StorageClass·동적 EBS 프로비저닝"*을 학습 목표로 적고 있었다 — **정면 충돌이 방치돼 있었다.**
+> (Stage 3 착수 전 절차 2단계 조회에서 발견. 이 블록엔 메타 줄이 없어 그동안 아무도 못 잡았다.)
+>
+> **확정: 배제가 아니라 순서다.** Stage 3을 둘로 쪼갠다.
+> | | 무엇 | 데이터 수명 | 왜 이 순서인가 |
+> |---|---|---|---|
+> | **3a** | StorageClass + `volumeClaimTemplates` (동적) | 세션 휘발 | "PVC가 EBS를 만든다"를 **눈으로 본 뒤**에야 `volumeHandle`이 무슨 뜻인지 이해된다 |
+> | **3b** | terraform 소유 EBS + static PV | 6개월 영속 | 3a→3b 전환 과정에서 **실패 ④claimRef 잔존**을 공짜로 만난다 |
+>
+> 아래 "static PV가 어려운 쪽이라 학습가치가 높다"는 판단은 **유지**된다 — 다만 그게
+> "쉬운 쪽을 건너뛸 이유"는 아니었다. 큰 태스크는 쪼갠다(Phase 1 회고).
+> ⚠️ **3a 동안에는 `kubectl delete pvc --all -A`가 destroy 전 필수**(SOP §8). 3b에서 EBS가
+> terraform 소유로 넘어가면 그때 이 규율이 볼륨엔 적용되지 않는다 — 두 Stage의 teardown이 다르다.
+
 **월 약 $2.3 / 6개월 $14 (크레딧의 7%)**: ECR 5GB $0.50 + EBS 20GB $1.82 + S3/DynamoDB ≈$0.
 - **🔴 ECR 구멍**: `README:101,148`은 ECR을 **`2-cluster`(destroy 대상)** 소속으로 적어놨으나
   **실제 `.tf`엔 `aws_ecr_*` 리소스가 0건**(전수 grep). 계획대로 두면 **destroy마다 이미지 전멸**
@@ -356,7 +375,9 @@ README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3
   영속 대상이 ECR 하나뿐이라 레이어를 늘리면 `tofu init/apply` 대상과 CI 매트릭스만 증가한다.
   0-bootstrap은 이미 **계정 수준 공유·영속 인프라**(S3 state·DynamoDB·OIDC·IAM·예산)를 담고 있어
   성격이 같고, `infra-deploy.yml` 매트릭스에 이미 있어 **CI 변경도 불필요**. **lifecycle policy 필수**(무한 누적 방지).
-- **EBS는 terraform이 소유하고 K8s는 static PV로 바인딩**(동적 PVC 아님). 근거: ①IaC-first 원칙
+- **EBS는 terraform이 소유하고 K8s는 static PV로 바인딩** ~~(동적 PVC 아님)~~ **→ 07-30 정정:
+  동적 PVC를 배제하지 않는다. 3a에서 동적으로 먼저 배우고 3b에서 이 구성으로 전환한다(위 D-004).**
+  근거: ①IaC-first 원칙
   ②ALB 고아와 같은 실패 모드 원천 차단 ③**학습 가치** — 동적 프로비저닝은 쉽고, 어려운 건
   "이미 있는 볼륨에 StatefulSet 붙이기"(`volumeHandle` static PV). **부수고 다시 지어도 데이터가
   그대로 붙는 것**을 확인하는 게 진짜 교보재.

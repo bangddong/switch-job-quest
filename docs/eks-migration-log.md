@@ -830,3 +830,50 @@
   | D-003 | `🚧진행중` | Phase 0~1만 구현, 2~3은 계획. **아직 코드가 없는 약속 2건**(vpc-cni `enableNetworkPolicy`·t4g medium 상향)이 드리프트 1순위 |
   D-003엔 "상태가 `🚧진행중`인 동안 이 블록을 **확정된 것으로 인용하지 말 것**"을 명시했다 —
   계획을 확정처럼 인용하는 것이 RDS 오답과 같은 계열의 사고다.
+
+---
+
+## 2026-07-30 — Stage 3a 착수 전 조회 (아직 $0, apply 없음)
+
+- `[메모]` **착수 전에 `design-change-procedure.md` 2단계(D-001 영향 범위 조회)를 먼저 돌렸다.**
+  어제 만든 절차의 첫 실사용. 목적은 "Stage 3 = 기각했던 in-cluster를 재채택"이라 절차의
+  ✅**특히** 항목에 해당하기 때문. 결과적으로 **계획대로 갔으면 중간에 막혔을 것 3건**이 나왔다.
+- `[막힘]` **CONTEXT.md 안에서 두 계획이 정면 충돌하고 있었다.** 코드가 아니라 문서끼리다.
+  ```
+  영속 레이어 절 : "EBS는 terraform이 소유하고 K8s는 static PV로 바인딩 (동적 PVC 아님)"
+                  "EBS를 6개월 영속 유지한다"
+  Stage 3 서술   : "StorageClass·동적 EBS 프로비저닝을 배우면서"
+  README:128     : "StorageClass, 동적 EBS 프로비저닝"
+  SOP §8         : "destroy 전 kubectl delete pvc --all -A 필수 (tofu state 밖 = 고아)"
+  ```
+  위는 동적을 **명시적으로 배제**하고 아래 셋은 동적을 **전제**한다. 데이터 수명도 정반대
+  (세션 휘발 vs 6개월 영속). **영속 레이어 결정에 📌 메타 줄이 없어서** 그동안 아무도 못 잡았다
+  — 어제 메타를 붙인 대상 선정(D-001~003)에서 이 블록이 빠졌던 것.
+- `[결정]` **배제가 아니라 순서로 확정 — Stage 3을 3a/3b로 분할** (`D-004` 신설, 상태 `🔄부분무효`).
+  | | 무엇 | 데이터 수명 | 근거 |
+  |---|---|---|---|
+  | 3a | StorageClass + `volumeClaimTemplates` (동적) | 세션 휘발 | "PVC가 EBS를 만든다"를 눈으로 본 뒤라야 `volumeHandle`이 뭔지 이해된다 |
+  | 3b | terraform 소유 EBS + static PV | 6개월 영속 | 3a→3b 전환에서 실패 ④`claimRef` 잔존을 공짜로 만난다 |
+  기각한 대안: ①동적만(영속 결정 폐기) → 실패 6종 중 ①③④⑥을 영영 안 만남
+  ②static만 → StorageClass를 안 배우고, AZ 종속이 첫 세션부터 걸려 원인 분리가 어려움.
+- `[막힘]` **파드 상한 초과가 예상된다 — 12 > 11.** t4g.small 상한 11(실측), 현재 8
+  (시스템 4 + ESO 3 + core-api 1). 3a 추가분 = `ebs-csi-controller` 2 + `ebs-csi-node` 1 + postgres 1 = 4.
+- `[해결]` apply 전에 실물 스키마를 조회해 확정했다(**"plan이 못 잡는 실패" 4번째를 예방**):
+  ```
+  $ aws eks describe-addon-configuration --addon-name aws-ebs-csi-driver \
+      --addon-version v1.63.1-eksbuild.1 --region ap-northeast-2 --query configurationSchema
+  "replicaCount":{"default":2,"description":"Number of replicas in the controller Deployment",
+                  "minimum":1,"type":"integer"}
+  "defaultStorageClass":{"properties":{"enabled":{"default":false,...}}}
+  ```
+  → `configuration_values`로 `controller.replicaCount=1` 지정 = 합계 11로 딱 맞음(여유 0).
+  `defaultStorageClass.enabled`가 **기본 false**라 StorageClass는 우리가 직접 쓴다 — 학습엔 오히려 유리.
+- `[메모]` `aws eks describe-addon-versions --addon-name aws-ebs-csi-driver`:
+  `v1.63.1-eksbuild.1` / clusterVersion `1.36` 호환 / **`requiresIamPermissions: True`**
+  → 애드온만 추가하면 안 되고 IRSA 필요. `irsa-eso.tf` 패턴 재사용.
+- `[메모]` **문서가 코드보다 앞서 있던 자리 1건**: `infra/aws-eks/README.md:76`은 OpenTofu 관리
+  애드온에 **EBS CSI**를 이미 적어놨으나 `addons.tf`엔 vpc-cni·kube-proxy·coredns **3개뿐**.
+  이상탐지 갭(`TASKS.md`가 "코드로 처리"라 했으나 `.tf`가 없던 것)과 같은 계열. 3a가 이걸 메운다.
+- `[메모]` 반대로 **잘 맞물려 있던 곳**: `secrets.tf`가 Stage 3을 미리 상정해 시크릿을 둘로 쪼개 뒀다
+  (*"Stage 3에서 RDS를 in-cluster Postgres로 갈아낄 때 db쪽만 교체"*). `core-api.yaml`도
+  envFrom 기반이라 앱 매니페스트 변경 0으로 갈아끼울 수 있다.
