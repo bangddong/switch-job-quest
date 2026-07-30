@@ -56,6 +56,40 @@ variable "node_max_size" {
   default     = 2
 }
 
+# ── DB 모드 (Stage 2 ↔ 3a 전환 스위치) ─────────────────────────
+#
+# 왜 rds.tf를 지우지 않고 토글로 두나 (D-001):
+#   지우면 **튜토리얼 Stage 2가 재현 불가**가 된다. 이 레포의 목적 중 하나가
+#   "처음 하는 사람이 그대로 따라 할 수 있는 문서"이므로, 지나온 Stage를
+#   코드에서 삭제하면 문서만 남고 실행은 안 되는 상태가 된다.
+#
+# 🔴 **기본값이 `in-cluster`인 이유 — 안전한 쪽으로 실패하게 만든다.**
+#   반대로 기본을 `rds`로 두면, 앞으로 모든 세션이 `-var db_mode=in-cluster`를 붙여야 하고
+#   **깜빡한 순간 RDS가 생성돼 과금된다**($0.025/h). 플래그를 잊었을 때 일어나는 일이
+#   "돈이 나간다"가 되면 안 된다.
+#   반면 기본을 in-cluster로 두면 잊었을 때 일어나는 일은 "Stage 2 재현이 안 된다"뿐이고,
+#   Stage 2 재현은 **의도적 행위**라 플래그를 명시하는 게 오히려 맞다.
+#     tofu apply -var db_mode=rds        # Stage 2 재현
+#     tofu apply                          # Stage 3a 이후 (기본)
+variable "db_mode" {
+  description = <<-EOT
+    DB를 어디에 둘지. rds = 관리형(Stage 2) / in-cluster = Postgres StatefulSet(Stage 3a~).
+    기본은 in-cluster — 플래그를 잊어도 과금 리소스가 생기지 않는 쪽이 기본이어야 한다.
+  EOT
+  type        = string
+  default     = "in-cluster"
+
+  validation {
+    condition     = contains(["rds", "in-cluster"], var.db_mode)
+    error_message = "db_mode must be \"rds\" or \"in-cluster\"."
+  }
+}
+
+# ℹ️ in-cluster Postgres의 볼륨 크기는 **여기 없다.** 동적 프로비저닝에서 크기를 정하는 주체는
+#    terraform이 아니라 PVC이기 때문 — `k8s/base/postgres.yaml`의 volumeClaimTemplates에 있다.
+#    (여기 변수를 두면 소비처 없는 죽은 설정이 된다. #326에서 두 번 걷어낸 유형.)
+#    3b에서 EBS를 terraform 소유로 옮기면 그때 이 레이어로 올라온다.
+
 # ── RDS (⑧) ───────────────────────────────────────────────────
 # 기존 컨벤션 준수: 이 레이어의 모든 변수는 default를 갖는다
 # (2-cluster엔 terraform.tfvars.example이 없어, default가 없으면 로컬·CI 양쪽에서 프롬프트가 뜬다).

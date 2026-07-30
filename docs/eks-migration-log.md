@@ -25,7 +25,8 @@
 | 2026-01 ~ 06 | $0 | 계정 개설~착수 전 |
 | 2026-07 (07-28 세션 전까지) | **$0.3283** | Task 8 · Stage 1 등 EKS 세션 3회 |
 | 2026-07-28 Stage 2 세션 | ~$0.06 (추정) | 26분 35초 · CE 반영 ~24h 지연 |
-| **누적** | **≈ $0.39** | 크레딧의 **0.2%** |
+| 2026-07-30 Stage 3a 세션 | ~$0.06 (추정) | 27분 · in-cluster Postgres 전환 |
+| **누적** | **≈ $0.45** | 크레딧의 **0.23%** |
 
 > 🔎 **조회 시 함정**: `RECORD_TYPE` 분리 없이 Cost Explorer를 보면 크레딧이 상계돼
 > **순액 $0.00000004**만 나온다 — "아직 아무것도 안 썼네"로 오독하게 된다. 실사용량은 이렇게:
@@ -830,3 +831,318 @@
   | D-003 | `🚧진행중` | Phase 0~1만 구현, 2~3은 계획. **아직 코드가 없는 약속 2건**(vpc-cni `enableNetworkPolicy`·t4g medium 상향)이 드리프트 1순위 |
   D-003엔 "상태가 `🚧진행중`인 동안 이 블록을 **확정된 것으로 인용하지 말 것**"을 명시했다 —
   계획을 확정처럼 인용하는 것이 RDS 오답과 같은 계열의 사고다.
+
+---
+
+## 2026-07-30 — Stage 3a 착수 전 조회 (아직 $0, apply 없음)
+
+- `[메모]` **착수 전에 `design-change-procedure.md` 2단계(D-001 영향 범위 조회)를 먼저 돌렸다.**
+  어제 만든 절차의 첫 실사용. 목적은 "Stage 3 = 기각했던 in-cluster를 재채택"이라 절차의
+  ✅**특히** 항목에 해당하기 때문. 결과적으로 **계획대로 갔으면 중간에 막혔을 것 3건**이 나왔다.
+- `[막힘]` **CONTEXT.md 안에서 두 계획이 정면 충돌하고 있었다.** 코드가 아니라 문서끼리다.
+  ```
+  영속 레이어 절 : "EBS는 terraform이 소유하고 K8s는 static PV로 바인딩 (동적 PVC 아님)"
+                  "EBS를 6개월 영속 유지한다"
+  Stage 3 서술   : "StorageClass·동적 EBS 프로비저닝을 배우면서"
+  README:128     : "StorageClass, 동적 EBS 프로비저닝"
+  SOP §8         : "destroy 전 kubectl delete pvc --all -A 필수 (tofu state 밖 = 고아)"
+  ```
+  위는 동적을 **명시적으로 배제**하고 아래 셋은 동적을 **전제**한다. 데이터 수명도 정반대
+  (세션 휘발 vs 6개월 영속). **영속 레이어 결정에 📌 메타 줄이 없어서** 그동안 아무도 못 잡았다
+  — 어제 메타를 붙인 대상 선정(D-001~003)에서 이 블록이 빠졌던 것.
+- `[결정]` **배제가 아니라 순서로 확정 — Stage 3을 3a/3b로 분할** (`D-004` 신설, 상태 `🔄부분무효`).
+  | | 무엇 | 데이터 수명 | 근거 |
+  |---|---|---|---|
+  | 3a | StorageClass + `volumeClaimTemplates` (동적) | 세션 휘발 | "PVC가 EBS를 만든다"를 눈으로 본 뒤라야 `volumeHandle`이 뭔지 이해된다 |
+  | 3b | terraform 소유 EBS + static PV | 6개월 영속 | 3a→3b 전환에서 실패 ④`claimRef` 잔존을 공짜로 만난다 |
+  기각한 대안: ①동적만(영속 결정 폐기) → 실패 6종 중 ①③④⑥을 영영 안 만남
+  ②static만 → StorageClass를 안 배우고, AZ 종속이 첫 세션부터 걸려 원인 분리가 어려움.
+- `[막힘]` **파드 상한 초과가 예상된다 — 12 > 11.** t4g.small 상한 11(실측), 현재 8
+  (시스템 4 + ESO 3 + core-api 1). 3a 추가분 = `ebs-csi-controller` 2 + `ebs-csi-node` 1 + postgres 1 = 4.
+- `[해결]` apply 전에 실물 스키마를 조회해 확정했다(**"plan이 못 잡는 실패" 4번째를 예방**):
+  ```
+  $ aws eks describe-addon-configuration --addon-name aws-ebs-csi-driver \
+      --addon-version v1.63.1-eksbuild.1 --region ap-northeast-2 --query configurationSchema
+  "replicaCount":{"default":2,"description":"Number of replicas in the controller Deployment",
+                  "minimum":1,"type":"integer"}
+  "defaultStorageClass":{"properties":{"enabled":{"default":false,...}}}
+  ```
+  → `configuration_values`로 `controller.replicaCount=1` 지정 = 합계 11로 딱 맞음(여유 0).
+  `defaultStorageClass.enabled`가 **기본 false**라 StorageClass는 우리가 직접 쓴다 — 학습엔 오히려 유리.
+- `[메모]` `aws eks describe-addon-versions --addon-name aws-ebs-csi-driver`:
+  `v1.63.1-eksbuild.1` / clusterVersion `1.36` 호환 / **`requiresIamPermissions: True`**
+  → 애드온만 추가하면 안 되고 IRSA 필요. `irsa-eso.tf` 패턴 재사용.
+- `[메모]` **문서가 코드보다 앞서 있던 자리 1건**: `infra/aws-eks/README.md:76`은 OpenTofu 관리
+  애드온에 **EBS CSI**를 이미 적어놨으나 `addons.tf`엔 vpc-cni·kube-proxy·coredns **3개뿐**.
+  이상탐지 갭(`TASKS.md`가 "코드로 처리"라 했으나 `.tf`가 없던 것)과 같은 계열. 3a가 이걸 메운다.
+- `[메모]` 반대로 **잘 맞물려 있던 곳**: `secrets.tf`가 Stage 3을 미리 상정해 시크릿을 둘로 쪼개 뒀다
+  (*"Stage 3에서 RDS를 in-cluster Postgres로 갈아낄 때 db쪽만 교체"*). `core-api.yaml`도
+  envFrom 기반이라 앱 매니페스트 변경 0으로 갈아끼울 수 있다.
+
+### 15:17 KST — 🔴 과금 세션 시작 (Stage 3a apply)
+
+- `[비용]` `tofu plan` = **26 to add**. Stage 2도 26개였는데 **내용이 교체**됐다:
+  RDS 4개(instance·subnet_group·security_group·ingress_rule) 빠지고
+  EBS CSI 4개(addon·iam_role·attachment·random_password.postgres) 들어옴.
+- `[해결]` **db_mode 토글이 먹은 것을 plan 출력으로 3중 확인**했다(apply 전 검증):
+  ① RDS 4개가 생성 목록에 없음 → `count = 0`
+  ② `secret_version.db_connection_incluster[0]`가 생성됨(`_rds`가 아니라)
+  ③ **출력 `db_address`·`db_master_secret_arn`이 `Changes to Outputs`에 안 나타남**
+     → `one(aws_db_instance.main[*]...)`이 null 반환. 조건부 리소스 출력의 관용구가 동작.
+- `[비용]` 26개 중 **과금 대상은 5개뿐**:
+  | 리소스 | 단가 |
+  |---|---|
+  | EKS 컨트롤플레인 | $0.10/h (전체의 78%) |
+  | t4g.small ×1 ON_DEMAND | ~$0.021/h |
+  | 퍼블릭 IPv4 ×1 | $0.005/h |
+  | PVC가 만들 EBS 10GiB | $0.0013/h (**plan에 안 나옴** — K8s가 만들 것이라 state 밖) |
+  | Secrets Manager ×2 | $0.0011/h |
+  | **합계** | **≈ $0.13/h** — RDS가 빠져 Stage 2보다 시간당 $0.025 저렴 |
+  나머지 21개(IAM·OIDC·애드온·access entry)는 전부 $0.
+- `[메모]` 예상 왕복 ~40분(≈$0.09). Stage 2 대비 **RDS 생성 4분 50초가 통째로 빠진다**.
+
+### 15:26 KST — apply 완료 (26 added, 0 changed, 0 destroyed)
+
+- `[해결]` **실측 소요 — Stage 2보다 빨랐다.**
+  | 단계 | 실측 | Stage 2 실측 |
+  |---|---|---|
+  | 컨트롤플레인 | **5분 48초** (15:17:58→15:23:46) | ~6분 |
+  | 노드그룹 | **1분 57초** | 2분 48초 |
+  | kube-proxy / vpc-cni | 54초 / 1분 4초 | 55초 |
+  | coredns | **14초** | 24초 |
+  | **aws-ebs-csi-driver** | **35초** | (신규) |
+  | RDS | **없음** | 4분 50초 |
+  → apply 전체 ~8분 40초. **RDS 4분 50초가 통째로 빠진 것이 가장 큰 차이.**
+- `[해결]` **db_mode 토글이 실제로도 동작 — `tofu output`에 `db_address`·`db_master_secret_arn`이
+  아예 나타나지 않았다.** plan 단계 예측과 일치. `one(리소스[*].속성)`이 조건부 출력의 정답 관용구.
+- `[해결]` 🔴 **파드 상한 예측이 맞았다 — `replicaCount=1`이 없었으면 막혔다.**
+  ```
+  $ kubectl get nodes -o custom-columns=...,MAXPODS:.status.allocatable.pods
+  ip-10-0-4-207.ap-northeast-2.compute.internal  Ready  v1.36.2-eks-bca9cf6  arm64  11  ap-northeast-2a
+  $ kubectl get pods -A            # 6개
+  kube-system/aws-node-8l758
+  kube-system/coredns-66f898668d-bpxvr
+  kube-system/coredns-66f898668d-gpg4q
+  kube-system/ebs-csi-controller-977c4fcf8-dwtdr   ← **1개**. 기본값이면 2개였다
+  kube-system/ebs-csi-node-p6h6d
+  kube-system/kube-proxy-h96bp
+  ```
+  기본값(2)이었다면 7 + ESO 3 + postgres 1 + core-api 1 = **12 > 11**로 하나가 Pending에 갇혔다.
+  현재 6 + 5 = **정확히 11/11**로 여유 0.
+  → **`aws eks describe-addon-configuration`으로 apply 전에 스키마를 조회한 것이 값을 했다.**
+    "plan이 못 잡는 실패"를 예방한 첫 사례(앞의 3건은 전부 사후에 발견했다).
+- `[메모]` 애드온 버전 실측: ebs-csi `v1.63.1-eksbuild.1`(사전 조회값과 동일) ·
+  coredns `v1.14.3-eksbuild.3` · kube-proxy `v1.36.0-eksbuild.13` · vpc-cni `v1.22.3-eksbuild.1`.
+  EBS CSI에만 `serviceAccountRoleArn`이 붙어 있다(`.../role/devquest-eks-ebs-csi`) — IRSA 연결 확인.
+- `[메모]` 노드 AZ = **ap-northeast-2a**. StorageClass가 `WaitForFirstConsumer`라
+  EBS도 2a에 만들어질 것이다(= 실패 6종 ①AZ 불일치가 구조적으로 발생 불가).
+
+### 15:28~15:30 KST — 동적 프로비저닝 실측 (Stage 3a 핵심)
+
+- `[해결]` **ESO·IRSA가 한 번에 붙었다.** Stage 2에서 최다 실패였던 `sts:AssumeRoleWithWebIdentity`
+  거부가 없었다 — 신뢰정책 `sub`를 그대로 재사용했기 때문.
+  ```
+  NAME           STORE                READY   REASON
+  core-api-app   aws-secretsmanager   True    SecretSynced
+  core-api-db    aws-secretsmanager   True    SecretSynced
+  ```
+  `core-api-db`가 **DB_HOST/DB_NAME/DB_USERNAME/DB_PASSWORD 4개를 한 출처에서** 받았다.
+  → **`sed`로 ARN을 치환하는 Stage 2 절차가 통째로 사라졌다.** in-cluster의 실질 이득.
+- `[해결]` **PVC → EBS 동적 생성 전 과정이 이벤트에 남았다** (블로그용 원문):
+  ```
+  Normal  WaitForFirstConsumer   waiting for first consumer to be created before binding
+  Normal  Provisioning           ebs.csi.aws.com_ebs-csi-controller-977c4fcf8-dwtdr_...
+  Normal  ExternalProvisioning   Waiting for a volume to be created either by the external
+                                 provisioner 'ebs.csi.aws.com' or manually by ...
+  Normal  ProvisioningSucceeded  Successfully provisioned volume pvc-09b2533e-...
+  ```
+  PVC Pending → Bound 까지 **약 11초**.
+- `[해결]` **생성된 실물 EBS** — 주장 3개가 동시에 검증됨:
+  ```
+  vol-0c32788ebc4a95cb0 | 10 GiB | gp3 | ap-northeast-2a | Encrypted=True | in-use | 3000 IOPS
+  ```
+  ① 볼륨 AZ(2a) == 노드 AZ(2a) → **`WaitForFirstConsumer`가 AZ 불일치를 구조적으로 차단**
+  ② StorageClass의 `encrypted: "true"`가 실제로 반영됨
+  ③ 태그에 **`ebs.csi.aws.com/cluster = true`** — `AmazonEBSCSIDriverPolicy`가 조건 키로 쓰는 그것.
+     "리소스 ARN이 아니라 **출처 태그**로 최소권한을 긋는다"는 irsa-ebs-csi.tf의 주석이 실물로 확인됐다
+     (써놓고 확인은 안 했던 주장이다).
+- `[해결]` 🔴 **고아 과금의 메커니즘을 숫자로 확인**:
+  ```
+  tofu state 총 리소스 : 34
+    그중 EBS 볼륨      : 0     ← vol-0c327...은 AWS에 있는데 tofu는 모른다
+  ```
+  `tofu destroy`는 자기가 아는 것만 지운다 → **destroy 전 `kubectl delete pvc`가 필수인 이유**가
+  추상적 규칙이 아니라 state 목록의 사실로 드러났다.
+- `[해결]` **`lost+found` 함정이 실재했다.** PGDATA를 하위 디렉토리로 안 내렸으면 여기서 막혔다:
+  ```
+  $ kubectl exec postgres-0 -- ls -a /var/lib/postgresql/data
+  .  ..  lost+found  pgdata
+  $ echo $PGDATA
+  /var/lib/postgresql/data/pgdata
+  ```
+  ext4 포맷 EBS를 마운트하면 `lost+found`가 생기고, postgres 엔트리포인트는 PGDATA가
+  "비어있지 않다"고 판단해 initdb를 건너뛴 뒤 PG_VERSION이 없다며 죽는다.
+- `[메모]` **기동 로그 — RDS와 같은 17.10**:
+  ```
+  starting PostgreSQL 17.10 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0)
+  database system is ready to accept connections
+  ```
+  Stage 2 RDS의 `engine_version = 17.10`과 **메이저·마이너까지 동일** → 관리형↔자체운영 비교 조건 성립.
+  타임스탬프가 KST로 찍힌다(매니페스트의 `TZ=Asia/Seoul`이 먹음).
+- `[메모]` core-api 배포 시 ECR 태그 선택이 또 한 번 값을 했다 — 최신 이미지의 `imageTags`가
+  `["latest", "e74147f80..."]` 순서라 `[0]`을 썼으면 **금지된 latest로 배포**됐다.
+- `[비용]` 파드 **11/11** 도달(시스템4 + EBS CSI 2 + ESO 3 + postgres 1 + core-api 1). 예측과 정확히 일치.
+
+### 15:32 KST — 🔴 GRAFANA 3키 검증 실패 — **전제가 틀렸다는 것을 찾아냈다**
+
+- `[막힘]` core-api가 `GRAFANA_*` 3키 없이 **부팅하지 못했다.** CrashLoopBackOff.
+  근본 원인 체인 끝(`Caused by` 8단계 중 마지막):
+  ```
+  Caused by: org.springframework.util.PlaceholderResolutionException:
+    Could not resolve placeholder 'GRAFANA_API_KEY' in value "${GRAFANA_API_KEY}"
+  ... 'otlpMetricsConfig' defined in URL [jar:nested:/app/app.jar/!BOOT-INF/lib/
+      monitoring-0.0.1-SNAPSHOT-plain.jar!/com/devquest/monitoring/OtlpMetricsConfig.class]
+  ```
+- `[해결]` 🔴 **logback이 아니었다. 소비처가 둘이었고, 우리는 하나만 고쳤다.**
+  | 경로 | 무엇이 요구하나 | 조건부인가 |
+  |---|---|---|
+  | 로깅 | `GRAFANA_LOKI_URL` → logback `<if>` | ✅ `5cf76da`로 조건부화됨 |
+  | **메트릭** | **`GRAFANA_API_KEY` → `OtlpMetricsConfig` 생성자** | ❌ **키 유무와 무관하게 켜진다** |
+
+  `OtlpMetricsConfig`에는 가드가 **있다**:
+  ```kotlin
+  @ConditionalOnProperty("grafana.otlp.enabled", havingValue = "true")
+  class OtlpMetricsConfig(
+      @Value("\${grafana.otlp.instance-id}") private val instanceId: String,
+      @Value("\${GRAFANA_API_KEY}") private val apiKey: String,
+  )
+  ```
+  그런데 그 스위치가 `application-prod.yml`에 **하드코딩 `true`**다:
+  ```yaml
+  grafana:
+    otlp:
+      enabled: true
+  ```
+  → 가드가 "키가 있는가"가 아니라 **"켜라고 했는가"**만 본다. prod 프로파일이면 무조건 켜지고,
+  그다음 생성자 주입에서 키가 없어 컨텍스트가 죽는다.
+- `[메모]` **CONTEXT에 적혀 있던 전제가 불완전했다** — *"이게 통과하면 logback 조건부화(5cf76da)의
+  실환경 검증이 끝난다"*. 소비처가 하나라고 가정한 서술이었다. **실환경에 올려보지 않았으면
+  계속 "검증만 남았다"고 믿었을 것.** Phase 1 회고의 *"경계를 넘는 계약은 양쪽 실물을 붙여서
+  검증한다"*가 환경변수 계약에도 똑같이 적용된다.
+- `[막힘]` **파드 상한 여유 0이 재배포를 막았다** — 예고했던 리스크가 그대로 실현:
+  ```
+  0/1 nodes are available: 1 Insufficient memory, 1 Too many pods.
+  ```
+  `kubectl rollout restart`는 새 파드를 먼저 띄우고 옛 파드를 지운다(RollingUpdate) →
+  순간 12개 → 새 파드 Pending. **11/11은 "돌아간다"이지 "운영 가능하다"가 아니다.**
+- `[해결]` 옛 파드를 직접 지워 슬롯을 비웠다. 근본 해결은 셋 중 하나:
+  ① `coredns` replicaCount 1 (addons.tf에 주석으로 준비돼 있음, 슬롯 +1)
+  ② `strategy: Recreate`로 바꿔 롤링 겹침 제거
+  ③ t4g.medium (상한 17) — 시간당 $0.13→$0.16
+  Stage 3b 착수 전 결정 필요.
+- `[결정]` **BE 코드 수정은 이 세션에서 하지 않는다.** 이미지 재빌드(CI)가 필요해 과금 구간이
+  길어지고, 수정은 테스트를 동반한 별도 PR이 맞다. 이번 세션은 3키를 되돌려 진행한다.
+
+### 15:38~15:45 KST — 🔴 **관리형이 공짜로 주던 것: TLS** (Stage 3 최대 발견)
+
+- `[막힘]` GRAFANA 3키를 되돌린 뒤에도 core-api가 죽었다. **원인이 바뀌었다**:
+  ```
+  Caused by: com.zaxxer.hikari.pool.HikariPool$PoolInitializationException:
+    Failed to initialize pool: The server does not support SSL.
+  Caused by: org.postgresql.util.PSQLException: The server does not support SSL.
+  ```
+- `[해결]` 원인: `application-prod.yml`의 jdbc-url이 **하드코딩**돼 있다.
+  ```yaml
+  jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
+  ```
+  호스트·DB명·계정은 환경변수인데 **`sslmode=require`만 상수**다.
+  RDS는 TLS가 켜진 채로 오기 때문에 이게 그냥 통했고, 그래서 아무도 몰랐다.
+- `[결정]` 🔑 **"앱 코드 변경 0"이라는 Stage 3 전제가 여기서 한 번 깨졌다.**
+  깨진 지점이 값지다 — **관리형이 "공짜로 주던 것"의 목록에 TLS가 있었다.**
+  자동 백업·PITR·로테이션처럼 눈에 띄는 항목이 아니라, **아무도 언급하지 않는 기본값**이다.
+  자체운영으로 옮긴다는 건 이런 것까지 소유한다는 뜻.
+- `[결정]` **인증서를 손으로 만들지 않았다.** 검토한 대안과 기각 사유:
+  | 안 | 기각/채택 |
+  |---|---|
+  | initContainer + openssl | ❌ `postgres:17-alpine`에 openssl 없음(실측 `sh: openssl: not found`). 다른 이미지 = 검증 안 된 서드파티 의존 |
+  | `kubectl create secret` 수동 | ❌ Stage 2 규칙 위반(손으로 만든 시크릿 금지) |
+  | **tofu `tls_self_signed_cert` → Secrets Manager → ESO** | ✅ **Stage 2 파이프 그대로 재사용, 새 개념 0, 세션마다 자동 재생성** |
+  `tls` 프로바이더가 versions.tf에 **이미 선언돼 있었다**(미사용 상태) — init 재실행도 불필요.
+- `[메모]` 자기서명으로 충분한 이유: **`sslmode=require`는 암호화만 요구하고 인증서 검증을 안 한다.**
+  검증하려면 `verify-ca`/`verify-full`이어야 하고 그때는 CA를 클라이언트에 심어야 한다.
+  ⚠️ 즉 **이 구성은 MITM을 막지 못한다.** 실운영이면 cert-manager로 CA 체계를 세울 자리.
+- `[해결]` 🔴 **PostgreSQL 키 파일 권한 검사 — 0600을 줄 수 없는 구조였다.**
+  PG는 키 파일이 group/world에 열려 있으면 기동을 거부하는데, **예외가 "root 소유 + group read(0640)"**다.
+  K8s Secret 볼륨은 kubelet이 `root:fsGroup` 소유로 마운트하므로 **0600(=postgres 소유)을 못 만든다.**
+  → `securityContext.fsGroup: 70` + `defaultMode: 0640` 조합이 정확히 그 예외에 들어맞는다. 실측:
+  ```
+  $ ls -l /certs/..data/
+  -rw-r-----  1 root  postgres  1294  server.crt
+  -rw-r-----  1 root  postgres  1675  server.key
+  $ psql -tAc "SHOW ssl;"
+  on
+  ```
+- `[메모]` ⚠️ **YAML 8진수 함정**: `defaultMode`에 앞의 0을 빼고 `640`이라 쓰면 **10진수 640**으로
+  읽혀 엉뚱한 권한이 된다. kubectl은 YAML 1.1 파서라 `0640`이 8진수. YAML 1.2식 `0o640`은
+  문자열로 잡힐 수 있어 쓰지 않는다.
+- `[해결]` ⭐ **StatefulSet의 약속이 증명됐다.** TLS 적용으로 파드가 재생성됐는데:
+  ```
+  PVC data-postgres-0 → pvc-09b2533e-178e-4380-8197-1d9c2884f989 (생성 15:29:32, 그대로)
+  ```
+  **파드는 죽고 새로 떴는데 볼륨은 같다.** Deployment였다면 보장되지 않는 것.
+- `[해결]` core-api 재생성은 `rollout restart` 대신 **`scale 0 → 1`**로 했다.
+  파드 상한 여유가 0이라 롤링(새 파드 먼저 생성)이 구조적으로 불가능하기 때문.
+
+### 15:41~15:43 KST — ✅ Stage 3a 목표 달성 + teardown
+
+- `[해결]` **`/health` 200. Flyway 12개가 in-cluster Postgres에 적용됐다.**
+  ```
+  Migrating schema "public" to version "12 - create user resume"
+  Successfully applied 12 migrations to schema "public", now at version v12 (execution time 00:00.161s)
+  HTTP 200  {"result":"SUCCESS","data":"DevQuest API is running","error":null}
+  ```
+  RDS(Stage 2)에서와 **동일한 결과**를 in-cluster에서 재현 — 앱 이미지는 같은 sha.
+- `[해결]` ⭐⭐ **StatefulSet + PVC의 존재 이유를 실측으로 증명했다.** 파드를 강제 삭제한 뒤:
+  ```
+                삭제 전                                삭제 후
+  파드 UID      1ce1fe43-ab37-4691-bb98-16a7e0e32785   98974a25-a4b2-4dde-bb37-6403c9c1a8dd
+  PVC 볼륨      pvc-09b2533e-178e-4380-8197-1d9c2884f989   (동일)
+  질문뱅크 행   26                                      26
+  ```
+  **UID가 바뀌었다 = 확실히 다른 파드 객체인데, 볼륨과 데이터는 그대로다.**
+  Deployment였다면 보장되지 않는 것. (26행은 문서 기록 V10 5 + V11 21 = 26과도 일치)
+- `[해결]` 🔴 **고아가 생기는 정확한 지점을 눈으로 봤다.** StatefulSet을 지운 직후:
+  ```
+  $ kubectl delete -f k8s/base/     # statefulset·service·storageclass 삭제됨
+  $ aws ec2 describe-volumes --filters "Name=tag:ebs.csi.aws.com/cluster,Values=true"
+  vol-0c32788ebc4a95cb0   in-use    ← **워크로드를 지웠는데 EBS는 살아있다**
+  ```
+  PVC를 지우고 나서야 회수됐다:
+  ```
+  $ kubectl delete pvc --all -A
+  [15:43:08] vol-0c32788ebc4a95cb0  deleting
+  [15:43:15] 볼륨 없음 — reclaimPolicy:Delete가 회수 완료   (7초)
+  ```
+  → **"StatefulSet 삭제 ≠ 볼륨 삭제"**. SOP §8의 `kubectl delete pvc --all -A`가
+    형식적 절차가 아니라는 것이 이 두 출력의 차이로 확정됐다.
+- `[메모]` teardown 순서는 SOP §8대로: ExternalSecret → SecretStore → 워크로드 → **PVC** → tofu destroy.
+
+### 15:45 KST — 🟢 과금 종료 · 고아 0
+
+- `[비용]` **과금 구간 15:17:58 → 15:45 = 약 27분. ≈ $0.06** ($0.13/h 기준).
+  Stage 2(26분 35초, ~$0.06)와 거의 같다 — **RDS가 빠진 만큼 TLS 삽질에 썼다.**
+- `[해결]` `Destroy complete! Resources: 30 destroyed.` (26 + TLS 4)
+- `[해결]` **고아 전수 검증 = 전부 0** (SOP §9):
+  ```
+  tofu state          : 0개
+  EKS 클러스터        : (없음)
+  EC2 인스턴스        : (없음)
+  EBS 볼륨            : (없음)   ← PVC 삭제를 먼저 했기 때문
+  로드밸런서·NAT      : (없음)
+  RDS 인스턴스·스냅샷 : (없음)
+  Secrets Manager     : (없음)   ← recovery_window_in_days = 0의 효과
+  ```
+  세션 마커도 자가청소됨(리퍼 감시 해제).
+- `[메모]` **Secrets Manager가 비어 있는 것이 중요하다.** 기본값(30일 복구창)이면 시크릿 4개가
+  "삭제 대기"로 남아 개당 $0.40/월씩 과금되고, 이름이 점유돼 다음 세션 apply가 실패한다.
+  이번엔 시크릿이 3개(db-connection·app·**postgres-tls**)로 늘었는데 전부 즉시 소멸했다.

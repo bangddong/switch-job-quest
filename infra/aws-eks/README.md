@@ -125,7 +125,8 @@ Terraform 오픈소스 포크, 커뮤니티 기본값이 됨. **HCP Terraform �
 | **0** | OpenTofu로 VPC + EKS 클러스터 + 관리형 노드그룹(t4g.small Spot ×1~2) + `kubectl` 연결 | 컨트롤플레인, 노드그룹, OIDC | (신규) |
 | **1** | Deployment + Service로 앱 배포 (ECR 이미지) | ECR·이미지 풀, 실클러스터 `kubectl` | Stage 1 재사용 |
 | **2** | Secret / Config | **IRSA** (IAM Roles for ServiceAccount) — EKS의 정수 | Stage 2 재사용 |
-| **3** | **Postgres StatefulSet + EBS CSI + PVC** | StorageClass, 동적 EBS 프로비저닝 | Stage 3 직결 |
+| **3a** | **Postgres StatefulSet + EBS CSI + 동적 PVC** | StorageClass, 동적 EBS 프로비저닝, `volumeClaimTemplates` | Stage 3 직결 |
+| **3b** | 같은 StatefulSet을 **terraform 소유 EBS + static PV**로 전환 | `volumeHandle`·`claimRef`, PV 재바인딩, AZ 종속 | (kind 불가 — EBS 없음) |
 | **4** | **AWS Load Balancer Controller → ALB Ingress** | IngressClass, ALB target-type | Stage 4 직결 |
 | **5** (선택) | metrics-server·HPA, Karpenter, ArgoCD | 오토스케일, GitOps | (확장) |
 
@@ -136,7 +137,8 @@ Terraform 오픈소스 포크, 커뮤니티 기본값이 됨. **HCP Terraform �
 | **0** — VPC·클러스터·노드그룹·kubectl | ✅ | 07-24 | 왕복 ~50분. NAT 0개 유지 |
 | **1** — ECR 이미지로 Deployment·Service | ✅ | 07-27 | 이미지 풀 성공. DB 미연결이라 CrashLoop로 종료(의도) |
 | **2** — Secret/Config + **IRSA** | ✅ | 07-28 | RDS + Secrets Manager + ESO. 아래 주석 참조 |
-| **3** — Postgres StatefulSet + EBS CSI + PVC | ⬜ | — | Stage 2의 RDS를 in-cluster로 갈아끼워 "관리형↔자체운영" 비교 |
+| **3a** — Postgres StatefulSet + EBS CSI + 동적 PVC | 🚧 | — | Stage 2의 RDS를 in-cluster로 갈아끼워 "관리형↔자체운영" 비교 |
+| **3b** — 같은 StatefulSet을 static PV·영속 EBS로 전환 | ⬜ | — | 부수고 다시 지어도 데이터가 붙는가 (반복해야 만나는 실패 6종) |
 | **4** — AWS LB Controller → ALB Ingress | ⬜ | — | — |
 | **5** — metrics-server·HPA·Karpenter·ArgoCD | ⬜ | — | 선택 |
 

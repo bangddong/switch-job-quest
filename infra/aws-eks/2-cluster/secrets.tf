@@ -18,6 +18,8 @@
 #   core-api-app → **내가 소유**(JWT·OAuth)
 # 한 덩어리로 묶으면 AWS가 자동 로테이션하는 값과 수동 값이 섞이고,
 # Stage 3에서 RDS를 in-cluster Postgres로 갈아낄 때 db쪽만 교체하는 것도 불가능해진다.
+# ✅ **07-30 Stage 3a에서 실제로 그렇게 됐다** — db쪽 secret_version만 모드별로 갈라졌고
+#    `core-api-app`과 `k8s/base/core-api.yaml`은 한 글자도 안 바뀌었다. 분리의 배당금.
 
 # ── DB 접속 좌표 (host/dbname) ─────────────────────────────────
 #
@@ -44,12 +46,58 @@ resource "aws_secretsmanager_secret" "db_connection" {
   recovery_window_in_days = 0
 }
 
-resource "aws_secretsmanager_secret_version" "db_connection" {
+# ── 모드별로 담기는 내용이 다르다 ──────────────────────────────
+#
+# 하나의 리소스에 조건식을 쓰지 않고 **리소스를 둘로 나눈** 이유:
+#   ① Terraform의 삼항 연산자는 양쪽 타입을 통일하려 하는데, 두 모드의 키 집합이
+#      달라서(2개 vs 4개) `inconsistent types` 에러가 난다.
+#   ② 나눠 놓으면 "두 모드가 배타적이고 내용도 다르다"가 코드에서 바로 보인다.
+# 같은 secret_id를 가리키므로 실제로 존재하는 시크릿은 언제나 1개다(count가 배타적이라).
+
+# [Stage 2] RDS 모드 — 접속 좌표만. 크리덴셜은 RDS 관리형 시크릿에 따로 있다.
+resource "aws_secretsmanager_secret_version" "db_connection_rds" {
+  count     = local.rds_enabled
   secret_id = aws_secretsmanager_secret.db_connection.id
   secret_string = jsonencode({
-    host   = aws_db_instance.main.address
-    dbname = aws_db_instance.main.db_name
+    host   = aws_db_instance.main[0].address
+    dbname = aws_db_instance.main[0].db_name
   })
+}
+
+# [Stage 3a] in-cluster 모드 — 좌표 + 크리덴셜 **4개 전부**.
+#
+# 🔑 Stage 2와의 결정적 차이: **시크릿 출처가 하나로 합쳐진다.**
+#   Stage 2는 username/password를 AWS(RDS)가 소유해서 ExternalSecret이 두 군데를
+#   가리켜야 했고, 그 이름(`rds!db-<uuid>`)을 AWS가 정하는 바람에 apply 후
+#   PLACEHOLDER를 sed로 치환하는 절차가 필요했다.
+#   in-cluster에선 우리가 비밀번호를 만드므로 그 절차가 통째로 사라진다.
+#   → "관리형이 편한 대신 이름을 못 정한다"는 트레이드오프를 양쪽에서 겪게 된다.
+#
+# host가 `postgres`인 이유: 같은 네임스페이스(default)의 Service 이름은 그대로
+#   DNS 이름이 된다. FQDN(postgres.default.svc.cluster.local)을 써도 되지만
+#   짧은 이름이 CoreDNS의 search domain으로 해석되므로 동일하게 동작한다.
+resource "aws_secretsmanager_secret_version" "db_connection_incluster" {
+  count     = local.incluster_enabled
+  secret_id = aws_secretsmanager_secret.db_connection.id
+  secret_string = jsonencode({
+    host     = "postgres"
+    dbname   = var.db_name
+    username = var.db_master_username
+    password = random_password.postgres[0].result
+  })
+}
+
+# in-cluster Postgres의 superuser 비밀번호.
+# RDS의 manage_master_user_password와 같은 역할을 우리가 대신 한다 —
+# 즉 **"시크릿을 만드는 주체가 AWS"였던 Stage 2의 반대편**이다.
+# 세션마다 새로 생성된다(destroy-after-use라 유지할 이유가 없다).
+resource "random_password" "postgres" {
+  count = local.incluster_enabled
+  # PostgreSQL 비밀번호에 특수문자를 넣지 않는다 — JDBC URL·psql 명령줄·
+  # K8s Secret(base64)을 오가며 이스케이프 사고가 나는 것을 원천 차단.
+  # 길이 32(엔트로피 ~165bit)면 특수문자 없이도 충분하다.
+  length  = 32
+  special = false
 }
 
 # ── 앱 시크릿 (JWT / GitHub OAuth) ─────────────────────────────

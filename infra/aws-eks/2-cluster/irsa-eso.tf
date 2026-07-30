@@ -85,21 +85,29 @@ data "aws_iam_policy_document" "eso_read_secrets" {
       "secretsmanager:GetSecretValue",
       "secretsmanager:DescribeSecret",
     ]
-    resources = [
+    # in-cluster 모드(Stage 3a~)에선 3번째 항목이 **사라진다** — RDS가 없으니
+    # RDS 관리형 시크릿도 없고, 크리덴셜이 db_connection 안으로 합쳐지기 때문.
+    # 즉 이 정책은 모드에 따라 시크릿 3개 또는 2개를 허용한다.
+    # `one(...)`을 쓰는 이유: count=0일 때 `[0]` 인덱스는 에러를 내지만
+    # one()은 빈 리스트에 null을 돌려주므로 compact로 걸러낼 수 있다.
+    resources = compact([
       aws_secretsmanager_secret.db_connection.arn,
       aws_secretsmanager_secret.app.arn,
-      # RDS가 스스로 만든 마스터 크리덴셜 시크릿.
+      # in-cluster Postgres의 TLS 인증서/키 (in-cluster 모드에서만 존재).
+      one(aws_secretsmanager_secret.postgres_tls[*].arn),
+      # RDS가 스스로 만든 마스터 크리덴셜 시크릿(rds 모드에서만 존재).
       # tofu가 만든 게 아니라 RDS가 만든 것이라, 이렇게 참조로만 잡을 수 있다.
-      aws_db_instance.main.master_user_secret[0].secret_arn,
-    ]
+      one(aws_db_instance.main[*].master_user_secret[0].secret_arn),
+    ])
   }
 }
 
 resource "aws_iam_policy" "eso_read_secrets" {
-  name        = "${var.cluster_name}-eso-read-secrets"
+  name = "${var.cluster_name}-eso-read-secrets"
   # ASCII만 (위 aws_iam_role.eso 주석 참조)
-  # 의미: ESO — 이 클러스터용 Secrets Manager 시크릿 3개 읽기 전용
-  description = "ESO read-only access to 3 Secrets Manager secrets of this cluster"
+  # 의미: ESO — 이 클러스터용 Secrets Manager 시크릿 읽기 전용
+  # (개수를 안 적는다 — db_mode에 따라 3개/2개로 달라지므로 숫자를 박으면 곧 거짓말이 된다)
+  description = "ESO read-only access to this cluster's Secrets Manager secrets"
   policy      = data.aws_iam_policy_document.eso_read_secrets.json
 }
 

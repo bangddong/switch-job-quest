@@ -1,6 +1,6 @@
-# EKS 2-cluster 아키텍처 (Stage 2 기준)
+# EKS 2-cluster 아키텍처 (Stage 2 · 3a)
 
-> AWS EKS 학습 놀이터의 `2-cluster` 레이어 — 컨트롤플레인 + 노드그룹 + **RDS + Secrets Manager + IRSA**.
+> AWS EKS 학습 놀이터의 `2-cluster` 레이어. **§1~§6 = Stage 2(`db_mode=rds`) · §7 = Stage 3a(`db_mode=in-cluster`, 기본값)**.
 > 이 문서는 **살아있는 다이어그램 소스**다. 레이어/Stage가 바뀌면 여기부터 갱신한다.
 >
 > 최종 갱신: 2026-07-28 (Stage 2 완료, PR #339 실측 반영)
@@ -262,14 +262,107 @@ flowchart LR
 
 ---
 
-## 7. Stage 3 예고 — 이 그림이 어떻게 바뀌나
+## 7. Stage 3a — in-cluster Postgres로 갈아끼운 그림 (2026-07-30 실증)
+
+> **위 §1~§6은 폐기되지 않았다.** `db_mode = "rds"`로 두면 그대로 재현된다(튜토리얼 Stage 2 경로).
+> 아래는 `db_mode = "in-cluster"`(기본값)일 때의 모습이다. **두 그림의 차이가 학습 내용 그 자체**다.
+
+```mermaid
+graph TB
+  subgraph aws["AWS 계정 · ap-northeast-2"]
+    subgraph vpc["VPC 10.0.0.0/16"]
+      subgraph az["ap-northeast-2a (노드가 뜬 AZ)"]
+        n1["t4g.small 노드 ×1<br/>공인 IP · 파드 상한 11"]
+        ebs[("EBS gp3 10GiB<br/>vol-0c327… · 암호화<br/>🔴 tofu state 밖")]
+      end
+      cp["EKS 컨트롤플레인 1.36"]
+    end
+    subgraph sm["Secrets Manager"]
+      smdb["devquest-eks/db-connection<br/>host·dbname·<b>username·password</b><br/>👤 전부 tofu 소유"]
+      smapp["devquest-eks/app<br/>JWT · OAuth · Grafana"]
+      smtls["devquest-eks/postgres-tls<br/>server.crt · server.key"]
+    end
+    ebscsi["IRSA: devquest-eks-ebs-csi<br/>AmazonEBSCSIDriverPolicy<br/>(태그 조건으로 경계)"]
+    esorole["IRSA: devquest-eks-eso"]
+  end
+
+  subgraph k8s["클러스터 내부 (11/11 파드)"]
+    sc["StorageClass gp3<br/>WaitForFirstConsumer<br/>reclaimPolicy: Delete"]
+    ctrl["ebs-csi-controller ×1<br/>(기본 2 → 상한 때문에 1)"]
+    node["ebs-csi-node (DaemonSet)"]
+    pvc["PVC data-postgres-0<br/>10Gi · Bound"]
+    pg["StatefulSet postgres-0<br/>postgres:17-alpine<br/>ssl=on"]
+    svc["Service postgres (headless)<br/>publishNotReadyAddresses"]
+    eso["External Secrets Operator ×3"]
+    ksec["Secret core-api-db<br/>Secret postgres-tls"]
+    app["core-api ×1"]
+  end
+
+  esorole --> eso
+  smdb --> eso
+  smapp --> eso
+  smtls --> eso
+  eso --> ksec
+  ksec -->|"POSTGRES_USER/PASSWORD/DB"| pg
+  ksec -->|"envFrom DB_*"| app
+  ksec -->|"/certs 0640 root:70"| pg
+
+  ebscsi --> ctrl
+  sc --> pvc
+  pvc -->|"① 파드 스케줄 대기<br/>② CreateVolume"| ctrl
+  ctrl -.->|"만든다"| ebs
+  node -.->|"attach/mount"| ebs
+  ebs --> pg
+  pg --> svc
+  app -->|"5432 · sslmode=require<br/>🔑 TLS 직접 발급"| svc
+
+  classDef bill fill:#ffe0e0,stroke:#c00,stroke-width:2px;
+  classDef orphan fill:#fff0d0,stroke:#e08000,stroke-width:3px,stroke-dasharray:5 3;
+  classDef sec fill:#e6f0ff,stroke:#06c;
+  class cp,n1 bill;
+  class ebs orphan;
+  class smdb,smapp,smtls,esorole,ebscsi,eso,ksec sec;
+```
+
+> 🟠 **주황 점선 = tofu state 밖**. `tofu destroy`가 못 지운다 —
+> **`kubectl delete pvc`를 먼저** 해야 회수된다(실측: 삭제 후 7초).
+
+### Stage 2 ↔ Stage 3a 델타
+
+| | Stage 2 (RDS) | Stage 3a (in-cluster) |
+|---|---|---|
+| 과금 노드 | 컨트롤플레인 · 노드 · **RDS** (3개) | 컨트롤플레인 · 노드 (2개) + EBS 소액 |
+| 시간당 | $0.155 | **$0.13** |
+| DB 생성 | 4분 50초 | **즉시** (이미지 pull) |
+| 시크릿 출처 | **2군데** (AWS 소유 `rds!db-uuid` + tofu) | **1군데** (전부 tofu) |
+| apply 절차 | ARN을 `sed`로 치환 | **치환 없음** |
+| IRSA 역할 | ESO 1개 | ESO + **EBS CSI** 2개 |
+| 애드온 | 3개 | **4개** (+aws-ebs-csi-driver) |
+| 파드 | 8 / 11 | **11 / 11** (여유 0) |
+| **TLS** | 관리형 제공 | 🔑 **직접 발급·마운트** |
+| 백업·PITR·로테이션 | 관리형 제공 | **없음** |
+| state 밖 리소스 | 0 | **EBS 1개** ← 고아 위험 |
+
+### 이 그림이 말하는 것
+
+1. **빨간 노드가 하나 줄었는데 주황 노드가 하나 생겼다.** 과금은 줄었지만 **관리 책임**이 늘었다.
+   RDS는 tofu가 통째로 소유해 destroy 한 번이면 끝이었고, EBS는 두 평면(K8s·tofu)에 걸쳐 있다.
+2. **시크릿 화살표가 단순해졌다.** Stage 2는 두 출처를 합성해야 했고 이름을 AWS가 정해서
+   apply 후 `sed` 치환이 필요했다. 3a는 전부 우리 것이라 그 단계가 없다 —
+   **대신 로테이션도 우리 몫이 됐다.**
+3. **화살표가 하나 늘었다: `ksec → pg`의 `/certs`.** 이게 Stage 3의 발견이다.
+   관리형에서 안 보이던 선이, 자체운영에서는 **직접 그려야 하는 선**이 된다.
+
+---
+
+## 8. Stage 3b 예고 — 이 그림이 또 바뀐다
 
 | 바뀌는 것 | 영향 |
 |---|---|
-| RDS ➜ **in-cluster Postgres StatefulSet** | 빨간 노드 하나가 사라지고, 대신 **PVC → EBS**가 생긴다 |
-| **EBS CSI 드라이버 + StorageClass** 추가 | 애드온이 하나 늘고, IRSA 역할이 하나 더 필요하다 |
-| ⚠️ **K8s가 AWS 리소스를 만들기 시작한다** | PVC가 만든 EBS는 **tofu state 밖** → destroy 전 `kubectl delete pvc --all -A` 필수 |
-| ⚠️ 노드 파드 상한 **11** | 현재 8 사용(시스템 4 + ESO 3 + 앱 1). StatefulSet 여유 3개뿐 |
+| PVC 동적 생성 ➜ **terraform 소유 EBS + static PV** | 주황 노드가 **빨간(tofu 소유)** 으로 바뀐다 = 고아 위험 소멸, 대신 AZ 고정 제약 |
+| `reclaimPolicy: Delete` ➜ **Retain** | 🔴 3a의 정답이 3b의 사고가 되는 지점 |
+| `volumeClaimTemplates` ➜ 명시적 PVC + `claimRef` | 실패 6종 ⑤(자동 생성 PVC가 static PV와 충돌) |
+| EBS를 `0-bootstrap`으로 이동 | 6개월 영속(월 $1.82) — 세션마다 destroy되면 안 되므로 |
 
-> `application-prod.yml`이 100% 환경변수 기반이라 **앱 코드·이미지 변경 0**으로 스왑된다.
-> 그게 "관리형 ↔ 자체운영" 비교 실습을 가능하게 하는 전제다.
+> ⚠️ **파드 상한 여유가 0이다(11/11).** 3b 착수 전 택1: ①`coredns` replicaCount 1
+> ②`strategy: Recreate` ③t4g.medium(상한 17, $0.13→$0.16/h). 상세는 `CONTEXT.md` D-004.

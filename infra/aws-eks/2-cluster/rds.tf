@@ -16,9 +16,22 @@
 #   RDS 서브넷그룹 요건은 "2개 이상 AZ"뿐이고 이미 2a/2c 퍼블릭 서브넷이 있다.
 #   publicly_accessible=false + 보안그룹 제한이면 **인터넷에서 도달 불가**는 동일하게 성립한다.
 
+# ── ⚙️ Stage 3a 토글 ──────────────────────────────────────────
+# 이 파일 전체가 `db_mode = "rds"`일 때만 생성된다(기본은 in-cluster → 0개).
+# **파일을 지우지 않는 이유**는 튜토리얼 Stage 2 재현성 — variables.tf의 db_mode 주석 참조.
+#
+# count를 쓰면 참조가 `aws_db_instance.main[0]`처럼 인덱스를 타게 된다.
+# 다른 파일(secrets.tf·irsa-eso.tf·outputs.tf)에서 이 리소스들을 참조하던 곳은
+# 전부 조건식으로 바뀌었다 — "RDS가 없을 수도 있다"가 이제 타입 수준의 사실이 됐기 때문.
+locals {
+  rds_enabled       = var.db_mode == "rds" ? 1 : 0
+  incluster_enabled = var.db_mode == "in-cluster" ? 1 : 0
+}
+
 # 서브넷 그룹 — RDS를 어느 서브넷에 놓을지. 2개 이상 AZ 필수(고가용성 전제 때문).
 # 우리는 Single-AZ지만 그래도 2개를 요구한다 — AWS가 장애조치 여지를 강제하는 것.
 resource "aws_db_subnet_group" "main" {
+  count      = local.rds_enabled
   name       = "${var.cluster_name}-db"
   subnet_ids = data.terraform_remote_state.network.outputs.public_subnet_ids
 
@@ -43,6 +56,7 @@ resource "aws_db_subnet_group" "main" {
 #    ⚠️ 같은 제약이 aws_vpc_security_group_ingress_rule.description에도 적용된다(아래).
 #    반면 Secrets Manager·IAM·ECR의 description은 한글을 받는다 — "AWS 전체"가 아니라 EC2 계열만.
 resource "aws_security_group" "rds" {
+  count       = local.rds_enabled
   name        = "${var.cluster_name}-rds"
   description = "RDS PostgreSQL - access allowed only from EKS cluster pods"
   vpc_id      = data.terraform_remote_state.network.outputs.vpc_id
@@ -53,7 +67,8 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "rds_from_cluster" {
-  security_group_id            = aws_security_group.rds.id
+  count             = local.rds_enabled
+  security_group_id = aws_security_group.rds[0].id
   # ASCII만 (위 aws_security_group.rds 주석 참조)
   # 의미: EKS 클러스터 보안그룹(노드 ENI)에서 오는 PostgreSQL 트래픽만 허용
   description                  = "PostgreSQL from EKS cluster security group (node ENI)"
@@ -85,6 +100,7 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_cluster" {
 #tfsec:ignore:AVD-AWS-0077
 #tfsec:ignore:AVD-AWS-0082
 resource "aws_db_instance" "main" {
+  count          = local.rds_enabled
   identifier     = "${var.cluster_name}-db"
   engine         = "postgres"
   engine_version = var.db_engine_version
@@ -105,8 +121,8 @@ resource "aws_db_instance" "main" {
   # 고객관리형 키(CMK)를 쓰면 $1/월이 붙어 학습 목적에 맞지 않는다.
   storage_encrypted = true
 
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.main[0].name
+  vpc_security_group_ids = [aws_security_group.rds[0].id]
   publicly_accessible    = false
   multi_az               = false
 

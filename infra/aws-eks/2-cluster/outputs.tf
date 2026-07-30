@@ -22,8 +22,12 @@ output "oidc_provider_arn" {
 # ── RDS / 시크릿 (⑧⑨⑩) ────────────────────────────────────────
 
 output "db_address" {
-  description = "RDS 엔드포인트 호스트 (포트 없음 — application-prod.yml의 jdbc-url이 포트를 포함하지 않는다)"
-  value       = aws_db_instance.main.address
+  description = <<-EOT
+    RDS 엔드포인트 호스트 (포트 없음 — application-prod.yml의 jdbc-url이 포트를 포함하지 않는다).
+    in-cluster 모드에선 **null** — DB가 AWS 리소스가 아니라 K8s Service(`postgres`)이기 때문.
+  EOT
+  # one(): count=0이면 null. `[0]` 인덱스는 에러가 나므로 조건부 리소스 출력엔 이 관용구를 쓴다.
+  value = one(aws_db_instance.main[*].address)
 }
 
 output "db_connection_secret_name" {
@@ -36,8 +40,10 @@ output "db_master_secret_arn" {
     RDS가 스스로 만든 마스터 크리덴셜 시크릿 ARN (username/password).
     ExternalSecret의 remoteRef.key에 이 **ARN 또는 이름**을 넣어야 한다.
     이름은 rds!db-... 형태로 AWS가 정하므로 apply 후 이 출력으로 확인할 것.
+    🔑 in-cluster 모드에선 **null**이고, 그래서 PLACEHOLDER 치환 절차 자체가 없어진다
+       (`k8s/eso/externalsecret-db-incluster.yaml`은 sed 없이 그대로 apply된다).
   EOT
-  value       = aws_db_instance.main.master_user_secret[0].secret_arn
+  value       = one(aws_db_instance.main[*].master_user_secret[0].secret_arn)
 }
 
 output "app_secret_name" {

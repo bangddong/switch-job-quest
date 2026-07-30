@@ -7,8 +7,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 브랜치 | `main` (clean) |
-| 열린 PR | 없음 |
+| 브랜치 | `stage/eks-3a-postgres-dynamic-pvc` |
+| 열린 PR | **#349** — EKS Stage 3a: RDS를 in-cluster Postgres로 전환 (머지 대기) |
 
 > **🌙 다음 세션 시작점**: main clean · 미커밋 0 · 열린 PR 0 · **AWS 잔존물 0 (비용 $0)** ·
 > 크레딧 ≈ $199.6/$200 · 세션 마커 없음.
@@ -17,16 +17,36 @@
 > 예산 `$10/$50/$150 ABSOLUTE_VALUE` + 이상탐지 `devquest-eks-anomaly-alerts / DAILY / 임계값 $5`.
 > **이전엔 AWS 기본값 `$100 AND 40%`라 크레딧 절반이 날아간 뒤에야 울렸다** — 콘솔에는 "켜짐"으로
 > 보였다는 점에서 꺼진 것보다 나빴다. 코드화하지 않았으면 몰랐을 것.
-> **➡️ 다음 = EKS Stage 3** (사용자가 "조금 이따" 진행하기로 함, 07-28).
-> RDS → **in-cluster Postgres StatefulSet** 스왑으로 EBS CSI·PVC·StorageClass 학습 +
-> "관리형 ↔ 자체운영" 비교(앱 코드 변경 0로 가능 — `application-prod.yml`이 100% 환경변수 기반).
-> 브랜치는 `stage/eks-3-*`(퀴즈 게이트 대상). 착수 전 `docs/eks-session-sop.md` §1부터.
+> ✅ **EKS Stage 3a 완료 (07-30, ★과금 27분 ≈ $0.06, 고아 0).** RDS → in-cluster Postgres 스왑 성공.
+> `/health` 200 · Flyway 12개 적용 · **파드 죽여도 데이터 유지 확인**(UID 변경, 볼륨·26행 동일).
+> `Destroy complete! 30 destroyed` · tofu state 0 · EKS·EC2·EBS·LB·NAT·RDS·스냅샷·시크릿 전부 비어 있음.
 >
-> **Stage 3 첫 작업으로 딱 좋은 것**: PR #339의 CI가 만든 이미지
-> **`e74147f8094d35238e83470672b31fbd4fe7a35b`** 로 배포해 **`GRAFANA_*` 3키 없이 뜨는지** 확인.
-> 이게 통과하면 logback 조건부화(`5cf76da`)의 실환경 검증이 끝난다. 검증됨: ECR 태그 == PR 머지 커밋
-> SHA, `5cf76da`가 조상, 해당 트리 `logback-spring.xml`에 조건부 처리 존재.
-> (3키를 제거하라는 뜻이 아니다 — prod도 시크릿으로 주입하는 값이라 자리는 유지. **의존하지 않음**을 확인하는 것)
+> 🔴 **발견 ①: `GRAFANA_API_KEY` 소비처가 둘이었다 — 전제가 틀렸다.**
+> ~~"3키 없이 뜨는지 확인하면 logback 조건부화(`5cf76da`) 검증 끝"~~ → **불완전한 전제였다.**
+> logback(로깅)은 고쳐졌지만 **`OtlpMetricsConfig`(메트릭)**가 `@Value("\${GRAFANA_API_KEY}")`를
+> 생성자에서 요구한다. 가드 `@ConditionalOnProperty("grafana.otlp.enabled")`는 있으나
+> 그 스위치가 `application-prod.yml`에 **하드코딩 `true`** — 즉 **키 유무가 아니라 "켜라고 했는가"만 본다.**
+> → 아래 "코드 작업"에 후속 항목 등재. **실환경에 안 올려봤으면 계속 "검증만 남았다"고 믿었을 것.**
+>
+> 🔴 **발견 ②: 관리형이 공짜로 주던 것에 TLS가 있었다.**
+> `jdbc-url: ...?sslmode=require`가 **상수로 하드코딩**돼 있다(호스트·DB명·계정은 전부 환경변수인데).
+> RDS는 TLS가 켜진 채로 와서 안 드러났다 → in-cluster로 바꾸자 `PSQLException: The server does not
+> support SSL.` **자동 백업·PITR 같은 눈에 띄는 기능이 아니라 아무도 언급 안 하는 기본값이 사라진다.**
+> 해결: tofu `tls_self_signed_cert` → Secrets Manager → ESO (손으로 만든 시크릿 금지 규칙 유지, 새 개념 0).
+>
+> ⭐ **예방 성공 1건 — "plan이 못 잡는 실패"를 사후가 아니라 사전에 막은 첫 사례.**
+> apply 전 `aws eks describe-addon-configuration`으로 `controller.replicaCount` 기본값이 **2**임을
+> 확인하고 1로 낮췄다. 안 했으면 12 > 11(t4g.small 상한)로 파드가 Pending에 갇혔다.
+> **어제 일지에 적은 교훈("apply 전 `aws ... describe-*`로 실물 조회")이 실제로 작동했다.**
+>
+> ⚠️ **파드 상한 11/11 — 여유 0.** `kubectl rollout restart`가 실패한다(롤링이 새 파드를 먼저 띄움 →
+> `0/1 nodes are available: 1 Insufficient memory, 1 Too many pods`). 이번엔 `scale 0→1`로 우회.
+> **3b 착수 전 셋 중 택1**: ①`coredns` replicaCount 1(`addons.tf`에 주석으로 준비됨)
+> ②`strategy: Recreate` ③t4g.medium(상한 17, $0.13→$0.16/h).
+>
+> **➡️ 다음 = Stage 3b** (terraform 소유 EBS + static PV, 6개월 영속). **3a의 정답이 3b의 함정이 된다** —
+> `reclaimPolicy: Delete`는 3a에서 고아를 막았지만 3b에선 데이터를 지우고, `volumeClaimTemplates`는
+> static PV와 충돌한다(실패 6종 ②⑤). 상세는 D-004.
 
 > ✅ **EKS Stage 2 완료 — PR #339 머지 (07-28, ★과금 26분 35초 ≈ $0.06).** apply→검증→teardown→퀴즈 전부 끝.
 > **현재 AWS에 아무것도 안 떠 있음 = 비용 $0, 고아 0건.** 퀴즈 통과(`docs/eks-quizzes/stage-eks-2-rds-secrets.md`).
@@ -109,7 +129,8 @@
 >   imagePullSecret 없이 노드 IAM·arm64, CrashLoop 3단계 Loki→JWT→DB, 클린 teardown 고아 0·ECR 생존).
 >   크레딧 ~$199.8(만료 2027-01-15). 실습 SOP 단일 출처 = `docs/eks-session-sop.md`(apply 전 필독).
 > **다음 = 택1:**
-> - **① EKS Stage 3 (Postgres StatefulSet + EBS CSI + PVC)** ← **사용자가 다음으로 지목(07-28)**.
+> - **① EKS Stage 3 (Postgres StatefulSet + EBS CSI + PVC)** ← **착수함(07-30, `stage/eks-3a-*`)**.
+>   🔴 **3a(동적 PVC) / 3b(static PV·영속) 두 세션으로 분할 확정 — D-004 재판정 참조.**
 >   ~~Stage 2~~는 **#339로 완료**(RDS+IRSA+ESO, `/health` 200, 고아 0). 브랜치 `stage/eks-3-*`(퀴즈 게이트).
 >   **Stage 2의 RDS를 in-cluster Postgres로 스왑** → StorageClass·동적 EBS 프로비저닝을 배우면서
 >   "관리형 ↔ 자체운영"을 **앱 코드 변경 0**으로 비교(`application-prod.yml`이 100% 환경변수 기반).
@@ -175,9 +196,9 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| **#349** | **★ EKS Stage 3a — RDS를 in-cluster Postgres로 전환 (07-30, 과금 27분 $0.06, 고아 0).** PVC Bound 11초 · EBS 실물(10GiB gp3 2a 암호화) · Flyway 12개 · `/health` 200 · **파드 삭제 후 데이터 유지 확인**(UID 변경, 볼륨·26행 동일) · PVC 삭제 후 EBS 7초 회수 · `destroy 30` 전수 0. **발견 ①** `GRAFANA_API_KEY` 소비처가 **둘**이었다 — logback(`5cf76da`)은 고쳤지만 `OtlpMetricsConfig`가 남았고, 그 가드는 `application-prod.yml`의 하드코딩 `enabled: true`만 본다(키 유무 무관). CONTEXT에 적힌 *"이게 통과하면 검증 끝"* 이라는 전제가 불완전했다 → BE 후속 등재. **발견 ②** **관리형이 공짜로 주던 것에 TLS가 있었다** — `sslmode=require`만 jdbc-url에 상수라 RDS에선 안 드러났다(`The server does not support SSL`). tofu `tls_self_signed_cert`→SM→ESO로 해결(Stage 2 파이프 재사용, 새 개념 0). **⭐ 예방 1건**: apply 전 `describe-addon-configuration`으로 `replicaCount` 기본값 2를 발견해 1로 — 안 했으면 12>11로 막혔다. **"plan이 못 잡는 실패"를 사후 아닌 사전에 막은 첫 사례**(앞의 3건은 전부 깨지고 나서 알았다). **설계 절차 첫 적용**: 착수 전 D-001 영향 범위 조회에서 **CONTEXT 내부의 정면 충돌**(영속 레이어는 동적 PVC 배제 / Stage 3 서술은 동적 전제)을 발견 → `D-004` 신설, 3a(동적)/3b(static)로 분할. ⚠️ 파드 11/11 여유 0 → `rollout restart` 실패(`Too many pods`), `scale 0→1`로 우회. QA: HIGH 0, F-1 fixed, F-2·F-3 → 원장 L-9·L-10. | 2026-07-30 |
 | **#342 · #343** | **★ IaC-first 정합화 — 그리고 가드레일이 사실은 꺼져 있었다는 발견 (07-29, 비용 $0).** 사용자 지적("IaC 기반인데 캡처가 필요하냐")에서 출발했으나 밑에 더 큰 부채가 있었다: 튜토리얼 G-1이 **콘솔 클릭으로 예산 만드는 법**을 가르치는데 `budget.tf`가 **이미 그 절차를 대체**한 상태 → 캡처는 죽은 절차의 부속품. 캡처 체계 전면 폐기 + 콘솔 절차를 IaC로 교체 + **미작성이던 레이어 스캐폴딩(재현 검증 첫 구멍) 작성**. 이상탐지를 `cost-anomaly.tf`로 코드화(TASKS는 "코드로 처리"라 적었지만 **실제 .tf가 없었다**). **🔴 머지 후 CI apply 실패 — `Limit exceeded on dimensional spend monitor creation`**: AWS가 신규 계정에 `Default-Services-Monitor`를 미리 만들어 두고 DIMENSIONAL은 **계정당 1개** → 생성이 아니라 **인수(import)**가 정답. plan은 내 코드만 보므로 못 잡는다(**plan이 못 잡는 실패 3번째** — ①한글 description ②EMAIL+IMMEDIATE ③계정당 한도). **진짜 수확**: 인수해 보니 AWS 기본 임계값이 **$100 AND 40%** — 크레딧 $200 계정에서 **절반 날아간 뒤에야 울림**. 콘솔엔 "켜짐"으로 보여 **꺼진 것보다 나빴다**. $5로 하향, 실측 확인 완료. 부수 발견: **크레딧 만료일이 문서마다 달랐고**(01-15 vs 07-15) 사용자 확인으로 **2027-01-15 확정** — 07-16의 "가입 +1년" **추론이 콘솔 값을 덮어쓴 오독**이었다. **크레딧 수명이 1년이 아니라 6개월.** | 2026-07-29 |
 | **#345 · #347** | **★ 설계 드리프트 방지 장치 (07-29).** 사용자 지적(*"설계는 바뀌는데 대비가 없어 계속 틀어진다"*)에서 출발. **근본 원인**: 결정은 `CONTEXT.md`에, 재판정은 일지에 따로 산다 — 일지는 append-only 시계열이라 "지금 유효한 결정"을 못 알려준다 → **CONTEXT만 읽으면 뒤집힌 결정을 유효한 것으로 읽는다.** 07-29 RDS 오답이 정확히 이것(07-28 재판정이 일지에만 존재). **1차 전수 점검 3건**: D-3 🔴 RDS 재탈락 사유①이 무효화됐는데 역참조 없음(→ **사유별 재판정 표**로 교체 — 통째로 지웠다면 ③이 살아있어 결론이 뒤집혔을 것) / D-1·D-2 경로 축약형. 정합 확인된 축: K8s 1.36·t4g.small·db.t4g.micro 코드값, 매니페스트 4종, 만료일, 비용 모델. **장치 4개**: ①결정 메타 줄(`📌 D-NNN · 상태 · 영향 · 재판정`) — **관측 사실엔 안 붙인다**, 대상은 다르게 고를 수 있었던 전략 결정뿐 ②`<!-- verify: <경로> -->` 마커(이상탐지 갭을 잡았을 장치) ③`design-integrity.yml` **경로 필터 없음**(코드 삭제가 문서를 깨뜨리는 게 핵심이라 문서를 안 건드린 PR이 더 위험) ④`design-change-procedure.md` + 빨간 깃발 3줄. **검사기 반증 테스트에서 버그 발견** — `\| while read`가 서브셸이라 에러는 찍히는데 `exit 0`이었다. **통과했다고 믿게 만드는 검사기는 없는 것보다 나쁘다.** **#347**: 결정 메타 2건 추가 — `D-002` 상시 운영 기각(`✅유효`, 리퍼·SOP·guard가 전부 이 결정의 파생물이라 뒤집히면 규율 전체가 무너짐 · "잠깐 켜두면"이 월 $122~174) / `D-003` 서비스 분해 에픽(`🚧진행중`, **진행중인 동안 확정으로 인용 금지** — 계획을 확정처럼 읽는 것이 RDS 오답과 같은 계열). **선정 기준 = "기각했다 재채택 가능한가"** — 단가·실측값은 뒤집히면 그냥 틀린 것이라 제외(메타를 남발하면 관리비만 늘고 신호가 준다). | 2026-07-29 |
-| #341 | **EKS 게시용 자료 부채 상환 (+1,429/−94).** 튜토리얼 2스테이지·다이어그램 3스테이지 뒤처진 것을 Stage 1~2로 갱신. 라이브 아티팩트 줌/전체화면 보존(덮어쓸 뻔한 것을 도구가 차단). | 2026-07-28 |
 
 ## 다음 작업
 
@@ -219,6 +240,19 @@
 - CI 메모: `tfsec` 잡이 릴리스 다운로드 시 GitHub API rate-limit(403)로 간헐 실패 → `github_token` 주입으로 근본해결 가능(미적용, 재실행으로 우회 중)
 
 ### 코드 작업
+- [ ] 🔴 **BE: `OtlpMetricsConfig`가 `GRAFANA_API_KEY` 없으면 앱을 죽인다 (07-30 EKS Stage 3a 실측 발견)**
+  - **증상**: 3키 없이 뜨면 `PlaceholderResolutionException: Could not resolve placeholder 'GRAFANA_API_KEY'`
+    → 컨텍스트 초기화 실패 → CrashLoopBackOff. logback(`5cf76da`)만 고쳐졌고 **메트릭 경로는 남아 있었다.**
+  - **원인**: `@ConditionalOnProperty("grafana.otlp.enabled", havingValue="true")` 가드는 있으나
+    `application-prod.yml`에 `grafana.otlp.enabled: true`가 **하드코딩**이라 항상 켜진다.
+    가드가 "키가 있는가"가 아니라 **"켜라고 했는가"**만 본다.
+  - **방향(택1, 미결정)**: ①`enabled: ${GRAFANA_OTLP_ENABLED:false}`로 환경변수화
+    ②`@Value("\${GRAFANA_API_KEY:}")` 기본값 + `enabled`를 키 존재와 연동 ③관측 설정 전체를 별도 프로파일로
+  - ⚠️ **prod에 영향 있다** — prod는 3키를 주입하므로 동작은 안 바뀌지만, 배포 시 실수로 키가 빠지면
+    지금은 **앱 전체가 죽는다**. "관측 설정 하나가 빠졌다고 앱이 못 뜨는 것은 결함"이라는
+    `secrets.tf ⑨`의 판단이 로깅에만 적용됐고 메트릭엔 안 됐다.
+  - 📌 관측: `application-prod.yml:17`에 Grafana `instance-id: "1680166"`이 평문으로 있다(퍼블릭 레포).
+    시크릿은 아니지만 스택 식별자다 — 위 작업 시 함께 환경변수화 검토.
 - [ ] **파이프라인 후속 (사용자 확인 대기)**: ① 모바일 실기기 확인 (데스크톱 시나리오는 Claude가
       prod 테스트 완료) ② 테스트 데이터 정리 — 회사 "테스트-토스" 삭제, 임시 이력서를 실제로 교체
 - [ ] **Phase 4 후보 (실사용 후 판단)**: 면접 회고 메모(activity NOTE 타입), 같은 회사 카드
@@ -348,6 +382,24 @@ README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3
   끝나면 destroy → 영구 비용 0, prod는 Fly 복귀.
 
 #### 영속 레이어 — 싸다, 반드시 분리할 것
+> 📌 **D-004** · 상태 `🔄부분무효` · 영향 `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/README.md`, `docs/eks-session-sop.md`, `k8s/base`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
+
+> 🔄 **07-30 재판정 — "동적 PVC 아님"이라는 배제가 무효화됐다.** 이 블록은 static PV를 택하면서
+> **동적 프로비저닝을 명시적으로 배제**했는데, 같은 CONTEXT의 Stage 3 서술과 `README:128`은
+> *"StorageClass·동적 EBS 프로비저닝"*을 학습 목표로 적고 있었다 — **정면 충돌이 방치돼 있었다.**
+> (Stage 3 착수 전 절차 2단계 조회에서 발견. 이 블록엔 메타 줄이 없어 그동안 아무도 못 잡았다.)
+>
+> **확정: 배제가 아니라 순서다.** Stage 3을 둘로 쪼갠다.
+> | | 무엇 | 데이터 수명 | 왜 이 순서인가 |
+> |---|---|---|---|
+> | **3a** | StorageClass + `volumeClaimTemplates` (동적) | 세션 휘발 | "PVC가 EBS를 만든다"를 **눈으로 본 뒤**에야 `volumeHandle`이 무슨 뜻인지 이해된다 |
+> | **3b** | terraform 소유 EBS + static PV | 6개월 영속 | 3a→3b 전환 과정에서 **실패 ④claimRef 잔존**을 공짜로 만난다 |
+>
+> 아래 "static PV가 어려운 쪽이라 학습가치가 높다"는 판단은 **유지**된다 — 다만 그게
+> "쉬운 쪽을 건너뛸 이유"는 아니었다. 큰 태스크는 쪼갠다(Phase 1 회고).
+> ⚠️ **3a 동안에는 `kubectl delete pvc --all -A`가 destroy 전 필수**(SOP §8). 3b에서 EBS가
+> terraform 소유로 넘어가면 그때 이 규율이 볼륨엔 적용되지 않는다 — 두 Stage의 teardown이 다르다.
+
 **월 약 $2.3 / 6개월 $14 (크레딧의 7%)**: ECR 5GB $0.50 + EBS 20GB $1.82 + S3/DynamoDB ≈$0.
 - **🔴 ECR 구멍**: `README:101,148`은 ECR을 **`2-cluster`(destroy 대상)** 소속으로 적어놨으나
   **실제 `.tf`엔 `aws_ecr_*` 리소스가 0건**(전수 grep). 계획대로 두면 **destroy마다 이미지 전멸**
@@ -356,7 +408,9 @@ README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3
   영속 대상이 ECR 하나뿐이라 레이어를 늘리면 `tofu init/apply` 대상과 CI 매트릭스만 증가한다.
   0-bootstrap은 이미 **계정 수준 공유·영속 인프라**(S3 state·DynamoDB·OIDC·IAM·예산)를 담고 있어
   성격이 같고, `infra-deploy.yml` 매트릭스에 이미 있어 **CI 변경도 불필요**. **lifecycle policy 필수**(무한 누적 방지).
-- **EBS는 terraform이 소유하고 K8s는 static PV로 바인딩**(동적 PVC 아님). 근거: ①IaC-first 원칙
+- **EBS는 terraform이 소유하고 K8s는 static PV로 바인딩** ~~(동적 PVC 아님)~~ **→ 07-30 정정:
+  동적 PVC를 배제하지 않는다. 3a에서 동적으로 먼저 배우고 3b에서 이 구성으로 전환한다(위 D-004).**
+  근거: ①IaC-first 원칙
   ②ALB 고아와 같은 실패 모드 원천 차단 ③**학습 가치** — 동적 프로비저닝은 쉽고, 어려운 건
   "이미 있는 볼륨에 StatefulSet 붙이기"(`volumeHandle` static PV). **부수고 다시 지어도 데이터가
   그대로 붙는 것**을 확인하는 게 진짜 교보재.
