@@ -1056,6 +1056,14 @@ volumes:
       secretName: postgres-tls
       defaultMode: 0640  # ⚠️ 앞의 0을 빼면 10진수 640으로 읽힌다
 ```
+> ⚠️ **`fsGroup: 70`은 이미지에 결합된 값이다.** postgres 이미지 태그를 올릴 때 반드시 함께 확인한다:
+> ```bash
+> kubectl exec postgres-0 -- id postgres     # uid=70(postgres) 이어야 한다
+> ```
+> uid가 바뀌면 키 파일의 group이 어긋나 PG가 기동을 거부한다
+> (`FATAL: private key file "/certs/server.key" has group or world access`).
+> alpine ↔ debian 계열 사이에서도 다를 수 있다.
+
 확인:
 ```bash
 kubectl exec postgres-0 -- sh -c 'ls -l /certs/..data/; psql -U "$POSTGRES_USER" -tAc "SHOW ssl;"'

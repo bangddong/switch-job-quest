@@ -106,6 +106,10 @@ spec:
       #    Secret 볼륨은 kubelet이 `root:fsGroup` 소유로 마운트하므로,
       #    fsGroup=70(postgres)과 defaultMode=0640을 조합하면 정확히 그 예외에 들어맞는다.
       #    → 0600으로 주려면 파일 소유자가 postgres여야 하는데, Secret 볼륨은 그걸 못 한다.
+      #    ⚠️ **이 값은 이미지에 결합돼 있다.** 아래 image 태그를 올릴 때 반드시 함께 확인할 것:
+      #         kubectl exec postgres-0 -- id postgres      # uid=70(postgres) 이어야 한다
+      #       uid가 바뀌면 키 파일 group이 어긋나 PG가 기동을 거부한다(증상: FATAL, private key file
+      #       "/certs/server.key" has group or world access). alpine/debian 계열 간에도 다를 수 있다.
       securityContext:
         fsGroup: 70 # postgres:17-alpine의 postgres uid/gid (실측: id postgres → uid=70(postgres))
       containers:
