@@ -93,6 +93,8 @@ data "aws_iam_policy_document" "eso_read_secrets" {
     resources = compact([
       aws_secretsmanager_secret.db_connection.arn,
       aws_secretsmanager_secret.app.arn,
+      # in-cluster Postgres의 TLS 인증서/키 (in-cluster 모드에서만 존재).
+      one(aws_secretsmanager_secret.postgres_tls[*].arn),
       # RDS가 스스로 만든 마스터 크리덴셜 시크릿(rds 모드에서만 존재).
       # tofu가 만든 게 아니라 RDS가 만든 것이라, 이렇게 참조로만 잡을 수 있다.
       one(aws_db_instance.main[*].master_user_secret[0].secret_arn),

@@ -99,6 +99,15 @@ spec:
       # graceful shutdown: Postgres에 SIGTERM이 가면 fast shutdown을 시작한다.
       # 기본 30초로는 체크포인트가 안 끝날 수 있어 넉넉히 준다(그래도 학습용이라 60초).
       terminationGracePeriodSeconds: 60
+
+      # 🔴 **PostgreSQL의 개인키 파일 권한 검사를 통과시키기 위한 설정** (07-30 실측 대응).
+      #    PG는 키 파일이 group/world에 열려 있으면 기동을 거부한다. 예외가 하나 있는데
+      #    **"root 소유 + group read(0640)"** 는 허용한다(PG 소스의 명시적 분기).
+      #    Secret 볼륨은 kubelet이 `root:fsGroup` 소유로 마운트하므로,
+      #    fsGroup=70(postgres)과 defaultMode=0640을 조합하면 정확히 그 예외에 들어맞는다.
+      #    → 0600으로 주려면 파일 소유자가 postgres여야 하는데, Secret 볼륨은 그걸 못 한다.
+      securityContext:
+        fsGroup: 70 # postgres:17-alpine의 postgres uid/gid (실측: id postgres → uid=70(postgres))
       containers:
         - name: postgres
           # 태그를 고정 버전으로 박는다. RDS에서 쓰던 engine_version 17.10과 메이저를 맞췄다 —
@@ -106,6 +115,16 @@ spec:
           # alpine: arm64(Graviton) 멀티아치 지원 + 이미지가 작아 pull이 빠르다.
           image: postgres:17-alpine
           imagePullPolicy: IfNotPresent
+          # 엔트리포인트 뒤에 붙는 인자는 그대로 postgres 서버에 전달된다.
+          # TLS를 켜는 이유는 앱이 `?sslmode=require`로 붙기 때문 — 자세한 배경은
+          # infra/aws-eks/2-cluster/postgres-tls.tf 상단 주석.
+          args:
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/certs/server.crt
+            - -c
+            - ssl_key_file=/certs/server.key
           ports:
             - name: postgres
               containerPort: 5432
@@ -136,6 +155,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: certs
+              mountPath: /certs
+              readOnly: true
           resources:
             # t4g.small(2GiB)에 core-api(512Mi 요청)와 시스템 파드가 이미 얹혀 있다.
             # Postgres는 shared_buffers 기본값이 128MB라 256Mi 요청으로 충분하다.
@@ -166,6 +188,22 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
             failureThreshold: 3
+
+      # TLS 인증서/키. ESO가 Secrets Manager에서 만들어 주는 Secret이다
+      # (k8s/eso/externalsecret-postgres-tls.yaml). 손으로 만들지 않는다.
+      #
+      # ⚠️ volumeClaimTemplates(아래 ④)와 다르다 — 이건 **파드마다 다시 붙는 설정**이고
+      #    저건 **파드가 소유하는 상태**다. Secret 볼륨은 tmpfs라 노드에 안 남는다.
+      volumes:
+        - name: certs
+          secret:
+            secretName: postgres-tls
+            # 0640 = owner rw / group r / other 없음. 위 securityContext.fsGroup=70과 짝이다.
+            #
+            # ⚠️ **앞의 0을 빼면 안 된다.** kubectl은 YAML 1.1로 파싱해서 `0640`을 8진수(=416)로
+            #    읽지만, `640`이라 쓰면 10진수 640(= 8진수 1200)이 되어 엉뚱한 권한이 된다.
+            #    (YAML 1.2식 `0o640`은 이 파서에서 문자열로 잡힐 수 있어 쓰지 않는다.)
+            defaultMode: 0640
 
   # ── ④ volumeClaimTemplates — 동적 프로비저닝이 실제로 일어나는 곳 ──
   #
