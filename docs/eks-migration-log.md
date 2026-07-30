@@ -877,3 +877,25 @@
 - `[메모]` 반대로 **잘 맞물려 있던 곳**: `secrets.tf`가 Stage 3을 미리 상정해 시크릿을 둘로 쪼개 뒀다
   (*"Stage 3에서 RDS를 in-cluster Postgres로 갈아낄 때 db쪽만 교체"*). `core-api.yaml`도
   envFrom 기반이라 앱 매니페스트 변경 0으로 갈아끼울 수 있다.
+
+### 15:17 KST — 🔴 과금 세션 시작 (Stage 3a apply)
+
+- `[비용]` `tofu plan` = **26 to add**. Stage 2도 26개였는데 **내용이 교체**됐다:
+  RDS 4개(instance·subnet_group·security_group·ingress_rule) 빠지고
+  EBS CSI 4개(addon·iam_role·attachment·random_password.postgres) 들어옴.
+- `[해결]` **db_mode 토글이 먹은 것을 plan 출력으로 3중 확인**했다(apply 전 검증):
+  ① RDS 4개가 생성 목록에 없음 → `count = 0`
+  ② `secret_version.db_connection_incluster[0]`가 생성됨(`_rds`가 아니라)
+  ③ **출력 `db_address`·`db_master_secret_arn`이 `Changes to Outputs`에 안 나타남**
+     → `one(aws_db_instance.main[*]...)`이 null 반환. 조건부 리소스 출력의 관용구가 동작.
+- `[비용]` 26개 중 **과금 대상은 5개뿐**:
+  | 리소스 | 단가 |
+  |---|---|
+  | EKS 컨트롤플레인 | $0.10/h (전체의 78%) |
+  | t4g.small ×1 ON_DEMAND | ~$0.021/h |
+  | 퍼블릭 IPv4 ×1 | $0.005/h |
+  | PVC가 만들 EBS 10GiB | $0.0013/h (**plan에 안 나옴** — K8s가 만들 것이라 state 밖) |
+  | Secrets Manager ×2 | $0.0011/h |
+  | **합계** | **≈ $0.13/h** — RDS가 빠져 Stage 2보다 시간당 $0.025 저렴 |
+  나머지 21개(IAM·OIDC·애드온·access entry)는 전부 $0.
+- `[메모]` 예상 왕복 ~40분(≈$0.09). Stage 2 대비 **RDS 생성 4분 50초가 통째로 빠진다**.
