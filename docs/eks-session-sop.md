@@ -56,8 +56,19 @@
    kubectl delete secretstore --all -A
 
    # ② K8s가 만든 ALB·EBS 회수 (state 밖 고아 방지)
-   kubectl delete ingress,pvc --all -A
-   # 콘솔/CLI로 ALB·EBS 사라졌나 확인
+   kubectl delete ingress --all -A
+   #
+   # 🔴 PVC는 **Stage에 따라 다르다.** 감각으로 옮기면 사고가 난다.
+   #   Stage 3a (동적 PVC): `kubectl delete pvc --all -A` **필수.**
+   #       안 하면 CSI가 만든 EBS가 tofu state 밖에 고아로 남아 계속 과금된다.
+   #   Stage 3b (static PV): **하지 않는 것을 권장.**
+   #       볼륨은 terraform(0-bootstrap) 소유라 destroy 대상이 아니고, reclaimPolicy가
+   #       Retain이며 IAM이 CSI의 삭제를 거부한다 — 즉 지워도 볼륨은 안 사라진다.
+   #       대신 PV가 `Released` + claimRef 잔존 상태가 되어, 다음 세션에 재적용할 때
+   #       실패 6종 ④(PV가 새 PVC를 안 받음)를 밟는다.
+   #       → **PVC를 남긴 채 클러스터를 destroy**하면 클러스터와 함께 깨끗이 사라진다.
+   kubectl get pvc -A     # 무엇이 있는지 확인하고 Stage에 맞게 판단
+   # 콘솔/CLI로 ALB 사라졌나 확인
 
    # ③ 인프라
    cd infra/aws-eks/2-cluster && tofu destroy

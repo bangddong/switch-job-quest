@@ -40,7 +40,7 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 
 ## 현재 영속 리소스
 
-**합계 ≈ $0.17/월** (Stage 3b 착수 후 ≈ $1.09/월)
+**합계 ≈ $1.09/월** (ECR $0.17 + EBS $0.91). 6개월 ≈ $6.5 = 크레딧의 3.3%
 
 | 리소스 | 레이어 | 왜 영속인가 | 증가 상한 | 월 비용 | 시작 | 재검토 |
 |---|---|---|---|---|---|---|
@@ -56,14 +56,51 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 > 상위 과금 구간 자체가 없다. 유료인 것은 Budget **Actions**(자동 조치형)뿐이고 우리는 안 쓴다.
 > *"예산을 많이 만들면 돈이 든다"* 는 옛 모델(첫 2개 무료 후 $0.02/일)의 잔상이다.
 
-### 🔜 Stage 3b에서 추가 예정 (아직 없음)
+### EBS — Postgres 데이터 볼륨 (Stage 3b)
 
 | 리소스 | 왜 | 증가 상한 | 월 비용 | 재검토 |
 |---|---|---|---|---|
-| **EBS** Postgres 데이터 볼륨 (10 GiB gp3, `ap-northeast-2a`) | static PV 재바인딩 실습은 **볼륨이 세션을 넘어 살아야** 성립 | 🔒 고정 크기 · **정확히 1개** | **$0.91** | 2027-01-15 |
+| **EBS** 10 GiB gp3 · `ap-northeast-2a` · 암호화 | static PV 재바인딩 실습은 **볼륨이 세션을 넘어 살아야** 성립한다 | 🔒 고정 크기 · **정확히 1개** · 크기 검증 1~100GiB | **$0.91** | 2027-01-15 |
 
-> **이 볼륨은 PR ②가 머지되는 순간 CI가 생성한다** (`infra-deploy.yml`이 0-bootstrap을 자동 apply).
+> **이 볼륨은 PR이 머지되는 순간 CI가 생성한다** (`infra-deploy.yml`이 0-bootstrap을 자동 apply).
 > 이 레포에서 **"머지 = 과금 개시"는 이때가 처음**이다.
+
+**🔒 삭제 방지 3중 (강한 순서대로)**
+
+| # | 장치 | 무엇이 막나 | 뚫리나 |
+|:-:|---|---|---|
+| ① | **CSI 삭제 태그 미부착** | `AmazonEBSCSIDriverPolicy`가 `DeleteVolume`을 `ebs.csi.aws.com/cluster`·`CSIVolumeName`·`kubernetes.io/created-for/pvc/name` **태그 조건으로만** 허용 → 셋 다 없으면 CSI 컨트롤러에 삭제 권한 자체가 없다. `CreateTags`도 생성 시점으로 제한돼 **스스로 권한을 얻을 수도 없다** | 🔴 **AWS IAM이 거부.** 코드 수정으로 못 뚫음 |
+| ② | `lifecycle { prevent_destroy = true }` | 실수로 `tofu destroy`를 걸어도 거부 | 🟡 lifecycle 블록을 지우면 뚫림 |
+| ③ | PV `persistentVolumeReclaimPolicy: Retain` | PVC를 지워도 PV·EBS 유지 | 🟡 YAML 한 줄 수정으로 뚫림 |
+
+> ①이 안 보이는 이유는 **"코드에 없는 것"이기 때문**이다. 누가 태그를 추가하면 주석은 그대로인데
+> 보호만 사라진다. → `assert-no-csi-delete-tags.sh`가 CI에서 기계적으로 막는다(반증 테스트 포함).
+>
+> ⚠️ ②는 **0-bootstrap이라서** 안전하다. `2-cluster`에 걸었다면 리퍼의
+> `tofu destroy -auto-approve`가 통째로 실패해 dead man's switch가 벽돌이 됐을 것이다.
+
+**제거 절차** (정말 지울 때만)
+
+```bash
+# 1. lifecycle { prevent_destroy = true } 를 ebs-postgres.tf에서 제거
+# 2. 0-bootstrap에서
+tofu apply -var postgres_persistent_volume_enabled=false
+# 3. 원장의 "제거됨" 표로 행을 옮기고 근거·날짜 기록
+```
+
+**복구 절차** (데이터를 잃었을 때) — 스냅샷 백업은 **의도적으로 만들지 않는다**
+
+데이터가 Flyway 마이그레이션 12개로 **전부 재생성 가능**하므로 스냅샷($0.05/GB-Mo)의 값이 낮다.
+잃었을 때는:
+
+```bash
+# ① 볼륨 재생성 (0-bootstrap apply — 새 volume id가 나온다)
+# ② PV/PVC 재적용: postgres-static.yaml을 새 volume id로 sed 후 kubectl apply
+# ③ postgres 기동 → Flyway가 스키마를 자동 재구축 (시드 불필요)
+```
+
+⚠️ 실패 6종 ⑥(기존 볼륨을 **포맷**해버림)이 유일한 비가역 사고다. 트리거는 PV의 `csi.fsType`을
+`ext4`에서 바꾸는 것 — **바꾸지 마라.**
 
 ---
 

@@ -398,7 +398,16 @@ README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3
   끝나면 destroy → 영구 비용 0, prod는 Fly 복귀.
 
 #### 영속 레이어 — 싸다, 반드시 분리할 것
-> 📌 **D-004** · 상태 `🔄부분무효` · 영향 `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/README.md`, `docs/eks-session-sop.md`, `k8s/base`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
+> 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
+
+> ✅ **07-31 진행**: 3a 완료(#349), **3b 구현 완료**. `🔄부분무효`였던 이유(=동적 PVC를 배제한 서술)는
+> "배제가 아니라 순서"로 정리돼 해소됐다. 두 Stage 모두 코드에 살아 있다(`postgres.yaml` ↔ `postgres-static.yaml`).
+> **3b에서 새로 확정된 것 2가지**(원 결정에 없던 것):
+> ① **EBS는 `0-bootstrap`에 둔다** — `2-cluster/variables.tf`가 "이 레이어로 올라온다"고 적어뒀으나
+>    그러면 **리퍼가 6개월 데이터를 자동 삭제**한다(dead man's switch는 2-cluster를 destroy한다).
+>    `prevent_destroy`로 막으면 리퍼의 destroy가 통째로 실패해 안전장치가 벽돌이 된다.
+> ② **노드그룹을 영속 볼륨과 같은 AZ로 고정** — 원 결정에 AZ 얘기가 없었는데, EBS는 AZ 리소스라
+>    이게 없으면 **50% 확률로 파드 영구 Pending**이다(3a는 `WaitForFirstConsumer`가 가려주고 있었다).
 
 > 🔄 **07-30 재판정 — "동적 PVC 아님"이라는 배제가 무효화됐다.** 이 블록은 static PV를 택하면서
 > **동적 프로비저닝을 명시적으로 배제**했는데, 같은 CONTEXT의 Stage 3 서술과 `README:128`은
