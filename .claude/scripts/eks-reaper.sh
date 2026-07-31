@@ -25,6 +25,32 @@ LOG="$DIR/reaper.log"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] $*" >> "$LOG" 2>/dev/null; }
 
+# ── 고아 EBS 경고 (감지 전용, 삭제하지 않는다) ──────────────────────
+#
+# 왜 "경고만" 인가 — 리퍼가 할 수 있는 일은 `tofu destroy` 하나뿐이다.
+# K8s가 CSI로 만든 볼륨은 **tofu state 밖**이라 destroy로 회수되지 않는다.
+# 즉 리퍼는 이 고아를 **볼 수는 있어도 지울 수는 없다.**
+#
+# 🔴 그래서 이것을 "생존 판정"에 넣으면 안 된다.
+#    넣으면: 고아 볼륨 존재 → 생존으로 판정 → destroy 시도 → 볼륨은 그대로 →
+#    다음 주기에 또 같은 판정 → **영원히 끝나지 않는 destroy 루프**가 된다.
+#    감지와 조치를 분리하고, 조치는 다음 세션의 사람에게 넘긴다.
+#
+# 영속 볼륨(Persistent=true)은 남아 있는 게 **정상**이므로 제외한다.
+# 값까지 비교하는 이유는 PERSISTENT-RESOURCES.md의 반증 테스트 주석 참조.
+warn_orphan_volumes() {
+  local orphans
+  orphans=$(aws ec2 describe-volumes --region "$REGION" \
+    --filters Name=status,Values=available \
+    --query "Volumes[?!(Tags[?Key=='Persistent' && Value=='true'])].[VolumeId,Size]" \
+    --output text 2>/dev/null) || return 0
+  [ -n "$orphans" ] || return 0
+  log "⚠️ 고아 EBS 감지 — tofu destroy로는 회수 불가(K8s가 만든 볼륨은 state 밖). 수동 삭제 필요:"
+  echo "$orphans" | while IFS=$'\t' read -r vid size; do
+    log "     $vid  ${size}GiB   →  aws ec2 delete-volume --region $REGION --volume-id $vid"
+  done
+}
+
 # 마커 없음 → 감시할 세션 없음. 조용히 종료.
 [ -f "$MARKER" ] || exit 0
 
@@ -59,6 +85,9 @@ RDS=$(aws rds describe-db-instances --region "$REGION" \
 
 if [ -z "$CLUSTERS" ] && [ -z "$RDS" ]; then
   # 과금 리소스 전부 없음 → 마커만 청소.
+  # ⚠️ 마커를 지우면 이 세션에 대한 감시가 끝난다. 그 전에 고아 볼륨을 반드시 남긴다 —
+  #    여기서 안 적으면 다음 세션까지 아무 기록도 없이 과금이 계속된다.
+  warn_orphan_volumes
   log "마커 있으나 과금 리소스 없음(EKS·RDS 모두) — 마커 자가 청소."
   rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
   exit 0
@@ -88,6 +117,9 @@ fi
 cd "$CLUSTER_DIR" || { log "   ⛔ cd 실패 — 마커 유지."; exit 1; }
 tofu init -input=false >> "$LOG" 2>&1
 if tofu destroy -auto-approve -no-color >> "$LOG" 2>&1; then
+  # destroy 성공 = tofu가 소유한 것은 전부 회수됐다는 뜻이다.
+  # 그래도 남아 있는 available 볼륨이 있다면 그건 정의상 **state 밖에서 만들어진 것**이다.
+  warn_orphan_volumes
   log "   ✅ tofu destroy 완료 — 과금 종료. 마커 청소."
   rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
 else

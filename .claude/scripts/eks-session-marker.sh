@@ -28,4 +28,40 @@ touch "$DIR/heartbeat" 2>/dev/null
 rm -f "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null  # 새 세션 — 캐시 초기화
 
 echo "🟢 EKS 세션 마커 생성 — 과금 추적 시작. destroy 전까지 리퍼가 감시합니다." >&2
+
+# ── 영속 리소스 배너 ────────────────────────────────────────────────
+# 왜: destroy로 사라지지 않는 리소스는 `kubectl`에도 `tofu state`에도 안 나온다.
+#     보이는 층과 과금되는 층이 분리돼 있어 "까먹는 것"이 부주의가 아니라 기본값이다.
+#     → 세션을 여는 순간, 묻지 않아도 눈에 들어오게 한다.
+#
+# 규칙 3가지:
+#   ① 절대 apply를 막지 않는다 — 조회 실패·자격증명 없음·오프라인 전부 조용히 넘어간다.
+#   ② 타임아웃을 짧게 — 훅이 느리면 사람이 훅을 끈다.
+#   ③ 기대값은 여기 하드코딩하지 않는다 — 단일 출처는 PERSISTENT-RESOURCES.md다.
+REGION="${EKS_REGION:-ap-northeast-2}"
+AWSQ=(aws --cli-connect-timeout 3 --cli-read-timeout 5 --region "$REGION")
+
+VOLS=$("${AWSQ[@]}" ec2 describe-volumes \
+  --filters Name=tag:Persistent,Values=true \
+  --query 'Volumes[].[VolumeId,Size,AvailabilityZone,State]' \
+  --output text 2>/dev/null)
+AWS_RC=$?   # ⚠️ 반드시 대입 **직후**에 잡는다. if 안에서 $?를 읽으면 aws가 아니라
+            #    바로 앞 test의 결과가 잡혀, "조회 실패"와 "볼륨 0개"가 구분되지 않는다.
+
+if [ "$AWS_RC" -ne 0 ]; then
+  : # 조회 실패(오프라인·자격증명 없음·권한 없음) — 조용히 넘어간다. apply를 막지 않는다.
+elif [ -n "$VOLS" ]; then
+  # EBS gp3 $0.0912/GB-Mo (ap-northeast-2 실측, Pricing API)
+  TOTAL_GB=$(echo "$VOLS" | awk '{s+=$2} END{print s+0}')
+  MONTHLY=$(awk -v g="$TOTAL_GB" 'BEGIN{printf "%.2f", g*0.0912}')
+  {
+    echo "━━ 영속 리소스 — destroy해도 사라지지 않습니다 ━━"
+    echo "$VOLS" | awk '{printf "   EBS  %-22s %3s GiB  %-18s %s\n", $1, $2, $3, $4}'
+    echo "   └ 합계 ${TOTAL_GB} GiB ≈ \$${MONTHLY}/월  (+ ECR 등은 원장 참조)"
+    echo "   📖 infra/aws-eks/PERSISTENT-RESOURCES.md 와 대조하세요 — 개수가 다르면 즉시 확인."
+  } >&2
+else
+  echo "   영속 EBS 볼륨 0개 — 이번 세션의 스토리지는 전부 destroy로 회수됩니다." >&2
+fi
+
 exit 0
