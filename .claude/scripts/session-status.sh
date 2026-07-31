@@ -82,8 +82,35 @@ hdr "EKS"
 MARKER="$ROOT/.claude/eks-session/active"
 if [ -f "$MARKER" ]; then
   AT=$(grep '^applied_at_h=' "$MARKER" 2>/dev/null | cut -d= -f2-)
-  row "세션 마커" "${C_R}🔴 활성 — apply ${AT:-시각미상}. 과금 중일 수 있음${C_0}"
-  row "" "${C_DIM}끝났다면 destroy 후 마커 확인: docs/eks-session-sop.md §8${C_0}"
+
+  # 🔴 **마커를 믿지 말고 AWS에 확인한다.**
+  #   마커는 `tofu apply` 명령을 감지하는 PreToolUse 훅이 만드는데, 이 훅은
+  #   **명령 문자열에 그 단어가 있기만 해도** 반응한다. 예를 들어 문서에
+  #   "제거 절차: tofu apply -var ..." 를 써넣는 것만으로 마커가 생긴다(2026-07-31 실측).
+  #
+  #   그러면 아무것도 안 떠 있는데 대시보드가 "🔴 과금 중"이라고 말한다 —
+  #   **거짓 경보는 경보를 죽인다.** 몇 번 겪으면 진짜 경고도 눈으로 넘기게 된다.
+  #   (오늘 SOP 고아 검사에서 고친 것과 같은 병이다.)
+  #
+  #   → 마커는 "확인해볼 이유"일 뿐이고, **판정은 AWS 실물이 한다.**
+  LIVE=""
+  if command -v aws >/dev/null 2>&1; then
+    AWSQ2=(aws --cli-connect-timeout 3 --cli-read-timeout 5 --region "${EKS_REGION:-ap-northeast-2}")
+    C=$("${AWSQ2[@]}" eks list-clusters --query 'clusters' --output text 2>/dev/null)
+    D=$("${AWSQ2[@]}" rds describe-db-instances \
+      --query 'DBInstances[?starts_with(DBInstanceIdentifier, `devquest`)].DBInstanceIdentifier' \
+      --output text 2>/dev/null)
+    LIVE="${C}${D}"
+  fi
+
+  if [ -n "$LIVE" ]; then
+    row "세션 마커" "${C_R}🔴 활성 — apply ${AT:-시각미상}. ${C_B}실제로 과금 중${C_0}"
+    row "" "${C_DIM}끝났다면 destroy: docs/eks-session-sop.md §8${C_0}"
+  else
+    row "세션 마커" "${C_Y}⚠️ 유령 마커 — 마커는 있으나 EKS·RDS 실물이 없다${C_0}"
+    row "" "${C_DIM}과금 아님. 훅 오탐이거나 destroy 후 정리가 안 된 것 — 리퍼가 다음 주기에 자가 청소한다.${C_0}"
+    row "" "${C_DIM}즉시 지우려면: rm -f .claude/eks-session/active${C_0}"
+  fi
 else
   row "세션 마커" "${C_G}없음 — 클러스터 미가동${C_0}"
 fi
