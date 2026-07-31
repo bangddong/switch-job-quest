@@ -45,6 +45,29 @@ resource "aws_eks_node_group" "main" {
     max_unavailable = 1
   }
 
+  # 🔴 persistent_az가 1-network의 AZ 목록 안에 있는지 먼저 확인한다.
+  #
+  # 없으면 위 subnet_ids의 맵 조회가 이렇게 실패한다:
+  #   Invalid index: the given key does not identify an element in this collection value
+  # — **어느 변수가 문제인지 한 마디도 안 알려준다.** 레이어 3개를 오가며 찾아야 한다.
+  # 여기서 이름을 대고 막으면 그 시간이 0이 된다.
+  #
+  # (QA F-2: 이 precondition이 `1-network`의 azs 출력을 실제로 소비한다.
+  #  안 쓰면 소비처 없는 죽은 설정이 된다 — #326에서 두 번 걷어낸 유형.)
+  lifecycle {
+    precondition {
+      condition = contains(
+        data.terraform_remote_state.network.outputs.azs,
+        data.terraform_remote_state.bootstrap.outputs.persistent_az,
+      )
+      error_message = format(
+        "persistent_az(%s)가 1-network의 AZ 목록%v 밖입니다. 0-bootstrap의 var.persistent_az를 목록 안의 값으로 바꾸거나, 1-network의 var.azs에 해당 AZ를 추가하세요.",
+        data.terraform_remote_state.bootstrap.outputs.persistent_az,
+        data.terraform_remote_state.network.outputs.azs,
+      )
+    }
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.node_worker,
     aws_iam_role_policy_attachment.node_cni,

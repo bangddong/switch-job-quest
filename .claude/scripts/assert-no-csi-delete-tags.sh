@@ -26,27 +26,34 @@ set -uo pipefail
 
 FORBIDDEN=("ebs.csi.aws.com/cluster" "CSIVolumeName" "kubernetes.io/created-for/pvc/name")
 
-# aws_ebs_volume 리소스 블록만 뽑아 **주석을 제거한 뒤** 금지 태그를 찾는다.
-#   ⚠️ 주석을 안 지우면 "이 태그를 붙이지 마라"는 설명문 자체가 매칭돼 항상 실패한다.
-#      (실제로 첫 시도에서 그렇게 됐다. 통과하지 않는 검사기는 곧 무시된다.)
+# **주석을 제거한 뒤**, 금지 태그가 "키 = 값" 형태로 **대입**되는지 찾는다.
+#
+# ⚠️ 주석을 안 지우면 "이 태그를 붙이지 마라"는 설명문 자체가 매칭돼 항상 실패한다.
+#    (첫 구현에서 실제로 그랬다. 통과하지 않는 검사기는 곧 무시된다.)
+#
+# 🔴 **중괄호 카운팅으로 `aws_ebs_volume` 블록만 잘라내던 방식을 버렸다 (QA F-3).**
+#    문자열 안에 짝 없는 `}`가 있으면 depth가 0으로 떨어져 **블록이 조기 종료**되고,
+#    그 뒤에 있는 진짜 금지 태그를 놓친다. 실측 재현:
+#      description = "... } ..."   ← 여기서 잘림
+#      tags = { "ebs.csi.aws.com/cluster" = "true" }   ← 스캔 대상에서 빠짐 → 통과
+#    "0건 통과"로 보이는 가장 나쁜 실패라, 파싱을 정교하게 만드는 대신 **없앴다.**
+#
+# 대신 파일 전체에서 `<태그>` 뒤에 `=`가 오는 경우만 본다. 설명문 안의 단순 언급은
+# 대입 형태가 아니라 걸리지 않는다. 블록 경계를 몰라도 되므로 깨질 구석이 없다.
+#
+# ℹ️ IAM 조건 키(`aws:RequestTag/...`, `ec2:ResourceTag/...`)는 **리소스 태그가 아니라
+#    정책 조건**이라 제외한다 — 이것까지 막으면 CSI 정책을 직접 쓸 수 없게 된다.
 scan_file() {
   local f="$1" hits=0
   local body
-  body=$(awk '
-    /^resource[[:space:]]+"aws_ebs_volume"/ { depth = 1; print; next }
-    depth > 0 {
-      print
-      n = gsub(/\{/, "{"); m = gsub(/\}/, "}")
-      depth += n - m
-      if (depth <= 0) depth = 0
-    }
-  ' "$f" | sed -e 's/#.*$//' -e 's|//.*$||')
-
-  [ -n "$body" ] || return 0
+  body=$(sed -e 's/#.*$//' -e 's|//.*$||' "$f")
 
   for tag in "${FORBIDDEN[@]}"; do
-    if printf '%s' "$body" | grep -qF -- "$tag"; then
-      echo "  🔴 $f — 금지 태그 '$tag' 가 aws_ebs_volume 에 있습니다."
+    # "태그" = ...   또는   태그 = ...   (앞에 IAM 조건 접두사가 없는 경우만)
+    if printf '%s\n' "$body" \
+      | grep -vE '(aws:RequestTag/|aws:ResourceTag/|ec2:ResourceTag/|ec2:CreateAction)' \
+      | grep -qE "\"?$(printf '%s' "$tag" | sed 's/[.[\*^$/]/\\&/g')\"?[[:space:]]*="; then
+      echo "  🔴 $f — 금지 태그 '$tag' 가 대입되고 있습니다."
       hits=1
     fi
   done
@@ -73,6 +80,19 @@ resource "aws_ebs_volume" "x" {
   tags = { Name = "x", Persistent = "true" }
 }
 EOF
+  # QA F-3: 블록 경계를 중괄호 카운팅으로 잡으므로, 블록 안에 heredoc이나 문자열 속
+  # 중괄호가 있으면 depth가 어긋나 **블록을 조기 종료**할 수 있다. 그러면 그 뒤에 있는
+  # 진짜 금지 태그를 놓친다 — "0건 통과"로 보이는 가장 나쁜 실패다.
+  cat > "$TMP/tricky.tf" <<'EOF'
+resource "aws_ebs_volume" "x" {
+  size = 10
+  description = "닫는 중괄호가 문자열 안에 있다 } 짝이 없다 — 블록 파싱을 조기 종료시키던 케이스"
+  tags = {
+    Name                      = "x"
+    "ebs.csi.aws.com/cluster" = "true"
+  }
+}
+EOF
   echo "── 반증 테스트 ──"
   # scan_file 규약: 위반 있으면 1, 없으면 0.
   # ⚠️ 두 케이스는 **기대 방향이 반대**다. 같은 조건문을 복사하면 뒤집힌다(실제로 그랬다).
@@ -86,6 +106,11 @@ EOF
   else
     echo "  🔴 실패: 주석을 오탐했다 (항상 실패하는 검사기는 곧 무시된다)"; exit 1
   fi
+  if scan_file "$TMP/tricky.tf" >/dev/null; then
+    echo "  🔴 실패: 문자열 속 닫는 중괄호에 블록이 잘려 뒤쪽 금지 태그를 놓쳤다"; exit 1
+  else
+    echo "  ✅ 문자열 속 닫는 중괄호가 있어도 금지 태그를 잡는다 (QA F-3)"
+  fi
   echo "  ✅ 자가 테스트 통과"
   exit 0
 fi
@@ -93,9 +118,13 @@ fi
 DIR="${1:-infra/aws-eks}"
 echo "🔒 영속 EBS 삭제 방지 검사 — $DIR"
 RC=0
+# ⚠️ **모든 `.tf`를 본다.** 전에는 `aws_ebs_volume`이 든 파일만 골랐는데, 블록 파싱을
+#    버린 지금은 그렇게 좁힐 이유가 없고 오히려 구멍이 된다 — 태그를 `locals`나 다른
+#    파일에 두고 `tags = local.xxx`로 참조하면 스캔에서 통째로 빠져나간다.
+#    (주석 제거 + "대입 형태"만 보므로 넓혀도 오탐이 안 는다.)
 while IFS= read -r f; do
   scan_file "$f" || RC=1
-done < <(grep -rl --include="*.tf" 'resource[[:space:]]*"aws_ebs_volume"' "$DIR" 2>/dev/null)
+done < <(find "$DIR" -name "*.tf" -type f 2>/dev/null)
 
 if [ "$RC" -eq 0 ]; then
   echo "  ✅ CSI 삭제 권한 태그 없음 — IAM이 볼륨 삭제를 거부합니다."

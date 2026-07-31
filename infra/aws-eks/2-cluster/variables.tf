@@ -88,7 +88,15 @@ variable "db_mode" {
 # ℹ️ in-cluster Postgres의 볼륨 크기는 **여기 없다.** 동적 프로비저닝에서 크기를 정하는 주체는
 #    terraform이 아니라 PVC이기 때문 — `k8s/base/postgres.yaml`의 volumeClaimTemplates에 있다.
 #    (여기 변수를 두면 소비처 없는 죽은 설정이 된다. #326에서 두 번 걷어낸 유형.)
-#    3b에서 EBS를 terraform 소유로 옮기면 그때 이 레이어로 올라온다.
+#
+# 🔴 **정정 (Stage 3b, 07-31).** ~~"3b에서 EBS를 terraform 소유로 옮기면 그때 이 레이어로 올라온다"~~
+#    → **틀렸다. `0-bootstrap`으로 갔다.** 여기(2-cluster)로 올렸다면 리퍼(dead man's switch)가
+#    사람 부재 2시간 뒤 `tofu destroy -auto-approve`로 6개월치 데이터를 지웠을 것이다.
+#    `prevent_destroy`로 막는 것도 답이 아니다 — destroy **전체**가 plan 단계에서 거부돼
+#    EKS·노드·NAT까지 아무것도 안 지워지고, 리퍼가 30분마다 같은 에러를 무한 반복한다
+#    (그 로그를 읽으려면 사람이 있어야 하는데, 리퍼 발동은 사람이 없다는 뜻이다).
+#    → 크기 변수도 함께 `0-bootstrap/variables.tf`의 `postgres_volume_size_gb`에 있다.
+#    상세: `.claude/CONTEXT.md` D-004 · `infra/aws-eks/0-bootstrap/ebs-postgres.tf`
 
 # ── RDS (⑧) ───────────────────────────────────────────────────
 # 기존 컨벤션 준수: 이 레이어의 모든 변수는 default를 갖는다
