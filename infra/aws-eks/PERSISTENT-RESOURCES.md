@@ -130,6 +130,17 @@ aws ecr describe-repositories --region $R --query 'repositories[].repositoryName
 aws ec2 describe-volumes --region $R --filters Name=status,Values=available \
   --query "Volumes[?!(Tags[?Key=='Persistent' && Value=='true'])].[VolumeId,Size,CreateTime]" \
   --output table
+
+# ── ③ 🔒 삭제 방지 실물 확인 — 합격 기준: 0건 ──
+# 배포된 볼륨에 CSI 삭제 조건 태그가 실제로 없는지 **AWS에 직접 묻는다.**
+# `assert-no-csi-delete-tags.sh`(CI)는 소스만 보는 tripwire라 런타임 조립 문자열 등을
+# 놓칠 수 있다(원장 L-12). 이 조회는 **최종 상태를 보므로 우회가 불가능하다.**
+for K in ebs.csi.aws.com/cluster CSIVolumeName kubernetes.io/created-for/pvc/name; do
+  echo -n "$K: "
+  aws ec2 describe-volumes --region $R --filters Name=tag:Persistent,Values=true \
+    --query "Volumes[?Tags[?Key=='$K']].VolumeId" --output text
+done
+# 셋 다 빈 줄이어야 한다. 하나라도 볼륨 ID가 나오면 **CSI가 그 볼륨을 지울 수 있는 상태**다.
 ```
 
 > 🔴 **왜 `Value=='true'`까지 보는가 (반증 테스트로 확정, 2026-07-31).**
