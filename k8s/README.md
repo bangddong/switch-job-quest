@@ -8,7 +8,8 @@
 k8s/
   base/
     core-api.yaml      # Deployment + Service (ClusterIP)
-    postgres.yaml      # StorageClass + Headless Service + StatefulSet (Stage 3a)
+    postgres.yaml         # Stage 3a — StorageClass(동적) + Headless Service + StatefulSet(volumeClaimTemplates)
+    postgres-static.yaml  # Stage 3b — StorageClass(no-provisioner) + PV + PVC + Service + StatefulSet
   eso/
     secretstore.yaml
     externalsecret-app.yaml
@@ -17,9 +18,16 @@ k8s/
     externalsecret-postgres-tls.yaml  # Stage 3a — Postgres 서버 인증서
 ```
 
-> ⚠️ **`externalsecret-db.yaml`과 `externalsecret-db-incluster.yaml`은 배타적이다.**
-> 둘 다 `core-api-db`라는 같은 이름의 Secret을 만든다 — 동시에 적용하면 두 소유자가 다퉈
-> 값이 왔다갔다 한다. `db_mode`에 맞는 **하나만** 적용할 것.
+> ⚠️ **배타 쌍이 둘 있다. 각각 하나만 적용한다.**
+>
+> | 쌍 | 충돌하는 것 | 고르는 기준 |
+> |---|---|---|
+> | `externalsecret-db.yaml` ↔ `-incluster.yaml` | 같은 이름의 Secret `core-api-db` | `db_mode` |
+> | `postgres.yaml` ↔ `postgres-static.yaml` | 같은 이름의 StatefulSet·Service `postgres` | Stage 3a / 3b |
+>
+> 동시에 적용하면 두 소유자가 다퉈 값이 왔다갔다 한다.
+> **3a 파일을 지우지 않는 이유**는 `rds.tf`를 안 지운 것과 같다 — 지나온 Stage가
+> 코드에서 재현 불가가 되면 튜토리얼이 문서만 남고 실행이 안 되는 상태가 된다.
 
 ## 배포 절차 (과금 세션 중)
 
@@ -88,13 +96,39 @@ kubectl get externalsecret
 > Stage 2에서 `sed` 치환이 귀찮았던 이유가, 3a에서 그게 사라지는 것으로 증명된다.
 > 반대로 잃은 것도 있다 — RDS는 비밀번호를 **자동 로테이션**했지만 우리 건 안 한다.
 
-### 2.5 in-cluster Postgres 배포 (Stage 3a~)
+### 2.5 in-cluster Postgres 배포
+
+**Stage 3a — 동적 PVC (세션 휘발)**
 
 ```bash
 kubectl apply -f k8s/base/postgres.yaml   # StorageClass + Headless Service + StatefulSet
 kubectl get pvc                            # 처음엔 Pending이 정상 (WaitForFirstConsumer)
 kubectl get pvc -w                         # Bound 까지 (~11초)
 ```
+
+**Stage 3b — static PV (영속)** · `infra/aws-eks/2-cluster`에서 실행
+
+```bash
+sed -e "s|EBS_VOLUME_ID_PLACEHOLDER|$(tofu output -raw postgres_data_volume_id)|" \
+    -e "s|PERSISTENT_AZ_PLACEHOLDER|$(tofu output -raw persistent_az)|" \
+    ../../../k8s/base/postgres-static.yaml | kubectl apply -f -
+
+kubectl get pv postgres-data          # STATUS: Available → Bound
+kubectl get pvc postgres-data         # VOLUME 이 postgres-data 인지 확인
+```
+
+> 🔑 **3a와 달리 치환이 필요하다.** 볼륨 ID는 세션이 바뀌어도 같지만(영속) 계정마다 다르고,
+> 퍼블릭 레포에 리소스 ID를 박아두지 않는다. `core-api.yaml`의 `IMAGE_PLACEHOLDER`와 같은 패턴.
+>
+> 🔴 **PV/PVC가 파드보다 먼저 있어야 한다.** PVC가 Bound가 아니면 파드는 스케줄조차 되지 않는다.
+> 순서: ESO 동기화 → **PV·PVC** → postgres → core-api.
+>
+> 🔎 **PVC가 Pending에서 안 넘어가면** 셋 중 하나다:
+> | 증상 | 원인 | 확인 |
+> |---|---|---|
+> | `no persistent volumes available` | PV·PVC의 `storageClassName`·용량 불일치 | `kubectl get pv,pvc -o wide` |
+> | PV가 `Released` | 이전 PVC의 `claimRef`가 남음 (실패 6종 ④) | `kubectl patch pv postgres-data -p '{"spec":{"claimRef":null}}'` |
+> | 파드만 Pending | 노드 AZ ≠ 볼륨 AZ (실패 6종 ①) | `kubectl describe pod postgres-0` → `node(s) had volume node affinity conflict` |
 
 > 🔴 **앱보다 먼저 띄워야 한다.** StatefulSet이 `core-api-db` Secret에서 비밀번호를 읽으므로
 > ESO 동기화(위 ③)가 끝난 뒤여야 하고, core-api는 이 DB에 붙으므로 그 뒤여야 한다.
@@ -138,7 +172,7 @@ kubectl delete secretstore --all -A
 # ② 워크로드
 kubectl delete -f k8s/base/ --ignore-not-found
 
-# ③ 🔴 PVC (Stage 3a~) — 이게 없으면 EBS가 고아로 남아 계속 과금된다
+# ③ 🔴 PVC — Stage 3a에서만 필수. **3b는 다르다(아래 표)**
 #    StatefulSet을 지워도 volumeClaimTemplates가 만든 PVC는 **의도적으로 남는다**(데이터 보호).
 #    그리고 그 볼륨은 tofu state 밖이라 destroy가 못 지운다. 07-30 실측:
 #      StatefulSet 삭제 직후  → vol-0c327...  in-use   ← 살아있다
@@ -148,6 +182,19 @@ aws ec2 describe-volumes --region ap-northeast-2 \
   --filters "Name=tag:ebs.csi.aws.com/cluster,Values=true" \
   --query 'Volumes[].[VolumeId,State]' --output text     # 비어야 한다
 ```
+
+> 🔴 **3a와 3b는 teardown이 다르다. 감각으로 옮기면 사고가 난다.**
+>
+> | | Stage 3a (동적) | Stage 3b (static) |
+> |---|---|---|
+> | PVC 삭제 | **필수** — 안 하면 EBS 고아 과금 | 해도 되고 안 해도 된다 |
+> | 삭제 시 EBS | **함께 사라짐** (`reclaimPolicy: Delete`) | **남는다** (`Retain` + IAM이 CSI 삭제 거부) |
+> | 남은 볼륨 | 고아 = 사고 | **정상** — 다음 세션에 다시 붙는다 |
+> | 고아 검사 | `available` 전부가 고아 | `Persistent=true`는 **제외**해야 함 (SOP §9) |
+>
+> 3b에서 PVC를 지우면 PV가 `Released` + `claimRef` 잔존 상태가 된다. 클러스터를 통째로
+> 부술 거라면 무해하지만, **세션 중에 다시 적용하면 바로 실패 6종 ④를 밟는다.**
+> 그래서 3b의 권장 순서는 **PVC를 남긴 채 클러스터를 destroy**하는 것이다.
 
 > 🔴 **`kubectl delete secret core-api-db`로 지우면 안 된다.** ExternalSecret이 `creationPolicy: Owner`라
 > **Secret이 즉시 되살아난다.** 07-28 실측 — 삭제 8초 뒤 같은 이름의 **다른 객체**로 부활했다:

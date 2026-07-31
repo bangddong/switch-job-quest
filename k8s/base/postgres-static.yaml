@@ -1,0 +1,249 @@
+# in-cluster Postgres — **static PV 버전** (EKS Stage 3b)
+#
+# ⚠️⚠️ `postgres.yaml`(Stage 3a, 동적 PVC)과 **배타적이다. 동시에 적용하지 마라.**
+#    둘 다 `postgres` StatefulSet과 `postgres` Service를 만든다.
+#    (`externalsecret-db.yaml` ↔ `-incluster.yaml` 관계와 같다.)
+#
+# ── 3a와 무엇이 다른가 ────────────────────────────────────────────────
+#
+#   Stage 3a (postgres.yaml)              Stage 3b (이 파일)
+#   ─────────────────────────             ────────────────────────────
+#   volumeClaimTemplates                  PV + PVC를 손으로 작성
+#     → PVC 자동 생성                       → volumeHandle에 볼륨 ID를 직접 적음
+#     → StorageClass가 CSI 호출              → terraform이 이미 만들어 둔 볼륨에 붙기만
+#     → EBS 동적 생성                        → EBS는 0-bootstrap 소유(destroy 대상 아님)
+#   reclaimPolicy: Delete                 persistentVolumeReclaimPolicy: Retain
+#     → PVC 지우면 볼륨도 삭제               → PVC 지워도 볼륨 유지
+#   데이터 수명 = 세션                     데이터 수명 = 6개월(크레딧 만료까지)
+#
+#   아래에서 위로 자동 생성                 위아래를 내가 맞춰 끼운다
+#
+# 🔴 **3a의 정답이 3b의 함정이 된다.** `reclaimPolicy: Delete`는 3a에서 고아를 막는 옳은
+#    선택이었지만 여기선 6개월치 데이터를 지운다(실패 6종 ②). 감각으로 옮기지 말 것.
+#
+# ── 적용 (2-cluster 디렉토리에서) ────────────────────────────────────
+#
+#   sed -e "s|EBS_VOLUME_ID_PLACEHOLDER|$(tofu output -raw postgres_data_volume_id)|" \
+#       -e "s|PERSISTENT_AZ_PLACEHOLDER|$(tofu output -raw persistent_az)|" \
+#       ../../../k8s/base/postgres-static.yaml | kubectl apply -f -
+#
+#   ⚠️ 3a와 달리 **치환이 필요하다.** 볼륨 ID는 세션마다 같지만(영속) 계정마다 다르고,
+#      퍼블릭 레포에 리소스 ID를 박아두지 않는다.
+---
+# ── ① StorageClass — 동적 프로비저닝을 **끄기 위해** 존재한다 ──────────
+#
+# static PV에 StorageClass가 왜 필요한가? 두 가지 일을 한다.
+#
+# ① `provisioner: kubernetes.io/no-provisioner`
+#    "이 클래스는 아무것도 만들지 않는다"는 선언. PVC가 이 클래스를 가리키면 K8s는
+#    **새 볼륨을 만들지 않고 기존 PV 중에서 짝을 찾는다.**
+#    이걸 빼고 3a의 `gp3`(= ebs.csi.aws.com)를 그대로 쓰면 **새 EBS가 하나 더 생긴다** —
+#    영속 볼륨은 안 쓰이고 매 세션 고아가 늘어난다. 조용히 돈만 나가는 실패다.
+#
+# ② `volumeBindingMode: WaitForFirstConsumer`
+#    3a와 같은 값이지만 **이유가 다르다.** 3a에서는 "볼륨을 만들 AZ를 파드가 뜬 뒤에 정하려고"
+#    썼다. 여기선 만들 게 없다 — 대신 **스케줄러가 PV의 nodeAffinity를 고려한 뒤에 바인딩**하게
+#    한다. Immediate면 바인딩이 먼저 일어나 파드가 갈 수 없는 노드에 묶일 수 있다.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-static
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+# reclaimPolicy를 여기 적지 않는 이유:
+#   🔴 StorageClass의 reclaimPolicy는 **그 클래스가 동적으로 만든 PV에만 상속**된다.
+#      손으로 쓴 static PV는 자기 spec.persistentVolumeReclaimPolicy가 지배한다.
+#      즉 여기에 Retain을 적어도 **데이터 보호에 아무 기여를 하지 않는다** — 적어두면
+#      "보호되고 있다"는 착각만 만든다. 진짜 스위치는 아래 PV 안에 있다.
+---
+# ── ② PersistentVolume — terraform이 만든 EBS의 "창고증" ───────────────
+#
+# PV는 실물 볼륨을 K8s에게 소개하는 객체다. 여기 적힌 volumeHandle이 실제 AWS 볼륨 ID다.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-data
+  labels:
+    app: postgres
+spec:
+  capacity:
+    storage: 10Gi # 실제 EBS 크기와 일치시킬 것 (0-bootstrap var.postgres_volume_size_gb)
+  volumeMode: Filesystem
+  accessModes: ["ReadWriteOnce"] # EBS는 한 번에 한 노드에만 붙는다
+
+  # 🔴 **여기가 진짜 데이터 보호 스위치다.** (StorageClass가 아니라)
+  #    Retain = PVC를 지워도 PV·EBS를 유지한다. PV는 `Released` 상태로 남는다.
+  #    ⚠️ Released PV는 **claimRef가 박힌 채로 남아 새 PVC를 자동으로 받지 않는다**
+  #       (실패 6종 ④, 최다 정체 지점). 재사용하려면 claimRef를 비워야 한다:
+  #         kubectl patch pv postgres-data -p '{"spec":{"claimRef":null}}'
+  #       이 마찰이 3b의 핵심 학습 포인트다 — Delete였다면 겪지 않았을 대신 데이터가 없다.
+  persistentVolumeReclaimPolicy: Retain
+
+  storageClassName: gp3-static
+
+  csi:
+    driver: ebs.csi.aws.com
+    volumeHandle: EBS_VOLUME_ID_PLACEHOLDER # ← tofu output postgres_data_volume_id
+    # 🔴 fsType이 실제 파일시스템과 어긋나면 마운트가 실패한다.
+    #    terraform이 만든 EBS는 **포맷되지 않은 맨 블록 디바이스**이고, CSI 드라이버가
+    #    첫 attach(NodeStageVolume) 때 파일시스템이 없으면 여기 적힌 타입으로 mkfs를 돌린다.
+    #    한 번 ext4로 만들어진 뒤에 xfs로 바꾸면 마운트 실패 — 최악의 경우 재포맷
+    #    (실패 6종 ⑥, 복구 불가). **이 값을 나중에 바꾸지 마라.**
+    fsType: ext4
+
+  # 🔴 AZ 고정의 K8s 쪽 절반. EBS는 AZ에 묶여 있으므로, 이 PV를 쓰는 파드는
+  #    반드시 같은 AZ의 노드에 스케줄되어야 한다.
+  #    노드그룹도 terraform에서 같은 AZ로 고정돼 있어(2-cluster/nodes.tf) 이중 방어다.
+  #    ⚠️ 노드가 1대인 지금 nodeAffinity 단독으로는 문제를 못 푼다 — 노드가 반대 AZ에
+  #       뜨면 파드는 그냥 Pending이 된다. **진짜 해결은 노드그룹 서브넷 고정 쪽**이고,
+  #       이건 "왜 Pending인지" 이유를 명확히 알려주는 역할이 크다.
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            # topology.kubernetes.io/zone = 클라우드 공통 표준 라벨(EKS 노드에 항상 존재).
+            # EBS CSI는 topology.ebs.csi.aws.com/zone 도 붙이지만, 표준 쪽이 이식성이 높다.
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values: ["PERSISTENT_AZ_PLACEHOLDER"] # ← tofu output persistent_az
+---
+# ── ③ PersistentVolumeClaim — "주문서" ────────────────────────────────
+#
+# 3a에서는 volumeClaimTemplates가 `data-postgres-0`이라는 이름으로 자동 생성해 줬다.
+# 여기서는 직접 만든다. 이름이 우리 것이므로 StatefulSet이 이 이름으로 참조한다.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3-static
+  resources:
+    requests:
+      storage: 10Gi
+  # 🔑 바인딩할 PV를 **명시**한다. 없어도 용량·클래스가 맞으면 붙지만, 명시하면
+  #    "엉뚱한 PV에 붙었는데 왜 데이터가 비어 있지?"라는 사고가 원천 차단된다.
+  volumeName: postgres-data
+---
+# ── ④ Headless Service (3a와 동일) ────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  clusterIP: None
+  # 파드가 Ready가 되기 전에도 DNS 레코드를 발행한다. 없으면 postgres가 뜨는 동안
+  # `postgres` 이름이 NXDOMAIN이 되고, 먼저 뜬 core-api가 UnknownHostException으로 CrashLoop.
+  publishNotReadyAddresses: true
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+# ── ⑤ StatefulSet — volumeClaimTemplates가 **없다** ───────────────────
+#
+# 🔴 `volumeClaimTemplates`는 **불변 필드**다. 살아 있는 StatefulSet에서 이걸 고쳐 apply하면:
+#      Forbidden: updates to statefulset spec for fields other than 'replicas',
+#      'ordinals', 'template', 'updateStrategy', ... are forbidden
+#    → 3a에서 3b로 넘어갈 때 **in-place 수정이 불가능**하다. 지우고 다시 만들어야 한다:
+#      kubectl delete statefulset postgres --cascade=orphan   # 파드를 살려둔 채 컨트롤러만 제거
+#      (실패 6종 ⑤ "volumeClaimTemplates가 static PV와 충돌"의 실제 모습)
+#
+# 대신 파드 스펙의 `volumes:`에서 위 PVC를 이름으로 참조한다.
+# ⚠️ 이 방식은 **모든 replica가 같은 PVC를 공유**한다. EBS는 RWO(한 노드 전용)라
+#    replicas를 2 이상으로 올리면 두 번째 파드가 영원히 뜨지 않는다.
+#    3a의 volumeClaimTemplates는 파드마다 PVC를 따로 만들어 이 문제가 없었다 —
+#    **static PV로 얻은 영속성의 대가**이고, 이래서 진짜 운영은 오퍼레이터를 쓴다.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1 # 위 경고 참조 — static PV + RWO에서는 1을 넘길 수 없다.
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 70 # postgres:17-alpine의 postgres uid/gid (실측: id postgres → uid=70)
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/certs/server.crt
+            - -c
+            - ssl_key_file=/certs/server.key
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: core-api-db, key: DB_USERNAME }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: core-api-db, key: DB_PASSWORD }
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef: { name: core-api-db, key: DB_NAME }
+            # 🔴 PGDATA를 하위 디렉토리로 내린다 — 없으면 초기화가 실패한다.
+            #    CSI가 ext4로 포맷하면 마운트 지점에 `lost+found`가 생긴다.
+            #    postgres 엔트리포인트는 PGDATA가 "비어 있을 때만" initdb를 돌리므로,
+            #    lost+found를 보고 "이미 초기화됨"으로 판단 → PG_VERSION이 없어 죽는다.
+            #    (3a에서 실제로 밟고 확인한 것. 3b는 매 세션 새 볼륨이 아니지만
+            #     **첫 포맷 때 똑같이 발생**하므로 그대로 유지한다.)
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: TZ
+              value: Asia/Seoul
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          # ⚠️ 프로브의 exec.command에는 K8s 변수 확장($(VAR))이 **적용되지 않는다.**
+          #    셸을 거쳐야 $POSTGRES_USER가 풀린다. 리터럴로 두면 pg_isready가
+          #    존재하지 않는 사용자로 조회하는데, pg_isready는 인증을 안 하므로
+          #    **틀린 채로 통과**한다 — 가장 나쁜 종류의 버그다.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        # ⭐ 3a와의 결정적 차이 — 템플릿이 아니라 **이미 존재하는 PVC를 이름으로 참조**한다.
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: certs
+          secret:
+            secretName: postgres-tls
+            defaultMode: 0640 # kubectl은 YAML 1.1로 읽는다 → 0640은 8진수, 640은 십진수(함정)

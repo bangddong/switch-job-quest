@@ -59,3 +59,26 @@ output "eso_role_arn" {
   EOT
   value       = aws_iam_role.eso.arn
 }
+
+# ── Stage 3b: static PV 매니페스트에 주입할 값 ────────────────────
+#
+# K8s 매니페스트는 terraform을 모른다. 이 레포의 확립된 전달 방식은 **sed 치환**이다
+# (core-api.yaml의 IMAGE_PLACEHOLDER, Stage 2 externalsecret의 RDS_MASTER_SECRET_PLACEHOLDER).
+# 같은 패턴을 그대로 쓴다 — 새 개념을 늘리지 않는다.
+#
+#   sed -e "s|EBS_VOLUME_ID_PLACEHOLDER|$(tofu output -raw postgres_data_volume_id)|" \
+#       -e "s|PERSISTENT_AZ_PLACEHOLDER|$(tofu output -raw persistent_az)|" \
+#       k8s/base/postgres-static.yaml | kubectl apply -f -
+#
+# ℹ️ 값 자체는 0-bootstrap이 소유한다. 여기서는 **중계만** 한다 —
+#    세션 작업 디렉토리가 2-cluster라, 사람이 레이어를 오가지 않아도 되게 하려는 것뿐이다.
+
+output "postgres_data_volume_id" {
+  description = "영속 EBS 볼륨 ID (static PV의 volumeHandle). 0-bootstrap 소유값의 중계."
+  value       = data.terraform_remote_state.bootstrap.outputs.postgres_data_volume_id
+}
+
+output "persistent_az" {
+  description = "영속 EBS·노드가 함께 놓인 AZ (static PV의 nodeAffinity). 0-bootstrap 소유값의 중계."
+  value       = data.terraform_remote_state.bootstrap.outputs.persistent_az
+}

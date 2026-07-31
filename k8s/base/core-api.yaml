@@ -18,6 +18,24 @@ metadata:
 spec:
   # 학습장이라 1개. 실무 prod는 최소 2 + PodDisruptionBudget(무중단 배포/노드 드레인 대비).
   replicas: 1
+
+  # 🔴 **Recreate로 고정한다 (Stage 3b).** 기본값 RollingUpdate는 이 노드에서 실패한다.
+  #
+  # RollingUpdate는 maxSurge(기본 25% → 1개)만큼 **새 파드를 먼저 띄운 뒤** 구 파드를 내린다.
+  # 즉 잠깐이라도 빈 슬롯 1칸이 필요하다. 그런데 t4g.small의 파드 상한은 11이고
+  # Stage 3a 실측 사용량이 정확히 11/11이었다 → `kubectl rollout restart`가 실패했다:
+  #   0/1 nodes are available: 1 Insufficient memory, 1 Too many pods
+  #
+  # Recreate는 **구 파드를 먼저 종료**하고 새 파드를 만든다. 여분 슬롯이 필요 없다.
+  # 대가는 롤아웃 중 ~30초 다운타임인데, 학습장에서는 무의미한 비용이다.
+  #
+  # ℹ️ 파드 상한이 메모리가 아니라 **ENI 개수**에서 나온다는 점이 EKS 특유다:
+  #    VPC CNI가 파드에 VPC IP를 직접 주므로 t4g.small = 3 ENI × (4 IP − 1) + 2 = 11.
+  #    coredns를 1개로 줄여(addons.tf) 여유 1칸도 함께 확보했지만, 롤링이 구조적으로
+  #    슬롯을 요구한다는 사실은 그대로다 → 둘 다 적용한다.
+  strategy:
+    type: Recreate
+
   selector:
     # Deployment가 "내 파드"를 찾는 기준. 아래 template.metadata.labels와 반드시 일치해야 한다.
     matchLabels:
