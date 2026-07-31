@@ -126,3 +126,64 @@ variable "ecr_keep_last_images" {
   description = "레포당 유지할 최근 이미지 수 (초과분은 lifecycle policy로 만료)."
   default     = 10
 }
+
+# ── 영속 Postgres 데이터 볼륨 (EKS Stage 3b) ───────────────────
+#
+# 🔴 **이 레이어에 두는 이유 — 리퍼 사정권 밖이어야 한다.**
+#   `2-cluster`에 두면 dead man's switch(`.claude/scripts/eks-reaper.sh`)가 사람 부재
+#   2시간 후 `tofu destroy -auto-approve`를 돌려 **6개월치 데이터를 자동 삭제**한다.
+#   리퍼는 마커에 박힌 `cluster_dir`(= 2-cluster)만 destroy하므로, 0-bootstrap은 안전하다.
+#   `prevent_destroy`를 2-cluster에 걸어 막는 방법도 있지만, 그러면 리퍼의 destroy가
+#   **통째로 실패**해 안전장치 자체가 벽돌이 된다. 레이어 선택이 여기서 값을 한다.
+#
+# ⚠️ **머지 = 과금 개시.** `infra-deploy.yml`이 main 푸시 때 이 레이어를 자동 apply한다.
+#   이 레포에서 "머지하면 돈이 나가기 시작하는" 첫 사례다. 원장에 명시돼 있다
+#   (`infra/aws-eks/PERSISTENT-RESOURCES.md`).
+
+variable "persistent_az" {
+  description = <<-EOT
+    영속 EBS를 둘 AZ. **노드그룹도 이 AZ로 고정된다**(2-cluster가 이 값을 remote state로 읽어간다).
+    EBS는 AZ에 묶여 다른 AZ 노드에 붙지 않으므로 둘이 반드시 일치해야 한다.
+    🔑 이 값은 **여기 한 곳에만** 존재한다 — 2-cluster에 같은 변수를 또 만들지 말 것
+       (같은 사실을 두 곳에 저장하면 한쪽이 썩는다. #351 QA F-2의 교훈).
+    ⚠️ 1-network의 var.azs 안에 있는 값이어야 한다(현재 2a·2c). 없는 AZ를 주면
+       2-cluster가 서브넷 맵 조회에서 실패한다.
+  EOT
+  type        = string
+  default     = "ap-northeast-2a"
+}
+
+variable "postgres_persistent_volume_enabled" {
+  description = <<-EOT
+    영속 Postgres 데이터 볼륨 생성 여부.
+
+    🔴 **기본값이 true인 이유 — db_mode와 판단이 반대다.**
+      db_mode는 "플래그를 잊으면 과금되는" 구조라 기본을 안전한 쪽에 뒀다. 여기는 다르다:
+      이 볼륨은 CI(`infra-deploy.yml`)가 apply하는데 CI엔 tfvars를 주입하지 않는다.
+      기본을 false로 두면 **볼륨이 영영 생기지 않아 Stage 3b가 성립하지 않는다.**
+      즉 "잊었을 때 일어나는 일"이 여기선 과금이 아니라 기능 부재다.
+
+    튜토리얼을 따라 하되 월 $0.91을 내고 싶지 않다면 false로 두면 된다
+    (Stage 3a까지는 정상 동작한다. 3b만 건너뛴다).
+
+    ⚠️ true → false로 바꿔도 볼륨은 안 지워진다 — prevent_destroy가 막는다(의도된 것).
+       정말 지우려면 lifecycle 블록을 먼저 제거해야 한다. 원장의 "제거 절차" 참조.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "postgres_volume_size_gb" {
+  description = <<-EOT
+    영속 볼륨 크기(GiB). gp3 $0.0912/GB-Mo → 10GiB = $0.91/월 = 6개월 $5.5(크레딧 2.7%).
+    Stage 3a의 동적 PVC와 같은 크기로 맞춰 비교 가능하게 했다.
+    ⚠️ EBS는 **키울 수만 있고 줄일 수 없다.** 늘리면 영구적으로 비싸진다.
+  EOT
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.postgres_volume_size_gb >= 1 && var.postgres_volume_size_gb <= 100
+    error_message = "postgres_volume_size_gb must be 1..100 (학습장 상한 — 실수로 큰 볼륨을 만들어 영구 과금되는 것을 막는다)."
+  }
+}

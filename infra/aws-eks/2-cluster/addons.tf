@@ -16,11 +16,23 @@ resource "aws_eks_addon" "coredns" {
   # coredns 파드가 스케줄되려면 노드가 있어야 함
   depends_on = [aws_eks_node_group.main]
 
-  # 🆘 파드 상한(11)에 막히면 여기를 켠다 — coredns를 1개로 줄여 슬롯 1칸을 번다.
-  #    노드가 1대뿐이라 replica 2개는 HA가 아니다(같은 노드에 둘 다 뜬다 = 함께 죽는다).
-  #    지금 켜지 않는 이유: 먼저 한도에 실제로 부딪혀 보는 것이 학습이기 때문.
-  #    Stage 3a 예상 사용량은 정확히 11/11이라 여유가 0이다.
-  # configuration_values = jsonencode({ replicaCount = 1 })
+  # 🆘 **켰다 (Stage 3b).** 파드 상한 11에 실제로 부딪혔으므로 목적을 달성했다.
+  #
+  # Stage 3a 실측: 시스템 4 + ESO 3 + coredns 2 + core-api 1 + postgres 1 = **11/11, 여유 0.**
+  # `kubectl rollout restart`가 실패했다 —
+  #   0/1 nodes are available: 1 Insufficient memory, 1 Too many pods
+  # 롤링 업데이트는 **새 파드를 먼저 띄우고** 구 파드를 내리므로 빈 슬롯 1칸이 필요한데 없었다.
+  # (그때는 `scale 0→1`로 우회했다. 삭제 후 생성이라 슬롯이 안 필요하다.)
+  #
+  # 3b는 StatefulSet을 지웠다 다시 만드는 작업이라 이 벽에 정면으로 부딪힌다.
+  #
+  # 왜 coredns를 줄이는 것이 공짜인가: **노드가 1대라 replica 2개는 HA가 아니다.**
+  # 둘 다 같은 노드에 뜨므로 노드가 죽으면 함께 죽는다. 가용성은 0도 2도 아니고 그냥 같다.
+  # 즉 두 번째 replica는 슬롯만 먹고 아무것도 보장하지 않았다.
+  #
+  # ⚠️ 노드를 2대 이상으로 늘리면 이 판단이 뒤집힌다 — 그때는 2로 되돌릴 것.
+  #    (파드 상한도 노드당 11이라 함께 늘어난다.)
+  configuration_values = jsonencode({ replicaCount = 1 })
 }
 
 # ── ⑫ EBS CSI 드라이버 (Stage 3a) ─────────────────────────────

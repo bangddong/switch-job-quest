@@ -59,3 +59,16 @@ jobs:
             fi
           done
           echo "OK: 로컬 전용 레이어가 apply 매트릭스에 없음"
+
+      - name: 영속 EBS에 CSI 삭제 권한 태그가 없는지 검증
+        # 6개월 영속 볼륨의 삭제 방지는 "코드에 **없는** 것"으로 구현돼 있다 —
+        # AmazonEBSCSIDriverPolicy가 DeleteVolume을 태그 조건으로만 허용하므로,
+        # 그 태그를 안 붙이면 CSI 컨트롤러가 볼륨을 지울 권한 자체를 갖지 못한다.
+        # 보호가 "부재"라 눈에 안 보이고, 누가 태그를 추가하면 주석은 그대로인데
+        # 보호만 사라진다. 사람이 지킬 일이 아니라 여기서 막는다.
+        run: bash .claude/scripts/assert-no-csi-delete-tags.sh
+
+      - name: 검사기 자가 테스트 (반증)
+        # 아무것도 매칭 못 하는 검사기도 "0건 통과"를 낸다.
+        # 태그가 실제로 있을 때 잡는지, 주석을 오탐하지 않는지를 매번 확인한다.
+        run: bash .claude/scripts/assert-no-csi-delete-tags.sh --self-test
