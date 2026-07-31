@@ -13,6 +13,14 @@
 # destroy-after-use 규율 덕에 우리는 어차피 매번 부수므로, 이 연습이 공짜로 따라온다
 # (보통 학습자는 클러스터를 부술 이유가 없어 이 경험 자체를 못 한다).
 
+# tfsec 판단: aws-ec2-volume-encryption-customer-key (LOW) — 무시한다.
+#   암호화는 켜져 있고(`encrypted = true`), 다만 AWS 관리 키(`aws/ebs`, $0)를 쓴다.
+#   CMK로 바꾸면 **키 하나가 월 ~$1** — 이 볼륨 자체가 월 $0.91이므로 **지키려는 데이터보다
+#   자물쇠가 더 비싸진다.** 학습장 데이터는 Flyway 마이그레이션 12개로 전부 재생성 가능해
+#   CMK가 주는 이득(키 회전·감사·교차계정 정책)의 값이 사실상 0이다.
+#   backend-state.tf(S3·DynamoDB)·ecr.tf가 같은 근거로 이미 같은 판단을 했다.
+#   prod였다면 CMK를 썼을 것이다.
+#tfsec:ignore:aws-ec2-volume-encryption-customer-key
 resource "aws_ebs_volume" "postgres_data" {
   count = var.postgres_persistent_volume_enabled ? 1 : 0
 
