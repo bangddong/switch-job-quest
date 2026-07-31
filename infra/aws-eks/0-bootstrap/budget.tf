@@ -46,8 +46,9 @@ resource "aws_budgets_budget" "credit_burn" {
     local.credit_threshold_chunks[count.index][length(local.credit_threshold_chunks[count.index]) - 1],
   )
 
-  budget_type  = "COST"
-  limit_amount = var.budget_limit_usd
+  budget_type = "COST"
+  # 크레딧 총액에서 파생 — 별도 변수를 두면 크레딧이 바뀔 때 한쪽만 고쳐 어긋난다(QA F-2).
+  limit_amount = tostring(var.credit_total_usd)
   limit_unit   = "USD"
 
   # ANNUALLY = 1년 주기. 시작일을 크레딧 창이 열린 달로 잡아 그 이후를 누적한다.

@@ -23,11 +23,9 @@ variable "budget_notification_email" {
   sensitive   = true
 }
 
-variable "budget_limit_usd" {
-  type        = string
-  description = "예산 기준 금액 (USD). 크레딧 총액 $200 기준."
-  default     = "200"
-}
+# ℹ️ 예산의 limit_amount는 **변수가 아니라 credit_total_usd에서 파생**된다(budget.tf).
+#    같은 "$200"을 독립 변수 둘로 두면 크레딧이 바뀔 때 한쪽만 고쳐 어긋난다.
+#    (QA F-2 — 지금은 안 틀렸지만 미래에 틀릴 구조였다.)
 
 # ── 누적 크레딧 소진 알림 ($10 단위) ──────────────────────────
 #
@@ -51,8 +49,16 @@ variable "budget_period_start" {
 
 variable "credit_total_usd" {
   type        = number
-  description = "추적할 크레딧 총액 (USD). 마지막 알림 임계값이 된다."
+  description = "추적할 크레딧 총액 (USD). 예산 limit_amount이자 마지막 알림 임계값이 된다."
   default     = 200
+
+  # 🔴 0 이하면 credit_thresholds가 빈 리스트 → 예산 리소스 count=0 →
+  #    **에러 하나 없이 알림 20개가 통째로 사라진다.** 가드레일이 조용히 없어지는 게
+  #    가장 나쁜 실패 모드라, 침묵 대신 apply를 멈추게 한다. (QA F-4)
+  validation {
+    condition     = var.credit_total_usd > 0
+    error_message = "credit_total_usd must be greater than 0 (0 이하면 예산 알림이 조용히 전부 사라진다)."
+  }
 }
 
 variable "budget_alert_step_usd" {
@@ -70,6 +76,15 @@ variable "budget_alert_step_usd" {
   validation {
     condition     = var.budget_alert_step_usd > 0
     error_message = "budget_alert_step_usd must be greater than 0."
+  }
+
+  # 🔴 정수만 허용한다. budget.tf의 예산 이름이 format("%03d", ...)로 만들어지는데
+  #    소수를 주면 `an integer is required`로 **plan이 크래시**한다 — 에러 메시지가
+  #    step 변수를 가리키지 않아 원인 찾는 데 시간이 든다. 여기서 이름을 대고 막는다.
+  #    (QA F-3 — tofu console로 2.5 입력 시 재현 확인)
+  validation {
+    condition     = floor(var.budget_alert_step_usd) == var.budget_alert_step_usd
+    error_message = "budget_alert_step_usd must be a whole number (예산 이름 생성이 %03d 포맷이라 소수는 plan을 깨뜨린다)."
   }
 }
 

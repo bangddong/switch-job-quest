@@ -141,7 +141,11 @@
 tofu state를 그대로 쓰므로(로컬 실행) 다음에 상태가 깨끗하다.
 
 - **한계**: macOS가 **자면(닫으면)** launchd가 안 돈다 → 깨어날 때 밀린 실행을 따라잡는다.
-  그동안(노트북 잠든 시간)은 과금 지속. 최악(주말 방치) ~$6, 그리고 **$35 예산 알람**(0-bootstrap)이 backstop.
+  그동안(노트북 잠든 시간)은 과금 지속. 최악(주말 방치) ~$6.
+  - 🔴 **이 경우의 backstop은 예산이 아니라 이상탐지다.** 예산은 **누적** $10 단위라
+    주말 급증 $6은 누적이 다음 계단을 넘지 않는 한 안 울린다(2026-07-31 누적 $0.481 기준
+    $6.48 → $10 미도달). 하루 단위 급증을 잡는 것은 **Cost Anomaly Detection(DAILY, $5)** 이다.
+    ~~"$35 예산 알람이 backstop"~~ 이라는 종전 서술은 임계 체계와 어긋났다(코드에 $35는 없었다).
 - **설치** (새 머신/클론 시 1회): `bash infra/aws-eks/reaper/install-reaper.sh`
 - **설정**: `EKS_REAPER_TTL`(기본 7200초=2h), `EKS_REAPER_DRYRUN=1`(테스트), `EKS_REGION`.
 - **리퍼가 뭔가 했나 확인**: `.claude/eks-session/reaper.log` (`DEAD MAN'S SWITCH 발동` 있으면 자동 destroy된 것).
