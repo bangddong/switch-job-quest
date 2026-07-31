@@ -46,14 +46,30 @@ FORBIDDEN=("ebs.csi.aws.com/cluster" "CSIVolumeName" "kubernetes.io/created-for/
 scan_file() {
   local f="$1" hits=0
   local body
-  body=$(sed -e 's/#.*$//' -e 's|//.*$||' "$f")
+
+  # ① 주석 제거 → ② IAM 조건 키(`aws:RequestTag/<태그>` 등)를 **토큰째 삭제**.
+  #
+  # 🔴 **"태그 뒤에 `=`가 오는지" 보던 방식을 버렸다 (QA F-4·F-5).**
+  #   F-4: 키를 local에 담아 computed key로 쓰면 정규식이 통째로 빗나간다 —
+  #        `locals { k = "ebs.csi.aws.com/cluster" }` + `tags = { (local.k) = "true" }`
+  #        여기서 태그 문자열 뒤에 오는 건 `=`가 아니라 `}`다.
+  #   F-5: IAM 조건 키 제외를 `grep -v`로 **줄 단위**로 하니, 같은 줄에 조건 키와
+  #        진짜 위반이 함께 있으면 위반까지 통째로 제외됐다.
+  #
+  # → 규칙을 단순화한다: **주석 밖에서 이 문자열이 보이면 안 된다.**
+  #   키든 값이든 locals든 merge든 jsonencode든 전부 걸린다. 우회 경로가 없다.
+  #   IAM 조건 키만 예외인데, 그건 `<접두사>/<태그>` 형태라 접두사째 지우면 남지 않는다
+  #   (줄 단위가 아니라 **토큰 단위** 삭제라 F-5가 재발하지 않는다).
+  #
+  # ⚠️ 대가: `description = "... ebs.csi.aws.com/cluster ..."` 처럼 **문자열 안 설명**도
+  #   걸린다. 의도된 것이다 — 설명은 주석(`#`)으로 쓰면 되고, 오탐 쪽으로 틀리는 편이
+  #   놓치는 것보다 낫다(이 검사가 지키는 건 6개월치 데이터다).
+  body=$(sed -e 's/#.*$//' -e 's|//.*$||' "$f" |
+    sed -E 's#(aws:RequestTag|aws:ResourceTag|ec2:ResourceTag)/[A-Za-z0-9./_:-]+##g')
 
   for tag in "${FORBIDDEN[@]}"; do
-    # "태그" = ...   또는   태그 = ...   (앞에 IAM 조건 접두사가 없는 경우만)
-    if printf '%s\n' "$body" \
-      | grep -vE '(aws:RequestTag/|aws:ResourceTag/|ec2:ResourceTag/|ec2:CreateAction)' \
-      | grep -qE "\"?$(printf '%s' "$tag" | sed 's/[.[\*^$/]/\\&/g')\"?[[:space:]]*="; then
-      echo "  🔴 $f — 금지 태그 '$tag' 가 대입되고 있습니다."
+    if printf '%s\n' "$body" | grep -qF -- "$tag"; then
+      echo "  🔴 $f — 금지 태그 '$tag' 가 (주석 밖에서) 참조되고 있습니다."
       hits=1
     fi
   done
@@ -93,6 +109,37 @@ resource "aws_ebs_volume" "x" {
   }
 }
 EOF
+  # QA F-4: 태그 키를 local에 담아 computed key로 쓰는 우회.
+  cat > "$TMP/computed.tf" <<'EOF'
+locals {
+  csi_tag_key = "ebs.csi.aws.com/cluster"
+}
+resource "aws_ebs_volume" "x" {
+  size = 10
+  tags = {
+    (local.csi_tag_key) = "true"
+  }
+}
+EOF
+  # QA F-5: IAM 조건 키와 진짜 위반이 **같은 줄**에 있는 경우.
+  cat > "$TMP/sameline.tf" <<'EOF'
+resource "aws_ebs_volume" "x" {
+  size = 10
+  tags = { note = "aws:RequestTag/ebs.csi.aws.com/cluster 참고", "CSIVolumeName" = "x" }
+}
+EOF
+  # IAM 조건 키만 있는 정당한 파일 — 오탐하면 안 된다.
+  cat > "$TMP/iamonly.tf" <<'EOF'
+data "aws_iam_policy_document" "x" {
+  statement {
+    condition {
+      test     = "StringLike"
+      variable = "aws:RequestTag/ebs.csi.aws.com/cluster"
+      values   = ["true"]
+    }
+  }
+}
+EOF
   echo "── 반증 테스트 ──"
   # scan_file 규약: 위반 있으면 1, 없으면 0.
   # ⚠️ 두 케이스는 **기대 방향이 반대**다. 같은 조건문을 복사하면 뒤집힌다(실제로 그랬다).
@@ -110,6 +157,21 @@ EOF
     echo "  🔴 실패: 문자열 속 닫는 중괄호에 블록이 잘려 뒤쪽 금지 태그를 놓쳤다"; exit 1
   else
     echo "  ✅ 문자열 속 닫는 중괄호가 있어도 금지 태그를 잡는다 (QA F-3)"
+  fi
+  if scan_file "$TMP/computed.tf" >/dev/null; then
+    echo "  🔴 실패: local + computed key 우회를 놓쳤다"; exit 1
+  else
+    echo "  ✅ local에 담아 computed key로 써도 잡는다 (QA F-4)"
+  fi
+  if scan_file "$TMP/sameline.tf" >/dev/null; then
+    echo "  🔴 실패: IAM 조건 키와 같은 줄에 있는 위반을 놓쳤다"; exit 1
+  else
+    echo "  ✅ IAM 조건 키와 같은 줄이어도 진짜 위반을 잡는다 (QA F-5)"
+  fi
+  if scan_file "$TMP/iamonly.tf" >/dev/null; then
+    echo "  ✅ IAM 조건 키만 있는 정당한 정책은 오탐하지 않는다"
+  else
+    echo "  🔴 실패: IAM 조건 키를 위반으로 오탐했다 (CSI 정책을 직접 못 쓰게 된다)"; exit 1
   fi
   echo "  ✅ 자가 테스트 통과"
   exit 0
