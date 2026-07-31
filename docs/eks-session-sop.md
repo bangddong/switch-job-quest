@@ -69,8 +69,17 @@
    tofu state list                                   # 비어야 함
    aws eks list-clusters --region $R                 # 비어야 함
    aws elbv2 describe-load-balancers --region $R --query 'LoadBalancers[].LoadBalancerName'
-   aws ec2 describe-volumes --region $R --filters Name=status,Values=available --query 'Volumes[].VolumeId'
    aws ec2 describe-nat-gateways --region $R --filter Name=state,Values=available
+
+   # ── EBS: "available" 전부가 고아는 아니다 (영속 볼륨 도입 이후) ──
+   # 🔴 영속 EBS는 destroy 후 **영원히 available 상태**로 남는 것이 정상이다.
+   #    옛 쿼리(Volumes[].VolumeId, 필터 없음)를 그대로 쓰면 매 세션 "고아 발견"이 뜬다.
+   #    합격 기준이 "전부 0건"이므로 **매번 실패하는 검사**가 되고, 매번 실패하는 검사는
+   #    곧 눈으로 넘기게 된다 → 그때부터 진짜 고아도 안 보인다.
+   #    → 고아 검사와 영속 인벤토리를 **성격이 다른 두 검사**로 가른다.
+   aws ec2 describe-volumes --region $R --filters Name=status,Values=available \
+     --query "Volumes[?!(Tags[?Key=='Persistent' && Value=='true'])].[VolumeId,Size,CreateTime]" \
+     --output table
 
    # ── RDS 계열 (Stage 2에서 추가) ──
    # ⚠️ 인스턴스가 사라져도 **스냅샷은 남아 계속 과금**된다. 가장 놓치기 쉬운 고아다.
@@ -95,6 +104,17 @@
    >
    > 📌 **07-28 teardown 실측: 위 항목 전부 0건 = 고아 없음.** destroy 4분 34초(26 destroyed).
    > 단계별: 노드그룹 2분 16초 · **RDS 3분 53초** · 컨트롤플레인 2분 9초.
+9b. **영속 인벤토리 대조** — 합격 기준이 위와 **정반대**다. 0건이 아니라 **원장과 일치**:
+   ```bash
+   aws ec2 describe-volumes --region $R --filters Name=tag:Persistent,Values=true \
+     --query 'Volumes[].[VolumeId,Size,AvailabilityZone,State]' --output table
+   ```
+   > 📖 기대값은 **`infra/aws-eks/PERSISTENT-RESOURCES.md`** 의 표다. 개수·크기·AZ가 어긋나면
+   > ①모르는 사이 볼륨이 늘었거나 ②원장 갱신을 빠뜨린 것 — **둘 다 즉시 확인 대상**이다.
+   >
+   > ⚠️ **9와 9b는 반대 방향의 검사다.** 9는 "없어야 한다", 9b는 "정확히 이만큼 있어야 한다".
+   > 하나로 합치면 어느 쪽 기준으로 읽어야 할지 모호해져 둘 다 무력해진다.
+
 10. 일지에 destroy 시각·총 과금 시간·비용 결산 append.
 11. **구축 후 이해도 퀴즈** — 학습 마일스톤(`stage/eks-*` 브랜치)이면 `quiz.md`로 진행,
     `docs/eks-quizzes/<브랜치>.md` + `<!-- QUIZ-PASSED -->`. (`assert-eks-quiz.sh`가 PR 차단으로 강제)
