@@ -32,6 +32,61 @@
      --query 'clusterVersions[?status==`STANDARD_SUPPORT`].[clusterVersion,endOfStandardSupportDate]' --output table
    ```
    크레딧 잔여도 확인(만료 2027-01-15, 안전예비 $30 규칙).
+2b. 🔴 **ECR 이미지가 관측 기본값 수정을 포함하는지 확인** (무료, 30초).
+   `secrets.tf`가 더 이상 `GRAFANA_*` 자리표시를 주입하지 않으므로, **그 수정 이전에 빌드된
+   이미지는 부팅 자체가 실패**한다 — `PlaceholderResolutionException: ... 'GRAFANA_API_KEY'`.
+   "왜 CrashLoopBackOff지"를 클러스터 안에서 디버깅하는 건 과금 구간에서 가장 비싼 실수다.
+   ```bash
+   git fetch origin   # 이미지 태그 커밋이 로컬에 있어야 한다
+   F=be/support/monitoring/src/main/kotlin/com/devquest/monitoring/OtlpMetricsConfig.kt
+   SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \
+     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \
+     | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}')
+
+   if [ -z "$SHA" ]; then
+     echo "🔴 판정 불가 — ECR 태그를 못 읽었다(자격증명·ruby·태그 형식 확인). 수동 확인 후 진행할 것"
+   elif git show "$SHA:$F" 2>/dev/null | grep -q 'GRAFANA_API_KEY:}'; then
+     echo "✅ OK — $SHA"
+   else
+     echo "🔴 재빌드 필요 — GitHub Actions > ECR Push > workflow_dispatch (service: core-api)"
+   fi
+   ```
+   > 날짜·푸시시각 비교가 아니라 **그 커밋의 소스를 직접 읽는다.** 태그가 곧 커밋이므로
+   > `git show <sha>:<path>`로 "이 이미지 안의 코드가 실제로 어떤가"를 확인할 수 있다.
+   >
+   > 🔴 **`[ -z "$SHA" ]` 가드를 지우지 마라.** 이 검사는 처음 작성했을 때 정확히
+   > **"통과했다고 믿게 만드는 검사"** 였다(QA F-1에서 재현). `SHA`가 비면
+   > `git show "$SHA:$F"`가 `git show ":$F"`로 해석되는데, 이건 **로컬 인덱스의 파일**을
+   > 읽는 유효한 문법이다 — ECR과 아무 상관 없이 네 워킹트리를 보고 `exit 0`으로 ✅를 낸다.
+   > 즉 aws 호출이 실패한 상황에서 가장 위험한 방향으로 조용히 통과한다.
+   > **"판정 불가"와 "재빌드 필요"를 구분해 둔 것도 의도적이다** — 둘 다 멈추라는 뜻이지만
+   > 해야 할 행동이 다르다(자격증명 고치기 vs 이미지 굽기).
+   >
+   > ⚠️ **`aws`·`ruby`의 stderr를 `2>/dev/null`로 죽이지 마라.** 한 번 그렇게 고쳤다가
+   > QA F-3에 걸렸다. `set -e` 아래에서는 `SHA=$(... | ruby ...)` 대입문 자체가 파이프라인
+   > 실패로 스크립트를 즉시 끝내는데, stderr까지 막으면 **"판정 불가"조차 못 찍고 무출력으로
+   > 죽는다.** 에러 원문이 지저분해 보여도 그게 유일하게 남는 신호다.
+   >
+   > 📌 이 블록은 **사람이 터미널에 붙여넣는 체크리스트**다(그래서 `set -e`가 없다).
+   > 스크립트로 옮기려면 SHA 대입 실패를 명시적으로 처리할 것 — 그대로 복사하지 말 것.
+   >
+   > 🔎 **`🔴 재빌드 필요`가 자주 뜨는 이유 — 오탐이 아니라 정책이다.**
+   > `ecr-push.yml`은 `be/**`가 바뀐 **PR에서도** 빌드하는데, `pull_request` 컨텍스트의
+   > `github.sha`는 **머지 커밋**이라 레포 히스토리에 없다. 실측(PR #355):
+   > ```
+   > ECR 최신 태그  6f6c0932…   부모 = 9692256(main) + 8dd4a0e(브랜치)  → 머지 커밋
+   > git cat-file   fatal: could not get object info                  → 로컬에 없음
+   > ```
+   > 이 이미지는 수정을 담고 있는데도 검사는 🔴를 낸다. **그대로 둔다.**
+   > 이 트랙의 산출물은 *"처음 하는 사람이 그대로 따라 할 수 있는 문서"* 이고, 그러려면
+   > **지금 도는 이미지가 어느 커밋인지 특정 가능해야** 한다. 조회조차 안 되는 태그로
+   > 유료 세션을 돌리면 나중에 "그때 뭐가 돌았더라"에 답할 수 없다.
+   > → 🔴가 뜨면 **main에서 `ECR Push`를 `workflow_dispatch`로 한 번 굽는다.** 태그가
+   >   main 커밋이 되어 ✅로 바뀌고, 그 자체가 "배포된 이미지 = main의 상태"를 보장한다.
+   >
+   > ⚠️ `git fetch origin '+refs/pull/*/merge:...'`로 머지 커밋까지 끌어와 판정을 통과시키는
+   > 우회는 **일부러 택하지 않았다.** 판정은 통과하지만 추적성은 그대로 없고,
+   > 머지된 PR의 merge ref는 GitHub이 정리할 수 있어 조용한 실패 경로가 하나 더 생긴다.
 3. **일지 시작 기록** — `docs/eks-migration-log.md`에 세션 시작 시각 append.
 4. `tofu init && tofu plan` — 리소스 하나씩 해설 + 비용 영향 + **사용자 승인 게이트**.
 

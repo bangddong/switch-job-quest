@@ -8,16 +8,51 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Condition
+import org.springframework.context.annotation.ConditionContext
+import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.type.AnnotatedTypeMetadata
 import java.util.Base64
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 
+/**
+ * `grafana.otlp.enabled=true`이더라도 실제 전송에 필요한 자격 증명
+ * (`GRAFANA_API_KEY`, `grafana.otlp.instance-id`)이 비어 있으면 [OtlpMeterRegistry] 빈을
+ * 등록하지 않는다. "켜라고 했는가"(enabled 플래그)만 보고 "쓸 수 있는가"(키가 실제로 있는가)는
+ * 확인하지 않던 기존 가드의 결함을 보완한다.
+ *
+ * 2026-07-30 EKS Stage 3a 인시던트: `GRAFANA_API_KEY` 미설정 상태에서 `@Value("\${GRAFANA_API_KEY}")`
+ * (기본값 없음)가 `PlaceholderResolutionException`을 던져 컨텍스트 초기화 자체가 실패 →
+ * CrashLoopBackOff. 값이 없어도 부팅은 성공해야 하므로, 자격 증명 부재를 "빈 등록 여부"로만
+ * 다루고 WARN 로그로 원인을 남긴다(값 자체는 로그에 남기지 않는다).
+ */
+class GrafanaOtlpCredentialsCondition : Condition {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean {
+        val environment = context.environment
+        val apiKey = environment?.getProperty("GRAFANA_API_KEY")
+        val instanceId = environment?.getProperty("grafana.otlp.instance-id")
+
+        if (apiKey.isNullOrBlank() || instanceId.isNullOrBlank()) {
+            log.warn(
+                "GRAFANA_API_KEY 또는 grafana.otlp.instance-id가 설정되지 않아 " +
+                    "OTLP 메트릭 전송(OtlpMeterRegistry)을 건너뜁니다.",
+            )
+            return false
+        }
+        return true
+    }
+}
+
 @Configuration
 @ConditionalOnProperty("grafana.otlp.enabled", havingValue = "true")
 class OtlpMetricsConfig(
-    @Value("\${grafana.otlp.instance-id}") private val instanceId: String,
-    @Value("\${GRAFANA_API_KEY}") private val apiKey: String,
+    @Value("\${grafana.otlp.instance-id:}") private val instanceId: String,
+    @Value("\${GRAFANA_API_KEY:}") private val apiKey: String,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -25,6 +60,7 @@ class OtlpMetricsConfig(
     private var registry: OtlpMeterRegistry? = null
 
     @Bean
+    @Conditional(GrafanaOtlpCredentialsCondition::class)
     fun otlpMeterRegistry(clock: Clock): OtlpMeterRegistry {
         require(instanceId.isNotBlank()) { "grafana.otlp.instance-id must not be blank" }
         require(apiKey.isNotBlank()) { "GRAFANA_API_KEY must not be blank" }
