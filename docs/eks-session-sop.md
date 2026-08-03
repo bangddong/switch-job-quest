@@ -40,8 +40,8 @@
    git fetch origin   # 이미지 태그 커밋이 로컬에 있어야 한다
    F=be/support/monitoring/src/main/kotlin/com/devquest/monitoring/OtlpMetricsConfig.kt
    SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \
-     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json 2>/dev/null \
-     | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}' 2>/dev/null)
+     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \
+     | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}')
 
    if [ -z "$SHA" ]; then
      echo "🔴 판정 불가 — ECR 태그를 못 읽었다(자격증명·ruby·태그 형식 확인). 수동 확인 후 진행할 것"
@@ -61,6 +61,14 @@
    > 즉 aws 호출이 실패한 상황에서 가장 위험한 방향으로 조용히 통과한다.
    > **"판정 불가"와 "재빌드 필요"를 구분해 둔 것도 의도적이다** — 둘 다 멈추라는 뜻이지만
    > 해야 할 행동이 다르다(자격증명 고치기 vs 이미지 굽기).
+   >
+   > ⚠️ **`aws`·`ruby`의 stderr를 `2>/dev/null`로 죽이지 마라.** 한 번 그렇게 고쳤다가
+   > QA F-3에 걸렸다. `set -e` 아래에서는 `SHA=$(... | ruby ...)` 대입문 자체가 파이프라인
+   > 실패로 스크립트를 즉시 끝내는데, stderr까지 막으면 **"판정 불가"조차 못 찍고 무출력으로
+   > 죽는다.** 에러 원문이 지저분해 보여도 그게 유일하게 남는 신호다.
+   >
+   > 📌 이 블록은 **사람이 터미널에 붙여넣는 체크리스트**다(그래서 `set -e`가 없다).
+   > 스크립트로 옮기려면 SHA 대입 실패를 명시적으로 처리할 것 — 그대로 복사하지 말 것.
 3. **일지 시작 기록** — `docs/eks-migration-log.md`에 세션 시작 시각 append.
 4. `tofu init && tofu plan` — 리소스 하나씩 해설 + 비용 영향 + **사용자 승인 게이트**.
 
