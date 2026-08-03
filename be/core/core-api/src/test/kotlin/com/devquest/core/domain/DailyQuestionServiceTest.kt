@@ -1,7 +1,8 @@
 package com.devquest.core.domain
 
+import com.devquest.core.domain.model.DailyQuestionContent
 import com.devquest.core.domain.model.evaluation.TechInterviewResult
-import com.devquest.core.domain.port.DailyMailLogPort
+import com.devquest.core.domain.port.DailyQuestionContentPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
@@ -20,7 +21,7 @@ import org.mockito.kotlin.whenever
 @ExtendWith(MockitoExtension::class)
 class DailyQuestionServiceTest {
 
-    @Mock lateinit var dailyMailLogPort: DailyMailLogPort
+    @Mock lateinit var dailyQuestionContentPort: DailyQuestionContentPort
     @Mock lateinit var techInterviewPort: TechInterviewPort
 
     @InjectMocks
@@ -28,8 +29,8 @@ class DailyQuestionServiceTest {
 
     @Test
     fun `getTodayQuestion - 오늘 질문이 존재하면 반환한다`() {
-        whenever(dailyMailLogPort.findTodayQuestion(eq("TECH_INTERVIEW"), any()))
-            .thenReturn("Java의 GC 동작 방식을 설명하세요.")
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any()))
+            .thenReturn(DailyQuestionContent(question = "Java의 GC 동작 방식을 설명하세요.", mailType = "TECH_INTERVIEW"))
 
         val result = service.getTodayQuestion()
 
@@ -38,7 +39,7 @@ class DailyQuestionServiceTest {
 
     @Test
     fun `getTodayQuestion - 오늘 질문이 없으면 CoreException(DAILY_QUESTION_NOT_FOUND)을 던진다`() {
-        whenever(dailyMailLogPort.findTodayQuestion(eq("TECH_INTERVIEW"), any()))
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any()))
             .thenReturn(null)
 
         assertThatThrownBy { service.getTodayQuestion() }
