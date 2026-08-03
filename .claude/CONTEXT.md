@@ -142,7 +142,7 @@
 > category 활성화가 의미를 가짐, #332 참조). **큰 트랙은 아래 "다음 = 택1".**
 > ~~L-9 zone 불일치~~ → **오진으로 종결(#337).**
 > - **서비스 분해 트랙**: Phase 0+1 완료(#295·#297·#298·#300 / #304·#305·#306·#307·#308). ai-api가 AI 포트
->   24개를 REST로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
+>   **포트 18개(LLM 17 + Judge0)를 엔드포인트 24개**로 노출, core는 HTTP 어댑터로 호출 가능. ⚠️ prod 기본값은 `transport=inprocess` 유지.
 > - **EKS 트랙**: Task 8 왕복 실증(#316) → #318 퀴즈 게이트 · #320 과금 안전장치(dead man's switch,
 >   하트비트 2h stale→launchd 리퍼 자동 `tofu destroy`, 이 맥에 설치됨) · #322 ECR 0-bootstrap 편입 ·
 >   #323 ECR push 워크플로 · **#324 Stage 1 완료 — core-api가 EKS에서 실제로 떴다**(ECR→노드 pull 성공,
@@ -246,7 +246,8 @@
     딸려옴 → client-ai 의존은 Phase 1로 연기. **Phase 1 착수 순서 = 1.3(ai-api AiCallLogPort 관측 어댑터)→1.1→1.2→1.4.**
 - **✅ Phase 1 전체 완료·머지 (07-22)**: 1.3 관측 어댑터(#304) → 1.1 REST 컨트롤러 24개(#305) →
   1.2 설정 이관(#306) → 1.4a HTTP 어댑터 배선(#307) → 1.4b·1.5 트랜잭션 재배치 + parity(#308).
-  **ai-api = AI 포트 24개를 REST로 노출하는 독립 서비스. core는 `transport=http`로 호출 가능.**
+  **ai-api = AI 포트 18개(LLM 17 + Judge0)를 엔드포인트 24개로 노출하는 독립 서비스.**
+  ~~포트 24개~~ — 포트와 엔드포인트를 혼동한 서술이었다(08-03 정정, 규약은 설계문서 §숫자 규약).
   - ⚠️ **프로덕션 기본값은 `inprocess` 유지** — Phase 1은 "전환 가능"까지고 "전환 완료"가 아니다.
     실전 검증(로컬 e2e → prod 전환 판단)이 남았다.
   - ⚠️ **`client-ai` 의존 제거 금지** (Phase 3까지 = inprocess 롤백 보존).
@@ -265,7 +266,9 @@
     다른 모듈이 의존할 수 없다. 앱 모듈로 빼면 구현이 두 벌이 되어 드리프트가 확정적이다.
   - Phase 1처럼 **기계적 작업과 동작 변경을 다른 PR로 분리**하는 패턴을 그대로 적용한다.
 - **⚠️ 2-cluster에 영향**: ai NetworkPolicy 실현하려면 vpc-cni addon에 `enableNetworkPolicy` 필요(현재 맨몸), JVM 3개엔 t4g.small 빠듯→medium. Phase 3 체크리스트.
-- **미해결(구현 중)**: 데일리 캐싱 전략(공통콘텐츠 1회생성→서빙, Redis) / 이메일 SES 전환·소유(core vs daily) / AiCheck 오케스트레이션 경계 / 분산 트레이싱
+- **미해결(구현 중)**: 데일리 캐싱 전략(공통콘텐츠 1회생성→서빙, Redis) / 이메일 SES 전환·소유(core vs daily) / 분산 트레이싱
+  - **AiCheck 오케스트레이션 경계** → 설계는 *"Phase 1에서 실증"* 이라 했으나 **실증 없이 Phase 1이 완료 선언됐다.**
+    08-03 확인 후 **Phase 2 Stage B로 이월** — 라이브러리 분리 시 오케스트레이션이 어디 남는지가 그 자리에서 강제로 드러난다.
 - CI 메모: `tfsec` 잡이 릴리스 다운로드 시 GitHub API rate-limit(403)로 간헐 실패 → `github_token` 주입으로 근본해결 가능(미적용, 재실행으로 우회 중)
 
 ### 코드 작업
