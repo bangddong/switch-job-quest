@@ -184,8 +184,11 @@
 >   (경계 다이어그램·실행 순서·검출된 버그·트랜잭션 재배치·이월 항목) ·
 >   Phase 0 회고 https://claude.ai/code/artifact/8d702047-0184-4743-b89d-4f085b8644bc ·
 >   목표 아키텍처 https://claude.ai/code/artifact/ffe35a97-ee42-4412-b85c-2716e8b59a14
-> - **배포 타겟 열린 결정(Phase 3 전 확정)**: "최종 prod"를 EKS 완전체 vs Fly 3서비스 vs Fly 단일+EKS 학습전용 —
->   미정. EKS 상시는 컨트롤플레인 $73/mo 고정비(destroy-after-use 전제).
+> - ✅ **배포 타겟 확정 (2026-08-03, Phase 2 계획 G-1)**: **Fly 단일 유지 + 분리는 EKS 실습에서만.**
+>   ~~EKS 완전체~~(destroy-after-use라 상시 불가, 크레딧 만료 후 갈 곳 없음) ·
+>   ~~Fly 3서비스~~(설계의 NetworkPolicy 전제가 통째로 무효 + 머신 비용 3배) 기각.
+>   **셋 다 "상시에도 분리를 올린다"를 전제한 게 함정이었다** — 그 전제를 버리면 세 문제가 동시에 사라진다.
+>   근거·대가는 `plans/2026-08-03-service-decomposition-phase02.md` §확정된 결정.
 > - **메모(리뷰 CI)**: OCR(alibaba)·roborev 검토 완료 → **도입 보류.** 솔로라 안 아픔 + OCR은 **API 종량제(Claude 구독 불가)**. 현 qa-reviewer로 충분. **협업자 생기거나 PR이 3서비스로 늘면** 그때 OCR 파일럿. 나중 카드.
 > - **메모(DB)**: **Neon→RDS 전환 = 폐기(07-21).** 무료 사용량 부족 시점에만 재고. RDS는 상시 과금이라 destroy-after-use(EKS 실습)·Fly fallback 전략과 배치. 상세는 "백로그 › DB".
 >
@@ -250,11 +253,17 @@
   - **잔존 리스크 1건**: `CodingQuestService.generateProblem`/`submitCode`는 재시도 루프에 AI·Judge0·DB가
     뒤섞여 트랜잭션 재배치를 **의도적 보류**했다. HTTP 전환이 완료되면 **이 둘이 유일하게 AI 호출 중
     DB 커넥션을 잡는 지점**이 된다. 전환 전 재검토 필요.
-- **➡️ 다음 스텝: Phase 2 (daily-service 추출 + 경량 무로그인 FE)** — 설계 문서 §이관계획.
-  ⚠️ **착수 전 필수**: ai-api를 **실제 네트워크에 처음 올리는 단계**다. `/internal/ai/**`가 **무인증**이고
-  `spring.web.error.include-message: always`로 내부 예외 메시지까지 노출한다. 현재는 Fly가 core-api만
-  배포해서 안 드러날 뿐이다. **인증·격리를 Phase 2 첫 태스크로 처리할 것.**
-  Phase 1처럼 **기계적 작업과 동작 변경을 다른 PR로 분리**하는 패턴을 그대로 적용한다.
+- **➡️ 다음 스텝: Phase 2** — 📖 **계획 확정: `plans/2026-08-03-service-decomposition-phase02.md`**
+  (Blindspot Pass 불일치 20건 반영, 결정 2건 확정). 착수 지점은 **Task 2.0(문서 정합화) → 2.1**.
+  - 🔴 **설계의 "daily = 무인증" 전제가 코드와 어긋난다**: `getTodayQuestion()`이 읽는 `daily_mail_log`의
+    유일한 writer가 메일 스케줄러라, **로그인 유저 존재 + 메일 발송 성공**이 있어야 오늘의 질문이 생긴다.
+    `MAIL_ENABLED`(기본 false)가 사실상 daily의 마스터 스위치다. → **G-2 = 생성/발송 분리**로 해소(Task 2.1).
+  - ~~**인증·격리를 Phase 2 첫 태스크로**~~ → **G-1 확정으로 근거 소멸.** ai-api·daily-api는 Fly에
+    안 올라가므로 `/internal/ai/**` 무인증은 EKS 안에서만 노출된다 → NetworkPolicy로 충분,
+    **설계 원안대로 Phase 3 소관**. (그 서술은 Fly 배포를 가정하고 있었다)
+  - **"무행동 이동 PR" 패턴은 라이브러리 모듈로 뺄 때만 성립한다** — `core-api`는 `jar`가 꺼져 있어
+    다른 모듈이 의존할 수 없다. 앱 모듈로 빼면 구현이 두 벌이 되어 드리프트가 확정적이다.
+  - Phase 1처럼 **기계적 작업과 동작 변경을 다른 PR로 분리**하는 패턴을 그대로 적용한다.
 - **⚠️ 2-cluster에 영향**: ai NetworkPolicy 실현하려면 vpc-cni addon에 `enableNetworkPolicy` 필요(현재 맨몸), JVM 3개엔 t4g.small 빠듯→medium. Phase 3 체크리스트.
 - **미해결(구현 중)**: 데일리 캐싱 전략(공통콘텐츠 1회생성→서빙, Redis) / 이메일 SES 전환·소유(core vs daily) / AiCheck 오케스트레이션 경계 / 분산 트레이싱
 - CI 메모: `tfsec` 잡이 릴리스 다운로드 시 GitHub API rate-limit(403)로 간헐 실패 → `github_token` 주입으로 근본해결 가능(미적용, 재실행으로 우회 중)
