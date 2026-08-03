@@ -38,15 +38,29 @@
    "왜 CrashLoopBackOff지"를 클러스터 안에서 디버깅하는 건 과금 구간에서 가장 비싼 실수다.
    ```bash
    git fetch origin   # 이미지 태그 커밋이 로컬에 있어야 한다
+   F=be/support/monitoring/src/main/kotlin/com/devquest/monitoring/OtlpMetricsConfig.kt
    SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \
-     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \
-     | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}')
-   git show "$SHA:be/support/monitoring/src/main/kotlin/com/devquest/monitoring/OtlpMetricsConfig.kt" \
-     | grep -q 'GRAFANA_API_KEY:}' && echo "✅ OK — $SHA" || echo "🔴 재빌드 필요 — ECR Push 워크플로 실행"
+     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json 2>/dev/null \
+     | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}' 2>/dev/null)
+
+   if [ -z "$SHA" ]; then
+     echo "🔴 판정 불가 — ECR 태그를 못 읽었다(자격증명·ruby·태그 형식 확인). 수동 확인 후 진행할 것"
+   elif git show "$SHA:$F" 2>/dev/null | grep -q 'GRAFANA_API_KEY:}'; then
+     echo "✅ OK — $SHA"
+   else
+     echo "🔴 재빌드 필요 — GitHub Actions > ECR Push > workflow_dispatch (service: core-api)"
+   fi
    ```
    > 날짜·푸시시각 비교가 아니라 **그 커밋의 소스를 직접 읽는다.** 태그가 곧 커밋이므로
    > `git show <sha>:<path>`로 "이 이미지 안의 코드가 실제로 어떤가"를 확인할 수 있다.
-   > 재빌드가 필요하면 GitHub Actions → **ECR Push** → `workflow_dispatch`(service: `core-api`).
+   >
+   > 🔴 **`[ -z "$SHA" ]` 가드를 지우지 마라.** 이 검사는 처음 작성했을 때 정확히
+   > **"통과했다고 믿게 만드는 검사"** 였다(QA F-1에서 재현). `SHA`가 비면
+   > `git show "$SHA:$F"`가 `git show ":$F"`로 해석되는데, 이건 **로컬 인덱스의 파일**을
+   > 읽는 유효한 문법이다 — ECR과 아무 상관 없이 네 워킹트리를 보고 `exit 0`으로 ✅를 낸다.
+   > 즉 aws 호출이 실패한 상황에서 가장 위험한 방향으로 조용히 통과한다.
+   > **"판정 불가"와 "재빌드 필요"를 구분해 둔 것도 의도적이다** — 둘 다 멈추라는 뜻이지만
+   > 해야 할 행동이 다르다(자격증명 고치기 vs 이미지 굽기).
 3. **일지 시작 기록** — `docs/eks-migration-log.md`에 세션 시작 시각 append.
 4. `tofu init && tofu plan` — 리소스 하나씩 해설 + 비용 영향 + **사용자 승인 게이트**.
 
