@@ -1,16 +1,22 @@
 # ── ⑨ Secrets Manager — 앱이 필요로 하는 값들 ────────────────────
 #
-# core-api가 prod 프로파일에서 **기본값 없이** 요구하는 환경변수는 총 10개다.
-# (Stage 1에서 "7개"로 파악했다가 틀렸다 — logback이 요구하는 3개를 놓쳤었다.
-#  yml은 `${VAR}` 형식이고 logback은 `source="VAR"` 형식이라 대문자 `${...}` grep에 안 걸린다.)
+# core-api가 prod 프로파일에서 **기본값 없이** 요구하는 환경변수는 7개다.
 #
 #   DB 계열 4 : DB_HOST DB_NAME DB_USERNAME DB_PASSWORD
 #   앱  계열 3 : JWT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
-#   로깅 계열 3: GRAFANA_LOKI_URL GRAFANA_LOKI_INSTANCE_ID GRAFANA_API_KEY
 #
-# 로깅 3개는 **여기서 주입하지 않는다.** logback을 조건부로 고쳐(별도 커밋)
-# URL이 비면 LOKI appender를 붙이지 않도록 했다. 관측 설정 하나가 빠졌다고
-# 앱 전체가 못 뜨는 것은 결함이지 운영 요건이 아니기 때문이다.
+# 관측 계열 3(GRAFANA_LOKI_URL·GRAFANA_LOKI_INSTANCE_ID·GRAFANA_API_KEY)은 **전부 선택**이다.
+# 없으면 해당 관측 경로만 꺼지고 앱은 뜬다. 관측 설정 하나가 빠졌다고 앱 전체가 못 뜨는 것은
+# 결함이지 운영 요건이 아니다.
+#
+# ⚠️ 이 숫자는 두 번 틀렸다. 세는 방법이 매번 새 구멍을 놓쳤다:
+#   Stage 1 "7개"  → logback이 `source="VAR"` 형식이라 대문자 `${...}` grep에 안 걸렸다(3개 누락).
+#   그 뒤 "10개"   → 로깅 3개를 "여기서 주입하지 않는다"고 **적어놓고 아래에서 주입하고 있었다.**
+#                    같은 파일 안에서 서술과 코드가 어긋난 채로 유지됐다.
+#   → 다시 셀 일이 생기면 문서가 아니라 코드에서 센다:
+#        grep -rn '\${[A-Z_]*}' be/core/core-api/src/main/resources/application*.yml
+#        grep -rn 'source="' be/support/logging/src/main/resources/logback-spring.xml
+#        grep -rn '@Value' be/support be/core --include=*.kt | grep -v ':}'   # 기본값 없는 것만
 #
 # ── 시크릿을 왜 2개로 나누나 ──
 # 소유자와 수명이 다르기 때문이다:
@@ -135,18 +141,28 @@ resource "aws_secretsmanager_secret_version" "app" {
     GITHUB_CLIENT_ID     = var.github_client_id_placeholder
     GITHUB_CLIENT_SECRET = var.github_client_secret_placeholder
 
-    # ── 관측(Grafana Loki) 3종 ──
-    # prod(Fly.io)도 이 3개를 시크릿으로 주입한다. 즉 여기 두는 게 원래 맞는 설계다.
-    # 값은 **더미**다. 학습 클러스터 로그를 실제 Grafana 스택으로 보내지 않는다
-    #   (① 실 크리덴셜을 학습 환경에 두지 않는다 ② prod 로그 스트림 오염 방지).
-    # loki4j 어펜더는 전송 실패를 비동기 경고로만 남기고 앱을 죽이지 않는다.
+    # ── 관측(Grafana) 3종은 **의도적으로 넣지 않는다** ──
     #
-    # 🟡 왜 지금 필요한가: ECR 최신 이미지(07-28 09:05 푸시)가 logback 수정 커밋
-    #    5cf76da(10:37)보다 **먼저** 만들어져서, 이 3개가 없으면 구버전 로직이
-    #    `URI with undefined scheme`로 부팅 실패한다. 수정본 이미지가 빌드되면
-    #    이 값들이 없어도 되지만, 그때도 제거할 이유는 없다(원래 있어야 할 자리).
-    GRAFANA_LOKI_URL         = var.grafana_loki_url_placeholder
-    GRAFANA_LOKI_INSTANCE_ID = var.grafana_loki_instance_id_placeholder
-    GRAFANA_API_KEY          = var.grafana_api_key_placeholder
+    # 종전엔 더미 값 3개를 주입했다. ~~"자리표시니까 무해하다"~~ — 틀렸다.
+    # 자리표시가 **비어있지 않다**는 사실 자체가 두 관측 경로를 모두 켜버렸다:
+    #
+    #   GRAFANA_API_KEY = "learning-placeholder-not-a-real-api-key"
+    #     + application-prod.yml의 instance-id "1680166"(**진짜 값**, 하드코딩)
+    #     → 학습 클러스터가 60초마다 우리 **실제 Grafana Cloud 스택**에
+    #       틀린 자격증명으로 인증을 시도했다. "실 크리덴셜을 학습 환경에 두지 않는다"는
+    #       원칙을 키에만 지키고 인스턴스 ID로 새어나간 것이다.
+    #   GRAFANA_LOKI_URL = "http://127.0.0.1:3100/..."
+    #     → logback의 `<if property("grafanaLokiUrl").length() > 0>`가 참이 되어
+    #       LOKI 어펜더가 붙고, 아무도 안 듣는 포트로 계속 전송을 시도했다.
+    #
+    # 🔑 **값이 없는 것이 곧 스위치다.** 두 경로 모두 부재를 기본-꺼짐으로 해석한다:
+    #     logback  → `defaultValue=""` + `<if>`로 어펜더 정의 자체를 건너뜀 (5cf76da)
+    #     메트릭   → `${GRAFANA_API_KEY:}` + Condition으로 빈 미등록 + WARN 1줄
+    #   (영속 EBS에서 "태그를 안 다는 것이 삭제 잠금"이었던 것과 같은 모양이다.)
+    #
+    # 🔴 **전제: ECR 이미지가 이 커밋 이후여야 한다.**
+    #    구버전 이미지는 GRAFANA_API_KEY에 기본값이 없어(`@Value("${GRAFANA_API_KEY}")`)
+    #    **부팅 자체가 실패**한다 — `PlaceholderResolutionException`.
+    #    다음 세션 전에 `ECR Push` 워크플로를 한 번 돌릴 것. (TASKS.md 등재)
   })
 }

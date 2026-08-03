@@ -32,6 +32,21 @@
      --query 'clusterVersions[?status==`STANDARD_SUPPORT`].[clusterVersion,endOfStandardSupportDate]' --output table
    ```
    크레딧 잔여도 확인(만료 2027-01-15, 안전예비 $30 규칙).
+2b. 🔴 **ECR 이미지가 관측 기본값 수정을 포함하는지 확인** (무료, 30초).
+   `secrets.tf`가 더 이상 `GRAFANA_*` 자리표시를 주입하지 않으므로, **그 수정 이전에 빌드된
+   이미지는 부팅 자체가 실패**한다 — `PlaceholderResolutionException: ... 'GRAFANA_API_KEY'`.
+   "왜 CrashLoopBackOff지"를 클러스터 안에서 디버깅하는 건 과금 구간에서 가장 비싼 실수다.
+   ```bash
+   git fetch origin   # 이미지 태그 커밋이 로컬에 있어야 한다
+   SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \
+     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \
+     | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}')
+   git show "$SHA:be/support/monitoring/src/main/kotlin/com/devquest/monitoring/OtlpMetricsConfig.kt" \
+     | grep -q 'GRAFANA_API_KEY:}' && echo "✅ OK — $SHA" || echo "🔴 재빌드 필요 — ECR Push 워크플로 실행"
+   ```
+   > 날짜·푸시시각 비교가 아니라 **그 커밋의 소스를 직접 읽는다.** 태그가 곧 커밋이므로
+   > `git show <sha>:<path>`로 "이 이미지 안의 코드가 실제로 어떤가"를 확인할 수 있다.
+   > 재빌드가 필요하면 GitHub Actions → **ECR Push** → `workflow_dispatch`(service: `core-api`).
 3. **일지 시작 기록** — `docs/eks-migration-log.md`에 세션 시작 시각 append.
 4. `tofu init && tofu plan` — 리소스 하나씩 해설 + 비용 영향 + **사용자 승인 게이트**.
 
