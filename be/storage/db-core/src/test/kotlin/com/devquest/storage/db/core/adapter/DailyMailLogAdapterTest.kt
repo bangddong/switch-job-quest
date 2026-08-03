@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
@@ -22,27 +23,25 @@ class DailyMailLogAdapterTest {
     private lateinit var adapter: DailyMailLogAdapter
 
     @Test
-    fun `동일 질문이 여러 사용자에 의해 중복 저장돼 있어도 중복 없이 반환한다`() {
-        // 사용자 N명이 같은 날 같은 질문을 받으면 N개의 행이 저장된다.
-        // 이 중복이 그대로 반환되면 실제로 덮는 "질문 종류" 수가 줄어들어
-        // 제외 목록의 실효 기간이 사용자 수에 반비례해 짧아진다.
-        val since = LocalDateTime.now().minusDays(20)
-        whenever(repository.findQuestionContentsSince(eq("TECH_INTERVIEW"), eq(since)))
-            .thenReturn(listOf("질문A", "질문A", "질문A", "질문B", "질문B"))
+    fun `existsTodayLog - 오늘 발송 이력이 있으면 true를 반환한다`() {
+        val today = LocalDate.now()
+        val start = today.atStartOfDay()
+        val end = today.plusDays(1).atStartOfDay()
+        whenever(
+            repository.existsByUserIdAndMailTypeAndSentAtBetween(eq("user1"), eq("TECH_INTERVIEW"), eq(start), eq(end))
+        ).thenReturn(true)
 
-        val result = adapter.findQuestionsSince("TECH_INTERVIEW", since)
+        val result = adapter.existsTodayLog("user1", "TECH_INTERVIEW", today)
 
-        assertThat(result).containsExactlyInAnyOrder("질문A", "질문B")
+        assertThat(result).isTrue()
     }
 
     @Test
-    fun `조회 시 지정한 기준 시각을 repository에 그대로 전달한다`() {
-        val since = LocalDateTime.now().minusDays(20)
-        whenever(repository.findQuestionContentsSince(eq("TECH_INTERVIEW"), eq(since)))
-            .thenReturn(emptyList())
+    fun `save - 지정한 파라미터로 저장을 위임한다`() {
+        val sentAt = LocalDateTime.now()
 
-        adapter.findQuestionsSince("TECH_INTERVIEW", since)
+        adapter.save("user1", "TECH_INTERVIEW", "질문A", sentAt)
 
-        verify(repository).findQuestionContentsSince("TECH_INTERVIEW", since)
+        verify(repository).save(org.mockito.kotlin.any())
     }
 }

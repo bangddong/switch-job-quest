@@ -1,12 +1,10 @@
 package com.devquest.core.api.scheduler
 
+import com.devquest.core.domain.DailyQuestionContentService
 import com.devquest.core.domain.MailService
 import com.devquest.core.domain.port.DailyMailLogPort
-import com.devquest.core.domain.port.TechInterviewPort
-import com.devquest.core.domain.port.TechQuestionBankPort
 import com.devquest.core.domain.port.UserEmailPort
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.LocalDate
@@ -17,22 +15,19 @@ import java.time.ZoneId
 class DailyMailScheduler(
     private val userEmailPort: UserEmailPort,
     private val mailService: MailService,
-    private val techInterviewPort: TechInterviewPort,
-    private val techQuestionBankPort: TechQuestionBankPort,
+    private val dailyQuestionContentService: DailyQuestionContentService,
     private val dailyMailLogPort: DailyMailLogPort,
-    @Value("\${devquest.daily-question.tech-stack}") private val techStack: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    companion object {
-        // 질문 뱅크가 총 26개(V10 5개 + V11 21개)뿐이라, 최근 질문 제외 윈도우가 뱅크 크기 이상이면
-        // 뱅크가 주기적으로 완전히 소진되어 AI 폴백(generateDailyQuestion, 비용 발생)이 매일 돌게 된다.
-        // 20일로 두면 뱅크에서 항상 최소 6개 이상이 후보로 남아 폴백 없이 동작한다.
-        private const val RECENT_QUESTION_WINDOW_DAYS = 20L
-    }
-
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
     fun sendDailyTechInterviewMail() {
+        // ① 콘텐츠 생성 — 유저 수·MAIL_ENABLED와 무관하게 항상 먼저 실행된다.
+        // 아래의 early return(발송 대상 없음 등)이 콘텐츠 생성을 막아서는 안 된다.
+        val content = dailyQuestionContentService.ensureTodayQuestion()
+        val question = content.question
+
+        // ② 발송 게이트 — 여기부터는 메일 발송에만 관여하고, 콘텐츠 생성에는 영향을 주지 않는다.
         val allUsers = userEmailPort.findAll()
         if (allUsers.isEmpty()) {
             log.info("발송 대상 없음 — 기술 면접 데일리 메일 skip")
@@ -48,16 +43,6 @@ class DailyMailScheduler(
             return
         }
 
-        val since = LocalDateTime.now(ZoneId.of("Asia/Seoul")).minusDays(RECENT_QUESTION_WINDOW_DAYS)
-        val recentQuestions = dailyMailLogPort.findQuestionsSince("TECH_INTERVIEW", since)
-        val bankQuestion = techQuestionBankPort.findUnused(recentQuestions)
-        val question = if (bankQuestion != null) {
-            log.info("질문 뱅크에서 질문 채택: category=${bankQuestion.category}")
-            bankQuestion.question
-        } else {
-            log.info("질문 뱅크 소진 — AI로 질문 생성")
-            techInterviewPort.generateDailyQuestion(techStack, recentQuestions)
-        }
         val deepLink = "https://quest.dhbang.co.kr/daily-question"
 
         log.info("데일리 기술 면접 메일 발송 시작: 대상 수=${targets.size}")

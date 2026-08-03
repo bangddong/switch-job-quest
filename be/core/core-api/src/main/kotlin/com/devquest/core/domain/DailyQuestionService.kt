@@ -1,7 +1,7 @@
 package com.devquest.core.domain
 
 import com.devquest.core.domain.model.evaluation.TechInterviewResult
-import com.devquest.core.domain.port.DailyMailLogPort
+import com.devquest.core.domain.port.DailyQuestionContentPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
@@ -12,14 +12,14 @@ import java.time.ZoneId
 
 @Service
 class DailyQuestionService(
-    private val dailyMailLogPort: DailyMailLogPort,
+    private val dailyQuestionContentPort: DailyQuestionContentPort,
     private val techInterviewPort: TechInterviewPort,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun getTodayQuestion(): String {
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
-        return dailyMailLogPort.findTodayQuestion("TECH_INTERVIEW", today)
+        return dailyQuestionContentPort.findToday("TECH_INTERVIEW", today)?.question
             ?: throw CoreException(ErrorType.DAILY_QUESTION_NOT_FOUND)
     }
 
