@@ -1,5 +1,16 @@
 # 서비스 분해 Phase 0~1 구현 계획 — ai-service 추출
 
+> ## ✅ 이 계획은 **실행 완료**됐다 (Phase 0: 2026-07-21 · Phase 1: 2026-07-22)
+>
+> 🔴 **본문의 `- [ ]` 체크박스를 "남은 일"로 읽지 마라.** 전부 실행됐고 표시만 안 갱신됐다.
+> 실제 상태는 §미해결/결정 로그의 **결과** 항목과 아래 PR을 보라:
+> Phase 0 = #295·#297·#298·#300 / Phase 1 = #304·#305·#306·#307·#308.
+>
+> 이 오해는 실제로 발생할 뻔했다 — **Phase 2 착수 전 Blindspot Pass가 "끝난 걸 다시 결정하려 한다"로
+> 잡아냈다**(`plans/2026-08-03-…-phase02.md` 불일치 #18). 그래서 이 배너를 남긴다.
+>
+> **다음 계획**: `docs/superpowers/plans/2026-08-03-service-decomposition-phase02.md`
+
 > **For agentic workers:** BE 에이전트(be-feature-builder) 위임 전제. 각 태스크는 TDD(테스트 먼저) +
 > `verification-before-completion` 게이트. 스텝은 체크박스(`- [ ]`)로 추적.
 > 상위 설계: `docs/superpowers/specs/2026-07-20-service-decomposition-design.md` (착수 전 필독).
@@ -410,7 +421,10 @@ AI 호출의 네트워크 지연(수 초)·부분 실패가 **DB 커넥션을 �
 
 ## 미해결 / 결정 로그 (구현 중 채움)
 
-- [ ] **Task 0.1 결과:** Judge0 ai-api 포함 여부 최종 → (추천: 포함)
+- [x] **Task 0.1 결과:** Judge0 ai-api 포함 여부 최종 → **포함 확정.** 실측 근거:
+      `ai-api/.../controller/Judge0Controller.kt` 존재 · `AiTransportConfig.kt:178` `judge0HttpAdapter` 등록.
+      단 **`AiEvaluatorPort` 마커는 상속하지 않는다** — LLM 호출이 아니라 RapidAPI 기반 코드 실행이라
+      성격이 다르다(`Judge0Port.kt:10` 주석에 근거 명시). 즉 "ai-api에 포함 / 마커에서는 제외"다.
 - [x] **Task 0.2 방침:** **A(관측 재배치) 확정**(2026-07-21 사용자 결정). 소비처 있으면 A+C 병행 → 조사로 최종형 결정
 - [x] **Task 0.2 결과 (2026-07-21):** **A 단독 확정** — AiCallLog 읽기 소비처 **0건**(포트=record() write-only,
   repo 커스텀 read 0, 주입처=CacheMetricsAdvisor 하나뿐, 통계/비용 API·조인 없음). 물리적 테이블·어댑터
@@ -424,7 +438,10 @@ AI 호출의 네트워크 지연(수 초)·부분 실패가 **DB 커넥션을 �
   롤백이 살아있는 한 core-api 프로세스가 client-ai 빈을 그대로 호스팅해 여전히 필요. Phase 3(client-ai
   컴파일 의존 제거)에 삭제 예정으로 주석만 남김. `pass-score`·`interview-questions`는 전 코드베이스에서
   소비처 0건 확인 — 이 태스크 범위 밖(손대지 않음). 상세는 Task 1.2 결정 박스.
-- [ ] **Task 1.4 결과:** 트랜잭션 경계 재배치 범위(어느 서비스까지)
+- [x] **Task 1.4 결과:** 트랜잭션 경계 재배치 범위 → **#308(`bd40c65`)로 완료.** 단 **1건 의도적 보류**:
+      `CodingQuestService.generateProblem`/`submitCode`는 재시도 루프에 AI·Judge0·DB가 뒤섞여 있어
+      재배치하지 않았다. ⚠️ **HTTP 전환이 완료되면 이 둘이 "AI 호출 중 DB 커넥션을 잡는 유일한 지점"**
+      이 된다 → 전환 전 재검토 필요. (Phase 2 계획 §미해결 로그로 이월)
 - 설계 문서의 남은 열린 질문(캐싱·이메일 소유·분산 트레이싱)은 **Phase 2~3** 소관 — 이 계획 범위 밖.
 
 ## 다음(이 계획 이후)

@@ -24,6 +24,21 @@
   InterviewCoach·CodingQuest·Company·Resume·Health)
 ```
 
+> ## 📐 숫자 규약 — **17 / 18 / 24는 셋 다 맞다. 서로 다른 걸 센다** (2026-08-03 확정)
+>
+> | 값 | 무엇 | 단일 출처 |
+> |:--:|---|---|
+> | **17** | `AiEvaluatorPort` 마커를 단 **LLM 포트** | `ArchAiPortConventionTest.kt`의 `hasSize(17)` |
+> | **18** | 위 17개 **+ `Judge0Port`** = ai-api가 담는 포트 전체 | ai-api 컨트롤러 18개와 1:1 |
+> | **24** | ai-api가 노출하는 **HTTP 엔드포인트** (포트 하나가 메서드를 여럿 노출) | ai-api `@*Mapping` 개수 |
+>
+> `Judge0Port`는 **ai-api에 포함되지만 마커는 상속하지 않는다** — LLM이 아니라 RapidAPI 기반
+> 코드 실행이라 성격이 다르다(`Judge0Port.kt:10` 주석에 근거).
+>
+> 🔴 **숫자를 다시 셀 일이 생기면 문서가 아니라 코드에서 센다.** 이 세 값을 문서끼리 베끼다가
+> `.claude/CONTEXT.md`가 "AI **포트** 24개"라고 적었다(실제로는 엔드포인트 수) — Phase 2 착수 전
+> Blindspot Pass가 잡았다. 아래 본문의 "18개/18종"은 **포트 기준**이다.
+
 ### 🔑 결정적 발견 (설계의 근거)
 - **AI 경계가 이미 포트로 존재**: `core-domain`에 `*EvaluatorPort`(Blog·Interview·Jd·Resume·Boss·
   DeveloperClass·SystemDesign·Personality·CompanyFit·Essay 등) 인터페이스. `client-ai`의 평가자 18개가
