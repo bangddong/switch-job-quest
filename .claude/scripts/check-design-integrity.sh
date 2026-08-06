@@ -113,41 +113,77 @@ done < <(
 #   ②는 "무엇이 참이어야 하는가"를 마커에 적게 해서 주장과 검사를 같은 층에 놓는다.
 while IFS=: read -r f n rest; do
   [ -z "${f:-}" ] && continue
-  payload=$(printf '%s' "$rest" | sed -n 's/.*<!--[[:space:]]*verify:[[:space:]]*\(.*\)-->.*/\1/p')
-  [ -z "$payload" ] && continue
 
-  # ` ~ ` 로 경로와 정규식을 가른다 (경로에 공백을 쓰지 않는 것이 이 레포 관례).
-  case "$payload" in
-    *" ~ "*)
-      path="${payload%% ~ *}"
-      pattern="${payload#* ~ }"
-      ;;
-    *)
-      path="$payload"
-      pattern=""
-      ;;
-  esac
-  # 앞뒤 공백 제거
-  path="${path#"${path%%[![:space:]]*}"}"; path="${path%"${path##*[![:space:]]}"}"
-  pattern="${pattern#"${pattern%%[![:space:]]*}"}"; pattern="${pattern%"${pattern##*[![:space:]]}"}"
-  [ -z "$path" ] && continue
+  # 🔴 한 줄에 마커가 여러 개일 수 있다 (표 행 안에 다는 관례가 이미 있다).
+  #    예전 구현은 `sed 's/.*verify:\(.*\)-->.*/\1/'` 였는데, 그리디 `.*`가 **줄의 마지막 `-->`까지**
+  #    삼켜서 **앞 마커들이 통째로 무시**됐다 — 앞 마커가 거짓이어도 뒤에 유효한 게 있으면 통과했다.
+  #    거짓 통과를 막으려는 검사기가 거짓 통과하던 셈. 그래서 각 마커를 독립적으로 뽑는다:
+  #    `([^-]|-[^-]|--[^>])*` 는 "`-->`가 나오기 전까지"를 뜻하는 ERE 관용구다.
+  markers=$(printf '%s\n' "$rest" \
+    | grep -oE '<!--[[:space:]]*verify:([^-]|-[^-]|--[^>])*-->' 2>/dev/null || true)
+  [ -z "$markers" ] && continue
 
-  # 문법을 설명하는 **예시**는 건너뛴다 — 꺾쇠로 감싼 자리표시자(`<경로>`)가 규약.
-  # (검사기 도입 당시 이 예외가 없어, 마커를 설명하는 문서 자체가 검사에 걸렸다.)
-  case "$path" in
-    *"<"*|*">"*) continue ;;
-  esac
+  # ⚠️ 여기서 파이프(`... | while`)를 쓰면 서브셸이라 err()의 FAIL=1이 밖으로 안 나간다.
+  #    herestring은 서브셸을 만들지 않는다.
+  while IFS= read -r marker; do
+    [ -z "$marker" ] && continue
+    payload="${marker#*verify:}"
+    payload="${payload%-->}"
 
-  if [ ! -e "$path" ]; then
-    err "$f:$n verify 마커의 경로가 없다: $path"
-  elif [ -n "$pattern" ]; then
-    if [ ! -f "$path" ]; then
-      err "$f:$n verify 내용 단언은 파일에만 쓸 수 있다 (디렉토리): $path"
-    elif ! grep -qE -- "$pattern" "$path" 2>/dev/null; then
-      err "$f:$n verify 내용 단언 실패 — '$path' 안에 없다: /$pattern/"
+    # ` ~ ` 로 경로와 정규식을 가른다 (경로에 공백을 쓰지 않는 것이 이 레포 관례).
+    case "$payload" in
+      *" ~ "*)
+        path="${payload%% ~ *}"
+        pattern="${payload#* ~ }"
+        has_assert=1
+        ;;
+      *)
+        path="$payload"
+        pattern=""
+        has_assert=0
+        ;;
+    esac
+    # 앞뒤 공백 제거
+    path="${path#"${path%%[![:space:]]*}"}"; path="${path%"${path##*[![:space:]]}"}"
+    pattern="${pattern#"${pattern%%[![:space:]]*}"}"; pattern="${pattern%"${pattern##*[![:space:]]}"}"
+    [ -z "$path" ] && continue
+
+    # 문법을 설명하는 **예시**는 건너뛴다 — 꺾쇠로 감싼 자리표시자(`<경로>`)가 규약.
+    # (검사기 도입 당시 이 예외가 없어, 마커를 설명하는 문서 자체가 검사에 걸렸다.)
+    case "$path" in
+      *"<"*|*">"*) continue ;;
+    esac
+
+    # `~`를 썼는데 정규식이 비면 조용히 "경로 존재만" 검사로 강등된다 — 그게 이 기능의 취지에
+    # 정면으로 반한다(약한 검사로 조용히 내려앉는 것). 명시적으로 막는다.
+    if [ "$has_assert" -eq 1 ] && [ -z "$pattern" ]; then
+      err "$f:$n verify 내용 단언이 비어 있다 (\`path ~ 정규식\` 형식): $path"
+      continue
     fi
-  fi
-done < <(grep -rnE '<!--[[:space:]]*verify:' --include='*.md' .claude docs infra k8s CLAUDE.md 2>/dev/null)
+
+    if [ ! -e "$path" ]; then
+      err "$f:$n verify 마커의 경로가 없다: $path"
+    elif [ "$has_assert" -eq 1 ]; then
+      if [ ! -f "$path" ]; then
+        err "$f:$n verify 내용 단언은 파일에만 쓸 수 있다 (디렉토리): $path"
+      else
+        grep -qE -- "$pattern" "$path" 2>/dev/null
+        rc=$?
+        # grep은 불일치=1, **정규식 문법 오류=2** 로 구분한다. 뭉치면 "내용이 없다"로 오인시켜
+        # 디버깅을 헤매게 한다.
+        if [ "$rc" -eq 2 ]; then
+          err "$f:$n verify 정규식이 유효하지 않다: /$pattern/"
+        elif [ "$rc" -ne 0 ]; then
+          err "$f:$n verify 내용 단언 실패 — '$path' 안에 없다: /$pattern/"
+        fi
+      fi
+    fi
+  done <<< "$markers"
+  # qa-cache는 QA 산출물(휘발성, .gitignore:48)이지 설계 문서가 아니다. 게다가 findings에는
+  # 마커 **문법을 인용한 산문**이 들어가므로(예: F-2 설명의 `path ~ 정규식`) 스캔하면 오탐이 난다.
+  # 스크립트가 이미 아는 함정("문법을 설명하는 예시")의 다른 얼굴이다.
+done < <(grep -rnE '<!--[[:space:]]*verify:' --include='*.md' --exclude-dir=qa-cache \
+           .claude docs infra k8s CLAUDE.md 2>/dev/null)
 
 if [ "$FAIL" -eq 0 ]; then
   echo "✅ 설계 무결성 통과 (결정 ${#SEEN_IDS[@]}건 검사)"
