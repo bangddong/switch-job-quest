@@ -86,3 +86,6 @@ devquest:
     daily-explain:
       capacity: 5
       refill-days: 1
+    daily-evaluate:
+      capacity: 1
+      refill-days: 1

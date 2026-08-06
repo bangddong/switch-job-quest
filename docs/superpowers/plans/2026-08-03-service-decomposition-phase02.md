@@ -168,7 +168,8 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 - 완료 판정: 설계·plan·CONTEXT 세 문서에서 같은 대상의 서술이 어긋나지 않는다.
 </details>
 
-### Task 2.1: 콘텐츠 생성을 메일 발송에서 분리 (#1·#2) — **G-2 (a) 구현**
+### ✅ Task 2.1: 콘텐츠 생성을 메일 발송에서 분리 (#1·#2) — **G-2 (a) 구현** · **완료 2026-08-04 (PR #359, `60fee5d`)**
+> `DailyQuestionContentService.ensureTodayQuestion()` + `V13` 마이그레이션(레거시 백필 포함).
 - 새 테이블: 날짜별 오늘의 질문 1건 (**Task 2.3에서 위치 확정 후 작성**).
 - `DailyMailScheduler`의 크론은 유지한 채 메서드 내부에서 게이트를 둘로 나눈다: ①생성
   (`DailyQuestionContentService.ensureTodayQuestion()` 위임, 유저 수·`MAIL_ENABLED` 무관)
@@ -178,10 +179,16 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 - **동작 변경 있음** → 단독 PR. 회귀 테스트: 유저 0명·`MAIL_ENABLED=false`에서도 오늘의 질문이 나온다.
 - ⚠️ 기존 `daily_mail_log`는 **발송 이력**으로 남긴다(중복 발송 방지 용도는 그대로).
 
-### Task 2.2: rate-limit 버킷 분리 (#9)
-- `/api/v1/daily-question/evaluate`를 tech-interview 버킷에서 떼어 daily 전용 버킷으로.
+### ✅ Task 2.2: rate-limit 버킷 분리 (#9) — **완료 2026-08-06**
+- `/api/v1/daily-question/evaluate`를 tech-interview 버킷에서 떼어 daily 전용 버킷으로. ✅
 - ⚠️ 분리 후 **총 예산이 2배가 되지 않도록** 용량을 재산정한다(현재 `capacity: 2` 공유).
-- 인메모리·`Fly-Client-IP` 의존은 이 태스크 범위 밖(Stage C에서 재검토 — EKS로 가면 그 분기는 죽는다).
+  → **확정: tech-interview 2 + daily-evaluate 1 = 총 3** (2+2=4는 명시적으로 기각).
+  tech는 현행 체감 유지, daily는 무로그인 공개 경로라 보수적으로 1. `daily-explain 5`는 불변.
+- 인메모리·`Fly-Client-IP` 의존은 이 태스크 범위 밖(Stage C에서 재검토 — EKS로 가면 그 분기는 죽는다). **건드리지 않음.**
+- 구현 메모: 인터셉터 3종이 90% 중복이라 `AbstractRateLimitInterceptor`/`AbstractRateLimitBucketStore`로
+  공통 베이스를 뽑았다 — **Task 2.6이 daily rate-limit을 라이브러리 모듈로 옮길 때 이동 단위가 된다.**
+- ⚠️ `RateLimitResetScheduler`에 새 스토어 `clear()`를 반드시 추가해야 한다(빠뜨리면 자정 리셋이
+  안 되어 **하루 1회 쓰고 영구 차단**). `RateLimitResetSchedulerTest`가 이 회귀를 고정한다.
 
 ### Task 2.3: daily 소유 테이블의 마이그레이션 위치 확정 (#6)
 - 현재 `daily_mail_log`(core-api 리소스) / `tech_question_bank`(db-core 리소스)로 갈려 있다.
