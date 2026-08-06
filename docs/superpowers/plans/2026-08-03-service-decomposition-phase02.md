@@ -169,10 +169,17 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 
 > 여기 있는 것은 *"무엇을 정해야 하는가"* 이지 *"어떻게 하라"* 가 아니다.
 
-- [ ] **daily 테이블의 마이그레이션 소유** — 축이 셋이다(#21~#27):
-      **①** 마이그레이션 실행 주체를 core-api 하나로 고정 / **②** 스키마 분리(설계 확정 이행, #26) /
-      **③** db-core로 모듈 통일. **②는 07-20 확정 결정이므로 다른 선택 시 `design-change-procedure` 대상.**
-      ⚠️ 어느 쪽이든 **#22(CI 공백)를 먼저 메우지 않으면 검증할 수 없다.**
+- [x] **① 마이그레이션 실행 주체** → **core-api 하나로 고정** (2026-08-06 · PR #365 `70580ff`).
+      `devquest.flyway.migrate-on-startup` 명시적 opt-in, **기본값 off**. daily-api는 아무것도 안 해도
+      안전하다 — *"잊으면 터진다"* 가 아니라 *"잊으면 안 돈다"* 로 뒤집었다.
+      <!-- verify: be/storage/db-core/src/main/kotlin/com/devquest/storage/db/core/config/FlywayConfig.kt ~ ConditionalOnProperty -->
+- [ ] **② daily 테이블의 데이터 소유 (스키마 분리)** — 설계가 🔴확정(07-20)했으나 **코드 0줄**(#26).
+      ①과 **직교한다** — ①은 *누가 돌리는가*, ②는 *어디에 사는가*. 기각이 아니라 순서를 매긴 것이라
+      `design-change-procedure` 대상이 아니다. **daily-api가 실제로 생기는 Stage C에서 필요해진다.**
+      ⚠️ 착수 시 `V13`의 `FROM daily_mail_log`(#21) 교차 의존을 함께 풀어야 한다.
+- [x] **선행: 마이그레이션 CI 공백(#22)** → **해소** (2026-08-06 · PR #364 `6a3c163`).
+      실제 Postgres 17.10에 Flyway를 돌린다. 이제 마이그레이션 결정을 **배포 전에 반증할 수 있다.**
+      <!-- verify: be/core/core-api/src/test/kotlin/com/devquest/migration/FlywayMigrationIntegrationTest.kt ~ PostgreSQLContainer -->
 - [ ] **`TechInterviewPort` 분할 여부** (#8·#13) — 가르면 `ArchAiPortConventionTest` 갱신 필요(삭제 아님)
 - [ ] **3자 빈 누수 대응** (#7) — 소스셋 격리 vs 스캔 범위 축소
 - [ ] **CodingQuest 소유** (core vs daily, #19) — G-1로 **긴급도 하락**. EKS 토폴로지 설계 시 결정
@@ -194,7 +201,7 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 |---|---|---|
 | **2.0** | 문서 정합화 — 평가자 개수 단일 출처화(#14), phase01 결정 로그 채움(#18), AiCheck 경계 재판정(#20) | 2026-08-03 |
 | **2.1** | 콘텐츠 생성을 메일 발송에서 분리 (G-2 구현). `ensureTodayQuestion()` + `V13`(레거시 백필) | 2026-08-03 · PR #359 `60fee5d` |
-| **2.2** | rate-limit 버킷 분리 (#9). **tech 2 + daily-evaluate 1 = 총 3** (2+2=4는 "예산 2배"라 기각). `AbstractRateLimitInterceptor`/`...BucketStore` 공통 베이스 = **Stage B의 이동 단위** | 2026-08-06 · PR #361 `904f7d4` |
+| **2.2** | rate-limit 버킷 분리 (#9). **tech 2 + daily-evaluate 1 = 총 3** (2+2=4는 "예산 2배"라 기각). `AbstractRateLimitInterceptor`/`...BucketStore` 공통 베이스 = **Stage B의 이동 단위** <!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/api/support/AbstractRateLimitInterceptor.kt --> | 2026-08-06 · PR #361 `904f7d4` |
 
 > ⚠️ **2.2에서 배운 함정**: `RateLimitResetScheduler`에 새 스토어 `clear()`를 빠뜨리면 자정 리셋이
 > 안 되어 **하루 1회 쓰고 영구 차단**된다. `RateLimitResetSchedulerTest`가 이 회귀를 고정한다.
