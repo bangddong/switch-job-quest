@@ -27,6 +27,15 @@ management:
         enabled: false
 
 
+devquest:
+  flyway:
+    # db-core의 FlywayConfig는 devquest.flyway.migrate-on-startup=true를 명시적으로 켠 앱에서만
+    # 마이그레이션을 실행한다(FlywayConfig.kt 클래스 주석 참고). core-api는 지금까지 해온 대로
+    # prod 기동 시 자동 마이그레이션을 유지해야 하므로 여기서 켠다. 다른 앱(예: 계획 중인 daily-api)이
+    # db-core만 의존한 채 별도 application-prod.yml에서 이 값을 켜지 않으면 마이그레이션은 돌지 않는다
+    # — 그게 이 게이트의 의도다.
+    migrate-on-startup: true
+
 storage:
   datasource:
     core:
