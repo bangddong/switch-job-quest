@@ -27,6 +27,13 @@ warn() { echo "::warning::$*"; }
 DOCS=(.claude/CONTEXT.md .claude/TASKS.md infra/aws-eks/README.md
       docs/eks-tutorial-steps.md docs/eks-session-sop.md CLAUDE.md k8s/README.md)
 
+# 설계·계획 문서를 추가한다 (2026-08-06).
+# 여기가 사각지대였다: 설계 스펙이 "daily=자체 스키마"를 🔴확정(07-20)해놓고 코드가 0줄인 상태로
+# 17일간 CI를 통과했다. 결정이 사는 곳이 감시 밖이면 무결성 검사의 의미가 없다.
+for _f in docs/superpowers/specs/*.md docs/superpowers/plans/*.md; do
+  [ -f "$_f" ] && DOCS+=("$_f")
+done
+
 echo "── 설계 무결성 검사 ──"
 
 # ── A/B/C: 결정 메타 줄 ────────────────────────────────────────────
@@ -85,25 +92,61 @@ while IFS=$'\t' read -r file lineno content; do
 done < <(
   for f in "${DOCS[@]}"; do
     [ -f "$f" ] || continue
-    grep -nE '^>[[:space:]]*📌' "$f" 2>/dev/null | while IFS=: read -r n rest; do
+    # 📌 **D-** 로 시작하는 것만 결정 메타 줄이다.
+    # 📌 자체는 이 레포에서 일반 강조로도 쓰인다(예: phase02 계획서의 "prod는 지금 200을 준다").
+    # 좁히지 않으면 감시 대상을 넓히는 순간 그런 줄들이 전부 "ID 없음"으로 오탐된다.
+    grep -nE '^>[[:space:]]*📌[[:space:]]*\*\*D-' "$f" 2>/dev/null | while IFS=: read -r n rest; do
       printf '%s\t%s\t%s\n' "$f" "$n" "$rest"
     done
   done
 )
 
 # ── D: 주장-검증 마커 ──────────────────────────────────────────────
-# 형식: <!-- verify: path/to/file -->
-# "X는 코드로 처리된다"류 주장 옆에 달아 두면, 그 코드가 사라질 때 CI가 잡는다.
+# 형식 ①: <!-- verify: path/to/file -->              → 경로가 실재하는가
+# 형식 ②: <!-- verify: path/to/file ~ 정규식 -->      → 실재 + **내용이 정규식과 일치**하는가
+#
+# 🔴 왜 ②가 필요한가 (2026-08-06 추가):
+#   ①만 있으면 "존재 ≠ 구현"을 못 잡는다. 실제 사례 — 설계가 "daily=자체 스키마"를 🔴확정(07-20)
+#   했는데 `FlywayConfig.kt`는 **존재하지만** `schemas()` 호출이 0건이었다. 경로 검사만으로는
+#   17일간 초록이었다. 이건 이 레포에서 반복된 형태다: 검사가 주장보다 헐거우면,
+#   더 쉽게 충족되는 대리 지표(존재/문자열 매칭/객체 동일성)를 통과시키고 진짜 성질은 놓친다.
+#   ②는 "무엇이 참이어야 하는가"를 마커에 적게 해서 주장과 검사를 같은 층에 놓는다.
 while IFS=: read -r f n rest; do
   [ -z "${f:-}" ] && continue
-  path=$(printf '%s' "$rest" | sed -n 's/.*<!--[[:space:]]*verify:[[:space:]]*\([^[:space:]]*\)[[:space:]]*-->.*/\1/p')
+  payload=$(printf '%s' "$rest" | sed -n 's/.*<!--[[:space:]]*verify:[[:space:]]*\(.*\)-->.*/\1/p')
+  [ -z "$payload" ] && continue
+
+  # ` ~ ` 로 경로와 정규식을 가른다 (경로에 공백을 쓰지 않는 것이 이 레포 관례).
+  case "$payload" in
+    *" ~ "*)
+      path="${payload%% ~ *}"
+      pattern="${payload#* ~ }"
+      ;;
+    *)
+      path="$payload"
+      pattern=""
+      ;;
+  esac
+  # 앞뒤 공백 제거
+  path="${path#"${path%%[![:space:]]*}"}"; path="${path%"${path##*[![:space:]]}"}"
+  pattern="${pattern#"${pattern%%[![:space:]]*}"}"; pattern="${pattern%"${pattern##*[![:space:]]}"}"
   [ -z "$path" ] && continue
+
   # 문법을 설명하는 **예시**는 건너뛴다 — 꺾쇠로 감싼 자리표시자(`<경로>`)가 규약.
   # (검사기 도입 당시 이 예외가 없어, 마커를 설명하는 문서 자체가 검사에 걸렸다.)
   case "$path" in
     *"<"*|*">"*) continue ;;
   esac
-  [ -e "$path" ] || err "$f:$n verify 마커의 경로가 없다: $path"
+
+  if [ ! -e "$path" ]; then
+    err "$f:$n verify 마커의 경로가 없다: $path"
+  elif [ -n "$pattern" ]; then
+    if [ ! -f "$path" ]; then
+      err "$f:$n verify 내용 단언은 파일에만 쓸 수 있다 (디렉토리): $path"
+    elif ! grep -qE -- "$pattern" "$path" 2>/dev/null; then
+      err "$f:$n verify 내용 단언 실패 — '$path' 안에 없다: /$pattern/"
+    fi
+  fi
 done < <(grep -rnE '<!--[[:space:]]*verify:' --include='*.md' .claude docs infra k8s CLAUDE.md 2>/dev/null)
 
 if [ "$FAIL" -eq 0 ]; then
