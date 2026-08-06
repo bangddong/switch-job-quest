@@ -23,6 +23,7 @@
 
 | ID | 출처 | 등급 | 내용 | 이관 사유 / 처리 방향 |
 |----|------|:----:|------|---------------------|
+| L-13 | `chore/design-integrity-content-assert/F-4` | LOW | **`.claude/qa-cache/`에 추적 중인 잔재 3개.** `.gitignore:48`에 등재돼 있으나 규칙 추가 전에 커밋된 파일이라 계속 추적된다(gitignore는 소급 적용 안 됨). `git ls-files .claude/qa-cache/` → 3건 | 이번 PR 범위는 검사기 파싱 수정이라 무관. 확장자가 없어 `--include='*.md'` 스캔 대상도 아니므로 **동작상 피해 없음**. `git rm --cached`로 정리하면 되나, 휘발성 파일이라 되살아날 수 있어 정리 시 재발 방지(훅/문서)를 함께 봐야 한다 |
 | L-1 | `feat/phase1-ai-call-log-observability/F-2` | MEDIUM | **`ai.call.log.recorded{success=false}` 태그가 도달 불가.** `CacheMetricsAdvisor`가 정상 응답일 때만 `record()`를 부르고 `success = true`로 하드코딩한다(실패 경로는 조기 return). 어댑터 로직은 옳지만 운영에서 이 태그는 영원히 0이다 | client-ai 수정 = inprocess 경로 동작 변경이라 Phase 1의 "동작 불변" 원칙에 반함. **AI 실패율 관측은 Task 1.4의 HTTP 어댑터 에러 매핑으로 확보**하기로 했고 부분 확보됨. advisor 자체 개선은 **Phase 3 정리 대상** |
 | L-2 | `feat/phase1-ai-api-rest-controllers/F-4` | LOW | `TechInterviewWireFormatContractTest`에 **wire format 계약과 에러 경로 계약이 혼재**. 파일명이 내용을 정확히 표현하지 못함 | 동일 `@SpringBootTest` 컨텍스트 재사용이 목적이라 기능 문제 없음. 리네임(`TechInterviewHttpContractTest` 등) 권고 수준 |
 | L-3 | `feat/phase1-ai-call-log-observability/F-3` | LOW | `AiCallLogObservabilityAdapter.record(log: AiCallLog)`의 **파라미터명 `log`가 클래스 멤버 로거를 섀도잉**. `this.log`로 해소돼 동작은 정상이나 가독성 저하 | 파라미터명을 `entry`/`callLog`로 변경 권고 |
