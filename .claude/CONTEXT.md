@@ -263,9 +263,15 @@
   (Blindspot Pass 불일치 20건 반영, 결정 2건 확정).
   - ✅ **Task 2.0(문서 정합화) · 2.1(생성/발송 분리) 완료** — PR #359(`60fee5d`).
     `DailyQuestionContentService.ensureTodayQuestion()` + `V13` 마이그레이션(레거시 백필 포함).
-  - ➡️ **다음 착수 지점: Task 2.2 (rate-limit 버킷 분리)**.
-    ⚠️ 착수 전에 `plans/2026-08-03-service-decomposition-phase02.md`의 **Task 2.0·2.1 체크박스가
-    아직 미체크**다 — 계획서 표부터 정합화하고 시작할 것.
+  - ✅ **Task 2.2(rate-limit 버킷 분리) 완료** — PR #361(`904f7d4`, 08-06).
+    `/daily-question/evaluate`를 tech-interview 버킷에서 분리. **용량 재산정: tech 2 + daily-evaluate 1
+    = 총 3** (2+2=4는 "예산 조용히 2배"라 명시적 기각). `AbstractRateLimitInterceptor`/`...BucketStore`
+    공통 베이스 추출 — **Task 2.6의 라이브러리 이동 단위**가 된다.
+    계획서 Task 2.0·2.1·2.2 체크박스도 이 PR에서 정합화했다.
+  - ➡️ **다음 착수 지점: Task 2.3 (daily 소유 테이블의 마이그레이션 위치 확정, #6)**.
+    `daily_mail_log`=core-api 리소스 / `tech_question_bank`=db-core 리소스로 갈려 있어, daily-api가
+    어느 모듈을 의존하느냐에 따라 보이는 마이그레이션이 달라진다. **기존 Neon(12개 적용 완료)의
+    히스토리 불일치를 만들지 않는 방법**을 함께 확정해야 한다 — 여기가 이 태스크의 어려운 부분이다.
   - 🔴 **설계의 "daily = 무인증" 전제가 코드와 어긋난다**: `getTodayQuestion()`이 읽는 `daily_mail_log`의
     유일한 writer가 메일 스케줄러라, **로그인 유저 존재 + 메일 발송 성공**이 있어야 오늘의 질문이 생긴다.
     `MAIL_ENABLED`(기본 false)가 사실상 daily의 마스터 스위치다. → **G-2 = 생성/발송 분리**로 해소(Task 2.1).
