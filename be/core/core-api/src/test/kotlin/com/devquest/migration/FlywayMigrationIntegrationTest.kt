@@ -25,12 +25,13 @@ import org.testcontainers.postgresql.PostgreSQLContainer
  * core-api가 db-core를 의존하므로, 이 테스트 소스셋(core-api `test`)의 클래스패스에서
  * 실제 배포와 동일하게 둘 다 합쳐진 상태로 로드된다.
  *
- * 로컬에서 colima로 Docker를 쓰는 경우(Docker Desktop이 아님) `DOCKER_HOST`가 기본 소켓
- * (`/var/run/docker.sock`)을 가리키지 않아 컨테이너 탐지에 실패할 수 있고, colima의 소켓 마운트
- * 특성상 Ryuk(리소스 리퍼) 기동이 막힐 수 있다(`operation not supported`). 이 경우:
- * `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLED=true`
- * 를 실행 환경에 설정하면 된다. GitHub Actions `ubuntu-latest`는 기본 소켓을 그대로 쓰므로
- * CI에서는 이 설정이 필요 없다. Ryuk을 꺼도 컨테이너 정리는 이 클래스의 `@AfterAll`이 수동으로 한다.
+ * 로컬에서 colima로 Docker를 쓰는 경우(Docker Desktop이 아님) 기본 소켓(`/var/run/docker.sock`)이
+ * 없어 Testcontainers가 컨테이너 탐지에 실패하고, colima의 소켓 마운트 특성상 Ryuk(리소스 리퍼) 기동도
+ * 막힌다(`operation not supported`). 이 설정(`DOCKER_HOST`를 colima 소켓으로, `TESTCONTAINERS_RYUK_DISABLED`를
+ * true로)은 셸에 수동으로 넣지 않는다 — `be/build.gradle.kts`의 `tasks.withType<Test>`가 기본 소켓
+ * 부재 + colima 소켓 존재를 감지해 테스트 JVM에만 자동으로 주입한다. GitHub Actions `ubuntu-latest`는
+ * 기본 소켓이 있으므로 그 분기 자체를 안 타 무해하다. Ryuk을 꺼도 컨테이너 정리는 이 클래스의
+ * `@AfterAll`이 수동으로 한다.
  */
 class FlywayMigrationIntegrationTest {
 
@@ -49,9 +50,18 @@ class FlywayMigrationIntegrationTest {
             } catch (e: Exception) {
                 // 🔴 도커가 없다고 조용히 스킵하면 안 된다 — "통과했다고 믿게 만드는 검사"가 되어
                 // 이 테스트의 존재 이유(마이그레이션을 실제로 검증)가 사라진다. 명확한 실패로 죽인다.
+                //
+                // "Docker가 실행 중인지 확인하세요"만 말하면 거짓 단서가 될 수 있다 — 실측 사례:
+                // colima에서 Docker는 멀쩡히 떠 있었는데도 Testcontainers가 DOCKER_HOST/기본 소켓
+                // (/var/run/docker.sock)만 보고 못 찾았다(`docker` CLI는 context를 읽어 정상 동작해
+                // 보이므로 착시가 생긴다). 실제로 어떤 경로/엔드포인트를 시도했는지 그대로 노출해서
+                // "도커는 켜져 있는데?"에서 헤매지 않게 한다. (build.gradle.kts가 DOCKER_HOST를
+                // colima 소켓으로 자동 설정하므로 정상 환경에서는 이 분기에 도달하지 않는다.)
                 throw IllegalStateException(
-                    "Testcontainers가 Postgres 컨테이너를 띄우지 못했습니다. 로컬(또는 CI 러너)의 Docker가 " +
-                        "실행 중인지 확인하세요. 이 테스트는 Docker 부재 시 스킵되지 않고 반드시 실패합니다.",
+                    "Testcontainers가 Postgres 컨테이너를 띄우지 못했습니다. " +
+                        "시도한 DOCKER_HOST=${System.getenv("DOCKER_HOST") ?: "(미설정 — 기본 소켓 /var/run/docker.sock 시도)"}. " +
+                        "Docker 자체가 실행 중인지, 그리고 Docker가 colima 등 비표준 소켓을 쓴다면 " +
+                        "DOCKER_HOST가 그 소켓을 가리키는지 확인하세요.",
                     e,
                 )
             }
