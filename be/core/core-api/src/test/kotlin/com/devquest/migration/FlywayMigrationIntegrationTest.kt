@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver
 import org.testcontainers.postgresql.PostgreSQLContainer
 
 /**
@@ -120,20 +121,37 @@ class FlywayMigrationIntegrationTest {
     @Test
     fun `마이그레이션 버전 번호가 모듈 경계를 넘어 중복되지 않는다`() {
         // V8이 core-api·db-core 양쪽에 중복 생성돼 prod 부팅이 실패했던 사고(2026-07-01, PR #231→#233)
-        // 재발 방지 가드. Flyway 자체도 중복 버전을 발견하면 migrate() 단계에서 예외를 던지지만,
-        // 그 의도를 이름 있는 테스트로 명시적으로 고정한다.
-        val flyway = newFlyway()
-        flyway.migrate()
+        // 재발 방지 가드.
+        //
+        // ⚠️ 일부러 Flyway API(migrate()/info())를 쓰지 않는다 — 둘 다 내부적으로 동일한
+        // resolveMigrations()를 거치는데, 그 단계에서 버전 중복을 발견하면 그 호출 자체가
+        // FlywayException을 던지고 반환하지 않는다. 그러면 아래 doesNotHaveDuplicates() 단언은
+        // "migrate()/info()가 정상 반환된 뒤"에만 실행되고, 그 시점엔 이미 중복이 없음이 보장된
+        // 상태라 이 단언이 거짓이 될 수 없는 도달 불가능한 코드가 된다(QA 지적 F-1).
+        // 그래서 Flyway를 거치지 않고 클래스패스의 마이그레이션 파일명을 직접 스캔해서 버전 번호를
+        // 뽑아 검사한다 — 이러면 이 단언이 Flyway 호출과 독립적으로, 중복이 있을 때 실제로 실패한다.
+        val resolver = PathMatchingResourcePatternResolver()
+        val migrationFiles = resolver.getResources("classpath*:db/migration/V*.sql")
 
-        val versions = flyway.info().all().map { it.version.toString() }
+        val versions = migrationFiles.map { resource ->
+            val filename = resource.filename
+                ?: error("마이그레이션 리소스에 파일명이 없습니다: $resource")
+            // 예: "V13__create_daily_question_content.sql" -> "13"
+            filename.removePrefix("V").substringBefore("__")
+        }
 
         assertThat(versions)
-            .describedAs("적용된 마이그레이션 버전 목록에 중복이 없어야 함")
+            .describedAs("클래스패스 마이그레이션 파일명에서 추출한 버전 목록에 중복이 없어야 함")
             .doesNotHaveDuplicates()
     }
 
     @Test
     fun `동일 마이그레이션을 재실행해도 아무 것도 다시 적용되지 않는다`() {
+        // ⚠️ 신호가 약한 테스트다(QA 지적 F-2) — migrationsExecuted == 0, validate() 통과는
+        // 사실상 Flyway 자체의 내장 idempotency 보장을 재확인하는 것에 가깝다. 이 테스트가 실질적으로
+        // 지키는 전제는 "프로덕션 FlywayConfig가 repair() → migrate()를 반복 호출해도 안전하다"는
+        // 쪽이다 — 그 전제가 깨지면(예: repair()가 실패하거나 재적용을 유발하면) 여기서 잡힌다는
+        // 목적으로 남겨둔다.
         val flyway = newFlyway()
         flyway.migrate()
 
