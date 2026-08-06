@@ -1,115 +1,94 @@
-# 서비스 분해 Phase 2 구현 계획 — daily 로직 자립 + 라이브러리 추출
+# 서비스 분해 Phase 2 — **개요층** (Stage 단위)
 
 - **상위 설계**: `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`
 - **선행 계획**: `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md` (Phase 0~1, 완료)
-- **작성**: 2026-08-03
-
-> ✅ **결정 2건 확정됨 (2026-08-03).** G-1 = *Fly는 단일 유지, 분리는 EKS에서만* / G-2 = *생성과 발송 분리*.
-> 이 두 결정이 Stage B의 형태를 바꿨다 — **앱 모듈이 아니라 라이브러리 모듈로 뺀다.** 아래 §확정된 결정 참조.
+- **작성** 2026-08-03 · **3층 구조로 재편** 2026-08-06
 
 ---
 
-## ⚠️ 이 계획의 근거 — Blindspot Pass 진단 (2026-08-03)
+## 🔑 이 문서를 읽는 법 — 3층 중 가운데
 
-설계의 *"daily는 무인증 · 자체 스키마 · 경량 FE를 함께 출시"* 가정을 실제 코드와 대조한 결과
-**불일치**. Phase 0~1 때(부분 일치, 불일치 4건)와 달리 이번엔 **전제 자체가 어긋난다.**
+| 층 | 사는 곳 | 수명 | 규칙 |
+|---|---|---|---|
+| **설계** | `specs/` | 길다 | 목표·확정 결정·불변식. 바꿀 땐 `design-change-procedure.md` |
+| **개요 ← 이 문서** | `plans/` | 중간 | **결과와 완료 판정만.** 미래 태스크에 *지시*를 쓰지 않는다 |
+| **태스크 계획** | PR 본문 | 짧다 | **착수 직전** 생성. Blindspot Pass 필수. 별도 문서로 안 남긴다 |
 
-### 확도 🔴 — 직접 확인함
+### 왜 이렇게 바꿨나 (2026-08-06)
 
-| # | 불일치 | 근거 | 대응 |
-|---|--------|------|------|
-| **1** | **"무인증 daily"의 읽기 경로가 인증·메일에 매달려 있다.** `getTodayQuestion()`이 `daily_mail_log`를 읽는데, 그 유일한 writer가 `DailyMailScheduler`이고 **① 로그인 유저가 있어야**(`userEmailPort.findAll()` 비면 return) **② 메일이 실제로 나가야만**(`sendDailyTechInterview()==true`) save한다 | `DailyQuestionService.kt:20-26` · `DailyMailScheduler.kt:36-41,66-69` | **Task 2.1** |
-| **2** | **`MAIL_ENABLED`가 사실상 daily 제품의 마스터 스위치.** `false`면 `sendDailyTechInterview`가 즉시 `false`를 반환해 save가 스킵된다. 기본값이 `false` | `MailService.kt:19-21` · `application.yml:78` | **Task 2.1** |
-| **3** | **경량 무로그인 FE는 이미 있다.** 설계는 "Phase 2에 함께 출시"라고 썼지만 신규 제작이 아니라 **분리**다 | `fe/src/app/App.tsx:195` (`isLoggedIn` 게이트 **앞**) · `DailyQuestionPage.tsx` | **Task 2.8** |
-| **4** | **Fly는 앱 1개 하드코딩.** `flyctl deploy`에 `-c`·`--app`이 없어 항상 `be/fly.toml`(=`devquest-api`)을 집는다. **ai-api의 Fly 배포 경로는 0건** — ECR/EKS 쪽에만 뚫려 있다 | `be/fly.toml:1` · `be-cd.yml`(deploy 스텝) · `ecr-push.yml`(`options: [core-api, ai-api]`) | **G-1 / Stage C** |
+이 문서는 원래 277줄이었고 Task 2.0~2.8의 **구현 지시**를 담고 있었다. 그게 실제로 깨졌다:
 
-> 📌 **prod는 지금 200을 준다** (`/api/v1/daily-question` 실측). 로그인 유저가 있고 오늘 메일이
-> 나갔기 때문이지 구조가 성립해서가 아니다. **장애가 아니라 구조 결함이고, 안 보이는 게 위험하다.**
+```
+2026-08-03  계획서 작성 (#357) — "새 테이블: Task 2.3에서 위치 확정 후 작성"
+2026-08-03  Task 2.1 머지 (#359) — V13을 db-core에 생성        ← 같은 날 위반
+```
 
-### 확도 🟡 — Blindspot Pass가 파일:라인 근거와 함께 보고, 전수 재확인은 안 함
+5개 태스크 앞을 내다본 순서 제약이 **작성 당일 깨졌고, 3일간 아무도 몰랐다.** 게으름이 아니라
+Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행해보기 전엔 알 수 없는 것**이었다.
 
-| # | 불일치 | 근거 | 대응 |
-|---|--------|------|------|
-| 5 | **배포 타겟이 두 문서에서 반대다.** 설계 §확정된 결정 *"배포 전략(확정, 재론 안 함)"* vs CONTEXT *"배포 타겟 열린 결정 — 미정"*. 격리수단(NetworkPolicy vs Fly) 충돌의 **상위 원인** | spec §확정된 결정 · `CONTEXT.md:183` | **G-1** |
-| 6 | **Flyway가 모듈로 갈려 있다.** `daily_mail_log`=core-api 리소스 / `tech_question_bank`=db-core 리소스. `flyway.locations` 오버라이드 없음 → daily가 db-core만 의존하면 V6이 안 보인다 | `core-api/.../V6__daily_mail_log.sql` · `db-core/.../V10,V11` | **Task 2.3** |
-| 7 | **세 번째 `@SpringBootApplication`도 `scanBasePackages=["com.devquest"]`** → Phase 0에서 43개 테스트를 깨뜨린 빈 누수가 **3자 관계로 재발**한다. 당시 해법은 별도 소스셋 격리였다 | `core-api/build.gradle.kts:10-40`(실측 주석) · `AiApiApplication.kt:15` | **Task 2.4** |
-| 8 | **`TechInterviewPort` 하나를 daily·core가 나눠 쓴다.** `evaluate`·`explainFollowup`=daily / `generateDailyQuestion`=스케줄러 / `generateQuestions`=core. **포트가 AI 방향으로만 경계를 긋는다** | `TechInterviewPort.kt:6-16` | **Task 2.6** |
-| 9 | **rate-limit 버킷을 daily가 tech-interview와 공유.** 분리하면 `capacity: 2` 예산이 두 JVM으로 쪼개져 **총 예산이 조용히 2배** | `WebMvcConfig.kt:17` · `application.yml:84` | **Task 2.2** |
-| 10 | **HTTP 어댑터 인프라가 core-api 안에 있다.** daily가 ai-api를 호출하려면 복제하거나 공유 모듈로 승격해야 한다 | `core-api/.../adapter/ai/http/*` · `AiHttpClientConfig` | **Task 2.5** |
-| 11 | **`AiTransportConfig`가 core-api 전용** → daily는 `inprocess` 폴백이 원천 불가, **태어날 때부터 HTTP-only**. plan의 "롤백 불변식"이 적용되지 않는 서비스가 하나 생긴다 | `AiTransportConfig.kt`(패키지 `core.api.config`) | **§Global Constraints** |
-| 12 | **`core-api`는 `jar`가 꺼져 있어 다른 모듈이 의존 못 한다.** 옮길 대상이 전부 core-api에 있으므로 **Phase 1의 "무행동 이동 PR" 패턴이 여기선 성립하지 않는다** | `core-api/build.gradle.kts:5-7` · `ai-api/build.gradle.kts:3-11`(실측) | **Task 2.6** |
-| 13 | **`ArchAiPortConventionTest`가 포트 목록을 하드코딩** — 이 에픽의 유일한 구조 가드. daily 소유로 옮기면 깨진다 | `ArchAiPortConventionTest.kt:23-42,62-76` | **Task 2.6** |
-| 14 | **평가자 개수가 문서마다 17·18·24로 다르다** | spec §결정적 발견 · `ArchAiPortConventionTest.kt:47` · `CONTEXT.md:145` | **Task 2.0** |
-| 15 | **`fe/vercel.json`이 `/api/(.*)` 전부를 core 호스트로 rewrite** + `fe-cd.yml`이 Vercel 프로젝트 1개 하드코딩. 설계의 `/daily` path 라우팅과 FE 현재 경로(`/api/v1/daily-question`)가 안 맞는다 | `fe/vercel.json:4-5` · `fe-cd.yml` | **Task 2.8** |
-| 16 | **`ai-api`에 Spring Security가 클래스패스에 없다** + `scanBasePackages=["com.devquest"]`라 core-api security가 함께 스캔될 수 있다 | `ai-api/build.gradle.kts` | **G-1 종속** |
-| 17 | **`fly.toml`은 scale-to-zero가 아니다** (`min_machines_running=1`). 복사해 daily 앱을 만들면 설계의 비용 전제가 깨진다 | `be/fly.toml:26-28` | **Stage C** |
-| 18 | **phase01 plan의 결정 로그에 이미 끝난 항목이 미체크로 남아 있다** (Task 0.1 Judge0 포함 여부, Task 1.4 트랜잭션 범위). Phase 2가 인계 목록으로 읽으면 **끝난 걸 다시 결정한다** | `phase01.md` §미해결/결정 로그 | **Task 2.0** |
-| 19 | **CodingQuest가 core와 daily에 동시 배정** — 그리고 가장 얽힌 코드(`generateProblem`/`submitCode`, 트랜잭션 재배치 보류)가 정확히 그 자리에 있다 | spec §서비스 경계 상세 · `CONTEXT.md:250-252` | **G-2 종속** |
-| 20 | **설계가 "Phase 1에서 실증"이라 못박은 AiCheck 경계가 실증 없이 Phase 1 완료 선언됐다.** 완료 판정 기준이 설계와 plan에서 다르다 | spec §열린 질문 · `CONTEXT.md:266` | **Task 2.0** |
+> 🔴 **먼 계획은 "검사가 주장보다 헐거운" 것의 한 형태다.** 코드를 열어보지 않은 사람이 쓴 지시가
+> *사고가 끝났다는 인상*을 준다. Task 2.3의 계획 3줄을 쓴 시점엔 `FlywayConfig.kt`도,
+> `V13`의 `FROM daily_mail_log`도, H2 CI 공백도 아무도 안 봤다. 그런데 문서에 적히는 순간
+> 결정된 것처럼 읽힌다. (2026-08-06 실제로 그 3줄을 집어들었다가 전제 3개가 틀렸다)
+
+**그래서 규칙 셋:**
+1. **미래 태스크에 지시를 쓰지 않는다.** 필요한 *결정*만 §열린 결정에 남긴다.
+2. **완료 판정은 미리 못 박아도 된다** — 결과 기준이라 안 썩는다.
+3. **태스크 상세는 코드를 연 사람이 착수 직전에 쓴다.**
 
 ---
 
-## ✅ 확정된 결정 (2026-08-03)
+## 진행 상황
 
-### G-1 → **Fly는 단일 유지, 분리는 EKS에서만**
+| Stage | 목표 | 상태 |
+|---|---|:--|
+| **A** | daily 도메인을 core 안에서 자립시킨다 (게이트 무관) | 🚧 2.0·2.1·2.2 완료 / 마이그레이션 소유 미결 |
+| **B** | daily 로직을 **라이브러리 모듈**로 (앱 아님 — G-1 귀결) | ⬜ |
+| **C** | EKS 토폴로지 3서비스 (Fly 무작업) | ⬜ |
+
+> Stage A는 **에픽이 멈춰도 단독으로 가치가 있다.** 지금 `/daily-question`은 "로그인 유저 존재 +
+> 메일 발송 성공"에 매달려 있고 그 사실이 어디에도 안 적혀 있다.
+
+### 완료 판정 (verification-before-completion)
+
+| 주장 | 필요한 증거 |
+|---|---|
+| Stage A 완료 | `./gradlew build` 그린 + prod 스모크(`/api/v1/daily-question` 200) + **유저 0명·`MAIL_ENABLED=false`에서도 200** |
+| Stage B 완료 | 기존 테스트 전량 그린 + daily-api 단독 기동 + **core-api 배포 산출물 불변** |
+| Stage C 완료 | 클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지 |
+
+---
+
+## ✅ 확정된 결정
+
+### G-1 → Fly는 단일 유지, 분리는 EKS에서만 (2026-08-03)
 
 상시 prod는 `core-api` 하나 그대로다. 3서비스 토폴로지는 **EKS 실습에서만** 검증한다.
 
-**왜**: 설계가 이미 *"EKS=실습 / Fly=상시"* 라고 못박았는데 §확정된 결정의 *"NetworkPolicy만"* 은
-EKS 전제였다. 둘을 동시에 만족시키는 유일한 배치가 이것이다. 부수 효과로 **설계의 격리 전제가
-수정 없이 살아남고**, `be-cd.yml`·`fly.toml`·비용이 전부 불변이다(#4·#17 무력화).
+**왜**: 설계가 *"EKS=실습 / Fly=상시"* 라고 못박았는데 §확정된 결정의 *"NetworkPolicy만"* 은 EKS
+전제였다. 둘을 동시에 만족시키는 유일한 배치다. 부수 효과로 `be-cd.yml`·`fly.toml`·비용이 전부 불변.
 
-**받아들이는 대가 (명시)**:
-- 분리된 구조가 **상시 환경에서는 검증되지 않는다.** EKS 세션에서만 돈다.
-- `/internal/ai/**` 무인증 문제(#16)는 **EKS 안에서만 노출**되므로 NetworkPolicy로 충분하다
-  → 설계 원안대로 **Phase 3 소관**. `.claude/CONTEXT.md`의 *"인증·격리를 Phase 2 첫 태스크로"* 는
-  Fly 배포를 가정한 서술이었고, **이 결정으로 근거가 사라졌다** → CONTEXT 정정 대상(Task 2.0).
+**대가 (명시)**: 분리된 구조가 **상시 환경에서는 검증되지 않는다.** `/internal/ai/**` 무인증은
+EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로 **Phase 3 소관**.
 
-**🔑 이 결정이 Stage B의 형태를 바꾼다.** Fly가 계속 core-api를 쓰므로 *"core에서 daily 코드를 제거"*
-하는 단계가 **영영 오지 않는다.** 앱 모듈로 빼면 core용·daily용 **구현이 두 벌**이 되어 드리프트가
-확정적이다. → **라이브러리 모듈로 뺀다**(§Stage B). 한 벌의 구현을 두 조립이 공유한다.
+> 🔑 **이 결정이 Stage B의 형태를 바꾼다.** Fly가 계속 core-api를 쓰므로 *"core에서 daily 코드를
+> 제거"* 하는 단계가 **영영 오지 않는다.** 앱 모듈로 빼면 구현이 두 벌이 되어 드리프트가 확정적이다.
+> → **라이브러리 모듈로 뺀다.** 한 벌의 구현을 두 조립이 공유한다.
 
-### G-2 → **생성과 발송을 분리**
+### G-2 → 생성과 발송을 분리 (2026-08-03)
 
-크론(`DailyMailScheduler`, `@Scheduled`)은 1개로 유지하고 **메서드 안에서 게이트를 둘로 나눈다**:
-①콘텐츠 생성(`DailyQuestionContentService.ensureTodayQuestion()` 위임, 유저 수·`MAIL_ENABLED` 무관)
-②메일 발송(생성분을 읽어 보냄). 실제 구현(`1bf075a`)은 크론 자체를 쪼개지 않았다 —
-독립된 두 크론으로 나누면 스케줄 시각이 어긋날 때 발송 크론이 생성 크론보다 먼저 돌 수 있어
-실행 순서 경합이 생긴다. 단일 크론 안에서 ①→② 순서를 코드로 강제하는 편이 더 단순하고
-경합이 원천적으로 없다.
+크론은 1개로 유지하고 메서드 안에서 게이트를 둘로 나눈다: ①콘텐츠 생성(유저 수·`MAIL_ENABLED`
+무관) ②메일 발송. 크론 자체를 쪼개지 않은 이유는 **실행 순서 경합** — 별도 크론이면 발송이 생성보다
+먼저 돌 수 있다. (구현 `1bf075a`)
 
-**왜**: daily가 자립해야 무인증 서비스가 성립한다(#1·#2). (b)요청시 생성은 첫 요청자가 AI 지연을
-전부 먹고 동시 요청 시 중복 과금이며, (c)시드 결정론은 *"매일 새로 생성되는 질문"* 이라는 제품
-성격을 바꾼다. (a)만 현재 제품을 유지하면서 결함을 없앤다.
+### 기각한 선택지 (재론 방지)
 
----
+**G-1**: (a)Fly 3앱 — 설계의 NetworkPolicy 전제가 통째로 무효 / (b)EKS 완전체 — destroy-after-use라
+상시 서비스 불가, 크레딧 만료 후 갈 곳 없음 / (c)혼합 — 격리 구현 2벌, 드리프트 1순위.
+> 🔑 셋 다 *"상시 환경에도 분리를 올린다"* 를 전제한 게 공통 함정이었다. 확정안은 그 전제를 버린다.
 
-## 참고 — 기각한 선택지 (재론 방지)
-
-### G-1. 배포 타겟
-
-문서 2개가 반대 상태였다(#5). 아래 3안을 놓고 비교한 끝에 **넷째 안(Fly 단일 + EKS 실습)**을 택했다.
-셋 다 기각 사유가 분명하므로 재론하지 않는다.
-
-| 선택지 | 격리 수단 | CI 변경 | 비용 | 걸리는 것 |
-|---|---|---|---|---|
-| **(a) Fly 3앱** | Fly 사설망(`.internal`) + 내부 포트 바인딩 | `be-cd.yml`을 앱별 매트릭스로, `fly.*.toml` 3개 | 앱당 머신 — `min_machines_running=1`이면 3배(#17) | 설계의 NetworkPolicy 전제가 통째로 무효 |
-| **(b) EKS 완전체** | ClusterIP + NetworkPolicy (설계 원안) | ECR Push는 이미 다중 서비스 지원 | destroy-after-use라 **상시 서비스 불가** | 크레딧 만료 2027-01-15 이후 갈 곳이 없다 |
-| **(c) 혼합** — Fly 상시 / EKS 학습 | 환경별로 **다른 수단** | 양쪽 다 | Fly 비용 + 실습 비용 | 격리 구현이 2벌, 드리프트 1순위 |
-
-> 🔑 **셋 다 "상시 환경에도 분리를 올린다"를 전제한다는 게 공통 함정이었다.** 그 순간
-> 설계의 NetworkPolicy 전제가 깨지거나(a·c) prod를 포기하게 된다(b).
-> 확정안은 그 전제 자체를 버린다 — **상시는 안 나눈다.** 그러면 세 문제가 동시에 사라진다.
-
-### G-2. daily 콘텐츠의 소유
-
-"오늘의 질문"을 **누가 만드나**(#1·#2). (a)로 확정. (b)·(c)의 기각 사유는 아래 표.
-
-| 선택지 | 내용 | 트레이드오프 |
-|---|---|---|
-| **(a) 생성과 발송을 분리** | 스케줄러를 둘로: ①콘텐츠 생성(무조건) ②메일 발송(생성분을 읽어 보냄) | daily가 자립한다. 새 테이블 1개. **← 채택** |
-| **(b) daily가 요청 시 생성** | `getTodayQuestion()`이 없으면 그 자리에서 AI 호출 | 첫 요청자가 AI 지연을 다 먹고, 동시 요청 시 중복 생성 |
-| **(c) 시드에서 결정론적 선택** | `tech_question_bank`에서 날짜 해시로 고름 | AI 호출 0, 가장 단순. 대신 "매일 새 문제" 성격이 바뀐다 |
+**G-2**: (b)요청 시 생성 — 첫 요청자가 AI 지연을 다 먹고 동시 요청 시 중복 과금 /
+(c)시드 결정론 — AI 호출 0으로 가장 단순하나 *"매일 새 문제"* 라는 제품 성격이 바뀐다.
 
 ---
 
@@ -120,158 +99,110 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 - **TDD** / **헥사고날 거부 규칙**(core-domain에 Spring 금지 · db-core↔client-ai 금지 · `!!` 금지) 유지.
 - **`client-ai` 의존 제거 금지** — 롤백 불변식. Phase 3까지 유효.
 - 🔑 **daily 로직은 라이브러리 모듈에 산다. 앱 모듈로 복제하지 않는다 (G-1 귀결).**
-  `core-api`(Fly 상시)와 `daily-api`(EKS 실습) **둘 다** 그 라이브러리를 의존한다.
-  구현 한 벌 · 조립 두 개. 복제하면 상시 환경에서 검증되는 쪽만 살아 있고 다른 쪽이 조용히 썩는다.
-- 🔑 **그래서 "무행동 이동 PR" 패턴이 되살아난다 (#12 해소).** `core-api`의 `jar`가 꺼져 있는 건
-  **다른 모듈이 core-api를 의존할 때** 문제다. 반대 방향(core-api → 라이브러리)은 제약이 없다.
-  daily 코드를 라이브러리로 옮겨도 core-api가 그걸 의존하면 **빈 구성이 그대로 유지**된다
-  → 이동 PR을 **동작 무변경**으로 만들 수 있다. (검증: 기존 테스트 전량 그린 = 완료 판정)
-- 🔴 **롤백 불변식이 daily-api에는 적용되지 않는다 (#11).** daily-api는 `client-ai`가 없어
-  `inprocess` 폴백이 원천 불가하고 **태어날 때부터 HTTP-only**다. 다만 G-1 덕분에 **위험이 작다** —
-  daily-api는 상시 트래픽을 받지 않으므로, 실패해도 EKS 실습 안에서 끝난다.
-  **상시 경로의 롤백은 "core-api를 그대로 두는 것"** 이고, 이건 아무것도 안 하면 유지된다.
-- **Fly 배포 무영향 (강한 불변식)**: 이 계획의 **어떤 태스크도** `be/fly.toml`·`be-cd.yml`을
-  건드리지 않는다. prod 배포 산출물은 Phase 2 내내 `core-api` 단일 jar다.
-  ⚠️ Stage A는 core-api의 **동작을 바꾸므로**(G-2) 이 불변식의 예외다 — 배포 *구성*이 아니라
-  *동작* 변경이고, 회귀 테스트로 지킨다.
-- **시크릿 안전**: `application-local.yml` 복제·이동·출력 금지. 새 모듈 설정은 `${ENV:}` 플레이스홀더만.
+  구현 한 벌 · 조립 두 개. 복제하면 상시에서 검증되는 쪽만 살고 다른 쪽이 조용히 썩는다.
+- 🔑 **"무행동 이동 PR" 패턴이 되살아난다.** `core-api`의 `jar`가 꺼진 건 *다른 모듈이 core-api를
+  의존할 때* 문제다. 반대 방향(core-api → 라이브러리)은 제약이 없다.
+- 🔴 **롤백 불변식이 daily-api에는 적용되지 않는다.** `client-ai`가 없어 `inprocess` 폴백이 원천
+  불가하고 태어날 때부터 HTTP-only다. G-1 덕분에 위험은 작다 — 상시 트래픽을 안 받는다.
+- **Fly 배포 무영향 (강한 불변식)**: 어떤 태스크도 `be/fly.toml`·`be-cd.yml`을 건드리지 않는다.
+  ⚠️ Stage A는 core-api의 **동작**을 바꾸므로(G-2) 예외다 — 배포 *구성*이 아니라 *동작* 변경이고,
+  회귀 테스트로 지킨다.
+- **시크릿 안전**: `application-local.yml` 복제·이동·출력 금지. 새 모듈 설정은 `${ENV:}` 만.
 
 ---
 
-## Stage A — daily 도메인을 자립시킨다 (게이트 무관, core 안에서)
+## 🔍 탐색 결과 — **지시가 아니라 발견이다**
 
-> 이 Stage는 **에픽이 멈춰도 단독으로 가치가 있다.** 지금 `/daily-question`은
-> "로그인 유저 존재 + 메일 발송 성공"에 매달려 있고, 그 사실이 어디에도 안 적혀 있다.
+> 이 절은 계획이 아니라 **조사 기록**이다. 착수 시 출발점으로 쓰되, *"이렇게 하라"* 로 읽지 말 것.
+> 각 항목은 발견 시점의 사실이며, 그 뒤 코드가 바뀌었을 수 있다 — **착수 직전에 재확인한다.**
 
-### ✅ Task 2.0: 문서 정합화 (선행, 코드 0) — **완료 2026-08-03**
+### Blindspot Pass · 2026-08-03 (확도 🔴 직접 확인)
 
-처리 결과:
-- **#14 숫자** → 셋 다 맞았다. **서로 다른 것을 세고 있었다**: 17=마커 단 LLM 포트 ·
-  18=+Judge0Port(=ai-api 컨트롤러 수) · 24=엔드포인트. 설계문서에 **§숫자 규약** 신설,
-  CONTEXT의 *"AI 포트 24개"*(실제로는 엔드포인트) 정정.
-- **#18 끝난 항목 미체크** → `phase01.md` 최상단에 **실행 완료 배너** + 결정 로그 2건을
-  실측 근거와 함께 채움(Judge0=포함하되 마커 제외 / 트랜잭션 재배치=#308 완료, 1건 의도적 보류).
-- **#20 AiCheck 경계** → 설계가 *"Phase 1에서 실증"* 이라 했으나 실증 없이 완료 선언된 것을 확인.
-  **기각하지 않고 Stage B로 이월** — 라이브러리 분리 시 "오케스트레이션이 어디 남는지"가
-  그 자리에서 강제로 드러나므로, 별도 실증보다 그때 결정하는 편이 싸다.
-- **G-1 귀결 정정 2건** → CONTEXT의 *"배포 타겟 미정"*·*"인증·격리를 Phase 2 첫 태스크로"* (#357에서 처리).
+| # | 발견 | 근거 |
+|---|------|------|
+| 1 | **"무인증 daily"의 읽기 경로가 인증·메일에 매달려 있다.** `getTodayQuestion()`이 읽는 `daily_mail_log`의 유일한 writer가 `DailyMailScheduler`이고 ①로그인 유저 존재 ②메일 발송 성공이 있어야 save | `DailyQuestionService.kt:20-26` · `DailyMailScheduler.kt:36-41,66-69` |
+| 2 | **`MAIL_ENABLED`가 사실상 daily의 마스터 스위치.** 기본값 `false` | `MailService.kt:19-21` |
+| 3 | **경량 무로그인 FE는 이미 있다.** 신규 제작이 아니라 분리 | `fe/src/app/App.tsx:195` |
+| 4 | **Fly는 앱 1개 하드코딩.** ai-api의 Fly 배포 경로 0건 | `be/fly.toml:1` · `be-cd.yml` |
 
-<details><summary>원래 계획 내용</summary>
-- 평가자 개수를 **하나의 숫자로 확정**(#14) — 코드(`ArchAiPortConventionTest`)를 단일 출처로.
-- `phase01.md` 결정 로그의 **이미 끝난 항목 체크**(#18) — Phase 2가 다시 결정하지 않도록.
-- AiCheck 경계 실증 항목(#20)을 **Phase 2 소관으로 이월하거나 명시적으로 기각**.
-- 🔴 **G-1 확정에 따른 정정 2건**:
-  - `.claude/CONTEXT.md`의 *"인증·격리를 Phase 2 첫 태스크로"* → **근거 소멸**. Fly 배포를 가정한
-    서술이었는데 daily·ai는 Fly에 안 올라간다. 설계 원안대로 **Phase 3(EKS) 소관**으로 되돌린다.
-  - `.claude/CONTEXT.md`의 *"배포 타겟 열린 결정 — 미정"* → **확정**으로 갱신.
-    설계 §확정된 결정과 어긋나 있던 상태를 해소한다(`design-change-procedure` 4단계).
-- 완료 판정: 설계·plan·CONTEXT 세 문서에서 같은 대상의 서술이 어긋나지 않는다.
-</details>
+> 📌 **prod는 지금 200을 준다.** 로그인 유저가 있고 오늘 메일이 나갔기 때문이지 구조가 성립해서가
+> 아니다. **장애가 아니라 구조 결함이고, 안 보이는 게 위험하다.**
 
-### ✅ Task 2.1: 콘텐츠 생성을 메일 발송에서 분리 (#1·#2) — **G-2 (a) 구현** · **완료 2026-08-04 (PR #359, `60fee5d`)**
-> `DailyQuestionContentService.ensureTodayQuestion()` + `V13` 마이그레이션(레거시 백필 포함).
-- 새 테이블: 날짜별 오늘의 질문 1건 (**Task 2.3에서 위치 확정 후 작성**).
-- `DailyMailScheduler`의 크론은 유지한 채 메서드 내부에서 게이트를 둘로 나눈다: ①생성
-  (`DailyQuestionContentService.ensureTodayQuestion()` 위임, 유저 수·`MAIL_ENABLED` 무관)
-  ②발송(생성분을 읽어 보냄). 크론 자체를 쪼개지 않은 이유는 실행 순서 경합 — 별도 크론이면
-  발송 크론이 생성 크론보다 먼저 도는 경우를 배제할 수 없다(실제 구현: `1bf075a`).
-- `getTodayQuestion()`이 `daily_mail_log`가 아니라 새 테이블을 읽는다.
-- **동작 변경 있음** → 단독 PR. 회귀 테스트: 유저 0명·`MAIL_ENABLED=false`에서도 오늘의 질문이 나온다.
-- ⚠️ 기존 `daily_mail_log`는 **발송 이력**으로 남긴다(중복 발송 방지 용도는 그대로).
+### Blindspot Pass · 2026-08-03 (확도 🟡 파일:라인 근거, 전수 재확인 안 함)
 
-### ✅ Task 2.2: rate-limit 버킷 분리 (#9) — **완료 2026-08-06**
-- `/api/v1/daily-question/evaluate`를 tech-interview 버킷에서 떼어 daily 전용 버킷으로. ✅
-- ⚠️ 분리 후 **총 예산이 2배가 되지 않도록** 용량을 재산정한다(현재 `capacity: 2` 공유).
-  → **확정: tech-interview 2 + daily-evaluate 1 = 총 3** (2+2=4는 명시적으로 기각).
-  tech는 현행 체감 유지, daily는 무로그인 공개 경로라 보수적으로 1. `daily-explain 5`는 불변.
-- 인메모리·`Fly-Client-IP` 의존은 이 태스크 범위 밖(Stage C에서 재검토 — EKS로 가면 그 분기는 죽는다). **건드리지 않음.**
-- 구현 메모: 인터셉터 3종이 90% 중복이라 `AbstractRateLimitInterceptor`/`AbstractRateLimitBucketStore`로
-  공통 베이스를 뽑았다 — **Task 2.6이 daily rate-limit을 라이브러리 모듈로 옮길 때 이동 단위가 된다.**
-- ⚠️ `RateLimitResetScheduler`에 새 스토어 `clear()`를 반드시 추가해야 한다(빠뜨리면 자정 리셋이
-  안 되어 **하루 1회 쓰고 영구 차단**). `RateLimitResetSchedulerTest`가 이 회귀를 고정한다.
+| # | 발견 | 근거 |
+|---|------|------|
+| 6 | **Flyway가 모듈로 갈려 있다.** 버전이 **교차**한다 — core-api `V1~V6,V8,V9` / db-core `V7,V10~V13` | 각 모듈 `db/migration/` |
+| 7 | **세 번째 `@SpringBootApplication`도 `scanBasePackages=["com.devquest"]`** → Phase 0에서 43개 테스트를 깨뜨린 빈 누수가 3자로 재발 | `AiApiApplication.kt:15` |
+| 8 | **`TechInterviewPort` 하나를 daily·core가 나눠 쓴다.** 포트가 AI 방향으로만 경계를 긋는다 | `TechInterviewPort.kt:6-16` |
+| 10 | **HTTP 어댑터 인프라가 core-api 안에 있다.** daily가 ai-api를 부르려면 공유 승격 필요 | `core-api/.../adapter/ai/http/*` |
+| 11 | **`AiTransportConfig`가 core-api 전용** → daily는 태어날 때부터 HTTP-only | `AiTransportConfig.kt` |
+| 12 | **`core-api`는 `jar`가 꺼져 있어 다른 모듈이 의존 못 한다** | `core-api/build.gradle.kts:5-7` |
+| 13 | **`ArchAiPortConventionTest`가 포트 목록을 하드코딩** — 이 에픽의 유일한 구조 가드 | `ArchAiPortConventionTest.kt:23-42,62-76` |
+| 15 | **`fe/vercel.json`이 `/api/(.*)` 전부를 core 호스트로 rewrite** | `fe/vercel.json:4-5` |
+| 16 | **`ai-api`에 Spring Security가 클래스패스에 없다** | `ai-api/build.gradle.kts` |
+| 17 | **`fly.toml`은 scale-to-zero가 아니다**(`min_machines_running=1`) | `be/fly.toml:26-28` |
+| 19 | **CodingQuest가 core와 daily에 동시 배정** — 가장 얽힌 코드가 정확히 그 자리에 | spec §서비스 경계 |
 
-### Task 2.3: daily 소유 테이블의 마이그레이션 위치 확정 (#6)
-- 현재 `daily_mail_log`(core-api 리소스) / `tech_question_bank`(db-core 리소스)로 갈려 있다.
-- daily-api가 어느 모듈을 의존할지에 따라 보이는 마이그레이션이 달라진다 → **먼저 정한다.**
-- 기존 Neon(12개 적용 완료)의 **히스토리 불일치를 만들지 않는 방법**을 함께 확정.
+### Blindspot Pass · 2026-08-06 — 마이그레이션 소유 조사 중 발견
+
+착수하려다 **전제 3개가 틀린 걸 발견해 멈췄다.** 아래는 그때 나온 것들이다.
+
+| # | 발견 | 근거 |
+|---|------|------|
+| **21** | 🔴 **V13이 V6 테이블에 SQL로 하드 의존.** db-core만 실린 클래스패스로 빈 DB에 돌리면 `relation "daily_mail_log" does not exist`로 즉사 | `V13__create_daily_question_content.sql:40` (`FROM daily_mail_log`) |
+| **22** | 🔴 **마이그레이션이 CI에서 한 번도 실행되지 않는다.** 테스트는 H2 + `ddl-auto: create-drop`, Flyway 구동 테스트 0건 → **어떤 결정도 배포 전 반증 불가**. V8 사고가 CI가 아니라 Loki 로그로 발견된 이유 | `db-core.yml:4-13` |
+| **23** | 🔴 **위험 위치는 Neon이 아니라 EKS in-cluster Postgres.** G-1로 daily-api는 Fly에 안 간다. Neon은 core-api 단독이라 충돌 불가 | `k8s/eso/externalsecret-db-incluster.yaml:51-66` |
+| **24** | 🔴 **파괴 경로는 "DELETED 표시"가 아니라 재적용 시도.** `FlywayConfig`가 `repair()`→`migrate()` 순이라, 클래스패스 결손 → DELETED → **V1부터 재실행 → 영구 부팅 불가** | `FlywayConfig.kt:21-22` (flyway-core 11.14.1) |
+| **25** | **파일 이동은 Flyway에 무해하다.** `script`는 location 기준 상대경로, `checksum`은 내용 해시. `locations`가 하나뿐이라 어느 모듈에 있든 동일 | `FlywayConfig.kt:19` |
+| **26** | 🔴 **설계가 확정한 "daily=자체 스키마"에 코드가 0줄.** `schemas()`/`defaultSchema()` 호출 0건, 마이그레이션 13개 전부 `public` | spec:60 (`🔴 확정 07-20`) vs `FlywayConfig.kt` |
+| **27** | **`spring.flyway.enabled: false`는 죽은 설정.** SB4에서 Flyway 자동설정이 제거돼 프로그래매틱 설정이 저 키를 안 읽는다 | `application-local.yml:12-13` |
+| **28** | **CI 린트는 버전 중복만 본다** — 모듈 이동은 통과. 그리고 `be-ci.yml`은 PR에서만 돈다(CD엔 린트 없음) | `.github/workflows/be-ci.yml:54-67` |
+| **29** | **Dockerfile이 모듈 경로를 하드코딩** — daily-api는 반드시 `be/core/` 밑이어야 하고 `ecr-push.yml`의 choice 목록도 손대야 한다 | `be/Dockerfile:3,17,22` |
+| **30** | **`ai_call_log`(V7) 선례는 답이 아니다.** Phase 1은 테이블을 옮긴 게 아니라 **읽기 소비처가 0건이라 DB 의존을 버렸다.** daily는 실제로 읽고 쓴다 | `ai-api/.../AiCallLogObservabilityAdapter.kt:12-15` |
+| **31** | **ai-api는 한 번도 배포된 적이 없다.** `k8s/base/`에 매니페스트 0건 → "분리는 이미 검증됐다"는 빌드 수준이지 런타임 수준이 아니다 | `k8s/base/` |
+| **32** | **BE 모듈 규칙표에 daily-api/daily-domain의 자리가 없고 강제 장치도 없다.** ArchUnit 의존성 0건, 규칙은 문서에만 산다 | `be/CLAUDE.md:5-14` |
 
 ---
 
-## Stage B — daily 로직을 라이브러리 모듈로 (Stage A 완료 후)
+## ❓ 열린 결정 — **착수할 때 정한다**
 
-> ⚠️ **태스크 번호가 실행 순서와 다르다** (2.5 → 2.6 → 2.4). 의존 순서를 따른 것 —
-> 공유 인프라를 먼저 옮기고, 로직을 라이브러리로 뺀 뒤, 마지막에 그걸 조립하는 앱을 만든다.
-> 번호는 Blindspot 진단 항목과의 대응을 유지하려고 그대로 뒀다.
+> 여기 있는 것은 *"무엇을 정해야 하는가"* 이지 *"어떻게 하라"* 가 아니다.
 
-> **목표는 "core에서 떼어내기"가 아니라 "두 조립이 공유할 수 있는 형태로 만들기"다.**
-> Fly는 계속 core-api를 쓰므로(G-1) core-api의 동작은 이 Stage 내내 불변이어야 한다.
+- [ ] **daily 테이블의 마이그레이션 소유** — 축이 셋이다(#21~#27):
+      **①** 마이그레이션 실행 주체를 core-api 하나로 고정 / **②** 스키마 분리(설계 확정 이행, #26) /
+      **③** db-core로 모듈 통일. **②는 07-20 확정 결정이므로 다른 선택 시 `design-change-procedure` 대상.**
+      ⚠️ 어느 쪽이든 **#22(CI 공백)를 먼저 메우지 않으면 검증할 수 없다.**
+- [ ] **`TechInterviewPort` 분할 여부** (#8·#13) — 가르면 `ArchAiPortConventionTest` 갱신 필요(삭제 아님)
+- [ ] **3자 빈 누수 대응** (#7) — 소스셋 격리 vs 스캔 범위 축소
+- [ ] **CodingQuest 소유** (core vs daily, #19) — G-1로 **긴급도 하락**. EKS 토폴로지 설계 시 결정
+- [ ] 설계 §열린 질문 중 Phase 2 소관: 데일리 캐싱 전략 · 이메일 소유
+      ⚠️ 이메일 소유는 Task 2.1이 부분적으로 답했다 — 발송은 core에 남고 콘텐츠 생성만 분리됐다
 
-### Task 2.5: HTTP 어댑터 인프라를 공유 위치로 (#10)
-- `BaseAiHttpAdapter`·`AiHttpClientConfig` 등이 지금 `core-api` 안에 있다.
-- daily가 ai-api를 호출하려면 공유돼야 한다. **복제 금지** — 두 벌이면 계약이 갈린다
-  (Phase 1의 "계약 단일 출처" 원칙 승계).
-- 완료 판정: **기존 테스트 전량 그린**(동작 무변경).
+### 닫힌 것
 
-### Task 2.6: daily 로직을 라이브러리 모듈로 이동 (#8·#12·#13)
-- 새 모듈(가칭 `core:daily-domain`) — **앱이 아니라 라이브러리**. `@SpringBootApplication` 없음.
-- 옮기는 것: `DailyQuestionService`, daily rate-limit 인터셉터, Task 2.1이 만든 콘텐츠 생성기.
-- `core-api`가 이 모듈을 의존 → **빈 구성 그대로 유지 = 동작 무변경**(#12 해소).
-- `TechInterviewPort` 분할 여부 결정(#8) — daily가 쓰는 2개(`evaluate`·`explainFollowup`)를
-  가를지, 포트를 공유한 채 둘지. **가르면 `ArchAiPortConventionTest`를 갱신**(#13, 삭제 아님).
-- 완료 판정: 기존 테스트 전량 그린 + `./gradlew build` + prod 스모크.
-
-### Task 2.4: `daily-api` 앱 모듈 스캐폴드 (#7) — **EKS 전용**
-- 세 번째 `@SpringBootApplication`. `core:daily-domain`을 의존해 조립만 한다.
-- 🔴 **Phase 0의 빈 누수를 먼저 막는다.** `AiApiApplication`·`DevQuestApplication` 둘 다
-  `scanBasePackages=["com.devquest"]`라(실측 확인) 세 번째가 생기면 3자 관계로 재발한다.
-  당시 해법(별도 소스셋 클래스패스 격리)을 확장 적용하거나, **이번엔 스캔 범위를 좁히는 쪽**을 검토.
-- ⚠️ 헬스체크: ai-api에는 `/health` 컨트롤러가 없다(core-api에만 있다). daily-api도 같은 함정 —
-  k8s 프로브 3개가 전부 `/health`를 본다(`k8s/base/core-api.yaml`).
-- 완료 판정: daily-api 단독 기동 + **core-api 배포 산출물 불변**.
+- [x] **G-1 배포 타겟** → Fly 단일 유지 / 분리는 EKS에서만 (2026-08-03)
+- [x] **G-2 daily 콘텐츠 소유** → 생성과 발송 분리 (2026-08-03)
+- [x] **FE 분리 여부** → **분리하지 않는다.** `/daily-question`은 이미 무로그인으로 동작하고(#3),
+      G-1로 `vercel.json` rewrite도 그대로 맞다(#15). 설계의 *"경량 FE 함께 출시"* 는 **이미 충족**
 
 ---
 
-## Stage C — EKS 토폴로지 (Fly 무작업)
+## 완료된 태스크 기록
 
-**G-1에 따라 Fly 쪽 작업은 없다.** `fly.toml`·`be-cd.yml` 불변, prod는 core-api 단일 배포 유지.
+| Task | 내용 | 완료 |
+|---|---|---|
+| **2.0** | 문서 정합화 — 평가자 개수 단일 출처화(#14), phase01 결정 로그 채움(#18), AiCheck 경계 재판정(#20) | 2026-08-03 |
+| **2.1** | 콘텐츠 생성을 메일 발송에서 분리 (G-2 구현). `ensureTodayQuestion()` + `V13`(레거시 백필) | 2026-08-03 · PR #359 `60fee5d` |
+| **2.2** | rate-limit 버킷 분리 (#9). **tech 2 + daily-evaluate 1 = 총 3** (2+2=4는 "예산 2배"라 기각). `AbstractRateLimitInterceptor`/`...BucketStore` 공통 베이스 = **Stage B의 이동 단위** | 2026-08-06 · PR #361 `904f7d4` |
 
-- `k8s/base/{ai-api,daily-api}.yaml` 신규 — **현재 0건**(k8s에는 core-api·postgres뿐).
-- NetworkPolicy — ai는 ClusterIP 내부 전용(설계 원안 그대로 유효).
-  ⚠️ **vpc-cni 애드온에 `enableNetworkPolicy`가 필요**한데 현재 맨몸이다 → `2-cluster/addons.tf` 수정.
-- ⚠️ **파드 상한**: t4g.small = 11이고 Stage 3a에서 이미 11/11을 찍었다. JVM이 3개가 되면
-  **노드 인스턴스 상향(t4g.medium)이 선행**돼야 한다 — 비용 재산정 필요.
-- ⚠️ `Fly-Client-IP` 기반 rate-limit 분기(#9 관련)는 EKS에서 죽는다 → 이 Stage에서 재검토.
-- 완료 판정: 클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지.
-
-### Task 2.8: FE — **이번 Phase에서는 분리하지 않는다** (#3·#15)
-- `/daily-question`은 **이미 무로그인으로 동작한다**(`App.tsx:195`). 제품 가치는 이미 나와 있다.
-- Fly가 단일 유지이므로(G-1) `vercel.json`의 `/api/(.*)` rewrite도 **그대로 맞다.**
-- → **분리 불필요.** 설계의 *"경량 FE 함께 출시"* 는 **이미 충족된 상태**로 기록하고 닫는다.
-  (EKS 실습에서 3서비스 e2e를 볼 때만 임시로 경로를 바꿔 확인한다.)
+> ⚠️ **2.2에서 배운 함정**: `RateLimitResetScheduler`에 새 스토어 `clear()`를 빠뜨리면 자정 리셋이
+> 안 되어 **하루 1회 쓰고 영구 차단**된다. `RateLimitResetSchedulerTest`가 이 회귀를 고정한다.
 
 ---
-
-## 검증 게이트 (verification-before-completion)
-
-| 주장 | 필요한 증거 |
-|---|---|
-| Task 2.1 완료 | 유저 0명 + `MAIL_ENABLED=false`에서 `/api/v1/daily-question` 200 (테스트로) |
-| Stage A 완료 | `./gradlew build` 그린 + prod 스모크(`/api/v1/daily-question` 200) |
-| Stage B 완료 | 기존 테스트 전량 그린 + daily-api 단독 기동 + core-api 배포 산출물 불변 |
-| Stage C 완료 | 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지 |
-
-## 미해결 / 결정 로그 (구현 중 채움)
-
-- [x] **G-1 배포 타겟** → **Fly 단일 유지 / 분리는 EKS에서만** (2026-08-03 확정)
-- [x] **G-2 daily 콘텐츠 소유** → **생성과 발송 분리** (2026-08-03 확정)
-- [ ] **Task 2.3 결과**: daily 테이블의 마이그레이션 모듈 위치 → (미정)
-- [ ] **Task 2.6 결과**: `TechInterviewPort` 분할 여부 → (미정)
-- [ ] **Task 2.4 결과**: 3자 빈 누수 대응 — 소스셋 격리 vs 스캔 범위 축소 → (미정)
-- [ ] **#19 CodingQuest 소유** (core vs daily) → (미정) — G-1로 **긴급도 하락**.
-      Fly가 단일이라 소유가 안 갈려도 상시 운영에 영향이 없다. EKS 토폴로지 설계 시 결정.
-- [ ] 설계 §열린 질문 중 Phase 2 소관: 데일리 캐싱 전략 · 이메일 소유(core vs daily) → (미정)
-      ⚠️ 이메일 소유는 **Task 2.1이 부분적으로 답한다** — 발송은 core에 남고 콘텐츠 생성만 분리된다.
 
 ## 다음 (이 계획 이후)
 
-- **Phase 3**: EKS 배포 토폴로지, `client-ai` 컴파일 의존 제거, 분산 트레이싱.
+**Phase 3**: EKS 배포 토폴로지, `client-ai` 컴파일 의존 제거, 분산 트레이싱.
+⚠️ Stage C 착수 전 확인할 것 — vpc-cni에 `enableNetworkPolicy` 필요(현재 맨몸) ·
+t4g.small 파드 상한 11인데 Stage 3a에서 이미 11/11 → JVM 3개면 **노드 상향 선행**(비용 재산정).
