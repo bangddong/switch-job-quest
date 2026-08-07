@@ -1281,3 +1281,75 @@
   자격증명이 없으니 당연하다. `/health`(커스텀)는 200이라 readiness probe는 무사했다.
   ⚠️ **함정**: probe를 `/actuator/health`로 바꾸면 파드가 영영 Ready가 안 된다.
   학습 환경이면 `management.health.mail.enabled=false`가 정석. 지난 세션들은 `/health`만 봐서 못 봤다.
+
+### 15:10~15:15 KST — Phase B 전환 (RDS → in-cluster static PV)
+
+- `[비용]` `tofu apply`(기본 `db_mode=in-cluster`) → **`6 added, 1 changed, 5 destroyed`**.
+  `aws_db_instance.main[0]` 파괴에 **3분 53초**. 이후 시간당 $0.146 → **$0.121**.
+- `[해결]` static PV 3종 확인:
+  ```
+  PV  postgres-data  RWO  Retain  Bound  default/postgres-data
+  PVC postgres-data  Bound  postgres-data  10Gi
+  aws ec2 describe-volumes vol-0518b6d0dcd2b0d70
+    → in-use  i-02df4703dfb088463  /dev/xvdaa
+  ```
+  **terraform 소유 영속 EBS가 실제로 파드에 붙었다.** 3a의 `reclaimPolicy: Delete`와 달리 **`Retain`**.
+- `[메모]` 로그에 `initdb`가 돌았다 = **이 볼륨은 07-31 생성 후 한 번도 쓰인 적이 없다.**
+  "3b는 코드만 머지되고 검증 안 됨"과 정확히 일치하는 증거.
+- `[메모]` 베이스라인 기록 — `stage3b_proof` 1행(`written before cluster destroy`), `tech_question_bank` **26행**,
+  파드 UID `56d9f2a9-d3ce-4475-ad9c-37dcb94d9262`, 노드 `ip-10-0-14-178`.
+
+### 15:33~16:15 KST — 🔴 **Stage 3b 핵심 검증: 부수고 다시 짓기**
+
+- `[해결]` `tofu destroy` → **`Destroy complete! Resources: 30 destroyed.`** (15:33:26→15:40:01, 6분 35초)
+  ```
+  aws ec2 describe-volumes vol-0518b6d0dcd2b0d70 → available  10  ap-northeast-2a   ← 살아남음
+  aws eks list-clusters        → (없음)
+  aws ec2 describe-instances   → (없음)
+  ```
+  **클러스터를 30개 리소스째 지웠는데 EBS는 그대로다.** EBS를 `0-bootstrap`에 둔 D-004 결정이
+  실제로 작동함을 확인.
+- `[해결]` 재apply(`30 added`, 16:04:14→16:13:54, 9분 40초) 후 같은 볼륨 ID로 static PV 재적용.
+  🔴 **데이터가 붙었다:**
+  ```
+  PostgreSQL Database directory appears to contain a database; Skipping initialization
+  database system was shut down at 2026-08-07 15:17:08 KST     ← 이전 클러스터의 종료 기록
+  stage3b_proof       1행  · written_at 2026-08-07 15:16:40.84631+09  ← 원본 타임스탬프 그대로
+  tech_question_bank  26행
+  파드 UID  56d9f2a9-… → c975027b-04b6-4db8-b131-3265cce99256   ← 다른 객체
+  노드      ip-10-0-14-178 → ip-10-0-8-95                        ← 다른 EC2
+  ```
+  **`initdb`가 0번 돌았다는 것이 결정적이다** — 빈 볼륨이면 반드시 돈다(첫 부팅 때 실제로 돌았다).
+  → **Stage 3b 학습 목표 *"부수고 다시 지어도 데이터가 붙는가"* 달성.**
+
+### 16:16~16:23 KST — `[막힘]` 🔴 **데이터는 붙었는데 자격증명이 안 붙었다** (설계 결함)
+
+- `[막힘]` 재구축 후 core-api가 **CrashLoopBackOff**. 원인:
+  ```
+  앱:       Caused by: org.postgresql.util.PSQLException: FATAL: password authentication failed for user
+  postgres: 2026-08-07 16:16:48 KST [188] FATAL:  password authentication failed for user "devquest"
+  ```
+- `[결정]` 🔴 **근본 원인 — `random_password.postgres`가 `2-cluster` state에 있다.**
+  `tofu destroy`가 state를 지우므로 재apply에서 **새 비밀번호**가 생성돼 Secrets Manager → ESO →
+  앱으로 흐른다. 그런데 postgres 이미지는 `POSTGRES_PASSWORD`를 **`initdb` 시점에만** 쓴다 —
+  데이터 디렉토리가 이미 있으면 무시하고 **옛 비밀번호 해시를 그대로 들고 있다.**
+  > **D-004가 EBS에 적용한 논리를 비밀번호에는 적용하지 않았다.**
+  > *"볼륨과 수명이 같아야 하는 것은 볼륨과 같은 레이어(`0-bootstrap`)에 둔다."*
+  > 영속 볼륨을 도입하는 순간 **볼륨 안에 구워지는 모든 것**(비밀번호 해시 포함)이 같은 제약을 받는다.
+  > 3b를 "코드 머지 = 완료"로 처리했으면 **이 결함은 다음 세션에 그대로 터졌을 것이다.**
+- `[해결]` 세션 내 복구 — 새 시크릿 값으로 DB 쪽을 맞춘다(값은 출력하지 않음):
+  ```
+  PW=$(kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)
+  kubectl exec postgres-0 -- psql -U devquest -d devquest -c "ALTER USER devquest PASSWORD '$PW';"
+  → ALTER ROLE
+  ```
+  파드 재생성 후:
+  ```
+  Successfully validated 13 migrations (execution time 00:00.013s)   ← applied가 아니라 validated
+  Current version of schema "public": 13
+  /health → {"result":"SUCCESS","data":"DevQuest API is running","error":null}
+  ```
+  **영속 데이터 위에서 앱이 완주했다.** Flyway가 `applied`가 아니라 `validated`를 찍은 것이
+  "스키마가 볼륨에 살아있다"의 또 다른 증거다.
+- `[메모]` **항구적 수정은 이번 세션에 넣지 않았다** — 유료 구간에서 IaC 구조를 바꾸는 것은
+  검증 없는 변경을 과금 중에 쌓는 일이다. 원장에 등재하고 무과금 세션에서 처리한다.
