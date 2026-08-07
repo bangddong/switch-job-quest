@@ -1231,3 +1231,53 @@
   `rds!db-<uuid>` 시크릿을 읽는 부분. 그게 이 세션의 첫 목표다.
 - `[메모]` AZ 정합 확인 — 출력 `persistent_az = "ap-northeast-2a"`,
   `postgres_data_volume_id = "vol-0518b6d0dcd2b0d70"`(2a). 노드 서브넷도 이 AZ 하나로 고정된다.
+
+### 14:29:58 KST — 🔴 과금 시작 · Phase A apply (`-var db_mode=rds`)
+
+- `[비용]` `tofu apply` 시작. **$0.146/h** (컨트롤플레인 $0.10 + t4g.small $0.021 + db.t4g.micro $0.025).
+- `[해결]` **`Apply complete! Resources: 29 added, 0 changed, 0 destroyed.` — 8분 27초** (14:29:58→14:38:25).
+  SOP 추정(40~50분)보다 훨씬 빨랐다.
+- `[해결]` 🔴 **원장 `L-9` 해소 — `db_mode=rds` 경로가 실제 apply에서 동작한다.**
+  ```
+  db_master_secret_arn = arn:aws:secretsmanager:ap-northeast-2:<account>:secret:rds!db-e0040ad0-…-n3Zsr3
+  ```
+  `one(aws_db_instance.main[*].master_user_secret[0].secret_arn)` 이 **런타임에 올바른 ARN을 반환**했다.
+  이어서 ESO가 그 AWS 소유 시크릿을 실제로 읽는 것까지 확인:
+  ```
+  kubectl get secretstore aws-secretsmanager → Ready=True  store validated
+  kubectl get externalsecret                 → core-api-app SecretSynced / core-api-db SecretSynced
+  ```
+  **D-001이 `rds.tf`를 남겨둔 근거("Stage 2 재현성")의 전제가 성립함을 확정.** L-9 → `closed`.
+- `[해결]` **Flyway 13개 적용 + `/health` 200.**
+  ```
+  Migrating schema "public" to version "13 - create daily question content"
+  Successfully applied 13 migrations to schema "public", now at version v13 (00:00.222s)
+  Started DevQuestApplicationKt in 18.213 seconds
+  /health → HTTP/1.1 200  {"result":"SUCCESS","data":"DevQuest API is running","error":null}
+  ```
+  🔎 **이건 #365(Flyway opt-in 게이트)의 실환경 검증이기도 하다.** `application-prod.yml`이
+  `devquest.flyway.migrate-on-startup: true`를 켜므로 마이그레이션이 돌았다. 게이트 배선이
+  틀렸다면 0개가 적용되고 앱이 깨졌을 것이다. CI(#364)에 이어 실클러스터에서도 확인됨.
+
+#### `[막힘]` 예상과 다른 것 3가지 (전부 문서 쪽이 낡았다)
+
+- 🔴 **① SOP의 "RDS는 EKS와 병렬 생성되지 않는다"는 틀렸다.** 실측:
+  ```
+  aws_db_instance.main[0]: Creating...        aws_eks_cluster.main: Creating...     ← 동시 시작
+  aws_db_instance.main[0]: Creation complete after 4m56s
+  aws_eks_cluster.main:    Creation complete after 6m1s
+  aws_vpc_security_group_ingress_rule.rds_from_cluster[0]: Creation complete after 0s
+  ```
+  **RDS 4m56s가 EKS 6m1s 안에 통째로 들어갔다.** 원인: `aws_db_instance`가 의존하는 건
+  `aws_security_group.rds[0]`·`aws_db_subnet_group`뿐이고, 클러스터 SG를 참조하는 것은
+  **인그레스 규칙 하나**(`rds.tf:75`)다. 규칙이 별도 리소스라 사슬이 DB까지 이어지지 않는다.
+  이 구조는 **Stage 2 최초 커밋(#339)부터 동일**했다 → 07-28의 "정정"이 **오정정**이었다.
+  > 교훈: 벽시계가 길어진 것을 보고 **원인을 추론해 문서를 고쳤다.** 의존 그래프를 직접 안 봤다.
+  > 이번 세션의 다른 항목들과 같은 형태 — 근거를 확인하지 않은 정정은 원래 서술보다 나쁘다.
+- **② 튜토리얼의 시크릿 키 개수 확인 문구가 낡았다.** 문서: *"`core-api-app` 6키 + `core-api-db` 4키 = 합 10키"*.
+  실측: **3키 + 4키 = 7키**. `GRAFANA_*` 3개를 `secrets.tf`에서 의도적으로 뺐는데(`secrets.tf:149~154`)
+  확인 문구가 따라오지 않았다. 처음 따라 하는 사람은 여기서 "잘못됐다"고 판단하고 멈춘다.
+- **③ `/actuator/health`가 503이다.** 원인은 `Mail health check failed` — 학습 클러스터에 SMTP
+  자격증명이 없으니 당연하다. `/health`(커스텀)는 200이라 readiness probe는 무사했다.
+  ⚠️ **함정**: probe를 `/actuator/health`로 바꾸면 파드가 영영 Ready가 안 된다.
+  학습 환경이면 `management.health.mail.enabled=false`가 정석. 지난 세션들은 `/health`만 봐서 못 봤다.
