@@ -742,8 +742,13 @@ for s in core-api-db core-api-app; do
   kubectl get secret $s -o json | ruby -rjson -e 'puts JSON.parse(STDIN.read)["data"].keys.sort'
 done
 ```
-확인: `core-api-db` 4키(DB_HOST/NAME/PASSWORD/USERNAME) + `core-api-app` 6키 = **합 10키**
-(= Stage 1에서 파악한 필수 환경변수 10개와 일치).
+확인: `core-api-db` 4키(DB_HOST/NAME/PASSWORD/USERNAME) + `core-api-app` 3키(JWT_SECRET/GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET) = **합 7키**.
+
+> ⚠️ **예전 문서는 여기가 "6키 = 합 10키"였다 — 2026-08-07 실측으로 정정.**
+> `GRAFANA_*` 3개(LOKI_URL·LOKI_INSTANCE_ID·API_KEY)를 `secrets.tf`에서 **의도적으로 뺐는데**
+> (전부 선택값이고, 앱이 `${GRAFANA_API_KEY:}` 기본값으로 없어도 뜬다) 확인 문구가 안 따라왔다.
+> 처음 따라 하는 사람은 여기서 "뭔가 잘못됐다"고 판단하고 멈춘다 — **확인 기준이 틀리면
+> 없는 실패를 만들어낸다.**
 
 > ✅ **`kubectl create secret`을 한 번도 치지 않았다.** 손으로 만든 Secret은
 > ① 누가 언제 넣었는지 기록이 없고 ② 값이 셸 히스토리에 남고 ③ 로테이션되지 않으며

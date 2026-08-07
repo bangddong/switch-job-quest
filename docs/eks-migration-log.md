@@ -37,7 +37,8 @@
 | 2026-07 (07-28 세션 전까지) | **$0.3283** | Task 8 · Stage 1 등 EKS 세션 3회 |
 | 2026-07-28 Stage 2 세션 | ~$0.06 (추정) | 26분 35초 · CE 반영 ~24h 지연 |
 | 2026-07-30 Stage 3a 세션 | ~$0.06 (추정) | 27분 · in-cluster Postgres 전환 |
-| **누적** | **≈ $0.45** | 크레딧의 **0.23%** |
+| 2026-08-07 Stage 3b 검증 세션 | **≈ $0.21** (실측 시간 기반) | 과금 97분 · destroy→재구축 왕복 포함 |
+| **누적** | **≈ $0.66** | 크레딧의 **0.33%** |
 
 > 🔎 **조회 시 함정**: `RECORD_TYPE` 분리 없이 Cost Explorer를 보면 크레딧이 상계돼
 > **순액 $0.00000004**만 나온다 — "아직 아무것도 안 썼네"로 오독하게 된다. 실사용량은 이렇게:
@@ -1182,3 +1183,199 @@
 - `[막힘]` 이 단계의 검사기(CSI 태그 검사)가 **네 번 뚫렸다** — 중괄호 → computed key → 줄단위
   제외 → `.tfvars`. 네 번째에서 멈추고 역할을 재정의했다: **tripwire이지 보안 경계가 아니다**
   (빨간 깃발 *"3번 시도했는데 4번 더"*). 상세는 PR #353.
+
+---
+
+## 2026-08-07 — Stage 3b 검증 세션 (착수)
+
+### 14:15~14:27 KST — 사전 점검 (전부 $0, apply 없음)
+
+- `[메모]` **세션 목표 2개를 묶었다.** ①Stage 3b의 학습 목표 — *"부수고 다시 지어도 데이터가 붙는가"*
+  ②원장 `L-9` — `db_mode=rds` 경로의 **실제 apply** 미검증. ②는 첫 apply를 `-var db_mode=rds`로
+  돌리면 공짜로 붙는다.
+- `[메모]` 착수 시점 상태 조회 — **떠 있는 것 없음**:
+  ```
+  aws eks list-clusters        → (없음)
+  aws ec2 describe-instances   → (running 없음)
+  aws rds describe-db-instances→ (없음)
+  aws ec2 describe-volumes --filters "Name=tag:Persistent,Values=true"
+    → vol-0518b6d0dcd2b0d70  ap-northeast-2a  10  available
+  ```
+- `[막힘]` **SOP 2b(ECR 이미지 검사)가 🔴로 나왔다.**
+  ```
+  SHA=0690ebe48cb2cf4cad0d57c39a538819b91c9cbc
+  git cat-file -t 0690ebe...  → fatal: git cat-file: could not get object info
+  git branch -r --contains …  → error: no such commit
+  ```
+  **SOP가 예고한 그대로다** — `ecr-push.yml`이 PR에서도 굽는데 `pull_request` 컨텍스트의
+  `github.sha`는 **머지 커밋**이라 레포 히스토리에 없다. 오탐이 아니라 정책(추적성)이다.
+- `[해결]` 문서대로 **main에서 `ECR Push`를 `workflow_dispatch`로 한 번 구웠다**(GitHub Actions, $0).
+  ```
+  SHA=f8f1a190f6923983d0e038da0699ec6d1266905d   ✅ OK
+  git rev-parse main = f8f1a190f6923983d0e038da0699ec6d1266905d   ← 일치
+  ```
+  이제 "이 세션에서 돈 이미지 = main의 상태"가 보장된다.
+
+### 14:27 KST — `tofu plan -var db_mode=rds` (아직 $0)
+
+- `[메모]` **Plan: 29 to add, 0 to change, 0 to destroy.**
+- `[해결]` 🔴 **원장 `L-9`의 plan 단계 근거를 재확인했다.** rds 모드에서:
+  ```
+  db_master_secret_arn  = (known after apply)     ← one(...)이 count=1에서 값을 반환
+  db_address            = (known after apply)
+  aws_db_instance.main[0] / aws_db_subnet_group.main[0] / aws_security_group.rds[0]
+  aws_vpc_security_group_ingress_rule.rds_from_cluster[0]
+  aws_secretsmanager_secret_version.db_connection_rds[0]      ← 복귀
+  postgres_tls·random_password.postgres                        ← 계획에 없음(제외 확인)
+  ```
+  **남은 미검증은 여전히 "실제 apply"** — RDS가 실제로 뜨고 ESO가 AWS 소유
+  `rds!db-<uuid>` 시크릿을 읽는 부분. 그게 이 세션의 첫 목표다.
+- `[메모]` AZ 정합 확인 — 출력 `persistent_az = "ap-northeast-2a"`,
+  `postgres_data_volume_id = "vol-0518b6d0dcd2b0d70"`(2a). 노드 서브넷도 이 AZ 하나로 고정된다.
+
+### 14:29:58 KST — 🔴 과금 시작 · Phase A apply (`-var db_mode=rds`)
+
+- `[비용]` `tofu apply` 시작. **$0.146/h** (컨트롤플레인 $0.10 + t4g.small $0.021 + db.t4g.micro $0.025).
+- `[해결]` **`Apply complete! Resources: 29 added, 0 changed, 0 destroyed.` — 8분 27초** (14:29:58→14:38:25).
+  SOP 추정(40~50분)보다 훨씬 빨랐다.
+- `[해결]` 🔴 **원장 `L-9` 해소 — `db_mode=rds` 경로가 실제 apply에서 동작한다.**
+  ```
+  db_master_secret_arn = arn:aws:secretsmanager:ap-northeast-2:<account>:secret:rds!db-e0040ad0-…-n3Zsr3
+  ```
+  `one(aws_db_instance.main[*].master_user_secret[0].secret_arn)` 이 **런타임에 올바른 ARN을 반환**했다.
+  이어서 ESO가 그 AWS 소유 시크릿을 실제로 읽는 것까지 확인:
+  ```
+  kubectl get secretstore aws-secretsmanager → Ready=True  store validated
+  kubectl get externalsecret                 → core-api-app SecretSynced / core-api-db SecretSynced
+  ```
+  **D-001이 `rds.tf`를 남겨둔 근거("Stage 2 재현성")의 전제가 성립함을 확정.** L-9 → `closed`.
+- `[해결]` **Flyway 13개 적용 + `/health` 200.**
+  ```
+  Migrating schema "public" to version "13 - create daily question content"
+  Successfully applied 13 migrations to schema "public", now at version v13 (00:00.222s)
+  Started DevQuestApplicationKt in 18.213 seconds
+  /health → HTTP/1.1 200  {"result":"SUCCESS","data":"DevQuest API is running","error":null}
+  ```
+  🔎 **이건 #365(Flyway opt-in 게이트)의 실환경 검증이기도 하다.** `application-prod.yml`이
+  `devquest.flyway.migrate-on-startup: true`를 켜므로 마이그레이션이 돌았다. 게이트 배선이
+  틀렸다면 0개가 적용되고 앱이 깨졌을 것이다. CI(#364)에 이어 실클러스터에서도 확인됨.
+
+#### `[막힘]` 예상과 다른 것 3가지 (전부 문서 쪽이 낡았다)
+
+- 🔴 **① SOP의 "RDS는 EKS와 병렬 생성되지 않는다"는 틀렸다.** 실측:
+  ```
+  aws_db_instance.main[0]: Creating...        aws_eks_cluster.main: Creating...     ← 동시 시작
+  aws_db_instance.main[0]: Creation complete after 4m56s
+  aws_eks_cluster.main:    Creation complete after 6m1s
+  aws_vpc_security_group_ingress_rule.rds_from_cluster[0]: Creation complete after 0s
+  ```
+  **RDS 4m56s가 EKS 6m1s 안에 통째로 들어갔다.** 원인: `aws_db_instance`가 의존하는 건
+  `aws_security_group.rds[0]`·`aws_db_subnet_group`뿐이고, 클러스터 SG를 참조하는 것은
+  **인그레스 규칙 하나**(`rds.tf:75`)다. 규칙이 별도 리소스라 사슬이 DB까지 이어지지 않는다.
+  이 구조는 **Stage 2 최초 커밋(#339)부터 동일**했다 → 07-28의 "정정"이 **오정정**이었다.
+  > 교훈: 벽시계가 길어진 것을 보고 **원인을 추론해 문서를 고쳤다.** 의존 그래프를 직접 안 봤다.
+  > 이번 세션의 다른 항목들과 같은 형태 — 근거를 확인하지 않은 정정은 원래 서술보다 나쁘다.
+- **② 튜토리얼의 시크릿 키 개수 확인 문구가 낡았다.** 문서: *"`core-api-app` 6키 + `core-api-db` 4키 = 합 10키"*.
+  실측: **3키 + 4키 = 7키**. `GRAFANA_*` 3개를 `secrets.tf`에서 의도적으로 뺐는데(`secrets.tf:149~154`)
+  확인 문구가 따라오지 않았다. 처음 따라 하는 사람은 여기서 "잘못됐다"고 판단하고 멈춘다.
+- **③ `/actuator/health`가 503이다.** 원인은 `Mail health check failed` — 학습 클러스터에 SMTP
+  자격증명이 없으니 당연하다. `/health`(커스텀)는 200이라 readiness probe는 무사했다.
+  ⚠️ **함정**: probe를 `/actuator/health`로 바꾸면 파드가 영영 Ready가 안 된다.
+  학습 환경이면 `management.health.mail.enabled=false`가 정석. 지난 세션들은 `/health`만 봐서 못 봤다.
+
+### 15:10~15:15 KST — Phase B 전환 (RDS → in-cluster static PV)
+
+- `[비용]` `tofu apply`(기본 `db_mode=in-cluster`) → **`6 added, 1 changed, 5 destroyed`**.
+  `aws_db_instance.main[0]` 파괴에 **3분 53초**. 이후 시간당 $0.146 → **$0.121**.
+- `[해결]` static PV 3종 확인:
+  ```
+  PV  postgres-data  RWO  Retain  Bound  default/postgres-data
+  PVC postgres-data  Bound  postgres-data  10Gi
+  aws ec2 describe-volumes vol-0518b6d0dcd2b0d70
+    → in-use  i-02df4703dfb088463  /dev/xvdaa
+  ```
+  **terraform 소유 영속 EBS가 실제로 파드에 붙었다.** 3a의 `reclaimPolicy: Delete`와 달리 **`Retain`**.
+- `[메모]` 로그에 `initdb`가 돌았다 = **이 볼륨은 07-31 생성 후 한 번도 쓰인 적이 없다.**
+  "3b는 코드만 머지되고 검증 안 됨"과 정확히 일치하는 증거.
+- `[메모]` 베이스라인 기록 — `stage3b_proof` 1행(`written before cluster destroy`), `tech_question_bank` **26행**,
+  파드 UID `56d9f2a9-d3ce-4475-ad9c-37dcb94d9262`, 노드 `ip-10-0-14-178`.
+
+### 15:33~16:15 KST — 🔴 **Stage 3b 핵심 검증: 부수고 다시 짓기**
+
+- `[해결]` `tofu destroy` → **`Destroy complete! Resources: 30 destroyed.`** (15:33:26→15:40:01, 6분 35초)
+  ```
+  aws ec2 describe-volumes vol-0518b6d0dcd2b0d70 → available  10  ap-northeast-2a   ← 살아남음
+  aws eks list-clusters        → (없음)
+  aws ec2 describe-instances   → (없음)
+  ```
+  **클러스터를 30개 리소스째 지웠는데 EBS는 그대로다.** EBS를 `0-bootstrap`에 둔 D-004 결정이
+  실제로 작동함을 확인.
+- `[해결]` 재apply(`30 added`, 16:04:14→16:13:54, 9분 40초) 후 같은 볼륨 ID로 static PV 재적용.
+  🔴 **데이터가 붙었다:**
+  ```
+  PostgreSQL Database directory appears to contain a database; Skipping initialization
+  database system was shut down at 2026-08-07 15:17:08 KST     ← 이전 클러스터의 종료 기록
+  stage3b_proof       1행  · written_at 2026-08-07 15:16:40.84631+09  ← 원본 타임스탬프 그대로
+  tech_question_bank  26행
+  파드 UID  56d9f2a9-… → c975027b-04b6-4db8-b131-3265cce99256   ← 다른 객체
+  노드      ip-10-0-14-178 → ip-10-0-8-95                        ← 다른 EC2
+  ```
+  **`initdb`가 0번 돌았다는 것이 결정적이다** — 빈 볼륨이면 반드시 돈다(첫 부팅 때 실제로 돌았다).
+  → **Stage 3b 학습 목표 *"부수고 다시 지어도 데이터가 붙는가"* 달성.**
+
+### 16:16~16:23 KST — `[막힘]` 🔴 **데이터는 붙었는데 자격증명이 안 붙었다** (설계 결함)
+
+- `[막힘]` 재구축 후 core-api가 **CrashLoopBackOff**. 원인:
+  ```
+  앱:       Caused by: org.postgresql.util.PSQLException: FATAL: password authentication failed for user
+  postgres: 2026-08-07 16:16:48 KST [188] FATAL:  password authentication failed for user "devquest"
+  ```
+- `[결정]` 🔴 **근본 원인 — `random_password.postgres`가 `2-cluster` state에 있다.**
+  `tofu destroy`가 state를 지우므로 재apply에서 **새 비밀번호**가 생성돼 Secrets Manager → ESO →
+  앱으로 흐른다. 그런데 postgres 이미지는 `POSTGRES_PASSWORD`를 **`initdb` 시점에만** 쓴다 —
+  데이터 디렉토리가 이미 있으면 무시하고 **옛 비밀번호 해시를 그대로 들고 있다.**
+  > **D-004가 EBS에 적용한 논리를 비밀번호에는 적용하지 않았다.**
+  > *"볼륨과 수명이 같아야 하는 것은 볼륨과 같은 레이어(`0-bootstrap`)에 둔다."*
+  > 영속 볼륨을 도입하는 순간 **볼륨 안에 구워지는 모든 것**(비밀번호 해시 포함)이 같은 제약을 받는다.
+  > 3b를 "코드 머지 = 완료"로 처리했으면 **이 결함은 다음 세션에 그대로 터졌을 것이다.**
+- `[해결]` 세션 내 복구 — 새 시크릿 값으로 DB 쪽을 맞춘다(값은 출력하지 않음):
+  ```
+  PW=$(kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)
+  kubectl exec postgres-0 -- psql -U devquest -d devquest -c "ALTER USER devquest PASSWORD '$PW';"
+  → ALTER ROLE
+  ```
+  파드 재생성 후:
+  ```
+  Successfully validated 13 migrations (execution time 00:00.013s)   ← applied가 아니라 validated
+  Current version of schema "public": 13
+  /health → {"result":"SUCCESS","data":"DevQuest API is running","error":null}
+  ```
+  **영속 데이터 위에서 앱이 완주했다.** Flyway가 `applied`가 아니라 `validated`를 찍은 것이
+  "스키마가 볼륨에 살아있다"의 또 다른 증거다.
+- `[메모]` **항구적 수정은 이번 세션에 넣지 않았다** — 유료 구간에서 IaC 구조를 바꾸는 것은
+  검증 없는 변경을 과금 중에 쌓는 일이다. 원장에 등재하고 무과금 세션에서 처리한다.
+
+### 16:24~16:31 KST — 🟢 종료 (과금 OFF)
+
+- `[해결]` teardown 순서 SOP §8대로: ExternalSecret → SecretStore → 워크로드 → 볼륨 detach 확인 → destroy.
+  **`Destroy complete! Resources: 30 destroyed.`** (6분 21초)
+- `[해결]` **고아 0건** — 남은 것은 의도된 영속 EBS 하나뿐:
+  ```
+  aws eks list-clusters       → (없음)
+  aws ec2 describe-instances  → (running 없음)
+  aws rds describe-db-instances → (없음)
+  aws ec2 describe-volumes    → vol-0518b6d0dcd2b0d70  available  10  Persistent=true
+  ```
+- `[비용]` **세션 실측 — 과금 구간 2회, 합 97분:**
+
+  | 구간 | 시각 | 길이 | 단가 | 비용 |
+  |---|---|---|---|---|
+  | Phase A+B | 14:29:58 → 15:40:01 | 70분 | $0.121/h | $0.141 |
+  | ↳ RDS 추가분 | 14:30 → ~15:14 | 45분 | $0.025/h | $0.019 |
+  | (무과금 공백) | 15:40 → 16:04 | 24분 | — | $0 |
+  | 재구축 검증 | 16:04:14 → 16:31:01 | 27분 | $0.121/h | $0.054 |
+  | **합** | | **97분** | | **≈ $0.21** |
+
+  > 사전 추정은 $0.15~0.18이었다. **초과분의 정체는 인프라가 아니라 디버깅 시간**이다 —
+  > 비밀번호 불일치 원인을 파악하는 데 든 7분이 그대로 과금됐다. 다음 세션 추정에 반영할 것:
+  > *"검증 세션은 예상 실패 1건당 10분을 더한다."*

@@ -138,7 +138,8 @@ Terraform 오픈소스 포크, 커뮤니티 기본값이 됨. **HCP Terraform �
 | **1** — ECR 이미지로 Deployment·Service | ✅ | 07-27 | 이미지 풀 성공. DB 미연결이라 CrashLoop로 종료(의도) |
 | **2** — Secret/Config + **IRSA** | ✅ | 07-28 | RDS + Secrets Manager + ESO. 아래 주석 참조 |
 | **3a** — Postgres StatefulSet + EBS CSI + 동적 PVC | ✅ | 07-30 (#349) | 27분 · ~$0.06. Flyway 12개가 in-cluster에 적용되고 `/health` 200 — RDS와 **동일 결과를 같은 이미지 sha로 재현**. 파드 강제 삭제 후 UID는 바뀌었는데 PVC·데이터(26행)는 그대로 = StatefulSet의 존재 이유를 실측. `kubectl delete -f k8s/base/` 뒤에도 EBS가 `in-use`로 남고, **PVC를 지워야** 7초 뒤 회수됨 <!-- verify: k8s/base/postgres.yaml ~ volumeClaimTemplates --> |
-| **3b** — 같은 StatefulSet을 static PV·영속 EBS로 전환 | 🚧 **코드만** | 코드 07-31 (#353)<br>클러스터 검증 ⬜ | terraform 소유 EBS `vol-0518b6d0dcd2b0d70`(10 GiB gp3, ap-northeast-2a)가 CI apply로 생성돼 **≈$0.91/월 과금 중**. 정작 목표인 *"부수고 다시 지어도 데이터가 붙는가"* 는 **아직 실클러스터에서 확인 안 했다** → 다음 유료 세션 목표(원장 `L-9` `db_mode=rds` 검증과 같은 세션) <!-- verify: k8s/base/postgres-static.yaml ~ volumeHandle --> <!-- verify: infra/aws-eks/0-bootstrap/ebs-postgres.tf ~ aws_ebs_volume --> |
+| **3b** — 같은 StatefulSet을 static PV·영속 EBS로 전환 | ✅ | 코드 07-31 (#353)<br>**검증 08-07** | **클러스터를 30개 리소스째 destroy했는데 데이터가 그대로 붙었다.** 재구축 후 `Skipping initialization`(= `initdb` 0회) + `database system was shut down at 15:17:08`(이전 클러스터의 종료 기록) + 증거행·질문뱅크 26행 유지. 파드 UID·노드·클러스터가 전부 다른데도. 세션 97분 ≈ $0.21 <!-- verify: k8s/base/postgres-static.yaml ~ volumeHandle --> <!-- verify: infra/aws-eks/0-bootstrap/ebs-postgres.tf ~ aws_ebs_volume --> |
+| ↳ **3b에서 드러난 결함** | 🔴 | 08-07 | **데이터는 붙는데 자격증명이 안 붙는다.** `random_password.postgres`가 `2-cluster` state에 있어 destroy→재apply에서 새로 생성되는데, postgres는 `POSTGRES_PASSWORD`를 `initdb` 때만 쓰므로 옛 해시를 유지 → `FATAL: password authentication failed`. **볼륨과 수명이 같아야 하는 것은 볼륨과 같은 레이어에 둔다**(D-004가 EBS에 적용한 논리). 원장 **L-14** |
 | **4** — AWS LB Controller → ALB Ingress | ⬜ | — | — |
 | **5** — metrics-server·HPA·Karpenter·ArgoCD | ⬜ | — | 선택 |
 
