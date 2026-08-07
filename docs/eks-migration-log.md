@@ -1182,3 +1182,52 @@
 - `[막힘]` 이 단계의 검사기(CSI 태그 검사)가 **네 번 뚫렸다** — 중괄호 → computed key → 줄단위
   제외 → `.tfvars`. 네 번째에서 멈추고 역할을 재정의했다: **tripwire이지 보안 경계가 아니다**
   (빨간 깃발 *"3번 시도했는데 4번 더"*). 상세는 PR #353.
+
+---
+
+## 2026-08-07 — Stage 3b 검증 세션 (착수)
+
+### 14:15~14:27 KST — 사전 점검 (전부 $0, apply 없음)
+
+- `[메모]` **세션 목표 2개를 묶었다.** ①Stage 3b의 학습 목표 — *"부수고 다시 지어도 데이터가 붙는가"*
+  ②원장 `L-9` — `db_mode=rds` 경로의 **실제 apply** 미검증. ②는 첫 apply를 `-var db_mode=rds`로
+  돌리면 공짜로 붙는다.
+- `[메모]` 착수 시점 상태 조회 — **떠 있는 것 없음**:
+  ```
+  aws eks list-clusters        → (없음)
+  aws ec2 describe-instances   → (running 없음)
+  aws rds describe-db-instances→ (없음)
+  aws ec2 describe-volumes --filters "Name=tag:Persistent,Values=true"
+    → vol-0518b6d0dcd2b0d70  ap-northeast-2a  10  available
+  ```
+- `[막힘]` **SOP 2b(ECR 이미지 검사)가 🔴로 나왔다.**
+  ```
+  SHA=0690ebe48cb2cf4cad0d57c39a538819b91c9cbc
+  git cat-file -t 0690ebe...  → fatal: git cat-file: could not get object info
+  git branch -r --contains …  → error: no such commit
+  ```
+  **SOP가 예고한 그대로다** — `ecr-push.yml`이 PR에서도 굽는데 `pull_request` 컨텍스트의
+  `github.sha`는 **머지 커밋**이라 레포 히스토리에 없다. 오탐이 아니라 정책(추적성)이다.
+- `[해결]` 문서대로 **main에서 `ECR Push`를 `workflow_dispatch`로 한 번 구웠다**(GitHub Actions, $0).
+  ```
+  SHA=f8f1a190f6923983d0e038da0699ec6d1266905d   ✅ OK
+  git rev-parse main = f8f1a190f6923983d0e038da0699ec6d1266905d   ← 일치
+  ```
+  이제 "이 세션에서 돈 이미지 = main의 상태"가 보장된다.
+
+### 14:27 KST — `tofu plan -var db_mode=rds` (아직 $0)
+
+- `[메모]` **Plan: 29 to add, 0 to change, 0 to destroy.**
+- `[해결]` 🔴 **원장 `L-9`의 plan 단계 근거를 재확인했다.** rds 모드에서:
+  ```
+  db_master_secret_arn  = (known after apply)     ← one(...)이 count=1에서 값을 반환
+  db_address            = (known after apply)
+  aws_db_instance.main[0] / aws_db_subnet_group.main[0] / aws_security_group.rds[0]
+  aws_vpc_security_group_ingress_rule.rds_from_cluster[0]
+  aws_secretsmanager_secret_version.db_connection_rds[0]      ← 복귀
+  postgres_tls·random_password.postgres                        ← 계획에 없음(제외 확인)
+  ```
+  **남은 미검증은 여전히 "실제 apply"** — RDS가 실제로 뜨고 ESO가 AWS 소유
+  `rds!db-<uuid>` 시크릿을 읽는 부분. 그게 이 세션의 첫 목표다.
+- `[메모]` AZ 정합 확인 — 출력 `persistent_az = "ap-northeast-2a"`,
+  `postgres_data_volume_id = "vol-0518b6d0dcd2b0d70"`(2a). 노드 서브넷도 이 AZ 하나로 고정된다.
