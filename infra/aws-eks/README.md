@@ -137,11 +137,17 @@ Terraform 오픈소스 포크, 커뮤니티 기본값이 됨. **HCP Terraform �
 | **0** — VPC·클러스터·노드그룹·kubectl | ✅ | 07-24 | 왕복 ~50분. NAT 0개 유지 |
 | **1** — ECR 이미지로 Deployment·Service | ✅ | 07-27 | 이미지 풀 성공. DB 미연결이라 CrashLoop로 종료(의도) |
 | **2** — Secret/Config + **IRSA** | ✅ | 07-28 | RDS + Secrets Manager + ESO. 아래 주석 참조 |
-| **3a** — Postgres StatefulSet + EBS CSI + 동적 PVC | 🚧 | — | Stage 2의 RDS를 in-cluster로 갈아끼워 "관리형↔자체운영" 비교 |
-| **3b** — 같은 StatefulSet을 static PV·영속 EBS로 전환 | ⬜ | — | 부수고 다시 지어도 데이터가 붙는가 (반복해야 만나는 실패 6종) |
+| **3a** — Postgres StatefulSet + EBS CSI + 동적 PVC | ✅ | 07-30 (#349) | 27분 · ~$0.06. Flyway 12개가 in-cluster에 적용되고 `/health` 200 — RDS와 **동일 결과를 같은 이미지 sha로 재현**. 파드 강제 삭제 후 UID는 바뀌었는데 PVC·데이터(26행)는 그대로 = StatefulSet의 존재 이유를 실측. `kubectl delete -f k8s/base/` 뒤에도 EBS가 `in-use`로 남고, **PVC를 지워야** 7초 뒤 회수됨 <!-- verify: k8s/base/postgres.yaml ~ volumeClaimTemplates --> |
+| **3b** — 같은 StatefulSet을 static PV·영속 EBS로 전환 | 🚧 **코드만** | 코드 07-31 (#353)<br>클러스터 검증 ⬜ | terraform 소유 EBS `vol-0518b6d0dcd2b0d70`(10 GiB gp3, ap-northeast-2a)가 CI apply로 생성돼 **≈$0.91/월 과금 중**. 정작 목표인 *"부수고 다시 지어도 데이터가 붙는가"* 는 **아직 실클러스터에서 확인 안 했다** → 다음 유료 세션 목표(원장 `L-9` `db_mode=rds` 검증과 같은 세션) <!-- verify: k8s/base/postgres-static.yaml ~ volumeHandle --> <!-- verify: infra/aws-eks/0-bootstrap/ebs-postgres.tf ~ aws_ebs_volume --> |
 | **4** — AWS LB Controller → ALB Ingress | ⬜ | — | — |
 | **5** — metrics-server·HPA·Karpenter·ArgoCD | ⬜ | — | 선택 |
 
+> 🔴 **`✅`는 "머지됐다"가 아니라 "실클러스터에서 확인했다"는 뜻이다.** 3b가 `🚧 코드만`인 이유가
+> 그것이다 — PR은 머지됐고 CI가 apply까지 했지만, 이 Stage의 **학습 목표 자체**(부수고 다시 지어도
+> 데이터가 붙는가)는 유료 세션 없이는 확인할 수 없다. 머지를 완료로 적으면 표가 실제보다 앞서 나가고,
+> 그건 이 레포에서 반복된 실패 형태(**검사가 주장보다 헐거움**)의 문서판이다.
+> ⚠️ 이 표는 실제로 08-07까지 3a·3b를 `🚧`/`⬜`로 두고 있었다 — 3a는 07-30에 끝났는데도.
+>
 > **Stage 2가 Stage 3를 대체하지 않는다.** RDS(관리형)는 EBS·PVC·StorageClass를 안 건드리므로
 > Stage 3의 학습 목표와 겹치지 않는다. Stage 3에서 DB를 in-cluster StatefulSet으로 바꾸면
 > 앱 코드 변경 0으로 두 방식을 비교하는 실습이 된다(`application-prod.yml`이 100% 환경변수 기반).

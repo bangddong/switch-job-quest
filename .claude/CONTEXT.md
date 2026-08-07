@@ -66,12 +66,13 @@
 >
 > ⚠️ **파드 상한 11/11 — 여유 0.** `kubectl rollout restart`가 실패한다(롤링이 새 파드를 먼저 띄움 →
 > `0/1 nodes are available: 1 Insufficient memory, 1 Too many pods`). 이번엔 `scale 0→1`로 우회.
-> **3b 착수 전 셋 중 택1**: ①`coredns` replicaCount 1(`addons.tf`에 주석으로 준비됨)
-> ②`strategy: Recreate` ③t4g.medium(상한 17, $0.13→$0.16/h).
+> ✅ **3b에서 둘 다 적용해 해소** — `coredns` replicaCount 1(`addons.tf`) + core-api `strategy: Recreate`
+> (`k8s/base/core-api.yaml`). t4g.medium 증설(③)은 **불필요해져 채택 안 함**($0.13/h 유지).
 >
-> **➡️ 다음 = Stage 3b** (terraform 소유 EBS + static PV, 6개월 영속). **3a의 정답이 3b의 함정이 된다** —
-> `reclaimPolicy: Delete`는 3a에서 고아를 막았지만 3b에선 데이터를 지우고, `volumeClaimTemplates`는
-> static PV와 충돌한다(실패 6종 ②⑤). 상세는 D-004.
+> **➡️ 다음 = Stage 3b의 *유료 검증 세션*.** 코드·CI apply는 07-31(#353)에 끝났고 EBS는 이미
+> 과금 중이다. 남은 건 실클러스터에서 *"부수고 다시 지어도 데이터가 붙는가"* 를 보는 것.
+> **3a의 정답이 3b의 함정이 된다** — `reclaimPolicy: Delete`는 3a에서 고아를 막았지만 3b에선
+> 데이터를 지우고, `volumeClaimTemplates`는 static PV와 충돌한다(실패 6종 ②⑤). 상세는 D-004.
 
 > ✅ **EKS Stage 2 완료 — PR #339 머지 (07-28, ★과금 26분 35초 ≈ $0.06).** apply→검증→teardown→퀴즈 전부 끝.
 > **현재 AWS에 아무것도 안 떠 있음 = 비용 $0, 고아 0건.** 퀴즈 통과(`docs/eks-quizzes/stage-eks-2-rds-secrets.md`).
@@ -281,10 +282,12 @@
     **daily-api가 실제로 생기는 Stage C에서 필요**해진다. 착수 시 `V13`의 `FROM daily_mail_log`
     교차 의존을 함께 풀어야 한다.
   - ➡️ **다음 착수 지점 (08-07 기준, 우선순위 순)**:
-    ① `infra/aws-eks/README.md`의 **Stage 표 정정** — 3a·3b가 머지됐는데 🚧/⬜로 낡음 (5분)
-    ② **EKS 유료 세션** — 3b 검증(*"부수고 다시 지어도 데이터가 붙는가"*) + 원장 **L-9**
-       (`db_mode=rds` 경로 미검증). 한 세션에 묶으면 이득
-    ③ **mneme 음차 간극** — `그라파나`→0건. FTS도 1.5B LLM도 못 메운다 (별건 레포)
+    ~~① `infra/aws-eks/README.md` Stage 표 정정~~ ✅ **완료** — 3a `✅`(07-30), 3b `🚧 코드만`.
+       표에 **`✅`= "머지됐다"가 아니라 "실클러스터에서 확인했다"** 규칙을 명시하고, 각 행에
+       `verify` 마커를 달아 코드와 어긋나면 CI가 잡게 했다(양쪽 마커 반증 테스트 통과)
+    ① **EKS 유료 세션** — 3b 검증(*"부수고 다시 지어도 데이터가 붙는가"*) + 원장 **L-9**
+       (`db_mode=rds` 경로 미검증). 한 세션에 묶으면 이득. **첫 apply를 `-var db_mode=rds`로**
+    ② **mneme 음차 간극** — `그라파나`→0건. FTS도 1.5B LLM도 못 메운다 (별건 레포)
   - 🔴 **설계의 "daily = 무인증" 전제가 코드와 어긋난다**: `getTodayQuestion()`이 읽는 `daily_mail_log`의
     유일한 writer가 메일 스케줄러라, **로그인 유저 존재 + 메일 발송 성공**이 있어야 오늘의 질문이 생긴다.
     `MAIL_ENABLED`(기본 false)가 사실상 daily의 마스터 스위치다. → **G-2 = 생성/발송 분리**로 해소(Task 2.1).
