@@ -21,9 +21,24 @@
    > | ESO helm install --wait | ~40초 |
    > | 앱 기동(Flyway 12개 포함) | 26초 |
    >
-   > ⚠️ **RDS는 EKS와 병렬 생성되지 않는다.** RDS 보안그룹의 인그레스가 EKS 클러스터
-   > 보안그룹 ID를 참조하므로 의존 사슬이 생겨 `클러스터 → SG → RDS` 순서로 직렬화된다.
-   > 즉 RDS 시간은 EKS 시간에 **더해진다**(예전 표의 "병렬" 서술은 틀렸다).
+   > 🔴 **정정 (2026-08-07 실측) — RDS는 EKS와 *병렬로* 생성된다.**
+   > 07-28에 이 자리에 *"직렬화되므로 RDS 시간이 EKS 시간에 더해진다"* 고 적었는데 **틀렸다.**
+   > ```
+   > aws_db_instance.main[0]: Creating...      aws_eks_cluster.main: Creating...   ← 동시 시작
+   > aws_db_instance.main[0]: Creation complete after 4m56s
+   > aws_eks_cluster.main:    Creation complete after 6m1s
+   > aws_vpc_security_group_ingress_rule.rds_from_cluster[0]: Creation complete after 0s
+   > ```
+   > **RDS 4m56s가 EKS 6m1s 안에 통째로 들어갔다.** 의존 그래프상 `aws_db_instance`는
+   > `aws_security_group.rds[0]`·`aws_db_subnet_group`에만 의존하고, 클러스터 SG를 참조하는 것은
+   > **인그레스 규칙 하나**(`rds.tf:75`)다. 규칙이 별도 리소스라 사슬이 DB까지 이어지지 않는다.
+   > 이 구조는 **Stage 2 최초 커밋(#339)부터 동일**했으므로 원래 서술이 옳았고 "정정"이 오정정이었다.
+   >
+   > ⚠️ **교훈**: 벽시계가 길어진 것을 보고 **원인을 추론해 문서를 고쳤다.** 의존 그래프를 안 봤다.
+   > 근거를 확인하지 않은 정정은 원래 서술보다 나쁘다 — 틀린 데다 "검증됨" 딱지가 붙는다.
+   >
+   > **실측 왕복(08-07, Stage 3b 검증 세션)**: apply 8m27s · destroy 6m21s ·
+   > 재구축 apply 9m40s. 전체 세션 97분(디버깅 포함).
 2. **사전 점검** (전부 무료):
    ```bash
    command -v tofu kubectl aws            # 도구 존재
