@@ -281,13 +281,18 @@
     **코드 0줄**. 실행 주체 축과 **직교**하므로 기각이 아니라 순서를 미룬 것이고,
     **daily-api가 실제로 생기는 Stage C에서 필요**해진다. 착수 시 `V13`의 `FROM daily_mail_log`
     교차 의존을 함께 풀어야 한다.
-  - ➡️ **다음 착수 지점 (08-07 기준, 우선순위 순)**:
-    ~~① `infra/aws-eks/README.md` Stage 표 정정~~ ✅ **완료** — 3a `✅`(07-30), 3b `🚧 코드만`.
-       표에 **`✅`= "머지됐다"가 아니라 "실클러스터에서 확인했다"** 규칙을 명시하고, 각 행에
-       `verify` 마커를 달아 코드와 어긋나면 CI가 잡게 했다(양쪽 마커 반증 테스트 통과)
-    ① **EKS 유료 세션** — 3b 검증(*"부수고 다시 지어도 데이터가 붙는가"*) + 원장 **L-9**
-       (`db_mode=rds` 경로 미검증). 한 세션에 묶으면 이득. **첫 apply를 `-var db_mode=rds`로**
-    ② **mneme 음차 간극** — `그라파나`→0건. FTS도 1.5B LLM도 못 메운다 (별건 레포)
+  - ➡️ **다음 착수 지점 (08-08 기준, 우선순위 순)**:
+    ~~Stage 표 정정 / EKS 유료 세션 / mneme 음차 간극~~ ✅ **셋 다 완료** (08-07~08-08).
+       상세는 각각 #368 · #370 · mneme#6. 유료 세션에서 **결함 2건이 새로 나왔고 그게 아래 ①②다.**
+    ① 🔴 **원장 `L-14` (HIGH) — `random_password.postgres`를 `0-bootstrap`으로 이동.**
+       무과금. **다음 유료 세션 전에 필수** — 안 고치면 클러스터를 다시 세울 때마다
+       in-cluster Postgres 로그인이 깨진다(볼륨은 `initdb` 때의 옛 해시를 유지하는데
+       state가 죽어 비밀번호가 새로 생성된다). `ignore_changes`로는 못 고친다($0 실증 완료)
+    ② **원장 `L-15` (MEDIUM) — readiness probe가 아무것도 검증하지 않는다.**
+       `/health`가 상수 반환이라 DB가 죽어도 Ready. 처방은 지표를 끄는 게 아니라
+       **readiness 그룹 정의**(`management.endpoint.health.group.readiness.include=db,ping`).
+       `/health` 자체는 **liveness용으로 옳으므로 유지**(liveness가 DB를 보면 장애를 증폭)
+       > 🔎 이건 **서브에이전트 주도 BE 작업**이라, 백로그의 *"퀴즈 게이트 확대 전 표본 1건"* 으로 겸용 가능
   - 🔴 **설계의 "daily = 무인증" 전제가 코드와 어긋난다**: `getTodayQuestion()`이 읽는 `daily_mail_log`의
     유일한 writer가 메일 스케줄러라, **로그인 유저 존재 + 메일 발송 성공**이 있어야 오늘의 질문이 생긴다.
     `MAIL_ENABLED`(기본 false)가 사실상 daily의 마스터 스위치다. → **G-2 = 생성/발송 분리**로 해소(Task 2.1).
