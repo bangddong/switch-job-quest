@@ -32,7 +32,23 @@
 | 지식 검색/축적 | `wiki_search` / `wiki_inject` | 위키 카테고리 `switch-job-quest/` 사용 |
 
 - mneme 서버가 꺼져 있으면 도구가 안 보인다 — 무시하고 평소대로 진행하면 된다(선택적 의존).
-- 자세한 동작 원리는 `E:/development/mneme-mcp/docs/` 참고.
+
+### 🔴 레포 경계 — 무엇이 여기 있고 무엇이 mneme-mcp에 있나
+
+| 여기(sjq)에 둔다 | mneme-mcp에 둔다 |
+|---|---|
+| mneme를 **도구로 쓰는 설정**(`.mcp.json`, 이 절) | mneme **자체의 기능·버그·백로그** (`PROGRESS.md §3 TODO`) |
+| **통합 지점** — 질문뱅크 빌드타임 시드(`question-bank-seed` 스킬, SessionStart 훅) | wiki 스키마·인덱싱·검색 구현 |
+| 이 앱의 **아키텍처 결정**(런타임 호출 금지 — 아래 CONTEXT 참조) | mneme 내부 결정 |
+
+⚠️ **mneme 기능 작업을 CONTEXT.md "다음 착수 지점"에 적지 말 것.** 08-07에 그렇게 했다가
+sjq에 **커밋할 게 한 줄도 없는 작업**을 이 레포 우선순위로 진행했고, 완료 반영을 위해
+문서 전용 PR을 하나 더 만들었다 — 07-31에 24건 쌓여 폐기한 **"클린 클로즈 PR"** 의 재발이다.
+
+⚠️ **wiki 경로를 하드코딩하지 말 것.** `$WIKI_DIR` → 후보 순회 순으로 해석한다
+(`check-wiki-question-candidates.sh` 참조). 개발 기기가 Windows·macOS 둘 다다 —
+한쪽으로 못 박으면 반대편이 조용히 죽는다(실제로 죽어 있었다, 08-09 발견).
+- 자세한 동작 원리는 자매 레포 `mneme-mcp`의 `docs/` 참고 (이 기기: `~/Develop/Sources/mneme-mcp`).
 
 ## EKS 작업 일지 규칙 (EKS 이관 작업 종료 시까지 유지)
 

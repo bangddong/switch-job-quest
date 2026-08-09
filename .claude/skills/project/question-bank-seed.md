@@ -1,6 +1,6 @@
 # SKILL: question-bank-seed
 
-mneme wiki(`E:/development/wiki/`)의 `tech/`, `ai-llm/` concept 페이지를 큐레이션해
+mneme wiki(`$WIKI_DIR` — 이 기기 `~/Develop/Sources/llm-wiki`)의 `tech/`, `ai-llm/` concept 페이지를 큐레이션해
 `tech_question_bank` Flyway 시드 마이그레이션 PR을 생성한다.
 
 > **불변식**: 빌드타임 시드 전용. sjq 앱 런타임 코드가 mneme/wiki를 호출하는 구조는 금지.
@@ -23,7 +23,8 @@ mneme wiki(`E:/development/wiki/`)의 `tech/`, `ai-llm/` concept 페이지를 �
 cat .claude/state/question-bank-seeded.txt 2>/dev/null
 
 # 현재 wiki concept 페이지 전체
-find E:/development/wiki/tech/pages E:/development/wiki/ai-llm/pages -name '*.md' | sort
+W="${WIKI_DIR:-$HOME/Develop/Sources/llm-wiki}"
+find "$W/tech/pages" "$W/ai-llm/pages" -name '*.md' | sed "s|^$W/||" | sort
 ```
 
 두 목록의 차집합 = 이번 처리 대상. 대상 0건이면 종료.
@@ -69,7 +70,9 @@ INSERT INTO tech_question_bank (category, question, reference_url, source) VALUE
 ### 5. 처리 목록 갱신
 
 이번에 처리한 wiki 페이지 경로를 `.claude/state/question-bank-seeded.txt`에 추가
-(한 줄에 하나, `E:/development/wiki/` 기준 전체 경로, sort 유지).
+(한 줄에 하나, **wiki 루트 기준 상대경로** — 예: `tech/pages/database/mvcc.md` — sort 유지).
+> 🔴 절대경로로 적지 말 것. 기기가 바뀌면 전부 '미처리'로 잡혀 **이미 시드된 페이지를 다시 시드**하게 된다
+> (08-09 실측: 경로만 교체했을 때 14건 전부 신규로 잡혔다).
 
 ### 6. 검증 + 커밋 + PR
 
