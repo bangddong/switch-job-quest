@@ -249,5 +249,5 @@ tofu state list                         # ③ 비었는지 확인
 |------|------|
 | 정답 경로 튜토리얼 | `docs/eks-tutorial-steps.md` |
 | 작업 일지 (결정·실패·비용) | `docs/eks-migration-log.md` |
-| K8s 학습 로드맵 (전체 10단계) | `E:/development/wiki/tech/k8s/_roadmap.md` |
+| K8s 학습 로드맵 (전체 10단계) | wiki `tech/k8s/_roadmap.md` |
 | 현재 작업 상태·미해결 이슈 | `.claude/CONTEXT.md` |
