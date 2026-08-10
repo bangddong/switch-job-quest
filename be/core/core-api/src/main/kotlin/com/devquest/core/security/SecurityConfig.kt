@@ -27,7 +27,15 @@ class SecurityConfig(
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .cors { it.configurationSource(corsConfigurationSource()) }
             .authorizeHttpRequests {
-                it.requestMatchers("/api/v1/auth/**", "/health", "/actuator/health").permitAll()
+                // kubelet은 파드 IP(127.0.0.1 아님)로 readiness를 찌른다. `/actuator/**` 아래 IP 제한에
+                // readiness 경로가 걸리면 파드가 영영 Ready가 안 된다 — readiness 그룹 경로만 별도로 연다.
+                // 나머지 actuator 엔드포인트(env 등)는 아래 IP 제한을 그대로 유지한다.
+                it.requestMatchers(
+                    "/api/v1/auth/**",
+                    "/health",
+                    "/actuator/health",
+                    "/actuator/health/readiness",
+                ).permitAll()
                 it.requestMatchers("/api/v1/tech-interview/**").permitAll()
                 it.requestMatchers("/api/v1/daily-question/**").permitAll()
                 it.requestMatchers("/actuator/**").access(
