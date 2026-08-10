@@ -36,6 +36,18 @@ spring:
 server:
   port: 8080
 
+# readiness 그룹을 명시적으로 정의한다. `/health`(liveness)는 상수만 반환 — DB가 죽어도 재시작 폭풍을
+# 일으키지 않기 위한 의도된 설계다. 하지만 그 상수 응답이 readinessProbe에도 쓰이면 DB가 죽어도
+# Service가 Ready로 착각해 트래픽을 계속 흘려보낸다. 그래서 readiness는 실제 의존성(db)을 보되,
+# actuator health 전체(AND 조합, 예: mail)에는 엮이지 않도록 include를 db,ping으로 한정한다.
+# 이 정의는 프로필에 상관없이 동일해야 하므로(로컬/테스트에서도 같은 계약을 검증) 공통 설정에 둔다.
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: db,ping
+
 logging:
   level:
     com.devquest: DEBUG

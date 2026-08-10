@@ -101,8 +101,10 @@ spec:
             periodSeconds: 20
             failureThreshold: 3
           # readinessProbe: 트래픽 받을 준비가 됐나. 실패 시 Service 엔드포인트에서 제외(재시작은 안 함)
+          # /health(liveness와 동일)는 상수만 반환해 DB가 죽어도 200을 준다 — readiness는 실제로
+          # DB를 보는 /actuator/health/readiness를 쓴다(SecurityConfig에서 별도 permitAll 처리됨).
           readinessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /actuator/health/readiness, port: http }
             periodSeconds: 10
             failureThreshold: 3
 ---

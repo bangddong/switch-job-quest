@@ -84,4 +84,10 @@ dependencies {
     // `postgresql`은 존재하지 않음 — 실측: Spring Boot BOM이 임포트하는 testcontainers-bom:2.0.3 확인).
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
+
+    // readiness probe 회귀 테스트(HealthReadinessTest)용 — 전체 Spring 컨텍스트 + 실제 SecurityConfig
+    // 필터체인을 통과하는 MockMvc가 필요하다. Spring Boot 4는 웹플럭스/웹mvc 테스트 지원을 기술별
+    // 아티팩트로 쪼갰다(spring-boot-test-autoconfigure에는 더 이상 `@AutoConfigureMockMvc`가 없음 —
+    // `org.springframework.boot.webmvc.test.autoconfigure` 패키지로 이동, 실측 확인).
+    testImplementation("org.springframework.boot:spring-boot-webmvc-test")
 }
