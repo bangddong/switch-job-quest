@@ -45,3 +45,16 @@ output "postgres_data_volume_id" {
   # count 기반 리소스는 [0] 인덱싱이 count=0에서 에러다. one()은 null을 준다(rds.tf와 같은 패턴).
   value = one(aws_ebs_volume.postgres_data[*].id)
 }
+
+output "postgres_master_password" {
+  description = <<-EOT
+    in-cluster Postgres superuser 비밀번호.
+
+    🔴 **영속 EBS와 수명이 같아야 하므로 여기(0-bootstrap)에서 만든다.**
+    2-cluster에 두면 세션마다 destroy되어 재생성되는데, 볼륨 안의 DB는
+    initdb 때의 옛 해시를 그대로 들고 있어 로그인이 깨진다(원장 L-14, 08-07 실측).
+    상세는 `postgres-password.tf`.
+  EOT
+  value     = random_password.postgres_master.result
+  sensitive = true
+}

@@ -109,6 +109,27 @@
 
 5. `tofu apply` ← **과금 시작.** (`eks-session-marker.sh` 훅이 자동으로 세션 마커 생성 → 리퍼 감시 개시)
 6. `aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2` → `kubectl get nodes` 검증.
+6b. 🔴 **in-cluster 모드라면 — postgres 파드가 Ready된 직후 비밀번호를 동기화한다.**
+   ```bash
+   PW=$(kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)
+   kubectl exec postgres-0 -- psql -U devquest -d devquest \
+     -c "ALTER USER devquest PASSWORD '$PW';"     # → ALTER ROLE
+   ```
+   **왜 필요한가**: postgres 이미지는 `POSTGRES_PASSWORD`를 **`initdb` 시점에만** 쓴다.
+   영속 볼륨에 이미 데이터 디렉토리가 있으면 그 변수를 **읽지도 않고** 옛 해시를 유지한다.
+   선언된 상태(Secrets Manager)와 실제 상태(볼륨)가 갈라지면 앱이 이렇게 죽는다:
+   ```
+   FATAL:  password authentication failed for user "devquest"
+   ```
+   **왜 매번 하는가 (한 번이 아니라)**: 같은 값으로 다시 걸면 무의미하므로 **멱등**이고,
+   2초면 끝난다. "한 번만 하면 되는 수동 절차"는 반드시 잊힌다 — 그리고 잊힌 걸
+   **과금 중에** 알게 된다(08-07에 7분을 태웠다). 표준 절차로 두면 이 실패 종류가 사라진다.
+
+   > 08-08 이후 비밀번호는 `0-bootstrap`이 소유해 **세션을 넘어 유지된다**(원장 L-14).
+   > 그래도 이 단계는 남긴다 — **08-07 이전에 구워진 볼륨은 어느 state에도 없는 옛 비밀번호를
+   > 들고 있고**, 앞으로 비밀번호를 회전시킬 때도 같은 갈라짐이 생긴다.
+   > 컨테이너 안 로컬 소켓은 `trust` 인증이라 **옛 비밀번호 없이도** 이 명령이 통한다.
+
 7. 실습 목표 수행. **일지 실시간 기록**(에러 원문·해결·비용·결정).
    - 매 턴 Stop 훅이 하트비트를 갱신 → "사람이 활동 중"이라 리퍼가 안 죽인다.
 

@@ -11,5 +11,11 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    # in-cluster Postgres의 superuser 비밀번호를 **여기서** 만든다.
+    # 왜 2-cluster가 아니라 여기인지는 `postgres-password.tf` 참조.
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }

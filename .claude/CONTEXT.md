@@ -284,15 +284,15 @@
   - ➡️ **다음 착수 지점 (08-08 기준, 우선순위 순)**:
     ~~Stage 표 정정 / EKS 유료 세션 / mneme 음차 간극~~ ✅ **셋 다 완료** (08-07~08-08).
        상세는 각각 #368 · #370 · mneme#6. 유료 세션에서 **결함 2건이 새로 나왔고 그게 아래 ①②다.**
-    ① 🔴 **원장 `L-14` (HIGH) — `random_password.postgres`를 `0-bootstrap`으로 이동.**
-       무과금. **다음 유료 세션 전에 필수** — 안 고치면 클러스터를 다시 세울 때마다
-       in-cluster Postgres 로그인이 깨진다(볼륨은 `initdb` 때의 옛 해시를 유지하는데
-       state가 죽어 비밀번호가 새로 생성된다). `ignore_changes`로는 못 고친다($0 실증 완료)
-    ② **원장 `L-15` (MEDIUM) — readiness probe가 아무것도 검증하지 않는다.**
-       `/health`가 상수 반환이라 DB가 죽어도 Ready. 처방은 지표를 끄는 게 아니라
+    ~~① 원장 `L-14` (HIGH) — postgres 비밀번호 수명~~ ✅ **완료(08-10)** — `random_password.postgres_master`를
+       `0-bootstrap`으로 이동(영속 EBS와 동일 수명). plan 실측 `1 to add / 0 to change / 0 to destroy`, **비용 0**.
+       SOP §6b에 **멱등 동기화 단계**를 표준 절차로 추가(08-07 이전 볼륨은 어느 state에도 없는 옛 비밀번호를 들고 있다)
+    ① **원장 `L-15` (MEDIUM) — readiness probe가 아무것도 검증하지 않는다.**
+       `/health`가 상수 반환이라 DB가 죽어도 Ready → 트래픽 유입 → 전부 500. 처방은 지표를 끄는 게 아니라
        **readiness 그룹 정의**(`management.endpoint.health.group.readiness.include=db,ping`).
-       `/health` 자체는 **liveness용으로 옳으므로 유지**(liveness가 DB를 보면 장애를 증폭)
-       > 🔎 이건 **서브에이전트 주도 BE 작업**이라, 백로그의 *"퀴즈 게이트 확대 전 표본 1건"* 으로 겸용 가능
+       `/health` 자체는 **liveness용으로 옳으므로 유지**(liveness가 DB를 보면 장애를 증폭). 무과금
+       > 🔎 서브에이전트 주도 BE 작업이라, 백로그의 *"퀴즈 게이트 확대 전 표본 1건"* 으로 겸용 가능
+    ② **다음 EKS 유료 세션** — SOP §6b가 실제로 갈라짐을 막는지 확인(L-14 검증). Stage 4(ALB Ingress)와 묶으면 이득
   - 🔴 **설계의 "daily = 무인증" 전제가 코드와 어긋난다**: `getTodayQuestion()`이 읽는 `daily_mail_log`의
     유일한 writer가 메일 스케줄러라, **로그인 유저 존재 + 메일 발송 성공**이 있어야 오늘의 질문이 생긴다.
     `MAIL_ENABLED`(기본 false)가 사실상 daily의 마스터 스위치다. → **G-2 = 생성/발송 분리**로 해소(Task 2.1).

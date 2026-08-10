@@ -89,22 +89,22 @@ resource "aws_secretsmanager_secret_version" "db_connection_incluster" {
     host     = "postgres"
     dbname   = var.db_name
     username = var.db_master_username
-    password = random_password.postgres[0].result
+    password = data.terraform_remote_state.bootstrap.outputs.postgres_master_password
   })
 }
 
-# in-cluster Postgres의 superuser 비밀번호.
-# RDS의 manage_master_user_password와 같은 역할을 우리가 대신 한다 —
-# 즉 **"시크릿을 만드는 주체가 AWS"였던 Stage 2의 반대편**이다.
-# 세션마다 새로 생성된다(destroy-after-use라 유지할 이유가 없다).
-resource "random_password" "postgres" {
-  count = local.incluster_enabled
-  # PostgreSQL 비밀번호에 특수문자를 넣지 않는다 — JDBC URL·psql 명령줄·
-  # K8s Secret(base64)을 오가며 이스케이프 사고가 나는 것을 원천 차단.
-  # 길이 32(엔트로피 ~165bit)면 특수문자 없이도 충분하다.
-  length  = 32
-  special = false
-}
+# ℹ️ in-cluster Postgres의 superuser 비밀번호는 **여기서 만들지 않는다.**
+#   RDS의 manage_master_user_password와 같은 역할을 우리가 대신 하는 것은 맞지만,
+#   그 값은 `0-bootstrap`이 소유한다 — 영속 EBS와 **수명이 같아야** 하기 때문이다.
+#
+#   ~~세션마다 새로 생성된다(destroy-after-use라 유지할 이유가 없다).~~
+#   🔴 **이 서술은 Stage 3a까지만 참이었다.** 동적 PVC 시절엔 볼륨이 세션과 함께 죽어
+#   매번 새 DB가 새 비밀번호로 initdb를 돌렸다. Stage 3b가 영속 볼륨을 도입하면서
+#   전제가 무너졌는데 리소스가 안 따라와, 08-07 검증 세션에서 재구축 후
+#   `FATAL: password authentication failed for user "devquest"`로 터졌다.
+#   **데이터는 살아남았는데 자격증명만 안 붙는** 형태였다. (원장 L-14)
+#
+#   근거·기각한 대안(ignore_changes)·$0 실증은 `0-bootstrap/postgres-password.tf`에 있다.
 
 # ── 앱 시크릿 (JWT / GitHub OAuth) ─────────────────────────────
 #
