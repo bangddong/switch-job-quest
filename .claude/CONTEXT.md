@@ -292,7 +292,11 @@
        **readiness 그룹 정의**(`management.endpoint.health.group.readiness.include=db,ping`).
        `/health` 자체는 **liveness용으로 옳으므로 유지**(liveness가 DB를 보면 장애를 증폭). 무과금
        > 🔎 서브에이전트 주도 BE 작업이라, 백로그의 *"퀴즈 게이트 확대 전 표본 1건"* 으로 겸용 가능
-    ② **다음 EKS 유료 세션** — SOP §6b가 실제로 갈라짐을 막는지 확인(L-14 검증). Stage 4(ALB Ingress)와 묶으면 이득
+    ② **다음 EKS 유료 세션** — 한 번에 셋을 검증한다:
+       ⓐ SOP §6b 비밀번호 동기화가 실제로 갈라짐을 막는가(L-14) ⓑ readiness가 진짜 DB를 보는가(L-15)
+       ⓒ **재현 검증** — 전부 destroy하고 `eks-tutorial-steps.md`**만 보고** Stage 0→3b 재현
+         (CLAUDE.md §재현 검증. 08-10에 3b 문서를 채워 이제 가능해졌다. 막히면 문서를 고치고 재시도)
+       그다음 Stage 4(ALB Ingress). 묶으면 세션 1회로 끝난다
   - 🔴 **설계의 "daily = 무인증" 전제가 코드와 어긋난다**: `getTodayQuestion()`이 읽는 `daily_mail_log`의
     유일한 writer가 메일 스케줄러라, **로그인 유저 존재 + 메일 발송 성공**이 있어야 오늘의 질문이 생긴다.
     `MAIL_ENABLED`(기본 false)가 사실상 daily의 마스터 스위치다. → **G-2 = 생성/발송 분리**로 해소(Task 2.1).
