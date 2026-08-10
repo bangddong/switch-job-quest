@@ -1185,5 +1185,6 @@ cd infra/aws-eks/2-cluster && tofu destroy    # ④ 인프라
 > ⚠️ **3b에서는 3a의 정답이 함정이 된다.** `reclaimPolicy: Delete`는 3a에서 고아를 막는 장치였지만
 > 3b(영속 볼륨)에서는 **데이터를 지우는 사고**가 된다. `volumeClaimTemplates`도 마찬가지로
 > static PV와 충돌한다. **같은 설정의 옳고 그름이 목적에 따라 뒤집히는 것**이 3b의 학습 포인트다.
-> ⚠️ **파드 상한 여유가 0이다**(11/11). 3b 착수 전에 셋 중 하나를 정해야 한다:
-> ①`coredns` replicaCount 1 ②`strategy: Recreate` ③t4g.medium(상한 17, $0.13→$0.16/h).
+> ⚠️ **파드 상한 여유가 0이었다**(11/11) — ✅ **3b에서 해소됨.** ①`coredns` replicaCount 1(`addons.tf`)과
+> ②`strategy: Recreate`(`k8s/base/core-api.yaml`)를 **둘 다** 적용했다. ③t4g.medium 증설은
+> 불필요해져 채택하지 않았다($0.13/h 유지).
