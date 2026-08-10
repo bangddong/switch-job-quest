@@ -1,8 +1,10 @@
 package com.devquest.core.api.controller
 
 import com.zaxxer.hikari.HikariDataSource
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.health.actuate.endpoint.HealthEndpointGroups
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.test.annotation.DirtiesContext
@@ -63,9 +65,17 @@ class ReadinessDbDownTest {
 }
 
 /**
- * readiness 그룹이 mail 지표에 영향받지 않는지 검증한다 — 이 수정의 핵심 동기.
+ * readiness 그룹이 mail 지표에 영향받지 않는지 검증한다 — 이 수정의 핵심 동기(AND 과결합 회귀).
  * mail 커넥션을 로컬 닫힌 포트로 돌려 mail health indicator를 결정적으로 DOWN 시킨다
  * (외부 네트워크 의존 없이, 즉시 connection refused).
+ *
+ * 판별 범위(정직하게 적어둔다, QA 지적 F-1): 이 테스트는 "`include`에 mail이 다시 끼워 넣어지는
+ * 회귀"는 정확히 잡는다. 그러나 `management.endpoint.health.group.readiness` 설정 블록이
+ * **통째로 삭제**되는 회귀는 못 잡는다 — 이 환경에서 Boot 4가 `readinessState`만 보는 기본
+ * readiness 그룹을 자동 등록하는데, `readinessState`도 mail을 보지 않으므로 설정이 없어도
+ * 이 테스트는 그대로 통과한다(실측 확인됨). 그 케이스는 `ReadinessDbDownTest`(설정이 없으면
+ * db가 readiness에 없어 DB를 죽여도 DOWN으로 안 바뀜)와 아래 [ReadinessGroupMembershipTest]
+ * (그룹 멤버십을 직접 단언)가 대신 잡는다.
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.MOCK,
@@ -117,5 +127,32 @@ class ActuatorReadinessSecurityMatcherTest {
     fun `actuator prometheus는 여전히 IP 제한이 걸려 임의 IP에서 거부된다 - 회귀 가드`() {
         mockMvc.perform(get("/actuator/prometheus").with(remoteAddr("203.0.113.5")))
             .andExpect(status().isForbidden)
+    }
+}
+
+/**
+ * QA 지적 F-1 — `ReadinessMailDownTest`는 상태 조작(200/503) 관찰만으로는 "readiness 그룹의
+ * include 설정이 실제로 db,ping으로 존재한다"를 증명하지 못한다(설정 블록을 통째로 지워도 그대로
+ * 통과함이 실측 확인됨). 그래서 여기서는 상태 응답이 아니라 `HealthEndpointGroups` 빈을 직접
+ * 조회해 readiness 그룹의 멤버십을 단언한다 — application.yml의
+ * `management.endpoint.health.group.readiness.include` 설정이 사라지거나 다른 값으로 바뀌면
+ * 이 테스트가 실패해야 한다.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@ActiveProfiles("test")
+class ReadinessGroupMembershipTest {
+
+    @Autowired
+    private lateinit var healthEndpointGroups: HealthEndpointGroups
+
+    @Test
+    fun `readiness 그룹은 db와 ping만 멤버로 포함한다 - include 설정 자체를 직접 단언`() {
+        val readinessGroup = requireNotNull(healthEndpointGroups.get("readiness")) {
+            "readiness 그룹이 존재하지 않는다 - management.endpoint.health.group.readiness 설정 확인 필요"
+        }
+
+        assertThat(readinessGroup.isMember("db")).isTrue
+        assertThat(readinessGroup.isMember("ping")).isTrue
+        assertThat(readinessGroup.isMember("mail")).isFalse
     }
 }
