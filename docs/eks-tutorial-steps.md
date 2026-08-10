@@ -1174,17 +1174,345 @@ cd infra/aws-eks/2-cluster && tofu destroy    # ④ 인프라
 
 ---
 
-## Stage 3b~5 — (예정)
+## Stage 3b — 영속 EBS + static PV (부수고 다시 지어도 데이터가 붙는가)
+
+3a에서는 **PVC가 볼륨을 만들었다.** 세션이 끝나면 볼륨도 같이 사라진다 — 학습에는 편하지만
+*"클러스터를 재생성해도 데이터가 살아남는가"* 는 확인할 수 없다. 3b는 그 반대로 간다:
+**terraform이 볼륨을 소유하고, K8s는 이미 있는 볼륨을 빌려 쓴다.**
+
+> ⚠️ **3a의 정답이 3b의 함정이 된다.** `reclaimPolicy: Delete`는 3a에서 고아 볼륨을 막는
+> 장치였지만 3b에서는 **6개월치 데이터를 지우는 사고**가 된다. `volumeClaimTemplates`도
+> 마찬가지로 static PV와 충돌한다. **같은 설정의 옳고 그름이 목적에 따라 뒤집히는 것**이
+> 이 단계의 핵심이다.
+
+### 3b-0. 개념 — 동적과 정적의 차이는 "누가 만드는가"
+
+```
+[3a 동적]  PVC "10Gi 주세요"  →  StorageClass(ebs.csi.aws.com)  →  CSI가 EBS를 생성
+                                                                   → PV 자동 생성
+[3b 정적]  terraform이 EBS 생성  →  사람이 PV를 작성(volumeHandle에 볼륨 ID를 직접 적음)
+                                  →  PVC가 그 PV를 지목(volumeName)
+```
+
+`PV`는 **실물 볼륨을 K8s에 소개하는 객체**이고, `PVC`는 **주문서**다. 3a에서는 주문서를 내면
+창고가 알아서 물건을 만들어 왔고, 3b에서는 **이미 있는 물건의 창고증(PV)을 사람이 써 준다.**
+
+### 3b-1. 볼륨은 `0-bootstrap`에 만든다 — `2-cluster`가 아니다 (💰 여기서 영속 과금 시작)
+
+```hcl
+# infra/aws-eks/0-bootstrap/ebs-postgres.tf
+resource "aws_ebs_volume" "postgres_data" {
+  count             = var.postgres_persistent_volume_enabled ? 1 : 0
+  availability_zone = var.persistent_az     # ← 이 리소스의 정체성
+  size              = var.postgres_volume_size_gb
+  type              = "gp3"
+  encrypted         = true
+  lifecycle { prevent_destroy = true }
+}
+```
+
+<!-- verify: infra/aws-eks/0-bootstrap/ebs-postgres.tf ~ aws_ebs_volume" "postgres_data -->
+
+🔴 **왜 `2-cluster`가 아닌가.** 이 레포는 세션이 끝나도 클러스터가 살아있으면
+`eks-reaper.sh`(dead man's switch)가 `tofu destroy -auto-approve`를 돈다.
+볼륨을 `2-cluster`에 뒀다면 **리퍼가 6개월치 데이터를 자동으로 지웠을 것이다.**
+
+🔴 **`prevent_destroy`만으로는 답이 안 된다.** 그걸 `2-cluster`에 걸면 destroy **전체**가
+plan 단계에서 거부돼 EKS·노드까지 아무것도 안 지워지고, 리퍼가 30분마다 같은 에러를 반복한다
+— **안전장치가 벽돌이 된다.** (`local_file` 3개짜리 임시 프로젝트로 $0에 재현해 확인했다.)
+
+→ 레이어를 나누는 것이 답이다. 리퍼가 destroy하는 대상은 `2-cluster`뿐이다
+(`eks-session-marker.sh`가 마커에 그 경로를 박는다).
+
+```bash
+cd infra/aws-eks/0-bootstrap && tofu apply
+aws ec2 describe-volumes --region ap-northeast-2 \
+  --filters "Name=tag:Persistent,Values=true" \
+  --query 'Volumes[].[VolumeId,State,Size,AvailabilityZone]' --output text
+```
+```
+vol-0518b6d0dcd2b0d70   available   10   ap-northeast-2a
+```
+
+> 💰 **이 순간부터 10 GiB gp3 = 약 $0.91/월이 클러스터와 무관하게 나간다.**
+> 세션을 끝내도, `2-cluster`를 destroy해도 남는다. 그게 이 단계의 목적이다.
+
+### 3b-2. 노드 AZ를 볼륨과 같은 AZ로 고정한다
+
+**EBS는 특정 AZ의 스토리지에 물리적으로 존재하고 다른 AZ의 인스턴스에는 붙지 않는다.**
+3a에서는 `volumeBindingMode: WaitForFirstConsumer`가 이 문제를 가려주고 있었다 —
+파드가 스케줄된 뒤에 그 AZ에 볼륨을 만들었으니 항상 맞았다. 3b에서는 볼륨이 먼저 있으므로
+**노드가 그 AZ로 가야 한다.** 안 맞으면 파드가 영구 `Pending`이다.
+
+`2-cluster`가 `0-bootstrap`의 값을 remote state로 읽어 서브넷을 하나로 좁힌다:
+
+```hcl
+# infra/aws-eks/2-cluster/nodes.tf
+subnet_ids = [
+  data.terraform_remote_state.network.outputs.public_subnet_ids_by_az[
+    data.terraform_remote_state.bootstrap.outputs.persistent_az
+  ]
+]
+```
+
+> 🔑 AZ 값은 **`0-bootstrap`의 `var.persistent_az` 한 곳에만** 존재한다. 2-cluster에 같은 변수를
+> 또 만들지 말 것 — 같은 사실을 두 곳에 저장하면 한쪽이 썩는다.
+
+확인:
+```bash
+kubectl get nodes -L topology.kubernetes.io/zone --no-headers | awk '{print $1, $6}'
+```
+```
+ip-10-0-8-95.ap-northeast-2.compute.internal ap-northeast-2a     ← 볼륨과 같은 AZ
+```
+
+### 3b-3. 비밀번호도 `0-bootstrap`에 둔다 — **볼륨과 수명이 같아야 하는 것은 볼륨과 같은 레이어에**
+
+이건 08-07 검증에서 **실제로 터진 뒤에** 알게 된 것이다(원장 `L-14`).
+
+```hcl
+# infra/aws-eks/0-bootstrap/postgres-password.tf
+resource "random_password" "postgres_master" {
+  length  = 32
+  special = false          # JDBC URL·psql·base64를 오가며 이스케이프 사고 원천 차단
+  lifecycle { prevent_destroy = true }
+}
+```
+
+<!-- verify: infra/aws-eks/0-bootstrap/postgres-password.tf ~ random_password" "postgres_master -->
+
+**왜 필요한가.** postgres 이미지는 `POSTGRES_PASSWORD`를 **`initdb` 시점에만** 쓴다.
+데이터 디렉토리가 이미 있으면 그 변수를 **읽지도 않고** 옛 해시를 유지한다. 그런데 비밀번호를
+`2-cluster`에 두면 destroy가 state에서 지우고, 재apply가 **새 값**을 만들어 앱에 흘린다:
+
+```
+볼륨   → initdb 때의 옛 비밀번호   (안 바뀜)
+tfstate → 재apply의 새 비밀번호     (바뀜)
+결과   → FATAL:  password authentication failed for user "devquest"
+```
+
+**데이터는 완벽히 살아남는데 자격증명만 안 붙는다.** 볼륨을 `0-bootstrap`에 둔 것과 **같은 논리**가
+비밀번호에도 적용된다 — 영속 볼륨을 도입하는 순간 **볼륨 안에 구워지는 모든 것**이 같은 제약을 받는다.
+
+> ⚠️ `lifecycle { ignore_changes = all }`로는 못 고친다. `ignore_changes`는 *state에 있는 값*과
+> 설정을 비교해 diff를 무시하는 것이라, destroy가 state에서 리소스를 지우면 무시할 대상 자체가 없다.
+
+### 3b-4. 파드 상한을 먼저 확보한다
+
+`vpc-cni`는 파드에 VPC IP를 직접 주므로 **파드 수가 인스턴스의 ENI 수에 묶인다.**
+t4g.small은 상한 11이고, 3a 시점에 이미 11/11로 여유가 0이었다.
+
+3b에서 두 가지를 적용해 해소했다(t4g.medium 증설은 불필요해 채택하지 않았다 — $0.13/h 유지):
+<!-- verify: infra/aws-eks/2-cluster/addons.tf ~ replicaCount --> <!-- verify: k8s/base/core-api.yaml ~ type:[[:space:]]*Recreate -->
+
+```hcl
+# infra/aws-eks/2-cluster/addons.tf — 노드가 1대라 coredns replica 2는 HA가 아니다
+configuration_values = jsonencode({ replicaCount = 1 })
+```
+```yaml
+# k8s/base/core-api.yaml — RollingUpdate는 새 파드를 먼저 띄우므로 여분 슬롯이 필요하다
+strategy:
+  type: Recreate
+```
+
+> 이걸 안 하면 `kubectl rollout restart`가 이렇게 실패한다:
+> `0/1 nodes are available: 1 Insufficient memory, 1 Too many pods`
+
+### 3b-5. static PV 3종 적용 — 3a와 달리 **치환이 필요하다**
+
+```bash
+cd infra/aws-eks/2-cluster
+sed -e "s|EBS_VOLUME_ID_PLACEHOLDER|$(tofu output -raw postgres_data_volume_id)|" \
+    -e "s|PERSISTENT_AZ_PLACEHOLDER|$(tofu output -raw persistent_az)|" \
+    ../../../k8s/base/postgres-static.yaml | kubectl apply -f -
+```
+```
+storageclass.storage.k8s.io/gp3-static created
+persistentvolume/postgres-data created
+persistentvolumeclaim/postgres-data created
+service/postgres created
+statefulset.apps/postgres created
+```
+
+> 🔑 볼륨 ID는 세션이 바뀌어도 같지만(영속) **계정마다 다르고, 퍼블릭 레포에 리소스 ID를 박지 않는다.**
+> `core-api.yaml`의 `IMAGE_PLACEHOLDER`와 같은 관례다.
+
+세 객체가 각각 무엇을 하는지:
+
+| | 값 | 왜 |
+|---|---|---|
+| **StorageClass** | `provisioner: kubernetes.io/no-provisioner`<br>`volumeBindingMode: WaitForFirstConsumer` | **동적 프로비저닝을 끄기 위해** 존재한다. 이름만 필요하고 아무것도 만들지 않는다 <!-- verify: k8s/base/postgres-static.yaml ~ no-provisioner --> |
+| **PV** | `csi.volumeHandle: <볼륨 ID>`<br>`persistentVolumeReclaimPolicy: Retain` | 실물 EBS의 창고증. 🔴 **`Retain`이 3a의 `Delete`를 뒤집는 지점** <!-- verify: k8s/base/postgres-static.yaml ~ persistentVolumeReclaimPolicy:[[:space:]]*Retain --> |
+| **PVC** | `volumeName: postgres-data` | 그 PV를 **지목**한다(아무거나 받지 않는다) |
+
+🔴 **StatefulSet에 `volumeClaimTemplates`가 없다.** 3a에서는 그게 파드마다 PVC를 자동 생성했지만,
+static PV에서는 PVC를 사람이 만들었으므로 충돌한다. 게다가 `volumeClaimTemplates`는 **불변 필드**라
+살아 있는 StatefulSet에서 고쳐 apply하면 거부된다 — 지우고 다시 만들어야 한다.
+
+바인딩 확인:
+```bash
+kubectl get pv postgres-data ; kubectl get pvc postgres-data
+```
+```
+NAME            CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM
+postgres-data   10Gi       RWO            Retain           Bound    default/postgres-data
+```
+
+**볼륨이 실제로 붙었는지는 AWS에 직접 묻는다** (K8s의 말이 아니라 최종 상태를 본다):
+```bash
+aws ec2 describe-volumes --region ap-northeast-2 --volume-ids <볼륨 ID> \
+  --query 'Volumes[0].[VolumeId,State,Attachments[0].InstanceId,Attachments[0].Device]' --output text
+```
+```
+vol-0518b6d0dcd2b0d70   in-use   i-02df4703dfb088463   /dev/xvdaa
+```
+
+### 3b-6. 🔴 비밀번호 동기화 — 파드가 Ready된 직후 **매번**
+
+```bash
+PW=$(kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)
+kubectl exec postgres-0 -- psql -U devquest -d devquest \
+  -c "ALTER USER devquest PASSWORD '$PW';"
+```
+```
+ALTER ROLE
+```
+
+3b-3에서 비밀번호를 영속화했어도 이 단계는 남는다. **그 이전에 구워진 볼륨은 어느 state에도 없는
+옛 비밀번호를 들고 있고**, 앞으로 비밀번호를 회전시킬 때도 같은 갈라짐이 생기기 때문이다.
+같은 값으로 다시 걸면 무의미하므로 **멱등**이고 2초면 끝난다.
+
+> *"한 번만 하면 되는 수동 절차"* 로 두지 않은 이유: 그런 건 반드시 잊히고, **잊힌 걸 과금 중에
+> 알게 된다**(실제로 원인 파악에 7분을 태웠다).
+> 컨테이너 안 로컬 소켓은 `trust` 인증이라 **옛 비밀번호 없이도** 이 명령이 통한다.
+
+### 3b-7. 앱 기동 확인
+
+```bash
+kubectl logs <core-api 파드> | grep -E "Successfully (applied|validated)|Started DevQuest"
+kubectl exec <core-api 파드> -- sh -c 'wget -qO- http://localhost:8080/health'
+```
+
+**첫 부팅**(빈 볼륨):
+```
+Successfully applied 13 migrations to schema "public", now at version v13
+{"result":"SUCCESS","data":"DevQuest API is running","error":null}
+```
+
+**재구축 후**(데이터가 있는 볼륨) — `applied`가 아니라 **`validated`** 다:
+```
+Successfully validated 13 migrations (execution time 00:00.013s)
+Current version of schema "public": 13
+```
+
+> 🔑 이 차이가 *"스키마가 볼륨에 살아 있다"* 의 증거다.
+
+### 3b-8. ★ 이 단계의 목표 — 부수고 다시 짓기
+
+먼저 **증거가 될 행**을 넣는다. 마이그레이션이 만드는 데이터로는 증명이 안 되기 때문이다
+(뒤에서 설명).
+
+```bash
+kubectl exec postgres-0 -- psql -U devquest -d devquest -tAc "
+CREATE TABLE IF NOT EXISTS stage3b_proof(id serial primary key, note text, written_at timestamptz default now());
+INSERT INTO stage3b_proof(note) VALUES ('written before cluster destroy');
+SELECT count(*) FROM stage3b_proof;"
+kubectl get pod postgres-0 -o jsonpath='{.metadata.uid}{"\n"}'      # 나중에 대조
+```
+
+**클러스터를 통째로 destroy** (3b-9의 순서를 따를 것) 후 다시 apply하고 3b-5를 반복한다.
+그리고 확인:
+
+```bash
+kubectl logs postgres-0 | grep -iE "Skipping initialization|database system was shut down"
+kubectl exec postgres-0 -- psql -U devquest -d devquest -tAc "SELECT note, written_at FROM stage3b_proof;"
+```
+```
+PostgreSQL Database directory appears to contain a database; Skipping initialization
+database system was shut down at 2026-08-07 15:17:08 KST     ← 이전 클러스터의 종료 기록
+written before cluster destroy|2026-08-07 15:16:40.84631+09  ← 원본 타임스탬프 그대로
+```
+
+🔴 **`initdb`가 안 돌았다는 것이 결정적 증거다.** 행 개수는 약하다 — 예를 들어 질문뱅크 26행은
+**마이그레이션이 만드는 숫자**라(V10 5행 + V11 21행) 빈 볼륨에 새로 적용해도 똑같이 26이 나온다.
+즉 *"살아남았다"* 와 *"똑같이 다시 만들어졌다"* 를 **구분하지 못한다.**
+
+| 증거 | 증명하는 것 |
+|---|---|
+| 행 개수가 같다 | **동등성** — 내용이 같다 |
+| `initdb` 건너뜀 + 이전 클러스터의 종료 시각 | **동일성** — 같은 것이다 |
+
+Stage 3b가 묻는 것은 **동일성**이다.
+
+### 3b-9. teardown — 3a와 순서가 다르다
+
+```bash
+kubectl delete externalsecret --all -A          # ① 소유자부터 (Secret 부활 방지)
+kubectl delete secretstore --all -A
+kubectl delete deployment core-api
+kubectl delete statefulset postgres             # ② DB를 깨끗이 내린다
+# 파드가 사라질 때까지 대기 → 볼륨이 detach된다
+until [ -z "$(kubectl get pod postgres-0 --no-headers 2>/dev/null)" ]; do sleep 5; done
+aws ec2 describe-volumes --region ap-northeast-2 --volume-ids <볼륨 ID> \
+  --query 'Volumes[0].State' --output text      # → available 이 될 때까지
+cd infra/aws-eks/2-cluster && tofu destroy      # ③ 인프라
+```
+
+🔴 **3a의 `kubectl delete pvc --all -A`를 그대로 하지 마라.** 3a에서는 그게 EBS를 회수하는
+필수 단계였지만(`reclaimPolicy: Delete`), 3b에서는 `Retain`이라 볼륨이 남는다 — 대신 PV가
+`Released` + `claimRef` 잔존 상태가 되어 다음에 **새 PVC를 자동으로 받지 않는다.**
+어차피 클러스터를 destroy하면 K8s 객체는 전부 사라지므로, 3b에서는 PVC를 지울 이유가 없다.
+
+> 재사용해야 하는 상황이 생기면 claimRef를 비운다:
+> `kubectl patch pv postgres-data -p '{"spec":{"claimRef":null}}'`
+
+**destroy 후 확인 — 볼륨은 살아 있어야 정상이다**:
+```bash
+aws eks list-clusters --region ap-northeast-2                 # → (없음)
+aws ec2 describe-instances --region ap-northeast-2 \
+  --filters "Name=instance-state-name,Values=running" --query 'Reservations[].Instances[].InstanceId' --output text   # → (없음)
+aws ec2 describe-volumes --region ap-northeast-2 \
+  --filters "Name=tag:Persistent,Values=true" --query 'Volumes[].[VolumeId,State]' --output text
+```
+```
+vol-0518b6d0dcd2b0d70   available     ← 이게 남는 것이 이 단계의 성공 조건
+```
+
+### Stage 3b 결산 (실측, 2026-08-07)
+
+과금 구간 **2회, 합 97분** (중간에 24분의 무과금 공백이 있다)
+
+| 단계 | 실측 |
+|---|---|
+| apply (29개 리소스, RDS 포함) | **8분 27초** |
+| destroy (30개) | 6분 35초 |
+| 재구축 apply (30개) | 9분 40초 |
+| 최종 destroy | 6분 21초 |
+| **세션 합계** | **≈ $0.21** |
+
+> 사전 추정은 $0.15~0.18이었다. 초과분의 정체는 인프라가 아니라 **디버깅 시간**이다
+> (비밀번호 갈라짐 원인 파악 7분). 다음 추정에 반영할 것:
+> *"검증 세션은 예상 실패 1건당 10분을 더한다."*
+
+| | Stage 3a (동적) | Stage 3b (static) |
+|---|---|---|
+| 볼륨 소유자 | K8s(CSI) | **terraform (`0-bootstrap`)** |
+| 수명 | 세션과 함께 소멸 | **영속 ($0.91/월)** |
+| reclaimPolicy | `Delete` (고아 방지) | **`Retain`** (데이터 보호) |
+| `volumeClaimTemplates` | 사용 | **사용 안 함** (PVC를 직접 작성) |
+| AZ | `WaitForFirstConsumer`가 가려줌 | **노드를 볼륨 AZ로 고정해야 함** |
+| 비밀번호 수명 | 아무래도 무관 | **볼륨과 같아야 함** (안 그러면 로그인 불가) |
+| teardown 시 PVC 삭제 | **필수** (안 하면 볼륨이 샌다) | 불필요 |
+
+> **결론**: 영속 볼륨은 "볼륨 하나 안 지우기"가 아니다. **볼륨의 수명이 다른 모든 것의 수명을
+> 다시 계산하게 만든다** — 비밀번호, AZ, reclaim 정책, teardown 순서까지. 3a에서 옳았던 선택이
+> 하나씩 뒤집힌다.
+
+---
+
+## Stage 4~5 — (예정)
 
 | Stage | 세울 것 | 새로 배우는 것 |
 |:--:|---|---|
-| **3b** | 같은 StatefulSet을 **terraform 소유 EBS + static PV**로 전환 | `volumeHandle`·`claimRef`, PV 재바인딩, AZ 종속, 6개월 영속 |
 | **4** | AWS Load Balancer Controller → ALB Ingress | IngressClass, ALB target-type |
 | **5** | metrics-server·HPA, Karpenter, ArgoCD | 오토스케일, GitOps |
-
-> ⚠️ **3b에서는 3a의 정답이 함정이 된다.** `reclaimPolicy: Delete`는 3a에서 고아를 막는 장치였지만
-> 3b(영속 볼륨)에서는 **데이터를 지우는 사고**가 된다. `volumeClaimTemplates`도 마찬가지로
-> static PV와 충돌한다. **같은 설정의 옳고 그름이 목적에 따라 뒤집히는 것**이 3b의 학습 포인트다.
-> ⚠️ **파드 상한 여유가 0이었다**(11/11) — ✅ **3b에서 해소됨.** ①`coredns` replicaCount 1(`addons.tf`)과
-> ②`strategy: Recreate`(`k8s/base/core-api.yaml`)를 **둘 다** 적용했다. ③t4g.medium 증설은
-> 불필요해져 채택하지 않았다($0.13/h 유지).
