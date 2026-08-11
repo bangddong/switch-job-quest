@@ -12,6 +12,28 @@
 >
 > **최종 검증**: 이관 완료 후 클러스터 destroy → 이 문서만으로 처음부터 재현 성공해야 완료.
 
+### 재현 검증 이력 — 이 문서를 얼마나 믿어도 되나
+
+| 날짜 | 범위 | 결과 |
+|---|---|---|
+| **2026-08-11** | **무과금 정적 대조** — 도구 버전 · 참조 파일 경로 14개 · `tofu plan` 실측 · 의존 그래프 · 마이그레이션 개수 · 시크릿 키 개수 | **결함 6건 발견·수정** (아래) |
+| (미실시) | **유료 왕복 재현** — 실제 apply → 3b까지 → destroy를 이 문서만 보고 | ⏳ 다음 유료 세션 |
+
+2026-08-11에 고친 6건. **전부 "문서를 읽어서는 안 보이고, 실제로 대조해야 나오는"** 종류였다:
+
+| # | 결함 | 어디 |
+|:--:|---|---|
+| ① | `db_mode` 변수가 **한 번도 등장하지 않았다** — Stage 2↔3a를 가르는 유일한 스위치인데 | 0-1 (신설) |
+| ② | *"Stage 0을 밟으면 RDS까지 생긴다"* — 기본값이 `in-cluster`라 **안 생긴다** | 먼저 읽을 것 |
+| ③ | `Plan: 26 to add` — 실측 **29**. 게다가 **개수는 `db_mode`를 구분 못 한다**(양쪽 다 29) | 0-1 |
+| ④ | *"RDS는 EKS와 병렬로 안 만들어진다"* — `tofu graph`상 **의존이 없다**(SOP는 08-07에 고쳤는데 여기만 남아 있었다) | 0-2 |
+| ⑤ | `Successfully validated 12 migrations`를 *"빈 RDS에 처음부터 실행"* 설명과 나란히 — **동시에 참일 수 없다** | 2-4 |
+| ⑥ | 앱 기동 확인이 `/health`(상수)뿐 — `readiness`·`probe`·`actuator`가 **전 문서에 0건**이었다 | 3b-7 |
+
+> 🔑 **①③⑥이 같은 병이다 — 검사가 주장보다 헐겁다.** 개수는 모드를 구분하지 못하고,
+> 상수 응답은 앱이 DB에 붙었는지 구분하지 못한다. 기대 출력을 적어두는 건 좋지만,
+> **무엇을 구분하지 *못하는지*** 를 같이 적지 않으면 통과가 곧 안심이 된다.
+
 ---
 
 ## ⚠️ 먼저 읽을 것 — 레이어와 스테이지는 1:1이 아니다
@@ -21,11 +43,16 @@
 - **IaC 레이어**(`0-bootstrap` / `1-network` / `2-cluster`)는 **인프라를 나누는 단위**다.
 - **Stage 0~5**는 **학습 마일스톤**이다. "무엇을 새로 이해했는가"로 나뉜다.
 
-**둘은 겹치지 않는다.** `2-cluster` 레이어 하나가 EKS 클러스터 + RDS + Secrets Manager + IRSA를
-**한 번의 `tofu apply`로 전부** 만든다. 그래서:
+**둘은 겹치지 않는다.** `2-cluster` 레이어 하나가 EKS 클러스터 + (RDS) + Secrets Manager + IRSA +
+EBS CSI를 **한 번의 `tofu apply`로 전부** 만든다. 그래서:
 
-- Stage 0을 밟는 순간 RDS까지 같이 생긴다. "Stage 2에 가서야 DB가 생긴다"가 **아니다.**
+- Stage 0을 밟는 순간 **Stage 3용 EBS CSI 애드온·IRSA까지 같이 생긴다.** "Stage 3에 가서야 생긴다"가 **아니다.**
 - 아래 Stage 1·2는 **인프라를 더 만드는 단계가 아니라, 이미 만들어진 것을 K8s 쪽에서 쓰는 단계**다.
+
+> 🔴 **단, RDS는 예외다 — `db_mode` 변수가 켜고 끈다** (기본값 `in-cluster` = **RDS 안 만듦**).
+> 이 문서는 오랫동안 *"Stage 0을 밟는 순간 RDS까지 같이 생긴다"* 고 적어뒀는데, 지금 기본값으로
+> 따라 하면 **RDS가 한 개도 안 생긴다.** 2026-08-11 재현 검증에서 발견해 고쳤다.
+> 스위치의 정확한 사용법은 [0-1의 `db_mode` 절](#-db_mode--이-문서에서-가장-중요한-스위치) 참조.
 
 > **왜 이렇게 뒀나 (트레이드오프)**: RDS를 `3-data` 같은 별도 레이어로 빼는 게 구조적으로는 더 깔끔하다.
 > 그런데 **자동 정리 장치(리퍼)가 하드코딩된 `2-cluster` 디렉토리에서만 `tofu destroy`를 돌린다.**
@@ -349,42 +376,118 @@ kubectl로 노드가 뜬 걸 확인한 뒤 **곧바로 부순다.**
 tofu -chdir=infra/aws-eks/2-cluster init
 tofu -chdir=infra/aws-eks/2-cluster plan -out=/tmp/stage.tfplan
 ```
-확인: **`Plan: 26 to add, 0 to change, 0 to destroy.`**
+🔴 **확인 기준은 개수가 아니라 뒤의 두 값이다:**
 
-구성 (26개):
+```
+Plan: <N> to add, 0 to change, 0 to destroy.
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^  ← 여기가 불변식
+```
 
-| 분류 | 개수 | 과금 |
-|---|:--:|---|
-| EKS 컨트롤플레인 | 1 | **$0.10/hr** |
-| 관리형 노드그룹 (t4g.small ×1) | 1 | **$0.0208/hr** + EBS 20GB |
-| 애드온 (vpc-cni·coredns·kube-proxy) | 3 | $0 |
-| OIDC 공급자 · IAM 역할 3 · 정책/연결 6 · access entry 2 | 12 | $0 |
-| **RDS** (인스턴스·서브넷그룹·보안그룹·인그레스) | 4 | **$0.025/hr** + gp3 20GB |
-| **Secrets Manager** (시크릿 2 + 버전 2) | 4 | $0.40/개/월 |
-| `random_password` (JWT 키) | 1 | $0 |
+`0 to change, 0 to destroy`는 **스테이지·버전이 올라가도 변하지 않는다.** 아무것도 없는 상태에서
+새로 짓는 것이므로 고치거나 부술 대상이 있으면 안 된다. 하나라도 0이 아니면 **state가 실제 AWS와
+어긋나 있다**는 뜻이니 apply하지 말고 원인을 찾는다.
+
+> ⚠️ **`N`(추가 개수)을 합격 기준으로 삼지 마라.** 두 가지 이유로 못 쓴다.
+>
+> **① 스테이지가 올라가면 늘어난다.** `14`(07-24) → `26`(07-28) → **`29`(2026-08-11 실측)**.
+> Stage 3a에서 EBS CSI 애드온+IRSA가, 3a-5에서 postgres TLS 리소스가 같은 레이어에 붙었다.
+> 이 문서가 오래 `26`을 확인 기준으로 적어둔 탓에, 그대로 따라 하면 **맞게 했는데도 틀린 것처럼
+> 보였다**(2026-08-11 재현 검증에서 발견). 기대 출력을 적는 건 좋지만 **갱신 안 된 기대 출력은
+> 사람을 막는다.**
+>
+> **② 🔴 개수는 `db_mode`를 구분하지 못한다.** 실측:
+> ```
+> tofu plan                      → Plan: 29 to add    (in-cluster, 기본값)
+> tofu plan -var db_mode=rds     → Plan: 29 to add    (RDS)
+> ```
+> RDS 4개가 빠진 자리에 TLS 2 + 시크릿 2가 들어와 **우연히 같아진다.**
+> *"29가 나왔으니 제대로 설정됐다"* 가 성립하지 않는다 — **검사가 주장보다 헐거운** 전형이다.
+> 모드를 확인하려면 개수가 아니라 **RDS 리소스가 계획에 있는지**를 본다:
+> ```bash
+> tofu -chdir=infra/aws-eks/2-cluster show -json /tmp/stage.tfplan \
+>   | grep -c '"aws_db_instance"'      # rds 모드면 ≥1, in-cluster면 0
+> ```
+
+#### 🔑 `db_mode` — 이 문서에서 가장 중요한 스위치
+
+```hcl
+# infra/aws-eks/2-cluster/variables.tf
+variable "db_mode" {
+  default = "in-cluster"   # rds = 관리형(Stage 2) / in-cluster = Postgres StatefulSet(Stage 3a~)
+}
+```
+
+<!-- verify: infra/aws-eks/2-cluster/variables.tf ~ variable "db_mode" -->
+<!-- verify: infra/aws-eks/2-cluster/variables.tf ~ default[[:space:]]*=[[:space:]]*"in-cluster" -->
+
+| 하려는 것 | 명령 | 왜 |
+|---|---|---|
+| **Stage 0~1** (클러스터 왕복 · 이미지 배포) | 아무것도 주지 않는다 — **기본값** | DB가 필요 없는 단계다. 기본값이면 RDS가 안 생겨 **$0.025/hr을 아낀다** |
+| **Stage 2** (RDS 연결 실습) | `... plan -var db_mode=rds -out=/tmp/stage.tfplan` | 🔴 **이걸 빼면 Stage 2가 성립하지 않는다** |
+| **Stage 3a·3b** (in-cluster Postgres) | 아무것도 주지 않는다 — **기본값** | RDS를 in-cluster로 갈아끼우는 게 목적 |
+
+🔴 **기본값이 `in-cluster`인 건 의도다.** 플래그를 잊었을 때 **과금 리소스(RDS)가 생기지 않는 쪽**이
+기본이어야 한다. 대신 대가가 있다: **Stage 2를 `-var db_mode=rds` 없이 따라 하면 RDS가 한 개도
+생기지 않고**, 2-4에서 기다리는 `Database: jdbc:postgresql://...rds.amazonaws.com` 이 영영 안 나온다.
+그리고 위 ②대로 **개수는 그 실수를 잡아주지 못한다.**
+
+> 📌 이 변수는 2026-08-11까지 이 문서에 **한 번도 등장하지 않았다**(grep 0건). Stage 2와 Stage 3a를
+> 가르는 유일한 스위치인데도 그랬다 — 재현 검증에서 나온 결함 중 가장 컸다.
+
+구성 (2026-08-11 실측, 두 모드 모두 **29**):
+
+| 분류 | in-cluster | rds | 과금 |
+|---|:--:|:--:|---|
+| EKS 컨트롤플레인 | 1 | 1 | **$0.10/hr** |
+| 관리형 노드그룹 (t4g.small ×1) | 1 | 1 | **$0.0208/hr** + EBS 20GB |
+| 애드온 (vpc-cni·kube-proxy·coredns·**aws-ebs-csi-driver**) | 4 | 4 | $0 |
+| IAM (OIDC 1 · 역할 4 · 정책 1 · 연결 6 · access entry·assoc 2) | 14 | 14 | $0 |
+| Secrets Manager (시크릿 + 버전 쌍) | 6 | 4 | $0.40/개/월 |
+| `random_password` (JWT 키) | 1 | 1 | $0 |
+| **postgres TLS** (`tls_private_key` · `tls_self_signed_cert`) | 2 | 0 | $0 |
+| **RDS** (인스턴스·서브넷그룹·보안그룹·인그레스) | 0 | 4 | **$0.025/hr** + gp3 20GB |
+| **합계** | **29** | **29** | |
 
 - plan에서 **`capacity_type = "ON_DEMAND"`** 확인 — 신규 계정은 Spot vCPU 쿼터가 0이라 SPOT이면 apply가 실패한다.
-- 📌 **과거 기록과 다른 점**: 07-24 시점엔 `14 to add`였다. Stage 2에서 RDS·시크릿·IRSA 12개가
-  같은 레이어에 추가돼 26이 됐다. 문서 상단 "레이어와 스테이지는 1:1이 아니다" 참조.
+- 📌 **레이어와 스테이지는 1:1이 아니다** — `2-cluster` 한 레이어가 Stage 0~3b의 리소스를 전부 담는다.
+  그래서 "Stage 0을 하는데 EBS CSI 애드온이 왜 생기지?"가 정상이다. 문서 상단 동명의 절 참조.
 
 ### 0-2. apply (★ 과금 시작)
 ```bash
 tofu -chdir=infra/aws-eks/2-cluster apply -auto-approve /tmp/stage.tfplan
 ```
-확인: `Apply complete! Resources: 26 added.` — **약 12~15분.**
+확인: `Apply complete! Resources: <N> added.` — plan에서 본 `N`과 같아야 한다. **약 9~15분.**
 
-단계별 실측 소요 (07-28):
+단계별 실측 소요:
 
 | 리소스 | 소요 |
 |---|---|
-| EKS 컨트롤플레인 | ~6분 |
+| EKS 컨트롤플레인 | ~6분 (07-28) · 6분 1초 (08-07) |
 | 노드그룹 | 2분 48초 |
 | 애드온 vpc-cni·kube-proxy | 55초 / coredns 24초 |
 | **RDS db.t4g.micro** | **4분 50초** |
+| 전체 왕복 (in-cluster) | apply 8분 27초 · destroy 6분 21초 (08-07 실측) |
 
-> ⚠️ **RDS는 EKS와 병렬로 만들어지지 않는다.** RDS 보안그룹의 인그레스 규칙이 **EKS 클러스터
-> 보안그룹 ID를 참조**하기 때문에 `클러스터 → 보안그룹 → RDS` 의존 사슬이 생겨 직렬화된다.
-> 즉 RDS 시간은 EKS 시간에 **더해진다.**
+> ✅ **RDS는 EKS와 *병렬로* 만들어진다** (2026-08-07 실측 + 의존 그래프 확인).
+> ```
+> aws_db_instance.main[0]: Creating...      aws_eks_cluster.main: Creating...   ← 동시 시작
+> aws_db_instance.main[0]: Creation complete after 4m56s
+> aws_eks_cluster.main:    Creation complete after 6m1s
+> ```
+> **RDS 4분 56초가 EKS 6분 1초 안에 통째로 들어갔다.** `tofu graph`로도 확인된다 —
+> `aws_db_instance.main`의 선행 노드는 `aws_db_subnet_group` · `aws_security_group.rds`뿐이고
+> **`aws_eks_cluster`는 들어있지 않다.** 클러스터 보안그룹을 참조하는 건
+> `aws_vpc_security_group_ingress_rule`(별도 리소스)이라 사슬이 DB까지 이어지지 않는다.
+>
+> ```bash
+> tofu -chdir=infra/aws-eks/2-cluster graph -type=plan | grep '"\[root\] aws_db_instance'
+> ```
+>
+> ⚠️ **이 자리에는 원래 정반대 서술이 있었다** — *"의존 사슬이 생겨 직렬화되므로 RDS 시간이
+> EKS 시간에 더해진다"*. 벽시계가 길어진 걸 보고 **원인을 추론해 문서를 고친 것**이었고,
+> 의존 그래프를 열어보지 않았다. **근거를 확인하지 않은 정정은 원래 서술보다 나쁘다** —
+> 틀린 데다 "검증됨" 딱지가 붙는다. (SOP는 08-07에 고쳤는데 이 문서는 2026-08-11
+> 재현 검증까지 옛 서술을 들고 있었다 — **같은 사실이 두 문서에 있으면 갈라진다.**)
 
 **이 순간부터 과금. 자리를 뜨지 말 것.**
 
@@ -465,8 +568,12 @@ Stage 1·2로 이어갈 게 아니면 **바로 부순다.**
 ```bash
 tofu -chdir=infra/aws-eks/2-cluster destroy -auto-approve
 ```
-확인: `Destroy complete! Resources: 26 destroyed.` — **약 4분 30초.**
+확인: `Destroy complete! Resources: <N> destroyed.` — **apply한 개수와 같아야 한다.**
+소요는 **약 4분 30초**(07-28, rds) ~ **6분 21초**(08-07, in-cluster).
 (노드그룹 2분 16초 · RDS 3분 53초 · 컨트롤플레인 2분 9초 — 병렬로 진행)
+
+> 🔴 **여기서 봐야 할 건 `<N>`이 apply와 *같다*는 것이지 특정 숫자가 아니다.** 개수가 모자라면
+> destroy가 일부 실패했다는 뜻이고, 실패한 채 자리를 뜨면 그게 그대로 과금이다. 0-5로 이어간다.
 
 ### 0-5. teardown 전수 검증 (고아 리소스 = 계속 새는 비용)
 
@@ -808,24 +915,45 @@ kubectl wait --for=condition=Ready pod -l app=core-api --timeout=300s
 ```bash
 kubectl logs -l app=core-api | grep -iE "Database:|migrations|Started"
 ```
-확인:
+확인 — **빈 RDS에 처음 붙는 것이므로 `applied`여야 한다**:
 ```
 Database: jdbc:postgresql://devquest-eks-db.<...>.ap-northeast-2.rds.amazonaws.com/devquest
           ?sslmode=require (PostgreSQL 17.10)
-Successfully validated 12 migrations
+Successfully applied 13 migrations to schema "public", now at version v13
 Started DevQuestApplicationKt in 26.331 seconds
 ```
 - **`sslmode=require`** — 따로 설정하지 않았는데 TLS로 붙는다(RDS 기본).
-- Flyway 마이그레이션이 **빈 RDS에 처음부터** 실행돼 스키마가 만들어진다.
+- 개수 `13`은 `be/support/db-core/src/main/resources/db/migration/`의 `V*.sql` 개수다
+  (2026-08-11 기준 V1~V13). **레포가 자라면 이 숫자도 자란다 — 파일 개수와 맞으면 정상.**
+
+> 🔴 **`applied`가 아니라 `validated`가 나왔다면 빈 DB가 아니다.** 파드가 한 번 이상 재기동됐거나
+> (첫 기동이 이미 적용했다) 이전 세션의 스키마가 남아 있다는 뜻이다. 둘을 구분 못 하면
+> *"마이그레이션이 도는 걸 확인했다"* 고 믿으면서 **실제로는 아무것도 안 돌았을 수 있다.**
+>
+> ⚠️ 이 자리에는 원래 `Successfully validated 12 migrations`가 *"빈 RDS에 처음부터 실행돼
+> 스키마가 만들어진다"* 는 설명과 **나란히** 적혀 있었다(2026-08-11 재현 검증에서 발견).
+> 두 문장은 동시에 참일 수 없다 — `validated`는 **이미 적용돼 있었다**는 뜻이다.
+> 원본 일지(07-28)를 보면 ECR 태그 실수로 **재배포**한 기록이 바로 위에 있다. 즉 관측된 로그는
+> 두 번째 기동의 것이었고, *"처음부터 실행됐다"* 는 **관측이 아니라 추론**이었다.
+> 이 구분은 3b-7에서 데이터 영속을 판정하는 **핵심 증거**가 되므로 여기서부터 정확해야 한다.
 
 ```bash
 kubectl port-forward svc/core-api 8080:8080 &
 curl -s localhost:8080/health
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/actuator/health/readiness
 ```
 확인:
 ```json
 {"result":"SUCCESS","data":"DevQuest API is running","error":null}
 ```
+```
+200
+```
+
+> 🔴 **`/health` 200만으로는 "DB에 붙었다"가 증명되지 않는다.** 이 엔드포인트는 **상수 문자열을
+> 반환**하며 DB를 보지 않는다(그게 liveness용으로는 옳은 설계다 — 아래 3b-7 참조).
+> DB 연결을 증명하는 건 위의 **Flyway 로그**와 `/actuator/health/readiness`다.
+> 절 제목의 *"`/health` 200 = 합격선"* 은 편의상의 이름이고, **판정 근거는 로그 쪽**이다.
 
 > 🎉 **Stage 1과 같은 이미지가 코드 변경 0으로 떴다.** 바뀐 건 환경변수 주입 경로뿐이다.
 > `application-prod.yml`을 100% 환경변수 기반으로 유지한 설계가 여기서 배당금을 낸다 —
@@ -1406,6 +1534,46 @@ Current version of schema "public": 13
 ```
 
 > 🔑 이 차이가 *"스키마가 볼륨에 살아 있다"* 의 증거다.
+
+#### 🔴 `/health` 200은 "앱이 살아났다"를 증명하지 않는다 — probe 두 개를 구분한다
+
+위 `wget /health`는 **상수 문자열을 반환**한다. DB가 죽어 있어도 200이다. 그래서 파드가 `Ready`인
+것만 보고 넘어가면, **DB에 못 붙은 앱에 트래픽이 흘러들어 전부 500**이 되는 상태를 통과시킨다.
+`k8s/base/core-api.yaml`은 두 probe를 **일부러 다른 엔드포인트로** 나눠 둔다:
+
+| probe | 경로 | 무엇에 답하나 | 실패 시 |
+|---|---|---|---|
+| **liveness** | `/health` (상수) | *"프로세스가 교착·데드락에 빠졌나"* | **재시작** |
+| **readiness** | `/actuator/health/readiness` (`db`,`ping`) | *"지금 트래픽을 받아도 되나"* | Service 엔드포인트에서 **제외**(재시작 안 함) |
+
+<!-- verify: k8s/base/core-api.yaml ~ path:[[:space:]]*/actuator/health/readiness -->
+<!-- verify: be/core/core-api/src/main/resources/application.yml ~ include:[[:space:]]*db,ping[[:space:]]*$ -->
+
+🔴 **liveness가 DB를 보면 안 된다.** DB가 잠깐 흔들릴 때 **모든 파드가 동시에 재시작**하고,
+그 재시작 폭풍이 DB를 더 밀어붙여 **장애를 복구하는 게 아니라 증폭**시킨다. `/health`가 상수를
+반환하는 건 게으름이 아니라 liveness용으로는 **정확히 옳은 설계**다. 잘못은 *그것을 readiness로도
+쓰던 것*이었다(원장 `L-15`).
+
+그래서 기동 확인은 **둘 다** 본다:
+
+```bash
+POD=$(kubectl get pod -l app=core-api -o jsonpath='{.items[0].metadata.name}')
+kubectl exec $POD -- sh -c 'wget -qO- http://localhost:8080/health; echo'
+kubectl exec $POD -- sh -c 'wget -qO- http://localhost:8080/actuator/health/readiness; echo'
+```
+```
+{"result":"SUCCESS","data":"DevQuest API is running","error":null}
+{"status":"UP","components":{"db":{"status":"UP",...},"ping":{"status":"UP"}}}
+```
+
+> ⚠️ `mail`이 `readiness`에 **없어야 정상**이다. 학습 클러스터엔 SMTP 자격증명이 없어
+> `/actuator/health`(전체)는 **503**을 준다 — 메일 발송 능력과 HTTP 요청 처리 능력은 무관한데
+> 그것 때문에 트래픽이 끊기면 안 되므로, readiness 그룹을 `db,ping`으로 **명시적으로 좁혔다.**
+>
+> 🔑 **`/actuator/health/readiness`는 `SecurityConfig`에서 별도로 `permitAll`돼 있다.**
+> `"/actuator/health"` 매처는 그 경로 **하나만** 매칭하므로, 하위 경로는 `/actuator/**`의
+> IP 제한(`127.0.0.1`)에 걸린다. kubelet은 **파드 IP로** 찌르기 때문에 그대로 두면 **403 →
+> 파드가 영영 Ready가 안 된다.** 나머지 actuator 엔드포인트의 IP 제한은 유지된다.
 
 ### 3b-8. ★ 이 단계의 목표 — 부수고 다시 짓기
 

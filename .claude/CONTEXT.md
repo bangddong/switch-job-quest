@@ -287,16 +287,30 @@
     ~~① 원장 `L-14` (HIGH) — postgres 비밀번호 수명~~ ✅ **완료(08-10)** — `random_password.postgres_master`를
        `0-bootstrap`으로 이동(영속 EBS와 동일 수명). plan 실측 `1 to add / 0 to change / 0 to destroy`, **비용 0**.
        SOP §6b에 **멱등 동기화 단계**를 표준 절차로 추가(08-07 이전 볼륨은 어느 state에도 없는 옛 비밀번호를 들고 있다)
-    ① **원장 `L-15` (MEDIUM) — readiness probe가 아무것도 검증하지 않는다.**
-       `/health`가 상수 반환이라 DB가 죽어도 Ready → 트래픽 유입 → 전부 500. 처방은 지표를 끄는 게 아니라
-       **readiness 그룹 정의**(`management.endpoint.health.group.readiness.include=db,ping`).
-       `/health` 자체는 **liveness용으로 옳으므로 유지**(liveness가 DB를 보면 장애를 증폭). 무과금
-       > 🔎 서브에이전트 주도 BE 작업이라, 백로그의 *"퀴즈 게이트 확대 전 표본 1건"* 으로 겸용 가능
-    ② **다음 EKS 유료 세션** — 한 번에 셋을 검증한다:
-       ⓐ SOP §6b 비밀번호 동기화가 실제로 갈라짐을 막는가(L-14) ⓑ readiness가 진짜 DB를 보는가(L-15)
-       ⓒ **재현 검증** — 전부 destroy하고 `eks-tutorial-steps.md`**만 보고** Stage 0→3b 재현
-         (CLAUDE.md §재현 검증. 08-10에 3b 문서를 채워 이제 가능해졌다. 막히면 문서를 고치고 재시도)
-       그다음 Stage 4(ALB Ingress). 묶으면 세션 1회로 끝난다
+    ~~① 원장 `L-15` (MEDIUM) — readiness probe가 아무것도 검증하지 않는다~~ ✅ **완료(08-10, #374)** —
+       readiness 그룹을 `db,ping`으로 명시 정의 + probe를 `/actuator/health/readiness`로.
+       `/health`는 **liveness용으로 옳으므로 유지**(liveness가 DB를 보면 재시작 폭풍으로 장애를 증폭).
+       착수 전 함정 1건 회피: `"/actuator/health"` 매처는 하위 경로를 안 잡아 kubelet이 **403 → 영영 Ready 실패**
+    ~~② 무과금 재현 검증(정적 대조)~~ ✅ **완료(08-11)** — 유료 세션 사전 점검 중 **과금 전에 문서 결함 6건** 발견·수정.
+       ①`db_mode` 문서에 0회 등장(Stage 2↔3a를 가르는 스위치인데) ②"Stage 0에 RDS 생긴다"가 거짓
+       ③`26 to add` → 실측 29, **게다가 개수가 모드를 구분 못 함**(양쪽 다 29) ④"RDS 직렬화" 오류가
+       SOP만 고쳐지고 튜토리얼에 잔존 ⑤`validated`를 "빈 DB에 처음 실행"으로 서술(동시 참 불가)
+       ⑥`readiness`·`actuator` 전 문서 0건 — **코드는 #374로 고쳤는데 정답 경로 문서는 옛 검사를 가르치고 있었다**
+       > 🔑 ①③⑥이 **같은 병 — 검사가 주장보다 헐겁다.** 내가 새로 단 마커도 같은 병에 걸려
+       > (`~ readiness`가 주석에 매칭) 세 번 좁힌 끝에 반증 3종을 통과시켰다
+    ③ **다음 EKS 유료 세션** — 남은 것은 **런타임에서만 확인 가능한 것들**이다:
+       ⓐ SOP §6b 비밀번호 동기화가 실제로 갈라짐을 막는가(L-14)
+         🔑 **지금 조건이 유난히 좋다** — 볼륨은 08-07 세션이 `ALTER USER`로 심은 비밀번호를 들고 있고
+         그 state는 파괴됐으며 `0-bootstrap`은 새 비밀번호를 갖고 있다 → **갈라짐이 이미 확정적으로 존재**.
+         동기화 **전에** 접속 시도 → 실패해야 한다(실패 안 하면 L-14 모델이 틀린 것). 멱등 정리가 아니라 **반증**으로 돌릴 것
+       ⓑ readiness가 진짜 DB를 보는가(L-15) — 실클러스터에서 `/actuator/health/readiness`
+       ⓒ **유료 왕복 재현** — apply → 3b → destroy를 `eks-tutorial-steps.md`만 보고
+         (정적 대조로 잡히는 건 08-11에 다 뺐으므로, 여기서 막히면 **진짜 런타임 갭**이다)
+       그다음 Stage 4(ALB Ingress).
+       > ⚠️ **Stage 4를 같은 세션에 넣을지는 ⓒ 통과 후 판단.** "문서가 맞나"(검증)와 "새 IaC 작성"(구축)을
+       > 섞으면 깨졌을 때 원인이 안 갈린다. 클러스터가 이미 떠 있어 이어가는 비용은 작으니 미리 못박지 말 것
+       > ⚠️ **"Stage 0→3b 전부 왕복"은 하지 않는다** — 문자 그대로 하면 apply/destroy 4회(0=RDS, 1, 2,
+       > 3a=동적PVC로 **두 번째 EBS 생성**, 3b) = 2~3시간·비용 몇 배. **최종 상태 재현 1회**로 간다
   - 🔴 **설계의 "daily = 무인증" 전제가 코드와 어긋난다**: `getTodayQuestion()`이 읽는 `daily_mail_log`의
     유일한 writer가 메일 스케줄러라, **로그인 유저 존재 + 메일 발송 성공**이 있어야 오늘의 질문이 생긴다.
     `MAIL_ENABLED`(기본 false)가 사실상 daily의 마스터 스위치다. → **G-2 = 생성/발송 분리**로 해소(Task 2.1).
