@@ -7,13 +7,16 @@ hooks:
   UserPromptSubmit:
     - hooks:
         - type: command
-          command: "python3 /e/development/switch-job-quest/.claude/scripts/inject-clarify-gate.py || python /e/development/switch-job-quest/.claude/scripts/inject-clarify-gate.py"
+          # 🔴 절대경로 금지 — 이 기기는 macOS, 다른 기기는 Windows다.
+          #    2026-08-11까지 `/e/development/...`가 박혀 있어 macOS에서 이 훅 2개가 통째로 죽어 있었다
+          #    (#372의 wiki 경로 하드코딩과 같은 병). `check-hook-wiring.sh`가 이제 이걸 CI에서 잡는다.
+          command: "python3 .claude/scripts/inject-clarify-gate.py || python .claude/scripts/inject-clarify-gate.py"
           timeout: 5
   PreToolUse:
     - matcher: "Write|Edit"
       hooks:
         - type: command
-          command: "/e/development/switch-job-quest/.claude/scripts/assert-orchestrator-path.sh"
+          command: ".claude/scripts/assert-orchestrator-path.sh"
   PostToolUse:
     - matcher: ".*"
       hooks:
