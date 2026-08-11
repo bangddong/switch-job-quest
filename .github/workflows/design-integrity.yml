@@ -28,3 +28,12 @@ jobs:
 
       - name: 설계 무결성 검사
         run: bash .claude/scripts/check-design-integrity.sh
+
+      # 2026-08-11 추가. 훅이 "설정돼 있는가"가 아니라 "실행 가능한가"를 본다.
+      # 계기: .claude/scripts/의 .sh 19개 중 12개가 mode 644라 훅으로 호출되면 exit 126으로
+      #       죽었고, 훅 프로토콜상 차단은 exit 2뿐이라 **막지 못하고 조용히 통과**시켰다.
+      #       `.claude/logs/`가 존재하지 않는 것이 증거였다(log-event.sh가 무조건 mkdir하는데도).
+      #       설계 무결성 검사와 나란히 두는 이유: 둘 다 "문서/설정이 실물과 맞는가"를 본다.
+      #       ⚠️ checkout이 파일 모드를 보존하므로 CI에서도 644가 그대로 재현된다.
+      - name: 훅 배선 검사 (실행 권한·경로 이식성)
+        run: bash .claude/scripts/check-hook-wiring.sh

@@ -384,6 +384,27 @@
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 나중에 복습(로그인·DB·간격 반복, RPG XP 연동). 지금은 보류.
 
 ### 백로그
+
+> 🔴 **2026-08-11 하네스 전수 점검** — 훅 12개가 mode 644라 **한 번도 실행된 적이 없었다**.
+> `.claude/logs/` 부재가 증거(`log-event.sh`가 무조건 `mkdir`하는데도 없었다). 수리 완료(아래 3건은 **범위 밖**으로 남긴 것).
+> 교훈: **스크립트의 로직은 여러 번 검증했지만 스크립트가 돌기는 하는지는 아무도 안 봤다.**
+> 직전 PR(#372)에서 고친 `check-wiki-question-candidates.sh`가 정확히 그 상태였다.
+
+- [ ] **harness(MEDIUM): `assert-not-main.sh:41`이 `.claude/`를 main에서 면제한다** (2026-08-11 발견).
+      문서(`CLAUDE.md` 브랜치 규칙 · `orchestrator.md` 역할 경계)는 *"`.claude/` 포함 모든 파일 수정은
+      작업 브랜치에서 · 예외 없음"* 이라고 적어뒀다 — **훅과 문서가 반대로 말한다.**
+      🔑 08-11 이전엔 훅이 죽어 있어 무의미했지만 **이제 실제로 도는 규칙**이라 어느 쪽이 의도인지 정해야 한다.
+      면제를 남기면 **하네스 자체를 리뷰 없이 main에 직접 고칠 수 있다** — 지금 가장 위험한 구멍.
+- [ ] **harness(LOW): `qa-reviewer`의 `Bash` 우회구** (2026-08-11 발견).
+      도구 목록에서 `Write`·`Edit`를 빼 "코드 수정 금지"를 기계로 만들었으나 `Bash`가 남아 있다
+      (마커 파일을 써야 하므로). `echo > file`은 안 막힌다. `design-reviewer`는 `permissionMode: plan`이라
+      완전히 막히는데 — **그쪽이 온전한 형태다.** 마커 생성을 전용 스크립트로 빼면 `Bash`를 뺄 수 있다.
+- [ ] **harness(MEDIUM): 필수 상태 체크가 2개뿐** (2026-08-11 실측).
+      `required_status_checks.contexts = ["FE CI / build", "BE CI / test"]`.
+      **`gitleaks`(시크릿 스캔)·`Design Integrity`·`tfsec`·`guard`는 빨개도 머지를 막지 않는다.**
+      새로 추가한 **훅 배선 검사도 `Design Integrity` 잡에 있어 같은 처지**다 — 즉 재발 방지 장치 자체가
+      아직 권고 수준이다. `enforce_admins: false`. → `gh api ... /branches/main/protection`으로 목록 확대 검토.
+
 - [ ] **process(MEDIUM): 이해도 퀴즈 게이트가 `stage/eks-*` 에만 걸려 있다** (2026-08-07 제기).
       `assert-eks-quiz.sh:21`이 그 외 브랜치를 전부 `exit 0`으로 면제한다. orchestrator 9.5단계는
       비EKS PR에 퀴즈를 **"선택"으로 제안**하게 되어 있는데 — **실측: 강제 4건(`docs/eks-quizzes/`) vs 선택 0건.**
