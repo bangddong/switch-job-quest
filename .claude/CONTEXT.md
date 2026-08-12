@@ -399,11 +399,15 @@
       도구 목록에서 `Write`·`Edit`를 빼 "코드 수정 금지"를 기계로 만들었으나 `Bash`가 남아 있다
       (마커 파일을 써야 하므로). `echo > file`은 안 막힌다. `design-reviewer`는 `permissionMode: plan`이라
       완전히 막히는데 — **그쪽이 온전한 형태다.** 마커 생성을 전용 스크립트로 빼면 `Bash`를 뺄 수 있다.
-- [ ] **harness(MEDIUM): 필수 상태 체크가 2개뿐** (2026-08-11 실측).
-      `required_status_checks.contexts = ["FE CI / build", "BE CI / test"]`.
-      **`gitleaks`(시크릿 스캔)·`Design Integrity`·`tfsec`·`guard`는 빨개도 머지를 막지 않는다.**
-      새로 추가한 **훅 배선 검사도 `Design Integrity` 잡에 있어 같은 처지**다 — 즉 재발 방지 장치 자체가
-      아직 권고 수준이다. `enforce_admins: false`. → `gh api ... /branches/main/protection`으로 목록 확대 검토.
+- [x] ~~**harness(MEDIUM): 필수 상태 체크가 2개뿐**~~ (08-11 발견 → **08-12 해소**).
+      빨개도 머지되던 4개(`gitleaks`·`Design Integrity`·`tfsec`·`guard`)를 필수로 올렸다.
+      **훅 배선 검사가 `Design Integrity` 안에 살고 있었으므로, 재발 방지 장치 자체가 권고였다.**
+      🔑 남은 교훈은 목록이 아니라 **드리프트**다: `required_status_checks`는 GitHub 설정에만 있고
+      레포엔 없다 → 검사를 새로 만들고 필수 등록을 잊으면 **아무 신호 없이 권고로 남는다**(그렇게 당했다).
+      CI로는 못 잡는다(보호 규칙 조회에 admin 스코프 필요, Actions `GITHUB_TOKEN`엔 없음).
+      → `session-status.sh`의 **"보호"** 절이 매 세션 양방향으로 대조한다. 목록은 여기 적지 않는다 —
+      이 항목의 옛 버전이 하드코딩해둔 2개짜리 목록은 확대 3분 만에 거짓이 됐다.
+      `enforce_admins: false` 유지(로컬 `assert-no-admin.sh`가 1차 방어, 사고 시 탈출구 보존).
 
 - [ ] **process(MEDIUM): 이해도 퀴즈 게이트가 `stage/eks-*` 에만 걸려 있다** (2026-08-07 제기).
       `assert-eks-quiz.sh:21`이 그 외 브랜치를 전부 `exit 0`으로 면제한다. orchestrator 9.5단계는
