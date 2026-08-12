@@ -128,7 +128,15 @@ EKS 이관 작업이 끝나면 이 섹션을 제거한다.
 
 ## 브랜치 규칙
 
-모든 파일 수정은 반드시 작업 브랜치에서 진행 (main 직접 수정 금지).
+**추적되는** 모든 파일 수정은 반드시 작업 브랜치에서 진행 (main 직접 수정 금지).
+`.claude/`도 예외가 아니다 — 훅 스크립트·에이전트 정의·`settings.json`은 특히.
+유일한 예외는 gitignore되는 런타임 파일(`qa-cache/`·`logs/`·`scratch/` 등)이며,
+커밋되지 않아 리뷰 대상이 아니기 때문이다. 판정은 `assert-not-main.sh`가 `git check-ignore`로 한다.
+
+<!-- verify: .claude/scripts/assert-not-main.sh ~ git check-ignore -q "\$FILE_PATH" -->
+<!-- verify: .claude/scripts/assert-not-main.sh ~ pwd -P -->
+<!-- verify: .github/workflows/design-integrity.yml ~ check-hook-wiring\.sh -->
+
 
 ```bash
 git fetch origin main
