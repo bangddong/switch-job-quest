@@ -399,10 +399,14 @@
       면제는 가드 전체를 끄는 걸 한 단계로 만들었다.
       곁다리로 **심볼릭 링크 fail-open**도 고쳤다 — "레포 밖" 판정이 문자열 prefix 비교뿐이라
       논리/물리 경로가 갈리면 main에서 `be/**`까지 통과했다(반증 테스트 짜다 실제로 밟음).
-- [ ] **harness(LOW): `qa-reviewer`의 `Bash` 우회구** (2026-08-11 발견).
-      도구 목록에서 `Write`·`Edit`를 빼 "코드 수정 금지"를 기계로 만들었으나 `Bash`가 남아 있다
-      (마커 파일을 써야 하므로). `echo > file`은 안 막힌다. `design-reviewer`는 `permissionMode: plan`이라
-      완전히 막히는데 — **그쪽이 온전한 형태다.** 마커 생성을 전용 스크립트로 빼면 `Bash`를 뺄 수 있다.
+- [x] ~~**harness(LOW): `qa-reviewer`의 `Bash` 우회구**~~ (08-11 발견 → **08-12 해소**).
+      에이전트 레벨 `PreToolUse[Bash]` 훅 `assert-qa-readonly.sh` 추가 — **읽기는 자유, 쓰기는
+      `.claude/qa-cache/`만.** 테스트 39건(정상 리뷰 명령 14 / 우회 시도 25) 전부 기대값 일치.
+      🔎 **08-11에 적어둔 해법("마커 생성을 전용 스크립트로 빼면 `Bash`를 뺄 수 있다")은 틀렸다.**
+      qa-reviewer는 마커뿐 아니라 **`git diff`로 리뷰 자체를 한다** — `Bash`를 빼면 일을 못 한다.
+      `design-reviewer`의 `permissionMode: plan`은 그쪽이 순수 읽기라서 가능한 것이고, 여기엔
+      이식할 수 없다. 도구 단위가 아니라 **명령 단위**로 가르는 게 이 역할의 온전한 형태다.
+      금지목록이 아니라 **허용목록**을 쓴다 — 금지목록은 반드시 샌다(kubectl·tofu·`python3 -c` …).
 - [x] ~~**harness(MEDIUM): 필수 상태 체크가 2개뿐**~~ (08-11 발견 → **08-12 해소**).
       빨개도 머지되던 4개(`gitleaks`·`Design Integrity`·`tfsec`·`guard`)를 필수로 올렸다.
       **훅 배선 검사가 `Design Integrity` 안에 살고 있었으므로, 재발 방지 장치 자체가 권고였다.**
