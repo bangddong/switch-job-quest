@@ -129,6 +129,24 @@
    > 그래도 이 단계는 남긴다 — **08-07 이전에 구워진 볼륨은 어느 state에도 없는 옛 비밀번호를
    > 들고 있고**, 앞으로 비밀번호를 회전시킬 때도 같은 갈라짐이 생긴다.
    > 컨테이너 안 로컬 소켓은 `trust` 인증이라 **옛 비밀번호 없이도** 이 명령이 통한다.
+   >
+   > 🔴 **동기화됐는지 확인할 때 `-h 127.0.0.1`을 쓰지 마라 — 항상 거짓 합격한다.**
+   > `pg_hba.conf` 실측(08-12):
+   > ```
+   > local  all all                trust
+   > host   all all 127.0.0.1/32   trust          ← 소켓뿐 아니라 루프백 TCP도 trust다
+   > host   all all ::1/128        trust
+   > host   all all all            scram-sha-256  ← 비밀번호를 실제로 검사하는 유일한 줄
+   > ```
+   > *"소켓은 trust"* 만 알고 **"그러므로 TCP는 검사된다"** 로 추론하면 틀린다(08-12에 실제로 밟았다).
+   > 검증은 **파드 IP나 다른 파드에서** 붙어야 `scram-sha-256` 줄을 탄다:
+   > ```bash
+   > PODIP=$(kubectl get pod postgres-0 -o jsonpath='{.status.podIP}')
+   > kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d | \
+   >   kubectl exec -i postgres-0 -- sh -c "read -r PW; PGPASSWORD=\"\$PW\" \
+   >     psql -h $PODIP -U devquest -d devquest -tAc 'select 1'"
+   > ```
+   > → `1`이면 동기화 성공. `FATAL: password authentication failed`면 아직 갈라져 있다.
 
 7. 실습 목표 수행. **일지 실시간 기록**(에러 원문·해결·비용·결정).
    - 매 턴 Stop 훅이 하트비트를 갱신 → "사람이 활동 중"이라 리퍼가 안 죽인다.

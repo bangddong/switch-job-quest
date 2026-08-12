@@ -1514,6 +1514,39 @@ ALTER ROLE
 > 알게 된다**(실제로 원인 파악에 7분을 태웠다).
 > 컨테이너 안 로컬 소켓은 `trust` 인증이라 **옛 비밀번호 없이도** 이 명령이 통한다.
 
+#### 🔴 동기화됐는지 확인할 때 `-h 127.0.0.1`을 쓰면 항상 통과한다
+
+`pg_hba.conf` 실측(2026-08-12):
+<!-- verify: docs/eks-session-sop.md ~ scram-sha-256 -->
+
+```
+local  all all                trust
+host   all all 127.0.0.1/32   trust          ← 소켓뿐 아니라 루프백 TCP도 trust
+host   all all ::1/128        trust
+host   all all all            scram-sha-256  ← 비밀번호를 실제로 검사하는 유일한 줄
+```
+
+*"소켓은 trust"* 까지만 알고 **"그러므로 TCP는 검사된다"** 로 추론하면 틀린다. 08-12 검증 세션에서
+실제로 밟았다 — `psql -h 127.0.0.1`로 확인했더니 **동기화 전인데도 성공**했고, 하마터면
+"갈라짐이 없다"고 결론 낼 뻔했다. 검사가 주장(비밀번호가 맞는가)보다 헐거운 대리물
+(TCP로 붙는가)을 보고 있었다.
+
+검증은 **파드 IP나 다른 파드에서** 붙어야 `scram-sha-256` 줄을 탄다:
+
+```bash
+PODIP=$(kubectl get pod postgres-0 -o jsonpath='{.status.podIP}')
+kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d | \
+  kubectl exec -i postgres-0 -- sh -c "read -r PW; PGPASSWORD=\"\$PW\" \
+    psql -h $PODIP -U devquest -d devquest -tAc 'select 1'"
+```
+
+| 출력 | 뜻 |
+|---|---|
+| `1` | 동기화 성공 |
+| `FATAL: password authentication failed for user "devquest"` | 아직 갈라져 있다 — 위 `ALTER USER`를 실행 |
+
+> 💡 비밀번호를 **stdin으로 넘긴다.** 명령줄 인자로 주면 `ps`와 셸 히스토리에 남는다.
+
 ### 3b-7. 앱 기동 확인
 
 ```bash

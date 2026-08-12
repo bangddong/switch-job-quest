@@ -1606,3 +1606,235 @@ NAT Gateway 없음(퍼블릭 서브넷). 합계 **≈ $0.12/h** — 08-07 실측
 
 > 컨테이너 안 로컬 소켓은 `trust`라 비밀번호 없이도 통한다. 그래서 검증은 **TCP(`-h 127.0.0.1`)**
 > 로 해야 한다 — 소켓으로 하면 어떤 비밀번호든 통과해 검사가 무의미해진다.
+
+### [결정] 20:34 — ⓐ 사전 등록(pre-registration): 테스트 **전에** 예측을 박아둔다
+
+apply가 도는 동안 코드로 확인한 사실:
+
+| 사실 | 근거 |
+|---|---|
+| `random_password.postgres_master`는 **0-bootstrap에서 새로 생성**됐다 (옛 값 import 없음) | `0-bootstrap/postgres-password.tf:41` — `prevent_destroy`만 있고 `import`/`ignore_changes` 없음 |
+| 2-cluster의 `random_password`는 **postgres가 아니라 `jwt_secret`** | `2-cluster/secrets.tf:121` |
+| 앱이 받는 비밀번호 = 0-bootstrap 값 | `2-cluster/secrets.tf:92` → Secrets Manager → ESO → `core-api-db` |
+| 볼륨은 08-07 `ALTER USER` 값을 들고 있다 | 그 후 유료 세션이 없었다(마지막 08-07, 0-bootstrap 비밀번호는 08-10 생성) |
+
+→ **발산이 보장된 상태.** 예측:
+
+- **P1** — 동기화 전, Secrets Manager 비밀번호로 **TCP** 접속하면
+  `FATAL: password authentication failed for user "devquest"` 로 **실패**한다.
+- **P2** — 같은 시점에 `trust` 소켓으로 붙으면 **성공**하고, **기존 데이터가 그대로 보인다**
+  (= 볼륨이 옛 것이지 새 `initdb`가 아니다).
+- **P3** — §6b `ALTER USER` 후 같은 TCP 접속이 **성공**한다.
+- **P4** — 그 사이 `core-api` 파드는 auth 실패로 Ready가 되지 못한다.
+
+> 🔎 **P2가 없으면 P1이 약하다.** P1의 실패만으로는 *"볼륨이 새로 initdb돼서 다른 비밀번호가
+> 구워졌다"* 와 구분이 안 된다. (엄밀히는 새 initdb라면 P1이 **성공**했어야 하므로 이미 배제되지만,
+> 데이터 생존은 별개의 주장이라 따로 본다 — 원장이 말하는 건
+> *"데이터는 완벽히 살아남았는데 자격증명만 안 붙었다"* 이다.)
+
+> ⚠️ **이 테스트는 단방향이다.** 08-07 비밀번호는 destroy된 2-cluster state에 있었으므로
+> **복구 불가**다. 즉 "볼륨에 옛 값이 있다"를 직접 확인할 수는 없고, "새 값이 안 통한다"만
+> 확인할 수 있다. 한계를 적어둔다.
+
+### [결정] 20:37 — ⓑ 사전 등록: L-15는 두 주장이고, 둘 다 잰다
+
+`k8s/base/core-api.yaml`의 현재 설정:
+- liveness → `/health` (상수 반환), `periodSeconds: 20`, `failureThreshold: 3`
+- readiness → `/actuator/health/readiness` (DB 확인), `periodSeconds: 10`, `failureThreshold: 3`
+
+L-15가 닫히면서 두 가지를 주장했다. **고친 것과 일부러 안 고친 것을 따로 잰다.**
+
+절차: 앱 Ready 확인 → `kubectl scale statefulset postgres --replicas=0` → 관찰 → 복구.
+
+| # | 예측 | 무엇을 재나 |
+|---|---|---|
+| Q1 | DB 정지 후 `/actuator/health/readiness` → **503**, `db` 컴포넌트 DOWN | readiness가 **실제로** DB를 본다 (고친 것) |
+| Q2 | 파드가 `0/1 NotReady`가 되고 **Service 엔드포인트에서 빠진다** | 트래픽 차단이 실제로 작동 |
+| Q3 | `/health`(liveness)는 **계속 200** | 상수 반환이 **의도된 설계**임을 확인 |
+| Q4 | **`RESTARTS`가 증가하지 않는다** | liveness가 DB를 안 보므로 **재시작 폭풍이 없다** ← 일부러 안 고친 쪽 |
+| Q5 | DB 복구 후 자동으로 Ready 복귀 (수동 개입 없이) | 회복 경로 |
+
+> 🔎 **Q4가 이 검증의 핵심이다.** Q1만 재면 "readiness 고쳤다"는 확인이지만, L-15의 진짜 설계
+> 판단은 *"liveness는 의존성을 보면 안 된다"* 쪽이다. `/health`가 상수를 반환하는 건 **결함이
+> 아니라 정답**이라는 주장이고, 그건 **재시작이 일어나지 않음**으로만 증명된다.
+> 부재를 재는 것이라 관찰 창을 충분히 잡는다 — liveness 20s × 3 = **60초 이상** 정지시킨다.
+
+> ⚠️ postgres를 `--replicas=0`으로 내린다. PVC는 건드리지 않으므로 static PV·`Retain` 정책과
+> 무관하고, 다시 올리면 같은 PVC에 재바인딩된다. (PVC를 지우면 SOP §8의 실패 6종 ④를 밟는다 —
+> 그건 하지 않는다.)
+
+### [해결] 20:52 — ⓐ 결과: L-14 전제 **확인**. 단, 첫 테스트는 **무효였다**
+
+| 예측 | 결과 | 증거 |
+|---|---|---|
+| **P2** 볼륨이 옛 것이고 데이터 생존 | ✅ | 15 테이블 · 13 마이그레이션 · **최초 적용 2026-08-07** |
+| **P1** 동기화 전 새 비밀번호 거부 | ✅ *(재시도 후)* | `FATAL: password authentication failed for user "devquest"` |
+| **P3** 동기화 후 같은 접속 성공 | ✅ | `ALTER ROLE` → `select 1` → `1` |
+
+생존한 테이블 15개:
+```
+ai_call_log, applied_company, coding_problem, coding_submission, company_activity,
+daily_mail_log, daily_question_content, flyway_schema_history, quest_history,
+quest_progress, stage3b_proof, tech_question_bank, user_coding_level, user_email, user_resume
+```
+
+**→ 원장 L-14가 서술한 발산은 실재했고, SOP §6b가 실제로 해소한다.** P3(양성 대조)까지 봤으므로
+"scram이 통째로 고장나서 뭘 해도 실패"라는 대안 해석도 배제된다.
+
+### [막힘] 🔴 첫 P1은 **통과할 수 없는 검사가 아니라, 실패할 수 없는 검사**였다
+
+첫 시도에서 P1이 **성공**했다 — 즉 "발산이 없다"는 뜻으로 읽힐 뻔했다. 원인:
+
+```
+$PGDATA/pg_hba.conf (실측)
+  local   all all                     trust
+  host    all all 127.0.0.1/32        trust     ← 내가 쓴 경로
+  host    all all ::1/128             trust
+  host    all all all                 scram-sha-256   ← 진짜 비밀번호 검사
+```
+
+**`psql -h 127.0.0.1`은 TCP지만 여전히 `trust`다.** 어떤 비밀번호를 줘도 통과한다.
+
+내 사전 등록에는 이렇게 써 있었다:
+
+> 컨테이너 안 로컬 소켓은 `trust`라 비밀번호 없이도 통한다. 그래서 검증은 **TCP(`-h 127.0.0.1`)**
+> 로 해야 한다 — 소켓으로 하면 어떤 비밀번호든 통과해 검사가 무의미해진다.
+
+**맞는 전제에서 틀린 결론을 냈다.** "소켓이 trust"는 참이지만 "그러므로 TCP는 비밀번호를 본다"는
+거짓이다. `pg_hba.conf`를 **열어보지 않고** 추론했다.
+
+해결: 파드 **자기 IP**(`10.0.4.118`)로 접속 → 클라이언트 주소가 `127.0.0.1`이 아니므로
+`host all all all scram-sha-256` 줄을 탄다. 그러자 예측대로 실패했다.
+
+> 🔴 **이번 주 내내 쫓던 그 형태를, 그것을 검증하려고 만든 테스트에서 다시 밟았다.**
+> 검사가 주장(비밀번호가 맞는가)보다 **헐거운 대리물**(TCP로 붙는가)을 봤다.
+> 08-11 튜토리얼 결함 6건, 08-11 mode 644, 08-12 권고 상태 체크와 **같은 병**이다.
+> 다른 점은 이번엔 **내가 그 병을 알고 있는 상태에서** 밟았다는 것 — 그래서 사전 등록이 유효했다.
+> 예측을 미리 박아두지 않았으면 "성공했으니 L-14는 이미 해소된 모양"으로 넘어갔을 것이다.
+
+### [결정] SOP §6b·튜토리얼 3b-6의 괄호 설명을 고쳐야 한다
+
+현재 문구: *"컨테이너 안 로컬 소켓은 `trust` 인증이라 옛 비밀번호 없이도 이 명령이 통한다."*
+
+**참이지만 불완전하다.** 읽는 사람이 "그럼 TCP는 검사되겠네"로 추론하게 만든다 — 실제로 내가 그랬다.
+동기화가 됐는지 `psql -h 127.0.0.1`로 확인하면 **항상 통과**한다(거짓 합격).
+→ `127.0.0.1`도 `trust`임을 명시하고, 검증은 **파드 IP 또는 다른 파드에서** 하라고 적는다.
+
+### [해결] 21:00 — ⓑ 결과: L-15의 **두 주장 모두** 확인
+
+절차: `kubectl scale statefulset postgres --replicas=0` → 105초 관찰 → 복구.
+
+```
+T+0    postgres 정지
+T+15   pod=[1/1 Running restarts=0]  ready=timeout  live=200  ep=있음
+T+30   pod=[0/1 Running restarts=0]  ready=timeout  live=200  ep=없음
+T+45   pod=[0/1 Running restarts=0]  ready=timeout  live=200  ep=없음
+T+60   pod=[0/1 Running restarts=0]  ready=timeout  live=200  ep=없음
+T+75   pod=[0/1 Running restarts=0]  ready=timeout  live=200  ep=없음
+T+90   pod=[0/1 Running restarts=0]  ready=timeout  live=200  ep=없음
+```
+
+| # | 예측 | 결과 |
+|---|---|---|
+| Q1 | readiness 실패 | ✅ kubelet 이벤트 `Readiness probe failed ... (x12 over 102s)` |
+| Q2 | NotReady + 엔드포인트 제외 | ✅ T+30에 `0/1`. EndpointSlice `{"ready":false,"serving":false}`, 주소가 `notReadyAddresses`로 이동 |
+| Q3 | liveness는 계속 200 | ✅ T+90까지 `{"result":"SUCCESS",...}` |
+| Q4 | **재시작 없음** | ✅ **90초 내내 `restarts=0`** (liveness 20s×3=60s 임계를 넘겨 관찰) |
+| Q5 | 복구 후 자동 Ready | ✅ 수동 개입 0. `{"status":"UP"}`, 엔드포인트 복귀, **재시작 여전히 0** (파드 age 3m46s = 한 번도 안 죽음) |
+
+**→ L-15가 고친 것(readiness가 DB를 본다)과 일부러 안 고친 것(liveness는 안 본다) 둘 다 실증됐다.**
+`/health`가 상수를 반환하는 것은 결함이 아니라 **재시작 폭풍을 막는 설계**다.
+
+### [메모] 예상과 달랐던 것 — readiness는 **503이 아니라 타임아웃**으로 실패한다
+
+```
+Readiness probe failed: Get "http://10.0.9.86:8080/actuator/health/readiness":
+  context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+```
+
+probe 설정은 `timeout=1s period=10s #failure=3`. DB가 없으면 Spring의 `db` 헬스 인디케이터가
+**커넥션 획득에서 블로킹**하므로 응답 자체가 안 온다.
+
+결과적으로는 동작한다(kubelet은 타임아웃도 실패로 센다). 하지만 **메커니즘이 코드·문서가 함의하는
+것과 다르다** — "readiness가 DB를 보고 503을 준다"가 아니라 "readiness가 매달려서 죽는다"다.
+
+실무적 차이:
+- `timeoutSeconds`를 늘리면(예: 5s) 실패 감지가 그만큼 느려진다. 지금 1s라 빠른 건 **우연에 가깝다**
+- 503 본문을 파싱하는 외부 모니터링이 있다면 아무것도 못 받는다
+- Hikari `connection-timeout`(기본 30s)에 묶여 있어, 그 값을 늘리면 헬스 응답도 같이 느려진다
+
+→ 원장에 LOW로 올린다. **결함은 아니지만 문서화되지 않은 의존**이다.
+
+### [해결] 21:05 — teardown · 고아 0건 · 세션 결산
+
+**타임라인**
+
+| 구간 | 시각 | 소요 |
+|---|---|---|
+| apply 시작 (과금 개시) | 20:30 | — |
+| 컨트롤플레인 생성 | | **6m41s** (08-07: 6m1s) |
+| 노드그룹 생성 | | **1m47s** (07-28: 2m48s — 빨라짐) |
+| 애드온 4종 | | vpc-cni·kube-proxy 각 14s · coredns 14s · **ebs-csi 45s** |
+| apply 완료 | 20:39 | **29 added, 0 changed, 0 destroyed** |
+| destroy 시작 | 20:48:53 | |
+| 노드그룹 파괴 | | **8m20s** ← 07-28 실측 2m16s의 **3.7배** |
+| 컨트롤플레인 파괴 | | 1m1s (07-28: 2m9s) |
+| destroy 완료 | 20:58:40 | **29 destroyed** (= apply 수와 일치, 불변식 유지) |
+
+**과금 창 ≈ 29분 → 증분 비용 ≈ $0.06** (베이스라인 제외).
+
+> ⚠️ **노드그룹 destroy 8m20s는 설명되지 않는다.** 같은 t4g.small 1대인데 07-28엔 2m16s였다.
+> 추측(미검증): ENI 정리 지연 또는 AWS 측 변동. **재현되면 원인을 파야 한다** — SOP §1의
+> 왕복 시간표(40~50분)가 destroy 쪽에서 깨지면 "통시간 확보" 판단이 틀어진다.
+
+**§9 고아 검사 — 전 항목 0건 합격**
+
+```
+tofu state 0 · EKS 0 · ELB 0 · NAT GW 0 · RDS 인스턴스 0
+RDS 스냅샷 수동 0 / 자동 0 · EBS 고아 0 · Secrets Manager 0(삭제 대기 포함)
+```
+
+**§9b 영속 인벤토리 — 원장과 일치 합격**
+
+```
+vol-0518b6d0dcd2b0d70 | 10 GiB | ap-northeast-2a | available   ← 정확히 1개
+```
+
+**dead man's switch 양 끝이 실제로 돌았다**: `tofu apply` 시 `eks-session-marker.sh`가
+`.claude/eks-session/active` 생성(20:30) → teardown 후 `eks-heartbeat-reminder.sh`가
+과금 리소스 0건을 확인하고 **자가청소**(active 제거). 08-11에 되살린 훅 하네스가 실제 과금
+세션에서 처음으로 제 일을 했다.
+
+### [막힘] 내가 낸 실수 — ESO IRSA에 **에러 메시지가 role ARN 자리에 들어갔다**
+
+apply가 **아직 안 끝난 상태에서** `tofu output -raw eso_role_arn`을 읽었다. outputs가 없으니
+tofu가 경고를 냈는데 **종료코드는 성공**이었고, 그 경고 본문(ANSI 색상 이스케이프 포함)이
+그대로 변수에 담겨 helm 주석이 됐다:
+
+```
+eks.amazonaws.com/role-arn: "<ESC>[33m...Warning: No outputs found...The state file either has no outputs defined"
+```
+
+helm도 K8s도 항의하지 않았다. IRSA가 안 붙은 채 ESO가 떴다.
+
+> 🔴 **이 레포는 정확히 같은 가드를 이미 갖고 있다.** SOP §2b의 `[ -z "$SHA" ]` —
+> *"aws 호출이 실패한 상황에서 가장 위험한 방향으로 조용히 통과한다"* 며 지우지 말라고
+> 적어둔 그 가드다. **ECR엔 붙였고 ESO엔 안 붙였다.**
+
+해결: `case "$ESO_ROLE" in arn:aws:iam::*:role/*)` 형식 검사 후 `helm upgrade` + 파드 재시작.
+확인은 **파드 안 환경변수**로 했다 — `AWS_ROLE_ARN` / `AWS_WEB_IDENTITY_TOKEN_FILE` 주입 확인.
+
+### [메모] 튜토리얼 결함 2건 (이번 세션 발견)
+
+1. **in-cluster 경로가 끊긴다.** `externalsecret-db-incluster.yaml`을 적용하는 단계가 문서에 없다.
+   832행은 RDS용(`externalsecret-db.yaml`)뿐이고, in-cluster 적용법은 **YAML 파일 주석 헤더에만**
+   있다. "처음 하는 사람이 그대로 따라 할 수 있는 문서"가 목표인데 3a~3b 경로에서 끊긴다.
+2. **2-2의 `ESO_ROLE=$(tofu output ...)`에 빈 값 가드가 없다** (위 실수의 직접 원인).
+
+### [메모] 부수 확인 — 어제(08-11) 정적 대조로 고친 것들이 실물에서 맞았다
+
+- **§2-4 `validated`**: 데이터 있는 볼륨에 재배포 → `Successfully validated 13 migrations` ✅
+  (어제 `applied`에서 정정한 그대로)
+- **§3b-5 static PV 3종 출력**: 문서의 5줄과 정확히 일치 ✅
+- **볼륨 부착 확인**: `vol-0518b6d0dcd2b0d70 in-use /dev/xvdaa` ✅
+- **ESO 키 수**: `core-api-db` 4키 + `core-api-app` 3키 = 문서의 **합 7키** ✅
