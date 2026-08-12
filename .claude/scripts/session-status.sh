@@ -65,6 +65,61 @@ else
   row "PR" "${C_DIM}gh 미설치 — 건너뜀${C_0}"
 fi
 
+# ── 브랜치 보호: 필수 체크 드리프트 ───────────────────────────────
+# 왜 여기 있나: required_status_checks는 **GitHub 설정에만** 있고 레포 안엔 없다.
+#   → 새 검사를 만들고 필수 등록을 잊으면 아무 신호 없이 "권고"로 남는다.
+#   실측(08-11): Design Integrity·gitleaks·tfsec·guard 4개가 정확히 그 상태였다.
+#   그 중 Design Integrity 안에 훅 배선 검사가 살고 있었으니, 재발 방지 장치 자체가
+#   빨개도 머지되는 상태였다. 08-12에 6개로 확대.
+#   CI로는 못 잡는다 — 보호 규칙 조회에 admin 스코프가 필요한데 Actions의 GITHUB_TOKEN엔 없다.
+#
+#   두 방향을 다 본다 (비대칭이라서):
+#     ① 필수인데 생산하는 job이 없다 → context 미보고 → PR이 Expected로 영구 대기 (fail-closed)
+#     ② PR에서 도는데 필수가 아니다  → 빨개도 머지된다 (fail-open, 조용함) ← 이번에 당한 쪽
+hdr "보호"
+if command -v gh >/dev/null 2>&1; then
+  CTX=$(gh api "repos/:owner/:repo/branches/main/protection" \
+          --jq '.required_status_checks.contexts[]' 2>/dev/null)
+  if [ -z "$CTX" ]; then
+    row "필수 체크" "${C_DIM}조회 실패 (권한/오프라인) — 건너뜀${C_0}"
+  else
+    # **모든** PR에서 무조건 도는 워크플로의 job 이름만 모은다.
+    #   `pull_request:`에 paths/branches 필터가 붙어 있으면 해당 없는 PR에선 아예 안 돈다
+    #   → 그런 검사를 필수로 걸면 그 PR은 "Expected"로 **영구 대기**한다. 필수 후보가 아니다.
+    #   (실측: ecr-push=paths:be/**, infra-deploy=paths:infra/aws-eks/** — 둘 다 제외돼야 정상)
+    # job은 4칸 들여쓰기 `name:`, step은 `- name:`이라 정규식으로 갈린다.
+    JOBS=$(for f in "$ROOT"/.github/workflows/*.yml; do
+             [ -f "$f" ] || continue
+             awk '
+               /^on:/ { inon=1; next }
+               inon && /^[a-zA-Z]/ { inon=0 }
+               inon && /^  pull_request:[[:space:]]*$/ { inpr=1; bare=1; next }
+               inpr && /^  [a-zA-Z]/ { inpr=0 }
+               inpr && /^    (paths|paths-ignore|branches|branches-ignore):/ { bare=0 }
+               END { exit (bare==1 ? 0 : 1) }
+             ' "$f" || continue
+             sed -n 's/^    name: *//p' "$f"
+           done)
+    DRIFT=0
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      printf '%s\n' "$JOBS" | grep -qxF "$c" || { row "생산자 없음" "${C_R}${c}${C_0}"; DRIFT=1; }
+    done <<< "$CTX"
+    while IFS= read -r j; do
+      [ -n "$j" ] || continue
+      printf '%s\n' "$CTX" | grep -qxF "$j" || { row "권고 상태" "${C_Y}${j}${C_0}  ${C_DIM}빨개도 머지됨${C_0}"; DRIFT=1; }
+    done <<< "$JOBS"
+    NC=$(printf '%s\n' "$CTX" | grep -c . )
+    if [ "$DRIFT" -eq 0 ]; then
+      row "필수 체크" "${C_G}${NC}개 · PR 검사 전부 필수${C_0}"
+    else
+      row "필수 체크" "${NC}개 ${C_Y}· 드리프트 있음(위)${C_0}"
+    fi
+  fi
+else
+  row "보호" "${C_DIM}gh 미설치 — 건너뜀${C_0}"
+fi
+
 # ── 미해결 지적 원장 ──────────────────────────────────────────────
 # review-ledger.md의 "미해결 (open)" 절에 있는 표 행(| L-…)만 센다.
 hdr "원장"
