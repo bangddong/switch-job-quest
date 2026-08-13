@@ -800,9 +800,12 @@ DB 접속에 필요한 값 4개가 **서로 다른 시크릿에 나뉘어 있다
 ESO_ROLE=$(tofu -chdir=infra/aws-eks/2-cluster output -raw eso_role_arn)
 
 # 🔴 형식 검사를 지우지 마라 — 아래 설명 참조
+# 📌 강제 종료를 쓰지 않는다: 이 블록은 사람이 터미널에 붙여넣는 체크리스트다(SOP §2b와 같은 관례).
+#    `exit`을 넣으면 인터랙티브 셸이 닫히고, `return`은 함수 밖이라 실패해 결국 같은 일이 벌어진다.
+#    → 🔴가 뜨면 **멈추고 손으로 판단**한다. 다음 명령을 그냥 이어붙이지 말 것.
 case "$ESO_ROLE" in
   arn:aws:iam::*:role/*) echo "✅ $ESO_ROLE" ;;
-  *) echo "🔴 role ARN이 아니다 — apply가 끝났는지 확인하고 다시 시도"; return 2>/dev/null || exit 1 ;;
+  *) echo "🔴 role ARN이 아니다 — apply가 끝났는지 확인하고 다시 시도. 여기서 멈출 것" ;;
 esac
 
 helm repo add external-secrets https://charts.external-secrets.io && helm repo update
@@ -1599,7 +1602,12 @@ ALTER ROLE
 #### 🔴 동기화됐는지 확인할 때 `-h 127.0.0.1`을 쓰면 항상 통과한다
 
 `pg_hba.conf` 실측(2026-08-12):
-<!-- verify: docs/eks-session-sop.md ~ scram-sha-256 -->
+
+<!-- verify: docs/eks-session-sop.md ~ status\.podIP -->
+<!-- 🔑 마커를 `~ scram-sha-256`으로 걸었다가 되돌렸다(08-12 QA F-5). 그 문자열은 SOP의
+     **코드펜스에도** 있어서, 경고 산문을 통째로 지워도 펜스만 남으면 통과한다 —
+     주장("파드 IP로 검증하라")이 아니라 근처 단어를 검사하는 장식 마커였다.
+     `status.podIP`는 그 경고 블록의 **대체 명령 안에만** 있으므로 블록이 사라지면 같이 사라진다. -->
 
 ```
 local  all all                trust
