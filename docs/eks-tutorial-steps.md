@@ -17,7 +17,25 @@
 | 날짜 | 범위 | 결과 |
 |---|---|---|
 | **2026-08-11** | **무과금 정적 대조** — 도구 버전 · 참조 파일 경로 14개 · `tofu plan` 실측 · 의존 그래프 · 마이그레이션 개수 · 시크릿 키 개수 | **결함 6건 발견·수정** (아래) |
-| (미실시) | **유료 왕복 재현** — 실제 apply → 3b까지 → destroy를 이 문서만 보고 | ⏳ 다음 유료 세션 |
+| **2026-08-12** | **유료 부분 실행** (29분) — Stage 0→3b 경로를 실제로 apply→앱기동→destroy. 단 **목적이 L-14/L-15 검증**이라 문서를 그대로 따라간 게 아니고, Stage 4·ALB는 미실행 | **결함 2건 추가 발견·수정** + 08-11 수정분 4개 실물 확인 ✅ |
+| (미실시) | **유료 완전 재현** — 이 문서**만** 보고 처음부터 끝까지 | ⏳ 다음 유료 세션 |
+
+> 🔎 **08-12를 "재현 검증"으로 세지 않는 이유**: 나는 이 문서를 *참조*했지 *따라가지* 않았다.
+> 막히면 코드를 직접 읽어 해결했는데, 처음 하는 사람에겐 그 선택지가 없다. 문서만으로 완주
+> 가능한지는 **여전히 미검증**이다. (그래도 08-12에 확인된 것들은 실물 대조라 값이 있다 — 아래.)
+
+**08-12 유료 세션에서 실물로 확인된 것** (08-11 정적 수정분이 맞았는지):
+
+| 확인 항목 | 결과 |
+|---|---|
+| §2-4 `validated` (데이터 있는 볼륨 재배포 시) | ✅ `Successfully validated 13 migrations` |
+| §3b-5 static PV 3종 apply 출력 5줄 | ✅ 문자 그대로 일치 |
+| 볼륨 부착 (`aws ec2 describe-volumes`) | ✅ `in-use /dev/xvdaa` |
+| ESO 시크릿 키 개수 (4 + 3 = 7) | ✅ 일치 |
+| `Plan: N to add, 0 to change, 0 to destroy` 불변식 | ✅ apply 29 = destroy 29 |
+
+**08-12에 새로 발견한 2건**: ①in-cluster용 ExternalSecret 적용 단계가 문서에 없었다(2-3)
+②`ESO_ROLE` 빈 값 가드가 없어 **에러 메시지가 IRSA 주석에 들어갔다**(2-2). 둘 다 수정함.
 
 2026-08-11에 고친 6건. **전부 "문서를 읽어서는 안 보이고, 실제로 대조해야 나오는"** 종류였다:
 
@@ -781,6 +799,15 @@ DB 접속에 필요한 값 4개가 **서로 다른 시크릿에 나뉘어 있다
 ```bash
 ESO_ROLE=$(tofu -chdir=infra/aws-eks/2-cluster output -raw eso_role_arn)
 
+# 🔴 형식 검사를 지우지 마라 — 아래 설명 참조
+# 📌 강제 종료를 쓰지 않는다: 이 블록은 사람이 터미널에 붙여넣는 체크리스트다(SOP §2b와 같은 관례).
+#    `exit`을 넣으면 인터랙티브 셸이 닫히고, `return`은 함수 밖이라 실패해 결국 같은 일이 벌어진다.
+#    → 🔴가 뜨면 **멈추고 손으로 판단**한다. 다음 명령을 그냥 이어붙이지 말 것.
+case "$ESO_ROLE" in
+  arn:aws:iam::*:role/*) echo "✅ $ESO_ROLE" ;;
+  *) echo "🔴 role ARN이 아니다 — apply가 끝났는지 확인하고 다시 시도. 여기서 멈출 것" ;;
+esac
+
 helm repo add external-secrets https://charts.external-secrets.io && helm repo update
 helm install external-secrets external-secrets/external-secrets \
   --version 2.8.0 --namespace external-secrets --create-namespace \
@@ -789,6 +816,43 @@ helm install external-secrets external-secrets/external-secrets \
   --wait --timeout 5m
 ```
 확인: `STATUS: deployed`, 파드 3개(controller·webhook·cert-controller) 전부 `Running`. ~40초.
+
+> 🔴 **왜 형식 검사가 필요한가 (2026-08-12에 실제로 밟았다).**
+> apply가 **아직 안 끝난 상태**에서 `tofu output`을 읽으면 tofu는 이렇게 답한다:
+> ```
+> Warning: No outputs found
+> The state file either has no outputs defined, or all the defined outputs are empty.
+> ```
+> **그런데 종료코드는 실패가 아니고**, 이 경고 본문이 그대로 `$ESO_ROLE`에 담긴다.
+> helm은 그걸 annotation 값으로 순순히 받고, K8s도 항의하지 않는다:
+> ```
+> eks.amazonaws.com/role-arn: "...Warning: No outputs found..."
+> ```
+> **IRSA가 안 붙은 채로 ESO가 뜬다.** 그 뒤 SecretStore가 실패하는 것을 보고 나서야 알게 되는데,
+> 그때쯤엔 원인이 여기라는 게 안 보인다.
+>
+> 같은 이유로 **SOP §2b에도 `[ -z "$SHA" ]` 가드**가 있다 — *"aws 호출이 실패한 상황에서
+> 가장 위험한 방향으로 조용히 통과한다"*. 그쪽엔 붙였는데 여기엔 없어서 당했다.
+> **빈 값·에러 문자열이 설정값 자리에 들어가는 경로는 전부 같은 가드가 필요하다.**
+
+**IRSA가 실제로 붙었는지는 helm 출력이 아니라 파드 안을 본다** (이게 유일하게 믿을 수 있는 확인):
+```bash
+POD=$(kubectl get pod -n external-secrets -l app.kubernetes.io/name=external-secrets \
+  -o jsonpath='{.items[0].metadata.name}')
+kubectl get pod -n external-secrets "$POD" \
+  -o jsonpath='{range .spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}'
+```
+```
+AWS_ROLE_ARN=arn:aws:iam::<account>:role/devquest-eks-eso
+AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token
+```
+> 값이 ARN이 아니면 위 가드를 건너뛴 것이다. 고치는 법:
+> ```bash
+> helm upgrade external-secrets external-secrets/external-secrets \
+>   --version 2.8.0 -n external-secrets --reuse-values \
+>   --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$ESO_ROLE" --wait
+> kubectl rollout restart deploy -n external-secrets   # SA 주석은 파드 재생성 때만 반영된다
+> ```
 
 **IRSA 배선이 실제로 됐는지 파드 안을 본다** (이 단계의 핵심):
 ```bash
@@ -831,6 +895,27 @@ kubectl apply -f k8s/eso/externalsecret-app.yaml
 ARN=$(tofu -chdir=infra/aws-eks/2-cluster output -raw db_master_secret_arn)
 sed "s|RDS_MASTER_SECRET_PLACEHOLDER|$ARN|" k8s/eso/externalsecret-db.yaml | kubectl apply -f -
 ```
+
+> 🔴 **`db_mode=in-cluster`(Stage 3a~)라면 위 db 블록 대신 이걸 쓴다.** 두 파일은 **같은 이름의
+> K8s Secret(`core-api-db`)을 만들므로 배타적으로 하나만** apply한다.
+> ```bash
+> kubectl apply -f k8s/eso/externalsecret-db-incluster.yaml   # 치환 없음
+> kubectl apply -f k8s/eso/externalsecret-postgres-tls.yaml   # in-cluster 전용 (TLS)
+> ```
+> 차이는 **값을 어디서 긁어오는가** 하나뿐이다:
+>
+> | | Stage 2 (RDS) | Stage 3a~ (in-cluster) |
+> |---|---|---|
+> | remoteRef 출처 | **2군데** — RDS 관리형 시크릿 + tofu 시크릿 | **1군데** — tofu 시크릿 |
+> | 시크릿 이름 | **AWS가 정함** (`rds!db-<uuid>`) | **우리가 정함** (`devquest-eks/db-connection`) |
+> | apply 절차 | ARN을 sed로 치환 | **그냥 apply** |
+>
+> 🔑 *"관리형이 편한 대신 이름을 못 정한다"* 는 트레이드오프가 양쪽에서 드러난다. Stage 2에서
+> PLACEHOLDER sed가 귀찮았던 이유가 여기서 사라지는 것으로 증명된다. 반대로 잃은 것도 있다 —
+> RDS는 비밀번호를 **자동 로테이션**했지만 in-cluster는 안 한다(그래서 3b-6 수동 동기화가 있다).
+>
+> ⚠️ 이 분기는 2026-08-12까지 **문서에 없었다.** `externalsecret-db-incluster.yaml`의 주석
+> 헤더에만 적혀 있어서, 튜토리얼만 따라가면 in-cluster 경로에서 막혔다.
 
 확인:
 ```bash
@@ -1513,6 +1598,44 @@ ALTER ROLE
 > *"한 번만 하면 되는 수동 절차"* 로 두지 않은 이유: 그런 건 반드시 잊히고, **잊힌 걸 과금 중에
 > 알게 된다**(실제로 원인 파악에 7분을 태웠다).
 > 컨테이너 안 로컬 소켓은 `trust` 인증이라 **옛 비밀번호 없이도** 이 명령이 통한다.
+
+#### 🔴 동기화됐는지 확인할 때 `-h 127.0.0.1`을 쓰면 항상 통과한다
+
+`pg_hba.conf` 실측(2026-08-12):
+
+<!-- verify: docs/eks-session-sop.md ~ status\.podIP -->
+<!-- 🔑 마커를 `~ scram-sha-256`으로 걸었다가 되돌렸다(08-12 QA F-5). 그 문자열은 SOP의
+     **코드펜스에도** 있어서, 경고 산문을 통째로 지워도 펜스만 남으면 통과한다 —
+     주장("파드 IP로 검증하라")이 아니라 근처 단어를 검사하는 장식 마커였다.
+     `status.podIP`는 그 경고 블록의 **대체 명령 안에만** 있으므로 블록이 사라지면 같이 사라진다. -->
+
+```
+local  all all                trust
+host   all all 127.0.0.1/32   trust          ← 소켓뿐 아니라 루프백 TCP도 trust
+host   all all ::1/128        trust
+host   all all all            scram-sha-256  ← 비밀번호를 실제로 검사하는 유일한 줄
+```
+
+*"소켓은 trust"* 까지만 알고 **"그러므로 TCP는 검사된다"** 로 추론하면 틀린다. 08-12 검증 세션에서
+실제로 밟았다 — `psql -h 127.0.0.1`로 확인했더니 **동기화 전인데도 성공**했고, 하마터면
+"갈라짐이 없다"고 결론 낼 뻔했다. 검사가 주장(비밀번호가 맞는가)보다 헐거운 대리물
+(TCP로 붙는가)을 보고 있었다.
+
+검증은 **파드 IP나 다른 파드에서** 붙어야 `scram-sha-256` 줄을 탄다:
+
+```bash
+PODIP=$(kubectl get pod postgres-0 -o jsonpath='{.status.podIP}')
+kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d | \
+  kubectl exec -i postgres-0 -- sh -c "read -r PW; PGPASSWORD=\"\$PW\" \
+    psql -h $PODIP -U devquest -d devquest -tAc 'select 1'"
+```
+
+| 출력 | 뜻 |
+|---|---|
+| `1` | 동기화 성공 |
+| `FATAL: password authentication failed for user "devquest"` | 아직 갈라져 있다 — 위 `ALTER USER`를 실행 |
+
+> 💡 비밀번호를 **stdin으로 넘긴다.** 명령줄 인자로 주면 `ps`와 셸 히스토리에 남는다.
 
 ### 3b-7. 앱 기동 확인
 
