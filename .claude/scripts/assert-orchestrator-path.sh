@@ -30,7 +30,15 @@
 #   ⚠️ **2026-08-14 QA F-3 — 이 주석의 초판은 거짓이었다.** *"jq 부재도 fail-closed가 막는다"* 고
 #      적었는데, jq가 없으면 **FILE_PATH 파싱이 먼저 빈 값이 되어 `exit 0`** — 판별부에 닿기도 전에
 #      가드 전체가 통과했다. 없는 방어를 있다고 주장한 것이고, 하필 *"조용한 통과를 막는다"* 를
-#      설명하는 주석에서 그랬다. → 아래 `require_parser`로 **실제로** 막고, 주석을 사실에 맞췄다.
+#      설명하는 주석에서 그랬다. → 아래 파서 선택부(jq → python3 → 둘 다 없으면 `exit 2`)로
+#      **실제로** 막고, 주석을 사실에 맞췄다.
+#
+#   ⚠️ **2026-08-14 QA F-5 — 그 수정이 같은 병을 새 코드에 다시 심었다.** 폴백을 범용
+#      "JSON 경로 미니언어"(`.a.b // .c.d`를 파싱)로 짰는데, `lstrip('.')`이 **문자열 맨 앞에서만**
+#      점을 지워 **두 번째 대안이 영영 매칭되지 않았다**. 실측: jq 없는 환경에서
+#      `{"tool_input":{"path":"be/x.kt"}}` → `exit 0` = **가드 소멸**(`.file_path`는 정상 차단).
+#      → **미니언어를 없앴다.** 필요한 값 3개를 파이썬에서 직접, 명시적으로 꺼낸다.
+#      교훈: 가드 안에 **범용 파서를 만들지 마라.** 그 파서의 버그가 곧 가드의 구멍이다.
 #
 # ── 필드 실재 근거 (문서가 아니라 연역) ──
 #   `agent_type`·`agent_id`는 문서에 있지만(hooks.md#agent-fields-in-hook-input) 페이로드를 직접
@@ -45,33 +53,44 @@ INPUT=$(cat)
 
 # ── 파서가 없으면 판단할 수 없다 → 막는다 (fail-closed) ──
 if command -v jq >/dev/null 2>&1; then
-  q() { echo "$INPUT" | jq -r "$1 // empty" 2>/dev/null; }
+  FILE_PATH=$(echo  "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
+  AGENT_ID=$(echo   "$INPUT" | jq -r '.agent_id   // empty' 2>/dev/null)
+  AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty' 2>/dev/null)
 elif command -v python3 >/dev/null 2>&1; then
-  q() { echo "$INPUT" | python3 -c "
-import json,sys
-try: d=json.load(sys.stdin)
-except Exception: sys.exit(0)
-k='$1'.lstrip('.').split(' // ')
-for key in k:
-    cur=d
-    for part in key.strip().split('.'):
-        cur = cur.get(part) if isinstance(cur,dict) else None
-    if cur: print(cur); break
-" 2>/dev/null; }
+  # 파이썬 소스는 **작은따옴표**로 감싼다 — 셸 보간이 전혀 일어나지 않게(따옴표 층에서 나는 사고 차단).
+  # 찾을 키는 인자로 넘긴다. 경로 문법을 해석하지 않고 **필요한 것만 직접** 꺼낸다(QA F-5).
+  pyget() {
+    echo "$INPUT" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+if not isinstance(d, dict):
+    sys.exit(0)
+want = sys.argv[1]
+if want == "path":
+    ti = d.get("tool_input")
+    ti = ti if isinstance(ti, dict) else {}
+    v = ti.get("file_path") or ti.get("path") or ""
+else:
+    v = d.get(want) or ""
+print(v)
+' "$1" 2>/dev/null
+  }
+  FILE_PATH=$(pyget path)
+  AGENT_ID=$(pyget agent_id)
+  AGENT_TYPE=$(pyget agent_type)
 else
   echo "차단: jq·python3가 모두 없어 훅 입력을 해석할 수 없습니다." >&2
   echo "  판단 불가 상태에서 통과시키면 가드가 조용히 사라집니다 — 막는 쪽을 택합니다." >&2
   exit 2
 fi
 
-FILE_PATH=$(q '.tool_input.file_path // .tool_input.path')
 [ -n "$FILE_PATH" ] || exit 0
 
 # be/ fe/ 가 아니면 애초에 관심 없다
 echo "$FILE_PATH" | grep -qE "(^|/)(be|fe)/" || exit 0
-
-AGENT_ID=$(q '.agent_id')
-AGENT_TYPE=$(q '.agent_type')
 
 # 면제 조건: **둘 다** 있어야 한다 (서브에이전트라는 적극적 증거) + 그게 orchestrator가 아닐 것
 if [ -n "$AGENT_ID" ] && [ -n "$AGENT_TYPE" ] && [ "$AGENT_TYPE" != "orchestrator" ]; then
