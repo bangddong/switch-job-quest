@@ -14,22 +14,22 @@ class AiCallLogAdapter(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override fun record(log: AiCallLog) {
+    override fun record(entry: AiCallLog) {
         try {
             repository.save(
                 AiCallLogEntity(
-                    evaluatorName = log.evaluatorName,
-                    modelName = log.modelName,
-                    inputTokens = log.inputTokens,
-                    outputTokens = log.outputTokens,
-                    cacheReadTokens = log.cacheReadTokens,
-                    cacheCreationTokens = log.cacheCreationTokens,
-                    latencyMs = log.latencyMs,
-                    success = log.success,
+                    evaluatorName = entry.evaluatorName,
+                    modelName = entry.modelName,
+                    inputTokens = entry.inputTokens,
+                    outputTokens = entry.outputTokens,
+                    cacheReadTokens = entry.cacheReadTokens,
+                    cacheCreationTokens = entry.cacheCreationTokens,
+                    latencyMs = entry.latencyMs,
+                    success = entry.success,
                 )
             )
         } catch (e: Exception) {
-            this.log.warn("AiCallLog 저장 실패 (무시)", e)
+            log.warn("AiCallLog 저장 실패 (무시)", e)
         }
     }
 }
