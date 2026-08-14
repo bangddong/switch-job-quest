@@ -22,21 +22,56 @@
 #
 # ── 🔴 fail-closed로 짠 이유 (여기가 핵심) ──
 #   순진한 구현은 `[ "$agent_type" != orchestrator ] && exit 0` 이다. 그러면 필드가 없을 때
-#   (구버전 CLI · jq 부재 · 스키마 변경) **조용히 통과** = 가드가 사라진다.
+#   (구버전 CLI · 스키마 변경) **조용히 통과** = 가드가 사라진다.
 #   이 레포가 반복해서 데인 형태라(08-11 mode 644 / 08-12 ECR SHA 빈 값 / 08-13 IRSA 에러 문자열),
 #   **"서브에이전트라는 적극적 증거가 있을 때만" 면제**한다. 증거가 없으면 orchestrator로 간주해 막는다.
 #   → 판별에 실패하면 위임이 막힐 뿐이고(시끄러운 실패), 가드가 사라지지는 않는다(조용한 실패 아님).
+#
+#   ⚠️ **2026-08-14 QA F-3 — 이 주석의 초판은 거짓이었다.** *"jq 부재도 fail-closed가 막는다"* 고
+#      적었는데, jq가 없으면 **FILE_PATH 파싱이 먼저 빈 값이 되어 `exit 0`** — 판별부에 닿기도 전에
+#      가드 전체가 통과했다. 없는 방어를 있다고 주장한 것이고, 하필 *"조용한 통과를 막는다"* 를
+#      설명하는 주석에서 그랬다. → 아래 `require_parser`로 **실제로** 막고, 주석을 사실에 맞췄다.
+#
+# ── 필드 실재 근거 (문서가 아니라 연역) ──
+#   `agent_type`·`agent_id`는 문서에 있지만(hooks.md#agent-fields-in-hook-input) 페이로드를 직접
+#   덤프하진 못했다(프로브가 권한 분류기에 차단됨). 대신 **행동으로 증명된다**:
+#   `be/` 경로가 이 스크립트를 통과할 수 있는 분기는 **아래 면제 하나뿐**이고, 그것은 두 필드가
+#   모두 비어있지 않아야 열린다. 수정 전 builder는 차단됐고 수정 후 통과해 실제로 커밋했다
+#   → **PreToolUse 페이로드에 두 필드가 존재한다.**
+#   ℹ️ 단 `log-event.sh:18`은 같은 목적에 `.agent_name // .agent_type`을 쓴다 — 레포 안에서 필드명
+#      합의가 없다. 여기서는 위 증명이 있는 `agent_type`만 신뢰한다.
 
 INPUT=$(cat)
 
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
+# ── 파서가 없으면 판단할 수 없다 → 막는다 (fail-closed) ──
+if command -v jq >/dev/null 2>&1; then
+  q() { echo "$INPUT" | jq -r "$1 // empty" 2>/dev/null; }
+elif command -v python3 >/dev/null 2>&1; then
+  q() { echo "$INPUT" | python3 -c "
+import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+k='$1'.lstrip('.').split(' // ')
+for key in k:
+    cur=d
+    for part in key.strip().split('.'):
+        cur = cur.get(part) if isinstance(cur,dict) else None
+    if cur: print(cur); break
+" 2>/dev/null; }
+else
+  echo "차단: jq·python3가 모두 없어 훅 입력을 해석할 수 없습니다." >&2
+  echo "  판단 불가 상태에서 통과시키면 가드가 조용히 사라집니다 — 막는 쪽을 택합니다." >&2
+  exit 2
+fi
+
+FILE_PATH=$(q '.tool_input.file_path // .tool_input.path')
 [ -n "$FILE_PATH" ] || exit 0
 
 # be/ fe/ 가 아니면 애초에 관심 없다
 echo "$FILE_PATH" | grep -qE "(^|/)(be|fe)/" || exit 0
 
-AGENT_ID=$(echo "$INPUT"   | jq -r '.agent_id   // empty' 2>/dev/null)
-AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // empty' 2>/dev/null)
+AGENT_ID=$(q '.agent_id')
+AGENT_TYPE=$(q '.agent_type')
 
 # 면제 조건: **둘 다** 있어야 한다 (서브에이전트라는 적극적 증거) + 그게 orchestrator가 아닐 것
 if [ -n "$AGENT_ID" ] && [ -n "$AGENT_TYPE" ] && [ "$AGENT_TYPE" != "orchestrator" ]; then
@@ -45,8 +80,11 @@ fi
 
 echo "차단: orchestrator는 be/ 또는 fe/ 코드를 직접 수정할 수 없습니다. 해당 에이전트에 위임하세요." >&2
 echo "  경로: ${FILE_PATH}" >&2
-if [ -z "$AGENT_ID" ] && [ -z "$AGENT_TYPE" ]; then
-  echo "  (agent_id·agent_type이 입력에 없다 → 메인 스레드로 간주. 서브에이전트인데 이 메시지를 봤다면" >&2
-  echo "   훅 입력 스키마가 바뀐 것이니 이 스크립트의 판별부를 갱신할 것 — 원장 L-20)" >&2
+# 진단 힌트는 **부분 드리프트**(한쪽만 소실)에서도 떠야 한다 — QA F-2.
+# 정작 걱정한 시나리오에서 힌트가 안 뜨면 디버깅이 제일 어려운 때 아무 단서가 없다.
+if [ "$AGENT_TYPE" != "orchestrator" ]; then
+  echo "  진단: agent_id=$([ -n "$AGENT_ID" ] && echo 있음 || echo 없음) / agent_type='${AGENT_TYPE}'" >&2
+  echo "  둘 다 없으면 메인 스레드다(정상). 서브에이전트인데 이 메시지를 봤다면 훅 입력 스키마가" >&2
+  echo "  바뀐 것이니 위 판별부를 갱신할 것 — 원장 L-20 참조." >&2
 fi
 exit 2
