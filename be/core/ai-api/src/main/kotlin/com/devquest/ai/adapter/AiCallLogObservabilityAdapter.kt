@@ -34,25 +34,25 @@ class AiCallLogObservabilityAdapter(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override fun record(log: AiCallLog) {
-        this.log.info(
+    override fun record(entry: AiCallLog) {
+        log.info(
             "ai_call_log_recorded evaluator={} model={} inputTokens={} outputTokens={} " +
                 "cacheReadTokens={} cacheCreationTokens={} latencyMs={} success={}",
-            log.evaluatorName,
-            log.modelName,
-            log.inputTokens,
-            log.outputTokens,
-            log.cacheReadTokens,
-            log.cacheCreationTokens,
-            log.latencyMs,
-            log.success,
+            entry.evaluatorName,
+            entry.modelName,
+            entry.inputTokens,
+            entry.outputTokens,
+            entry.cacheReadTokens,
+            entry.cacheCreationTokens,
+            entry.latencyMs,
+            entry.success,
         )
 
         meterRegistry.counter(
             "ai.call.log.recorded",
-            "evaluator", log.evaluatorName,
-            "model", log.modelName,
-            "success", log.success.toString(),
+            "evaluator", entry.evaluatorName,
+            "model", entry.modelName,
+            "success", entry.success.toString(),
         ).increment()
     }
 }
