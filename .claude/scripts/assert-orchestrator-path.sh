@@ -69,12 +69,23 @@ except Exception:
 if not isinstance(d, dict):
     sys.exit(0)
 want = sys.argv[1]
+
+# jq의 `//` 는 **null·false만** falsy로 본다. 파이썬 `or` 는 0·""·[] 까지 falsy라
+# 같은 페이로드에서 두 경로가 갈린다(08-14 QA F-7 실측: {"agent_id":0} → jq "0" vs python "").
+# 지금 스키마로는 도달 불가한 이론적 발산이지만, **두 경로가 다르게 판정하는 가드**는
+# 그 자체로 신뢰할 수 없다 → jq 시맨틱에 맞춘다.
+def pick(*vals):
+    for v in vals:
+        if v is not None and v is not False:
+            return v
+    return ""
+
 if want == "path":
     ti = d.get("tool_input")
     ti = ti if isinstance(ti, dict) else {}
-    v = ti.get("file_path") or ti.get("path") or ""
+    v = pick(ti.get("file_path"), ti.get("path"))
 else:
-    v = d.get(want) or ""
+    v = pick(d.get(want))
 print(v)
 ' "$1" 2>/dev/null
   }
@@ -87,6 +98,13 @@ else
   exit 2
 fi
 
+# ⚠️ **알려진 한계 (의도적, 08-14).** `file_path`가 **빈 문자열**이고 `path`에 실제 값이 있으면
+#    jq `//` 시맨틱상 빈 문자열이 채택돼 여기서 통과한다. 고치지 않은 이유:
+#    ①`file_path`가 **아예 없으면** `path`로 정상 폴백해 차단된다(실측 exit=2) — 도구는 둘 중
+#      하나만 보내므로 현실 페이로드에서 구멍이 아니다 ②"경로 불명 → 차단 불가 → 통과"는
+#      `assert-not-main.sh`가 이미 쓰는 레포 공통 관례다 ③이 파일은 3라운드 연속 버그를 냈고,
+#      도달 불가한 경계를 위해 로직을 더 얹는 것은 *"3번 시도했는데 4번 더"* 다.
+#    🔑 재검토 트리거: 훅 payload에서 `file_path`와 `path`가 **동시에** 관측되면.
 [ -n "$FILE_PATH" ] || exit 0
 
 # be/ fe/ 가 아니면 애초에 관심 없다
