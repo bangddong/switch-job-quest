@@ -84,6 +84,7 @@ snapshot_state() {
 
 case "$MODE" in
   snapshot)
+    rm -f "$BASELINE.done" 2>/dev/null || true   # 새 세션 = 새 검증 기회
     snapshot_state > "$BASELINE" 2>/dev/null || true
     exit 0
     ;;
@@ -99,9 +100,23 @@ case "$MODE" in
       echo "   확인: .claude/agents/qa-reviewer.md 의 SubagentStart 배선 + $BASELINE" >&2
       exit 2
     fi
+    # 🔴 **baseline을 지우지 않는다** (08-16 QA F-15).
+    #    초판은 verify에서 무조건 `rm -f` 했다. 그런데 **SubagentStop은 한 세션에서 여러 번
+    #    발생한다**(하네스 알림에도 "the same task-id may notify more than once"라고 적혀 있다).
+    #    → 1회차 verify가 통과하며 baseline을 지우고, Stop 훅 피드백으로 세션이 이어지면
+    #      2회차 verify가 "baseline 없음"으로 **fail-closed(exit 2)** 해서 리뷰어를 차단했다.
+    #    즉 **F-11에서 넣은 fail-closed가 자기 차단 루프**를 만들었다. 실측 피해:
+    #      QA 3회 연속 무응답(169k·70k·130k 토큰) — 매 Stop마다 막혔기 때문이다.
+    #    🔑 교훈: fail-closed로 바꿀 때는 **수명주기 가정**(Start:Stop = 1:1)을 먼저 확인해야 한다.
+    #      "없으면 막는다"가 옳으려면 "있어야 할 때 반드시 있다"가 참이어야 한다.
+    #
+    #    대신 **소비 표시**를 남긴다: 이미 검증한 baseline이면 다음 Stop은 조용히 통과한다.
+    #    (baseline이 **아예 없는** 경우의 fail-closed는 그대로 유지 — F-11의 의도는 살린다)
+    if [ -f "$BASELINE.done" ]; then exit 0; fi
+
     AFTER=$(snapshot_state)
     DELTA=$(comm -13 <(sort "$BASELINE" 2>/dev/null) <(printf '%s\n' "$AFTER" | sort))
-    rm -f "$BASELINE" 2>/dev/null || true
+    : > "$BASELINE.done" 2>/dev/null || true
     [ -z "$DELTA" ] && exit 0
 
     echo "🔴 qa-reviewer 세션 중 **추적 파일이 변경됐다**." >&2

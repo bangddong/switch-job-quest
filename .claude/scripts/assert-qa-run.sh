@@ -108,7 +108,10 @@ while IFS= read -r row; do
   case "$state" in fixed|obsolete) continue ;; esac
 
   # 항소 경로: wontfix + 원장에 해당 출처가 있고 + 그 줄에 사용자 결정 마커가 있을 것
-  if [ "$state" = "wontfix" ] && grep -F "$BRANCH/$id" "$LEDGER" 2>/dev/null | grep -qF "$HIGH_OVERRIDE"; then
+  # 🔴 부분일치 금지 (08-16 QA F-12): `grep -F ".../F-1"` 은 `.../F-10` 에도 매치된다.
+  #    그러면 F-1이 F-10의 사용자 결정 마커에 **편승**해 실제 결정 없이 통과한다.
+  #    ID 뒤에 숫자가 이어지지 않을 것을 요구한다.
+  if [ "$state" = "wontfix" ] && grep -E "$BRANCH/$id([^0-9]|\$)" "$LEDGER" 2>/dev/null | grep -qF "$HIGH_OVERRIDE"; then
     echo "   ℹ️  $id (HIGH) — 사용자 결정으로 wontfix. 원장에 근거 기록됨." >&2
     continue
   fi
@@ -128,7 +131,8 @@ while IFS= read -r row; do
   [ -z "$row" ] && continue
   id=$(field "$row" 2); state=$(field "$row" 4)
   if [ "$state" = "deferred" ]; then
-    if ! grep -qF "$BRANCH/$id" "$LEDGER" 2>/dev/null; then
+    # 규칙②와 같은 부분일치 결함을 공유했다(F-12 하위 사례) → 동일하게 조인다.
+    if ! grep -qE "$BRANCH/$id([^0-9]|\$)" "$LEDGER" 2>/dev/null; then
       [ "$BLOCKED" -eq 0 ] && echo "⛔ PR 생성 차단:" >&2
       echo "   $id 가 deferred인데 원장에 없습니다 → .claude/review-ledger.md 에 '$BRANCH/$id' 출처로 등재하세요." >&2
       BLOCKED=1

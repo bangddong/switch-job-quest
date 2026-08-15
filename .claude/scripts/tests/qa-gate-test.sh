@@ -48,6 +48,17 @@ cp /tmp/ledg.bak "$LEDG"
 printf '\n| L-98 | `%s/F-9` | HIGH | 무관 | <!-- USER-DECIDED --> |\n' "$BRANCH" >> "$LEDG"
 run 2 "마커가 다른 ID 행에 있음 → 차단"
 
+# ⑤-b F-12 회귀: 마커가 **접두어가 겹치는 다른 ID**(F-10) 행에만 있으면 F-1은 통과 불가
+cp /tmp/ledg.bak "$LEDG"
+printf '%s\n| F-1 | HIGH | wontfix | x | y |\n' "$hdr" > "$FIND"
+printf '\n| L-97 | `%s/F-10` | HIGH | 무관 | <!-- USER-DECIDED --> |\n' "$BRANCH" >> "$LEDG"
+run 2 "F-12: F-1이 F-10 마커에 편승 시도 → 차단"
+
+# ⑤-c 반대로 정확히 그 ID면 통과해야 한다
+cp /tmp/ledg.bak "$LEDG"
+printf '\n| L-97 | `%s/F-1` | HIGH | 내용 | <!-- USER-DECIDED --> |\n' "$BRANCH" >> "$LEDG"
+run 0 "F-12: 정확히 F-1 행의 마커 → 통과"
+
 # ⑥ MEDIUM + deferred + 원장 없음 → 차단 (규칙 3 회귀)
 cp /tmp/ledg.bak "$LEDG"
 printf '%s\n| F-2 | MEDIUM | deferred | x | y |\n' "$hdr" > "$FIND"
