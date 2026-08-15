@@ -76,15 +76,50 @@ while IFS= read -r row; do
   esac
 done <<< "$(rows)"
 
-# (2) HIGH는 'fixed' 또는 'obsolete'만 허용 — deferred/wontfix로 넘길 수 없다.
+# (2) HIGH는 'fixed'/'obsolete'가 기본. 단 **사용자 결정이 기록되면** wontfix로 닫을 수 있다.
+#
+# ══ 왜 예외 경로를 뒀나 (2026-08-16) ══
+#
+# 원래는 예외가 없었다. 그런데 등급을 매기는 것은 **LLM(qa-reviewer)** 인데 훅은 그 등급을
+# **항소 불가**로 취급했다 → **등급이 틀렸을 때의 경로가 아예 없다.**
+#
+# 2026-08-16 `fix/harness-holes`에서 실제로 막다른 길에 빠졌다:
+#   qa-reviewer가 가드 우회 3건을 HIGH로 매겼는데, 그 판정은 **위협 모델이 없는 상태**에서
+#   나온 것이었다(당시 Severity 기준에 "누구를 상대로"가 없었다 — 지금은 있다).
+#   사용자가 위협 모델을 "실수 탐지기"로 확정해 세 건이 범위 밖이 됐지만,
+#   재판정 시도가 2회 무응답으로 끝나자 남은 선택지가 **"내가 등급을 몰래 고친다"** 뿐이었다.
+#   🔴 **게이트가 우회를 유일한 출구로 만든 것** — 그건 게이트 설계의 실패다.
+#
+# 이 레포의 다른 병("검사가 주장보다 헐겁다")의 반대편이다:
+#   **검사가 입력이 가진 정밀도보다 엄격하다.** 소프트 판단(LLM 등급) 위에 하드 게이트를 세웠다.
+#
+# ── 그래서: 기계가 다 판정하지 않고, 막히면 **사람에게 올린다** ──
+#   기본은 그대로 차단이다(첫 대응은 "고쳐라"). 고치지 않기로 판단되면 **사용자에게 물어**
+#   그 결정을 원장에 남긴다. 마커는 사용자 결정이 있었다는 **감사 흔적**이다.
+#
+# ⚠️ 이 마커를 사용자에게 묻지 않고 붙이지 마라. 그건 QA를 chore로 우회하는 것과 같다.
+#    마커는 게이트를 뚫는 열쇠가 아니라 **결정이 있었다는 기록**이고, 기록이 거짓이면
+#    그 다음 사람이 잘못된 근거 위에서 판단하게 된다.
+HIGH_OVERRIDE='<!-- USER-DECIDED -->'
 while IFS= read -r row; do
   [ -z "$row" ] && continue
   id=$(field "$row" 2); grade=$(field "$row" 3); state=$(field "$row" 4)
-  if [ "$grade" = "HIGH" ] && [ "$state" != "fixed" ] && [ "$state" != "obsolete" ]; then
-    [ "$BLOCKED" -eq 0 ] && echo "⛔ PR 생성 차단:" >&2
-    echo "   $id 는 HIGH입니다. 미룰 수 없습니다 (현재 상태=$state, 허용=fixed|obsolete)." >&2
-    BLOCKED=1
+  [ "$grade" = "HIGH" ] || continue
+  case "$state" in fixed|obsolete) continue ;; esac
+
+  # 항소 경로: wontfix + 원장에 해당 출처가 있고 + 그 줄에 사용자 결정 마커가 있을 것
+  if [ "$state" = "wontfix" ] && grep -F "$BRANCH/$id" "$LEDGER" 2>/dev/null | grep -qF "$HIGH_OVERRIDE"; then
+    echo "   ℹ️  $id (HIGH) — 사용자 결정으로 wontfix. 원장에 근거 기록됨." >&2
+    continue
   fi
+
+  [ "$BLOCKED" -eq 0 ] && echo "⛔ PR 생성 차단:" >&2
+  echo "   $id 는 HIGH입니다 (현재 상태=$state)." >&2
+  echo "     ① 고친다 → fixed  ② 코드가 바뀌어 무의미해졌다 → obsolete" >&2
+  echo "     ③ 고치지 않기로 판단된다면 **사용자에게 묻고**, 원장 '$BRANCH/$id' 행에" >&2
+  echo "        근거와 함께 $HIGH_OVERRIDE 마커를 남긴 뒤 wontfix로 표시하라." >&2
+  echo "        (마커를 사용자에게 묻지 않고 붙이는 것은 게이트 우회다)" >&2
+  BLOCKED=1
 done <<< "$(rows)"
 
 # (3) deferred 지적은 원장(review-ledger.md)에 등재돼 있어야 한다.
