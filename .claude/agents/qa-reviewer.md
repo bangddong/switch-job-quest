@@ -21,6 +21,16 @@ hooks:
       hooks:
         - type: command
           command: ".claude/scripts/log-event.sh PostToolUse qa-reviewer"
+  # 결과 기반 탐지 — 명령을 파싱하지 않으므로 셸 트릭으로 우회할 수 없다.
+  # assert-qa-readonly.sh(사전 차단)가 3라운드 조여도 매번 새 우회가 열려 추가했다(원장 L-12와 같은 결론).
+  SubagentStart:
+    - hooks:
+        - type: command
+          command: ".claude/scripts/qa-effect-guard.sh snapshot"
+  SubagentStop:
+    - hooks:
+        - type: command
+          command: ".claude/scripts/qa-effect-guard.sh verify"
 ---
 
 # QA Reviewer
