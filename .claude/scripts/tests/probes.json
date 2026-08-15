@@ -1,0 +1,9 @@
+[
+  {"s":"assert-no-main-push.sh","note":"커밋 메시지가 가드를 설명","c":"git commit -F - <<'MSG'\nchore: 가드 설명\n\ngit push origin main 을 막는 훅이다\nMSG"},
+  {"s":"assert-no-admin.sh","note":"커밋 메시지가 가드를 설명","c":"git commit -F - <<'MSG'\nchore: 설명\n\ngh pr merge --admin 을 막는다\nMSG"},
+  {"s":"assert-no-csi-delete-tags.sh","note":"문서에 금지 태그를 인용","c":"cat > doc.md <<'EOF'\nebs.csi.aws.com/cluster 태그를 붙이지 마라\nEOF"},
+  {"s":"assert-skill-safety.sh","note":"평범한 문서 작성","c":"cat > doc.md <<'EOF'\n스킬 문서 예시\nEOF"},
+  {"s":"assert-eks-quiz.sh","note":"평범한 커밋","c":"git commit -F - <<'MSG'\ndocs: 퀴즈 설명\nMSG"},
+  {"s":"assert-qa-readonly.sh","note":"awk 파이프 구분자 (L-21)","c":"awk -F'|' '{print $2}' file.md"},
+  {"s":"assert-qa-readonly.sh","note":"grep OR 패턴 (L-21)","c":"grep -nE 'L-(20|21)' ledger.md"}
+]

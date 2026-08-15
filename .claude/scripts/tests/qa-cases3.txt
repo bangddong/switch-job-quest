@@ -1,0 +1,15 @@
+0	awk -F'|' '{print $2}' ledger.md	L-21 오탐: awk 파이프 구분자
+0	grep -nE 'L-(20|21)' ledger.md	L-21 오탐: grep OR 패턴
+0	grep '>' file.md	L-21 오탐: 따옴표 안 리다이렉트 문자
+0	grep -c 'a;b' file.md	L-21 오탐: 따옴표 안 세미콜론
+0	awk -F'|' '{n=split($0,a,"|"); print n}' x.md	L-21 오탐: 중첩 파이프
+0	git diff origin/main...HEAD | awk -F'|' '{print $1}'	오탐 + 진짜 파이프 혼합
+0	echo "rm -rf be/"	따옴표 안 위험 문자열은 데이터
+2	"rm" -rf be/core	적대적: 따옴표로 감싼 실제 명령
+2	git diff HEAD; rm -rf be/	적대적: 세미콜론 뒤
+2	mkdir -p "$(rm -rf be/core)"	적대적: 명령치환 안에 숨기기
+2	true && echo x > be/X.kt	적대적: && 뒤 리다이렉트
+2	echo hacked > be/X.kt	적대적: 직접 쓰기
+2	echo "$(cat be/X.kt)" > /tmp/steal.txt	적대적: 레포 밖 유출
+2	grep 'x' file.md; rm -rf be/	오탐 케이스 뒤에 숨기기
+0	echo "sha" > .claude/qa-cache/marker	정당한 마커 쓰기

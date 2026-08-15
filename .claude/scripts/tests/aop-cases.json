@@ -1,0 +1,14 @@
+[
+  {"exp":2,"note":"메인 스레드(필드 없음) + be/ → 차단","in":{"tool_input":{"file_path":"be/core/X.kt"}}},
+  {"exp":2,"note":"메인 스레드 + fe/ → 차단","in":{"tool_input":{"file_path":"fe/src/App.tsx"}}},
+  {"exp":2,"note":"agent_type=orchestrator 명시 + be/ → 차단","in":{"agent_id":"a1","agent_type":"orchestrator","tool_input":{"file_path":"be/core/X.kt"}}},
+  {"exp":0,"note":"be-feature-builder 서브에이전트 + be/ → 통과","in":{"agent_id":"sub-001","agent_type":"be-feature-builder","tool_input":{"file_path":"be/core/X.kt"}}},
+  {"exp":0,"note":"fe-feature-builder 서브에이전트 + fe/ → 통과","in":{"agent_id":"sub-002","agent_type":"fe-feature-builder","tool_input":{"file_path":"fe/src/App.tsx"}}},
+  {"exp":2,"note":"agent_type만 있고 agent_id 없음 → 증거 불충분 → 차단(fail-closed)","in":{"agent_type":"be-feature-builder","tool_input":{"file_path":"be/core/X.kt"}}},
+  {"exp":2,"note":"agent_id만 있고 agent_type 없음 → 증거 불충분 → 차단","in":{"agent_id":"sub-003","tool_input":{"file_path":"be/core/X.kt"}}},
+  {"exp":0,"note":"레포 문서 경로는 애초에 관심 없음","in":{"tool_input":{"file_path":"docs/eks-migration-log.md"}}},
+  {"exp":0,"note":".claude/ 도 관심 없음","in":{"tool_input":{"file_path":".claude/CONTEXT.md"}}},
+  {"exp":0,"note":"file_path 없음 → 통과","in":{"tool_input":{}}},
+  {"exp":0,"note":"경로에 be가 들어가지만 디렉토리가 아님","in":{"tool_input":{"file_path":"docs/maybe/notes.md"}}},
+  {"exp":2,"note":"절대경로 be/ → 차단","in":{"tool_input":{"file_path":"/Users/x/repo/be/core/X.kt"}}}
+]

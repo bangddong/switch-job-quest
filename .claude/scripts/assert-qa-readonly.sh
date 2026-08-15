@@ -89,12 +89,69 @@ def target_ok(path):
 
 # ── 리다이렉트 대상 검사 (heredoc 제거 후이므로 남은 > 는 진짜 리다이렉트) ──
 # `2>&1`, `>&2` 같은 fd 복제는 파일 쓰기가 아니다.
-for m in re.finditer(r'(?<![0-9<>])>>?\s*(?!&)([^\s;|&()]+)', cmd):
-    if not target_ok(m.group(1)):
-        fail(f"허용되지 않은 경로로 씁니다: {m.group(1)}", m.group(0))
+# ── 따옴표 안은 데이터다 (2026-08-15, 원장 L-21) ────────────────
+# 초판은 원문에서 그대로 `;` `|` `(` `)` 를 잘랐다. 그래서 **구분자·패턴으로 그 문자를 쓰는
+# 정상 읽기 명령**까지 막았다 — `awk -F'|'`, `grep -nE 'L-(20|21)'`, `grep '>' file`.
+# 🔴 **실제로 우회가 일어났다**: 이 레포의 qa-reviewer가 차단당하자 `printf '\174'` 로
+#    파이프 문자를 만들어 통과시켰다. 이 스크립트 자신의 주석이 경고한 바로 그 일이다.
+#
+# 해법: 따옴표 안 문자를 'X'로 **마스킹한 사본**을 만들고, 연산자 탐색·분리는 마스크에서,
+#       값 추출은 원문에서 한다(길이가 같으므로 위치가 그대로 대응된다).
+# ⚠️ 마스킹은 **차단 범위를 넓히지 않는다** — 따옴표 밖의 연산자는 그대로 잡힌다.
+#    적대적 케이스(`"rm" -rf`, `; rm -rf be/`, `$(rm -rf be)`)는 테스트로 고정돼 있다.
+# 🔴 **겹따옴표 안을 통째로 마스킹하면 안 된다.** 셸에서 `$(...)` 와 백틱은
+#    겹따옴표 안에서도 **살아있다**. 초판이 그걸 놓쳐 `mkdir -p "$(rm -rf be/core)"` 가
+#    뚫렸다(08-15, 기존 적대적 스위트가 잡음). 홑따옴표만 완전 리터럴이다.
+def mask_quotes(s):
+    out=[]; i=0; n=len(s); stack=[]   # S=홑따옴표 D=겹따옴표 C=$( ) B=백틱
+    while i < n:
+        c=s[i]
+        if stack and stack[-1]=='S':          # 홑따옴표: 전부 리터럴
+            if c=="'": stack.pop(); out.append(c)
+            else: out.append('X')
+            i+=1; continue
+        if c=='\\' and i+1<n:
+            out.append('\\'); out.append('X'); i+=2; continue
+        if c=="'" and not (stack and stack[-1]=='D'):
+            stack.append('S'); out.append(c); i+=1; continue
+        if c=='"':
+            if stack and stack[-1]=='D': stack.pop()
+            else: stack.append('D')
+            out.append(c); i+=1; continue
+        if s[i:i+2]=='$(':                     # 겹따옴표 안에서도 활성
+            stack.append('C'); out.append('$('); i+=2; continue
+        if c==')' and stack and stack[-1]=='C':
+            stack.pop(); out.append(c); i+=1; continue
+        if c=='`':                             # 겹따옴표 안에서도 활성
+            if stack and stack[-1]=='B': stack.pop()
+            else: stack.append('B')
+            out.append(c); i+=1; continue
+        out.append('X' if (stack and stack[-1]=='D') else c)
+        i+=1
+    return ''.join(out)
+
+masked = mask_quotes(cmd)
+assert len(masked)==len(cmd)   # 위치 대응이 깨지면 조용히 틀리는 것보다 죽는 편이 낫다
+
+for m in re.finditer(r'(?<![0-9<>])>>?\s*(?!&)([^\s;|&()]+)', masked):
+    target = cmd[m.start(1):m.end(1)]     # 값은 원문에서
+    if not target_ok(target):
+        fail(f"허용되지 않은 경로로 씁니다: {target}", cmd[m.start():m.end()])
 
 # ── 세그먼트별 명령 이름 검사 ────────────────────────────────────
-segments = re.split(r'\|\||&&|[;|\n]|\$\(|`|\)', cmd)
+def segment_spans(m):
+    """마스크에서 연산자 위치를 찾아 원문 구간으로 돌려준다."""
+    spans=[]; start=0; i=0; n=len(m)
+    while i < n:
+        if m[i:i+2] in ('||','&&','$('):
+            spans.append((start,i)); i+=2; start=i; continue
+        if m[i] in ';|\n`)':
+            spans.append((start,i)); i+=1; start=i; continue
+        i+=1
+    spans.append((start,n))
+    return spans
+
+segments = [cmd[a:b] for a,b in segment_spans(masked)]
 for seg in segments:
     s = seg.strip()
     if not s:

@@ -26,17 +26,8 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || ec
 # `gh pr merge --admin` 같은 문자열이 들어가면 데이터인데도 명령으로 오인된다.
 # 실제로 이 훅을 확장한 커밋의 메시지가 바로 이 훅에 막혔다(08-12).
 # 오탐이 잦은 가드는 우회당하고, 우회는 가드를 침식한다 → 본문을 걷어내고 본다.
-COMMAND=$(printf '%s\n' "$COMMAND" | awk '
-  {
-    if (skip) { if ($0 ~ ("^[[:space:]]*" tag "[[:space:]]*$")) skip=0; next }
-    line=$0
-    if (match(line, /<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*['"'"'"]?/)) {
-      t=substr(line, RSTART, RLENGTH)
-      gsub(/^<<-?[[:space:]]*|['"'"'"]/, "", t)
-      tag=t; skip=1
-    }
-    print line
-  }')
+. "$(dirname "${BASH_SOURCE[0]}")/lib/strip-heredoc.sh"
+COMMAND=$(strip_heredoc "$COMMAND")
 
 deny() {
   echo "⛔ $1" >&2

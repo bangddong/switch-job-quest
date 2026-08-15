@@ -5,6 +5,13 @@
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "")
 
+# heredoc 본문은 데이터다 — 이 가드를 **설명하는** 커밋 메시지·문서가 차단되면 안 된다.
+# 08-12에 형제 `assert-no-admin.sh`만 고치고 여기를 빠뜨렸다가 08-15에 재발을 확인했다
+# (오탐을 테스트하려던 명령 자체가 이 가드에 막히는 것으로 즉석 증명됐다).
+# 사본이 갈라져 생긴 문제라 로직을 lib/로 뺐다 — 상세는 그 파일 주석.
+. "$(dirname "${BASH_SOURCE[0]}")/lib/strip-heredoc.sh"
+COMMAND=$(strip_heredoc "$COMMAND")
+
 # git push 명령인지 확인
 if ! echo "$COMMAND" | grep -q "git push"; then
   exit 0

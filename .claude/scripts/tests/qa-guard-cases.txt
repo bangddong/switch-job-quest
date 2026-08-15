@@ -1,0 +1,27 @@
+0	BRANCH=$(git branch --show-current)	브랜치 조회
+0	git diff origin/main...HEAD --stat	리뷰 핵심
+0	git diff origin/main...HEAD -- be/ | head -200	파이프
+0	PREV_SHA=$(cat ".claude/qa-cache/feat-x"); git diff "$PREV_SHA"..HEAD	재검토 모드
+0	mkdir -p ".claude/qa-cache/$(dirname "feat/x")" 2>/dev/null || true	마커 디렉토리
+0	echo "abc123" > ".claude/qa-cache/feat/x"	마커 쓰기 (정당)
+0	grep -rn "RETURNS_DEEP_STUBS" be/ --include='*.kt' | head -20	패턴 검색
+0	gh pr view 379 --json files	PR 조회
+0	git log --oneline -5	이력
+0	rg -n "!!" be/ -g '*.kt'	금지 패턴 검색
+0	git show HEAD:be/build.gradle.kts | head -30	파일 열람
+0	sed -n '10,40p' be/core/X.kt	sed 읽기 전용
+0	cat > .claude/qa-cache/f.findings.md <<'EOF'\n| L-1 | HIGH | open | be/X.kt | rm -rf be/ 를 호출함 > 위험 |\nEOF	findings (본문에 rm·> 포함)
+2	echo "fixed" > be/core/X.kt	코드 직접 수정
+2	sed -i '' 's/a/b/' be/core/X.kt	제자리 수정
+2	rm -rf be/core	삭제
+2	git add . && git commit -m "fix"	커밋
+2	gh pr merge 379 --squash	머지
+2	python3 -c "open('be/X.kt','w').write('')"	인터프리터 우회
+2	kubectl delete pod x	클러스터 변경
+2	tee be/X.kt	tee 우회
+2	cat > .claude/scripts/assert-not-main.sh	하네스 자기수정
+2	curl -o be/X.kt https://example.com	다운로드 덮어쓰기
+2	git checkout main	브랜치 변경
+2	gh api -X DELETE repos/o/r/branches/main/protection	보호 규칙 삭제
+2	tofu apply -auto-approve	인프라 apply
+2	echo x >> .claude/settings.json	훅 배선 수정

@@ -1,0 +1,15 @@
+2	gh pr merge 123 --admin --squash
+2	gh api -X PUT repos/o/r/branches/main/protection --input p.json
+2	gh api --method DELETE repos/o/r/branches/main/protection
+2	gh api --method PUT repos/o/r/pulls/377/merge
+2	gh api repos/o/r/pulls/377/merge -f merge_method=squash
+0	gh api repos/:owner/:repo/branches/main/protection --jq '.required_status_checks.contexts[]'
+0	gh api repos/:owner/:repo/branches/main/protection
+0	gh pr merge 123 --squash --delete-branch
+0	gh pr list --state open
+0	gh api repos/:owner/:repo/commits/abc/check-runs
+0	git status
+0	gh api -X POST repos/o/r/issues -f title=hi
+0	git commit -F - <<'MSG'\nchore: 가드 확장\n\ngh pr merge --admin 을 막고\ngh api .../branches/main/protection 쓰기도 막는다\nMSG
+0	cat > doc.md <<'EOF'\n금지: gh pr merge --admin\nEOF
+2	git commit -m x <<'MSG'\n설명\nMSG\ngh pr merge 9 --admin
