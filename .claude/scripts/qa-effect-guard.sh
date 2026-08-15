@@ -57,10 +57,28 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 # 파일별로 (상태, 내용해시) 한 줄씩. 델타를 보여주려면 목록 자체를 남겨야 한다 —
 # 해시 하나만 저장하면 "뭔가 바뀌었다"까지만 알고 **무엇이** 바뀌었는지는 못 말한다
 # (초판이 그래서 baseline 시점에 이미 수정돼 있던 파일까지 싸잡아 보고했다).
+# 🔴 **gitignore된 고가치 파일은 `git status`가 못 본다** (08-15 QA F-10).
+#    특히 `.claude/settings.local.json` 은 **권한 allow 규칙 343건**을 담고 있어,
+#    거기 한 줄 쓰면 **세션을 넘어 지속되는 권한 상승**이 된다.
+#    실수로 일어날 일은 아니지만(위협 모델상 범위 밖) **결과의 크기가 다르므로**
+#    파서를 넓히는 대신 **고정 목록을 해시로 감시**한다 — 범용 규칙이 아니라 열거다.
+#    ⚠️ 목록을 늘릴 때는 "여기 쓰이면 세션을 넘어 영향이 남는가"만 기준으로 삼을 것.
+WATCH="
+.claude/settings.local.json
+.claude/settings.json
+.claude/launch.json
+"
+
 snapshot_state() {
   git status --porcelain -- . ':(exclude).claude/qa-cache' 2>/dev/null | while read -r st f; do
     h=$( [ -f "$f" ] && shasum "$f" 2>/dev/null | awk '{print $1}' || echo "-" )
     printf '%s %s %s\n' "$st" "$h" "$f"
+  done
+  # git이 안 보는 것들 — 존재 여부와 내용해시를 직접 본다
+  printf '%s\n' "$WATCH" | while read -r w; do
+    [ -n "$w" ] || continue
+    h=$( [ -f "$ROOT/$w" ] && shasum "$ROOT/$w" 2>/dev/null | awk '{print $1}' || echo "absent" )
+    printf 'W %s %s\n' "$h" "$w"
   done
 }
 
