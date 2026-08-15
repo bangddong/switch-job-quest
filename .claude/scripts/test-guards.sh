@@ -137,6 +137,15 @@ run_probes
 
 # 게이트 자체 테스트 — findings/원장을 임시로 바꿔치기하므로 별도 스크립트다.
 # ⚠️ 실제 파일을 건드렸다가 원복하므로, 실패해도 원복이 돌도록 스크립트 안에서 관리한다.
+for extra in effect-guard-test.sh; do
+  [ -x "$T/$extra" ] || continue
+  out=$(bash "$T/$extra" 2>&1)
+  echo "$out" | grep -E '^  FAIL' || true
+  p=$(echo "$out" | awk '/^통과/{print $2}'); f=$(echo "$out" | awk '/^통과/{print $5}')
+  printf '  %-28s %2s/%s  %s\n' "qa-effect-guard.sh" "$p" "$((p+f))" "F-11·F-15·F-16 상호작용"
+  PASS=$((PASS+p)); FAIL=$((FAIL+f))
+done
+
 if [ -x "$T/qa-gate-test.sh" ]; then
   out=$(bash "$T/qa-gate-test.sh" 2>&1)
   echo "$out" | grep -E '^  FAIL' || true
@@ -150,7 +159,7 @@ echo
 #    실패 0건으로 "통과"가 된다 — 커버리지가 사라졌는데 초록이 뜬다.
 #    실제로 이번 PR 초판에 배선 안 된 케이스 파일이 하나 있었다(08-15 QA F-3).
 #    → 총 건수 하한을 박는다. 케이스를 **추가**하면 이 숫자도 함께 올린다.
-MIN_CASES=137
+MIN_CASES=145
 if [ "$((PASS+FAIL))" -lt "$MIN_CASES" ]; then
   echo "❌ 케이스 수가 줄었다: $((PASS+FAIL)) < ${MIN_CASES}"
   echo "   케이스 파일이 비었거나 러너 배선이 끊겼을 가능성이 높다."

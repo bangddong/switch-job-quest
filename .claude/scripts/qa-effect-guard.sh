@@ -39,6 +39,9 @@ cd "$ROOT" || exit 0
 
 INPUT=$(cat 2>/dev/null || echo '{}')
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // .agent_name // empty' 2>/dev/null)
+# 🔑 `agent_id` 는 서브에이전트마다 고유하다. baseline에 새겨두면
+#    "**이 에이전트에 대해** Start가 돌았는가"를 정확히 판정할 수 있다 (08-16 QA F-16).
+AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
 
 # qa-reviewer가 아니면 관심 없다. (판별 불가 시엔 아무것도 하지 않는다 —
 #  이 훅은 차단이 아니라 탐지이므로, 여기서 fail-closed로 막으면 무관한 에이전트를 방해한다.)
@@ -85,7 +88,7 @@ snapshot_state() {
 case "$MODE" in
   snapshot)
     rm -f "$BASELINE.done" 2>/dev/null || true   # 새 세션 = 새 검증 기회
-    snapshot_state > "$BASELINE" 2>/dev/null || true
+    { printf 'AGENT %s\n' "${AGENT_ID:-unknown}"; snapshot_state; } > "$BASELINE" 2>/dev/null || true
     exit 0
     ;;
   verify)
@@ -112,11 +115,30 @@ case "$MODE" in
     #
     #    대신 **소비 표시**를 남긴다: 이미 검증한 baseline이면 다음 Stop은 조용히 통과한다.
     #    (baseline이 **아예 없는** 경우의 fail-closed는 그대로 유지 — F-11의 의도는 살린다)
-    if [ -f "$BASELINE.done" ]; then exit 0; fi
+    # 🔴 **이 에이전트에 대해** Start가 돌았는지 확인한다 (08-16 QA F-16).
+    #    `.done`만 보면, 다음 세션에 Start가 안 돌아도 **이전 세션의 .done이 남아** 조용히
+    #    통과한다 — F-11의 fail-closed를 내가 되살린 `.done`으로 우회시킨 셈이었다.
+    #    Start 미실행은 이 레포 실측 전례가 있다(#377, 훅 12개 mode 644).
+    BASE_AGENT=$(awk '/^AGENT /{print $2; exit}' "$BASELINE" 2>/dev/null)
+    if [ -n "$AGENT_ID" ] && [ "$BASE_AGENT" != "$AGENT_ID" ]; then
+      echo "🔴 qa-reviewer 효과 검사: baseline이 **다른 에이전트**의 것이다." >&2
+      echo "   baseline=$BASE_AGENT / 현재=$AGENT_ID" >&2
+      echo "   이 에이전트에 대해 SubagentStart가 돌지 않았다는 뜻이다 — 탐지가 작동하지 않았다." >&2
+      echo "   확인: .claude/agents/qa-reviewer.md 의 SubagentStart 배선" >&2
+      exit 2
+    fi
+
+    # 같은 에이전트의 반복 Stop이면 이미 검증했다 → 조용히 통과 (F-15)
+    if [ -f "$BASELINE.done" ] && [ "$(cat "$BASELINE.done" 2>/dev/null)" = "${AGENT_ID:-unknown}" ]; then
+      exit 0
+    fi
 
     AFTER=$(snapshot_state)
-    DELTA=$(comm -13 <(sort "$BASELINE" 2>/dev/null) <(printf '%s\n' "$AFTER" | sort))
-    : > "$BASELINE.done" 2>/dev/null || true
+    # ⚠️ `comm` 은 **양쪽이 정렬돼 있어야** 한다. AGENT 줄은 소유권 확인용이지 비교 대상이
+    #    아니므로 양쪽에서 뺀 뒤 각각 정렬한다. (초판은 한쪽에만 AGENT 줄을 앞에 붙여
+    #    전역 정렬이 깨졌고, 변경이 없는데도 델타가 나왔다 — 스위트가 잡았다)
+    DELTA=$(comm -13 <(grep -v '^AGENT ' "$BASELINE" 2>/dev/null | sort) <(printf '%s\n' "$AFTER" | sort))
+    printf '%s' "${AGENT_ID:-unknown}" > "$BASELINE.done" 2>/dev/null || true
     [ -z "$DELTA" ] && exit 0
 
     echo "🔴 qa-reviewer 세션 중 **추적 파일이 변경됐다**." >&2
