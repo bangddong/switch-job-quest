@@ -57,6 +57,9 @@ ALLOWED = {
     # 셸 키워드·구조
     'if','then','else','elif','fi','for','while','do','done','case','esac','[',']','[[',']]',
     'test','true','false','local','export','set','shift','return','echo','printf',
+    # `read`·`:` 는 키워드 벗기기(F-9) 이후 드러난다 — 둘 다 본질적으로 읽기/무동작이다.
+    # 스위트가 `while read -r l; do …` 오탐을 즉시 잡아줘서 추가했다(08-15).
+    'read',':','wait','sleep',
     # 읽기·분석
     'cat','head','tail','wc','grep','egrep','fgrep','rg','find','ls','file','stat','diff','comm',
     'sort','uniq','cut','tr','sed','awk','jq','yq','basename','dirname','realpath','xargs','tee',
@@ -175,9 +178,17 @@ for seg in segments:
         continue
     toks = s.split()
     # 앞쪽 VAR=... 대입과 리다이렉트 토큰은 건너뛴다
+    # 🔴 셸 키워드 뒤의 **실제 명령**까지 벗겨낸다 (08-15 QA F-9).
+    #    초판은 `toks[0]` 만 봤고 `if`/`while`/`do` 가 ALLOWED라 그 뒤가 통째로 안 보였다:
+    #      `if rm -rf be/core; then true; fi`  → toks[0]='if'(허용) → rm 미검사 → 통과
+    #      `for f in x; do rm -rf be/; done`   → toks[0]='do'(허용) → 동일
+    #    bash는 if-조건절을 분기 결과와 무관하게 **그대로 실행**한다. 이색적 우회가 아니라
+    #    토큰 순회에서 빠진 자리였다.
+    LEADING = {'if','then','else','elif','while','until','do','!','time','command','builtin','exec','eval','nohup'}
     while toks and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', toks[0])
                     or re.match(r'^[0-9]*>>?', toks[0])
-                    or re.match(r'^[0-9]*<', toks[0])):
+                    or re.match(r'^[0-9]*<', toks[0])
+                    or toks[0] in LEADING):
         toks.pop(0)
     if not toks:
         continue

@@ -130,6 +130,7 @@ run_multi path-guard-cases.json                           "be/fe 경로 가드 �
 run_txt  assert-qa-readonly.sh       qa-guard-cases.txt   "정상 리뷰 명령 + 우회 시도"
 run_txt  assert-qa-readonly.sh       qa-guard-cases2.txt  "적대적"
 run_txt  assert-qa-readonly.sh       qa-cases3.txt        "따옴표 오탐(L-21) + 적대적"
+run_txt  assert-qa-readonly.sh       qa-cases4.txt        "셸 키워드·ANSI-C 우회(F-1·F-9)"
 run_txt  assert-no-admin.sh          hook-cases.txt       "브랜치 보호 우회 경로"
 run_txt  assert-no-main-push.sh      push-guard-cases.txt "main push 차단 + heredoc 오탐"
 run_probes
@@ -139,7 +140,7 @@ echo
 #    실패 0건으로 "통과"가 된다 — 커버리지가 사라졌는데 초록이 뜬다.
 #    실제로 이번 PR 초판에 배선 안 된 케이스 파일이 하나 있었다(08-15 QA F-3).
 #    → 총 건수 하한을 박는다. 케이스를 **추가**하면 이 숫자도 함께 올린다.
-MIN_CASES=112
+MIN_CASES=128
 if [ "$((PASS+FAIL))" -lt "$MIN_CASES" ]; then
   echo "❌ 케이스 수가 줄었다: $((PASS+FAIL)) < ${MIN_CASES}"
   echo "   케이스 파일이 비었거나 러너 배선이 끊겼을 가능성이 높다."

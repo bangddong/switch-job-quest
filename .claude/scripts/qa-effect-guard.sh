@@ -44,8 +44,13 @@ AGENT=$(echo "$INPUT" | jq -r '.agent_type // .agent_name // empty' 2>/dev/null)
 #  이 훅은 차단이 아니라 탐지이므로, 여기서 fail-closed로 막으면 무관한 에이전트를 방해한다.)
 [ "$AGENT" = "qa-reviewer" ] || exit 0
 
-STATE_DIR="$ROOT/.claude/qa-cache"
-BASELINE="$STATE_DIR/.effect-baseline"
+# 🔴 **baseline을 `.claude/qa-cache/` 에 두면 안 된다** (08-15 QA F-8).
+#    거기는 qa-reviewer가 **쓰기를 허용받은** 유일한 경로다(`assert-qa-readonly.sh`의 target_ok).
+#    즉 감시자의 기준점이 **피감시자의 쓰기 영역 안**에 있었다 — 허용된 명령만으로
+#    `git status … > .claude/qa-cache/.effect-baseline` 을 다시 만들면 델타가 0이 된다.
+#    파서를 우회할 필요조차 없었다. 감시자는 피감시자가 손댈 수 없는 곳에 상태를 둬야 한다.
+STATE_DIR="$ROOT/.claude/.effect-state"
+BASELINE="$STATE_DIR/qa-reviewer"
 mkdir -p "$STATE_DIR" 2>/dev/null || true
 
 # 추적 파일의 변경 상태 + 내용 해시. qa-cache/ 자체는 제외(리뷰어의 정당한 작업 산출물).
@@ -65,7 +70,17 @@ case "$MODE" in
     exit 0
     ;;
   verify)
-    [ -f "$BASELINE" ] || exit 0
+    # 🔴 fail-closed (08-15 QA F-11). 여기까지 왔다는 건 이미 agent_type=qa-reviewer로
+    #    확정된 뒤다 — 이 시점에 baseline이 없다는 것은 SubagentStart가 안 돌았거나
+    #    세션 중 지워졌다는 신호다. 둘 다 "탐지가 작동하지 않았다"는 뜻이고,
+    #    그걸 통과로 처리하면 이 PR이 F-2에서 배운 것과 정확히 모순된다.
+    if [ ! -f "$BASELINE" ]; then
+      echo "🔴 qa-reviewer 효과 검사의 baseline이 없다 — 탐지가 작동하지 않았다." >&2
+      echo "   SubagentStart 훅이 안 돌았거나 세션 중 baseline이 지워졌다." >&2
+      echo "   판단 불가 상태를 통과로 처리하지 않는다(가드가 조용히 사라지는 경로)." >&2
+      echo "   확인: .claude/agents/qa-reviewer.md 의 SubagentStart 배선 + $BASELINE" >&2
+      exit 2
+    fi
     AFTER=$(snapshot_state)
     DELTA=$(comm -13 <(sort "$BASELINE" 2>/dev/null) <(printf '%s\n' "$AFTER" | sort))
     rm -f "$BASELINE" 2>/dev/null || true
