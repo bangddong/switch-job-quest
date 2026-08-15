@@ -131,9 +131,21 @@ run_txt  assert-qa-readonly.sh       qa-guard-cases.txt   "정상 리뷰 명령 
 run_txt  assert-qa-readonly.sh       qa-guard-cases2.txt  "적대적"
 run_txt  assert-qa-readonly.sh       qa-cases3.txt        "따옴표 오탐(L-21) + 적대적"
 run_txt  assert-no-admin.sh          hook-cases.txt       "브랜치 보호 우회 경로"
+run_txt  assert-no-main-push.sh      push-guard-cases.txt "main push 차단 + heredoc 오탐"
 run_probes
 
 echo
+# 🔴 **거짓 통과 방어.** 케이스 파일이 비거나 러너가 조용히 건너뛰면(파일명 오타·경로 변경)
+#    실패 0건으로 "통과"가 된다 — 커버리지가 사라졌는데 초록이 뜬다.
+#    실제로 이번 PR 초판에 배선 안 된 케이스 파일이 하나 있었다(08-15 QA F-3).
+#    → 총 건수 하한을 박는다. 케이스를 **추가**하면 이 숫자도 함께 올린다.
+MIN_CASES=112
+if [ "$((PASS+FAIL))" -lt "$MIN_CASES" ]; then
+  echo "❌ 케이스 수가 줄었다: $((PASS+FAIL)) < ${MIN_CASES}"
+  echo "   케이스 파일이 비었거나 러너 배선이 끊겼을 가능성이 높다."
+  echo "   의도적으로 줄였다면 이 스크립트의 MIN_CASES를 함께 낮춰라(근거를 커밋 메시지에)."
+  exit 1
+fi
 if [ "$FAIL" -gt 0 ]; then
   echo "❌ 가드 테스트 실패 — 통과 ${PASS} / 실패 ${FAIL}"
   echo "   가드를 고칠 때는 **오탐과 차단을 함께** 봐야 한다. 한쪽만 보면 반드시 반대쪽이 깨진다."

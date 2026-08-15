@@ -33,6 +33,10 @@ import re, sys, os
 cmd = sys.argv[1]
 
 # ── heredoc 본문은 데이터다 ──────────────────────────────────────
+# ⚠️ **이것은 `lib/strip-heredoc.sh` 와 같은 로직의 세 번째 사본이다** (08-15 QA F-4).
+#    저기는 bash 함수, 여기는 이 파이썬 블록 안이라 소싱이 안 된다 — 언어가 다르다.
+#    🔑 **heredoc 태그 처리에 엣지케이스를 추가하면 두 곳을 함께 고쳐야 한다.**
+#    사본이 갈라져 3일간 오탐이 산 전례가 있다(assert-no-main-push, 08-12~08-15).
 # findings 본문에는 리뷰 대상 코드가 인용된다 — `rm -rf`나 `>` 가 그대로 들어갈 수 있다.
 # 그걸 명령으로 읽으면 정상 리뷰가 막힌다(08-12 assert-no-admin.sh와 같은 오탐).
 lines, out, tag = cmd.split('\n'), [], None
@@ -106,12 +110,25 @@ def mask_quotes(s):
     out=[]; i=0; n=len(s); stack=[]   # S=홑따옴표 D=겹따옴표 C=$( ) B=백틱
     while i < n:
         c=s[i]
+        # 🔴 ANSI-C 인용 `$'...'` — 여기서는 `\'` 가 따옴표를 **닫지 않는다**(bash 사양).
+        #    초판이 이걸 일반 홑따옴표로 취급해 우회로가 됐다(08-15 QA F-1, 실측):
+        #      $'x\'y' ; rm -rf be/   → 상태가 2글자 일찍 닫히고 다시 열려
+        #                                뒤쪽 `; rm -rf be/` 가 통째로 마스킹돼 숨었다.
+        if stack and stack[-1]=='A':
+            if c=='\\' and i+1<n: out.append('XX'); i+=2; continue
+            if c=="'": stack.pop(); out.append(c)
+            else: out.append('X')
+            i+=1; continue
         if stack and stack[-1]=='S':          # 홑따옴표: 전부 리터럴
             if c=="'": stack.pop(); out.append(c)
             else: out.append('X')
             i+=1; continue
         if c=='\\' and i+1<n:
             out.append('\\'); out.append('X'); i+=2; continue
+        if s[i:i+2]=="$'" and not (stack and stack[-1]=='D'):
+            stack.append('A'); out.append("$'"); i+=2; continue
+        if s[i:i+2]=='$"' and not (stack and stack[-1]=='D'):
+            stack.append('D'); out.append('$"'); i+=2; continue   # $"..." 는 "..." 와 동일
         if c=="'" and not (stack and stack[-1]=='D'):
             stack.append('S'); out.append(c); i+=1; continue
         if c=='"':
@@ -168,8 +185,13 @@ for seg in segments:
     # `$(...)`·따옴표 경계에서 쪼개지며 남은 파편(예: `" 2>/dev/null`)은 명령이 아니다.
     # 리다이렉트 대상 검사는 이 루프와 **독립적으로** 위에서 이미 전체 문자열에 대해 돌았으므로
     # 여기서 파편을 건너뛴다고 쓰기가 새지 않는다.
-    if not name or name.startswith('-') or name.startswith('$'):
+    if not name or name.startswith('-'):
         continue
+    # 🔴 `$VAR` 로 시작하는 명령 이름은 **정적으로 확인할 수 없다** → 막는다(fail-closed).
+    #    초판은 건너뛰었고, 그래서 `X=rm; $X -rf be/core` 가 통과했다(08-15 실측).
+    #    리뷰어가 변수 간접으로 명령을 만들 이유가 없다 — 필요하면 직접 쓰면 된다.
+    if name.startswith('$'):
+        fail(f"명령 이름이 변수라 확인할 수 없습니다: {name}", s)
     if name not in ALLOWED:
         fail(f"허용목록에 없는 명령입니다: {name}", s)
 
