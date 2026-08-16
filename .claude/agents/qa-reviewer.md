@@ -21,16 +21,22 @@ hooks:
       hooks:
         - type: command
           command: ".claude/scripts/log-event.sh PostToolUse qa-reviewer"
-  # 결과 기반 탐지 — 명령을 파싱하지 않으므로 셸 트릭으로 우회할 수 없다.
-  # assert-qa-readonly.sh(사전 차단)가 3라운드 조여도 매번 새 우회가 열려 추가했다(원장 L-12와 같은 결론).
-  SubagentStart:
-    - hooks:
-        - type: command
-          command: ".claude/scripts/qa-effect-guard.sh snapshot"
-  SubagentStop:
-    - hooks:
-        - type: command
-          command: ".claude/scripts/qa-effect-guard.sh verify"
+  # 🔴 **효과 기반 탐지는 배선을 뺐다 (2026-08-16, 원장 L-24 / QA F-18).**
+  #    `qa-effect-guard.sh`를 SubagentStart(snapshot)·SubagentStop(verify)에 걸었는데,
+  #    **snapshot이 한 번도 baseline을 만들지 못했다.** 실측 대조:
+  #      · 같은 frontmatter의 `PreToolUse`(assert-qa-readonly.sh)는 **정상 작동**한다
+  #        (이 세션에서 bash·python3를 실제로 차단한 것이 증거)
+  #      · `SubagentStart/Stop`만 `.claude/.effect-state/` 에 아무것도 남기지 못했다
+  #    → 서브에이전트 **생명주기 이벤트 시점엔 자기 frontmatter 훅이 호출 후보에 못 드는**
+  #      구조적 문제로 보인다(미확정 — 계측 없이는 단정 불가).
+  #
+  #    🔴 그런데 verify 쪽은 도는 정황이 있었고, snapshot이 없으니 **매번 fail-closed(exit 2)** 로
+  #       리뷰어를 차단했다. QA 응답이 4연속 퇴화한 원인이 이것으로 보인다.
+  #       **전제가 거짓인 가드는 없느니만 못하다** — 배선을 뺀다.
+  #
+  #    스크립트와 테스트(9건)는 남긴다. 호출 경로를 찾으면 그대로 다시 걸 수 있다.
+  #    재배선 전 확인: qa-reviewer 스폰 직후 `.claude/.effect-state/qa-reviewer` 가 생기는가.
+  #    (⚠️ 테스트가 끝에 `rm -rf` 로 상태를 치우므로 스위트 직후에 보면 안 된다)
 ---
 
 # QA Reviewer
