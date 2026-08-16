@@ -119,8 +119,17 @@ case "$MODE" in
     #    `.done`만 보면, 다음 세션에 Start가 안 돌아도 **이전 세션의 .done이 남아** 조용히
     #    통과한다 — F-11의 fail-closed를 내가 되살린 `.done`으로 우회시킨 셈이었다.
     #    Start 미실행은 이 레포 실측 전례가 있다(#377, 훅 12개 mode 644).
+    # 🔴 `agent_id` 부재도 fail-closed (08-16 QA F-17). 자매 가드
+    #    (`assert-be-path.sh`·`assert-orchestrator-path.sh`)는 "증거 불충분 → 막는다"로
+    #    이미 그렇게 하는데 이 파일만 예외였다 — **가드 간 일관성이 깨지면 그 틈이 구멍이 된다**
+    #    (08-15 strip-heredoc 사본 분기가 정확히 그 형태였다).
+    if [ -z "$AGENT_ID" ]; then
+      echo "🔴 qa-reviewer 효과 검사: 훅 입력에 agent_id가 없다 — 소유권을 판정할 수 없다." >&2
+      echo "   판단 불가를 통과로 처리하지 않는다. 훅 입력 스키마를 확인하라." >&2
+      exit 2
+    fi
     BASE_AGENT=$(awk '/^AGENT /{print $2; exit}' "$BASELINE" 2>/dev/null)
-    if [ -n "$AGENT_ID" ] && [ "$BASE_AGENT" != "$AGENT_ID" ]; then
+    if [ "$BASE_AGENT" != "$AGENT_ID" ]; then
       echo "🔴 qa-reviewer 효과 검사: baseline이 **다른 에이전트**의 것이다." >&2
       echo "   baseline=$BASE_AGENT / 현재=$AGENT_ID" >&2
       echo "   이 에이전트에 대해 SubagentStart가 돌지 않았다는 뜻이다 — 탐지가 작동하지 않았다." >&2
@@ -129,7 +138,7 @@ case "$MODE" in
     fi
 
     # 같은 에이전트의 반복 Stop이면 이미 검증했다 → 조용히 통과 (F-15)
-    if [ -f "$BASELINE.done" ] && [ "$(cat "$BASELINE.done" 2>/dev/null)" = "${AGENT_ID:-unknown}" ]; then
+    if [ -f "$BASELINE.done" ] && [ "$(cat "$BASELINE.done" 2>/dev/null)" = "$AGENT_ID" ]; then
       exit 0
     fi
 
@@ -138,7 +147,7 @@ case "$MODE" in
     #    아니므로 양쪽에서 뺀 뒤 각각 정렬한다. (초판은 한쪽에만 AGENT 줄을 앞에 붙여
     #    전역 정렬이 깨졌고, 변경이 없는데도 델타가 나왔다 — 스위트가 잡았다)
     DELTA=$(comm -13 <(grep -v '^AGENT ' "$BASELINE" 2>/dev/null | sort) <(printf '%s\n' "$AFTER" | sort))
-    printf '%s' "${AGENT_ID:-unknown}" > "$BASELINE.done" 2>/dev/null || true
+    printf '%s' "$AGENT_ID" > "$BASELINE.done" 2>/dev/null || true
     [ -z "$DELTA" ] && exit 0
 
     echo "🔴 qa-reviewer 세션 중 **추적 파일이 변경됐다**." >&2

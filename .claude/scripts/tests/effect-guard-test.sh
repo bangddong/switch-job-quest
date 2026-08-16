@@ -36,5 +36,9 @@ git checkout -- README.md
 # qa-reviewer 아닌 에이전트는 관여 안 함
 chk "다른 에이전트 타입 → 무관" 0 "$(run "$OTHER" verify)"
 
+# F-17: agent_id 부재 → fail-closed (자매 가드와 일관)
+rm -rf "$S"; run "$A1" snapshot >/dev/null
+chk "agent_id 없음 → fail-closed (F-17)" 2 "$(run '{"agent_type":"qa-reviewer"}' verify)"
+
 rm -rf "$S"
 echo "─────"; echo "통과 $P / 실패 $F"
