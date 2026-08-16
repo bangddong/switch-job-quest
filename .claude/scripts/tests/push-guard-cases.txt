@@ -1,0 +1,13 @@
+2	git push origin main	main 직접 push → 차단
+2	git push --force origin main	force push → 차단
+2	git push -f origin main	-f 축약형 → 차단
+2	git push origin/main	슬래시 표기 → 차단
+2	git push --set-upstream origin main	upstream 설정과 함께 → 차단
+0	git push origin feature/x	feature 브랜치 → 허용
+0	git push -u origin fix/harness-holes	작업 브랜치 → 허용
+0	git push	인자 없는 push (현재 브랜치) → 허용
+0	git status	push 아님 → 관심 밖
+0	gh pr create --base main	PR 생성은 정상 경로 → 허용
+0	git commit -F - <<'MSG'\nchore: 가드 설명\n\ngit push origin main 을 막는 훅이다\nMSG	heredoc 본문은 데이터 (오탐 방지)
+0	cat > doc.md <<'EOF'\n금지: git push origin main\nEOF	문서 작성 (오탐 방지)
+2	git commit -m x <<'MSG'\n설명\nMSG\ngit push origin main	heredoc 닫힌 뒤의 진짜 명령 → 차단

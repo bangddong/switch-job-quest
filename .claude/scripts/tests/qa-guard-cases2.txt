@@ -1,0 +1,12 @@
+0	mkdir -p ".claude/qa-cache/$(dirname "feat/x")" 2>/dev/null || true	마커 디렉토리 (오탐이었던 것)
+2	mkdir -p "$(rm -rf be/core)"	명령치환 안에 숨기기
+2	"rm" -rf be/core	따옴표로 감싸기
+2	git diff HEAD; rm -rf be/	세미콜론 뒤에 붙이기
+2	true && echo x > be/X.kt	&& 뒤 리다이렉트
+2	cat .claude/qa-cache/f 2>/dev/null; echo hacked > be/X.kt	파편 뒤에 숨기기
+2	echo "$(cat be/X.kt)" > /tmp/steal.txt	레포 밖으로 쓰기
+0	git diff origin/main...HEAD 2>/dev/null | wc -l	fd 리다이렉트 정상
+0	echo "sha" >> ".claude/qa-cache/feat/x"	append 도 qa-cache면 허용
+2	git commit --amend --no-edit	amend
+0	gh api repos/o/r/pulls/379/files --jq '.[].filename'	gh api 읽기
+2	gh api -X POST repos/o/r/issues -f title=x	gh api 쓰기

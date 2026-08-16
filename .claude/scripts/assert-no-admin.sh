@@ -26,17 +26,19 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || ec
 # `gh pr merge --admin` 같은 문자열이 들어가면 데이터인데도 명령으로 오인된다.
 # 실제로 이 훅을 확장한 커밋의 메시지가 바로 이 훅에 막혔다(08-12).
 # 오탐이 잦은 가드는 우회당하고, 우회는 가드를 침식한다 → 본문을 걷어내고 본다.
-COMMAND=$(printf '%s\n' "$COMMAND" | awk '
-  {
-    if (skip) { if ($0 ~ ("^[[:space:]]*" tag "[[:space:]]*$")) skip=0; next }
-    line=$0
-    if (match(line, /<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*['"'"'"]?/)) {
-      t=substr(line, RSTART, RLENGTH)
-      gsub(/^<<-?[[:space:]]*|['"'"'"]/, "", t)
-      tag=t; skip=1
-    }
-    print line
-  }')
+# 🔴 **fail-closed로 읽는다.** 초판은 그냥 `. lib` 이었는데, lib이 없거나 읽기에 실패하면
+#    `strip_heredoc`이 미정의 → `COMMAND=$(strip_heredoc ...)` 가 **빈 문자열**이 되고
+#    이후 모든 grep이 매치 실패해 **가드가 통째로 통과**했다(08-15 QA F-2, 실측 확인).
+#    사본 분기를 막으려고 lib으로 뺀 것이 새 fail-open을 만든 셈이다.
+LIB="$(dirname "${BASH_SOURCE[0]}")/lib/strip-heredoc.sh"
+# shellcheck source=/dev/null
+. "$LIB" 2>/dev/null
+if ! declare -f strip_heredoc >/dev/null 2>&1; then
+  echo "차단: 가드 헬퍼를 읽을 수 없습니다 ($LIB)" >&2
+  echo "  판단 불가 상태에서 통과시키면 가드가 조용히 사라집니다 — 막는 쪽을 택합니다." >&2
+  exit 2
+fi
+COMMAND=$(strip_heredoc "$COMMAND")
 
 deny() {
   echo "⛔ $1" >&2

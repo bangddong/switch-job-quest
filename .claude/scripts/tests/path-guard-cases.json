@@ -1,0 +1,15 @@
+[
+  {"s":"assert-be-path.sh","exp":2,"in":{"agent_id":"s","agent_type":"be-feature-builder","tool_input":{"file_path":"fe/src/App.tsx"}},"note":"be-builder가 fe/ 수정 → 차단 (본래 역할)"},
+  {"s":"assert-be-path.sh","exp":0,"in":{"agent_id":"s","agent_type":"be-feature-builder","tool_input":{"file_path":"be/core/X.kt"}},"note":"be-builder가 be/ 수정 → 허용"},
+  {"s":"assert-be-path.sh","exp":0,"in":{"agent_id":"s","agent_type":"fe-feature-builder","tool_input":{"file_path":"fe/src/App.tsx"}},"note":"다른 에이전트에 상속돼도 비켜준다 (#383 회귀 방지)"},
+  {"s":"assert-be-path.sh","exp":2,"in":{"tool_input":{"file_path":"fe/src/App.tsx"}},"note":"신원 불명 → fail-closed (막는 쪽)"},
+  {"s":"assert-be-path.sh","exp":2,"in":{"agent_type":"fe-feature-builder","tool_input":{"file_path":"fe/src/App.tsx"}},"note":"agent_id 없음 = 증거 불충분 → fail-closed"},
+  {"s":"assert-be-path.sh","exp":0,"in":{"tool_input":{"file_path":"docs/x.md"}},"note":"관심 밖 경로"},
+
+  {"s":"assert-fe-path.sh","exp":2,"in":{"agent_id":"s","agent_type":"fe-feature-builder","tool_input":{"file_path":"be/core/X.kt"}},"note":"fe-builder가 be/ 수정 → 차단"},
+  {"s":"assert-fe-path.sh","exp":0,"in":{"agent_id":"s","agent_type":"fe-feature-builder","tool_input":{"file_path":"fe/src/App.tsx"}},"note":"fe-builder가 fe/ 수정 → 허용"},
+  {"s":"assert-fe-path.sh","exp":0,"in":{"agent_id":"s","agent_type":"be-feature-builder","tool_input":{"file_path":"be/core/X.kt"}},"note":"다른 에이전트에 상속돼도 비켜준다"},
+  {"s":"assert-fe-path.sh","exp":2,"in":{"tool_input":{"file_path":"be/core/X.kt"}},"note":"신원 불명 → fail-closed"},
+
+  {"s":"assert-not-main.sh","exp":0,"in":{"tool_input":{"file_path":".claude/qa-cache/x"}},"note":"gitignore 경로는 main에서도 허용 (브랜치일 땐 무조건 허용)"}
+]
