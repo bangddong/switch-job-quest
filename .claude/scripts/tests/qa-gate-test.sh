@@ -3,11 +3,35 @@
 # 실제 findings/원장을 건드리지 않도록 임시 파일로 바꿔치기하고 끝나면 원복한다.
 set -uo pipefail
 ROOT=$(git rev-parse --show-toplevel)
+
+# 🔴 **CI는 detached HEAD로 체크아웃한다** (actions/checkout, PR은 머지 커밋).
+#    그러면 `git branch --show-current` 가 **빈 문자열**이고, 훅이 보는 마커 경로가
+#    `.claude/qa-cache/` (디렉토리)가 되어 `[ ! -f ]` 가 참 → 전부 차단된다.
+#    → 통과를 기대한 케이스 3건이 CI에서만 실패했다(08-16 실측, 로컬은 통과).
+#    이 테스트는 **브랜치 컨텍스트가 있어야** 의미가 있으므로, 없으면 임시로 만든다.
+DETACHED=0
+if [ -z "$(git branch --show-current)" ]; then
+  DETACHED=1
+  ORIG_HEAD=$(git rev-parse HEAD)
+  TMPBR="ci-guard-test-$$"
+  git checkout -q -b "$TMPBR" || { echo "  ⚠️ 임시 브랜치 생성 실패 — 게이트 테스트 불가"; exit 1; }
+fi
 BRANCH=$(git branch --show-current)
+restore_branch() {
+  [ "$DETACHED" = 1 ] || return 0
+  git checkout -q --detach "$ORIG_HEAD" 2>/dev/null || true
+  git branch -D "$TMPBR" -q 2>/dev/null || true
+}
+trap restore_branch EXIT
 FIND="$ROOT/.claude/qa-cache/$BRANCH.findings.md"
 LEDG="$ROOT/.claude/review-ledger.md"
 HOOK="$ROOT/.claude/scripts/assert-qa-run.sh"
 MARK="$ROOT/.claude/qa-cache/$BRANCH"
+
+# 🔴 `.claude/qa-cache/` 는 gitignore라 **새 체크아웃(CI·worktree)엔 존재하지 않는다.**
+#    이게 없으면 마커 쓰기가 조용히 실패하고, 훅은 "QA 미실행"으로 차단한다
+#    → 통과를 기대한 3건이 CI에서만 실패했다(08-16, detached HEAD 재현으로 확정).
+mkdir -p "$(dirname "$FIND")" 2>/dev/null || true
 
 cp "$FIND" /tmp/find.bak 2>/dev/null || true
 cp "$LEDG" /tmp/ledg.bak
