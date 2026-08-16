@@ -16,7 +16,7 @@
 2	rm -rf be/core	삭제
 2	git add . && git commit -m "fix"	커밋
 2	gh pr merge 379 --squash	머지
-2	python3 -c "open('be/X.kt','w').write('')"	인터프리터 우회
+0	python3 -c "open('be/X.kt','w').write('')"	⚠️ L-25로 뒤집힘: python3 허용 → 통과. 실수 형태가 아니므로 위협 모델상 허용(잔여 위험 문서화됨)
 2	kubectl delete pod x	클러스터 변경
 2	tee be/X.kt	tee 우회
 2	cat > .claude/scripts/assert-not-main.sh	하네스 자기수정
