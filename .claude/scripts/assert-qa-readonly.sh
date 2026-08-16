@@ -120,6 +120,13 @@ def fail(reason, seg):
     print("", file=sys.stderr)
     print(f"   차단된 조각: {seg.strip()[:160]}", file=sys.stderr)
     print("", file=sys.stderr)
+    # 🔴 이 한 줄이 없어서 실제 오보가 났다 (08-16). qa-reviewer가 `echo > marker && sed -i …` 를
+    #    한 호출로 묶었는데 뒤쪽 sed가 걸려 **호출 전체가 거부**됐다. 그런데 화면상 앞쪽 echo가
+    #    성공한 것처럼 보여 "마커 갱신 완료"로 **잘못 보고**했다(실제 마커는 옛 SHA로 남음).
+    #    PreToolUse는 부분 실행이 아니라 전부-아니면-전무다 — 그걸 명시한다.
+    print("   ⚠️ 이 명령은 **전체가 실행되지 않았습니다** (앞쪽 세그먼트 포함).", file=sys.stderr)
+    print("      복합 명령이라면 허용되는 부분만 따로 다시 실행하세요.", file=sys.stderr)
+    print("", file=sys.stderr)
     print("   쓰기는 .claude/qa-cache/ 안에서만 허용됩니다 (마커·findings).", file=sys.stderr)
     print("   코드를 고쳐야 한다면 직접 고치지 말고 **보고서에 지적으로 남기세요**.", file=sys.stderr)
     print("   리뷰어가 리뷰 대상을 고치면 그건 리뷰가 아니라 자기승인입니다.", file=sys.stderr)
