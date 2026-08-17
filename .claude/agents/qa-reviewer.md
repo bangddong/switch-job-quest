@@ -21,22 +21,13 @@ hooks:
       hooks:
         - type: command
           command: ".claude/scripts/log-event.sh PostToolUse qa-reviewer"
-  # 🔴 **효과 기반 탐지는 배선을 뺐다 (2026-08-16, 원장 L-24 / QA F-18).**
-  #    `qa-effect-guard.sh`를 SubagentStart(snapshot)·SubagentStop(verify)에 걸었는데,
-  #    **snapshot이 한 번도 baseline을 만들지 못했다.** 실측 대조:
-  #      · 같은 frontmatter의 `PreToolUse`(assert-qa-readonly.sh)는 **정상 작동**한다
-  #        (이 세션에서 bash·python3를 실제로 차단한 것이 증거)
-  #      · `SubagentStart/Stop`만 `.claude/.effect-state/` 에 아무것도 남기지 못했다
-  #    → 서브에이전트 **생명주기 이벤트 시점엔 자기 frontmatter 훅이 호출 후보에 못 드는**
-  #      구조적 문제로 보인다(미확정 — 계측 없이는 단정 불가).
-  #
-  #    🔴 그런데 verify 쪽은 도는 정황이 있었고, snapshot이 없으니 **매번 fail-closed(exit 2)** 로
-  #       리뷰어를 차단했다. QA 응답이 4연속 퇴화한 원인이 이것으로 보인다.
-  #       **전제가 거짓인 가드는 없느니만 못하다** — 배선을 뺀다.
-  #
-  #    스크립트와 테스트(9건)는 남긴다. 호출 경로를 찾으면 그대로 다시 걸 수 있다.
-  #    재배선 전 확인: qa-reviewer 스폰 직후 `.claude/.effect-state/qa-reviewer` 가 생기는가.
-  #    (⚠️ 테스트가 끝에 `rm -rf` 로 상태를 치우므로 스위트 직후에 보면 안 된다)
+  # 🔴 **효과 기반 탐지(`qa-effect-guard.sh`)는 삭제했다 (2026-08-17, 원장 L-24 종결).**
+  #    SubagentStart(snapshot)·SubagentStop(verify)에 걸었으나 **snapshot이 한 번도
+  #    baseline을 만들지 못했다** — 같은 frontmatter의 PreToolUse는 정상 작동하는데
+  #    생명주기 이벤트만 `.claude/.effect-state/`에 아무것도 남기지 않았다.
+  #    08-16에 배선만 빼고 스크립트 170줄 + 테스트 9건을 "언젠가 재배선"으로 남겼는데,
+  #    **한 번도 돈 적 없는 코드에 원장 항목까지 달려 유지비만 냈다.** 지워야 지운 것이다.
+  #    되살릴 일이 생기면 git 이력에 있다(이 커밋의 부모).
 ---
 
 # QA Reviewer
