@@ -30,7 +30,19 @@ fi
 
 # main 브랜치로 push 시도 감지
 # 패턴: git push origin main, git push --force origin main, git push -f origin main 등
-if echo "$COMMAND" | grep -qE "git push.*(origin\s+main|origin/main|\s+main$)"; then
+#
+# 🔴 **`.*` 대신 `[^;&|]*` 를 쓴다 — 세그먼트를 넘지 않게 (2026-08-18, 원장 L-29).**
+#
+# 그리디 `.*` 는 **명령 구분자를 건너뛴다.** 그래서 이것이 차단됐다:
+#     git push -q && git log --oneline origin/main..HEAD
+#     ^^^^^^^^                          ^^^^^^^^^^^
+# 앞은 현재 브랜치 push(정상), 뒤는 읽기 전용 조회인데 `.*` 가 `&&` 를 건너뛰어 이어 붙였다.
+# 실제로 이 PR(#387)의 CONTEXT 갱신 커밋이 막혔고, **그 오탐을 진단하려던 명령도 막혔다.**
+#
+# ⚠️ 오탐이 잦은 가드는 우회당하고, 우회는 가드를 침식한다(L-21 에서 실제로 발생).
+#    `[^;&|]*` 는 `;` `&&` `||` `|` 를 만나면 멈추므로 **한 세그먼트 안의 인자만** 본다.
+#    차단력은 그대로다 — `git push origin main && ...` 는 첫 세그먼트에서 잡힌다(테스트로 고정).
+if echo "$COMMAND" | grep -qE "git push[^;&|]*(origin[[:space:]]+main|origin/main|[[:space:]]+main\$)"; then
   echo "⛔ main 브랜치에 직접 push할 수 없습니다." >&2
   echo "" >&2
   echo "feature 브랜치에서 PR을 통해 머지하세요:" >&2
