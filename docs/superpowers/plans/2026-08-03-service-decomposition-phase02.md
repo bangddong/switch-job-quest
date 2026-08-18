@@ -77,9 +77,17 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
+> 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
+
 크론은 1개로 유지하고 메서드 안에서 게이트를 둘로 나눈다: ①콘텐츠 생성(유저 수·`MAIL_ENABLED`
 무관) ②메일 발송. 크론 자체를 쪼개지 않은 이유는 **실행 순서 경합** — 별도 크론이면 발송이 생성보다
 먼저 돌 수 있다. (구현 `1bf075a`)
+
+> 🔄 **2026-08-18 부분 재채택 — 읽기 경로에 한해 (b)를 좁게 되살렸다.**
+> 위 결정은 *"생성은 크론이 한다"* 를 함의했고, 그 결과 `GET /api/v1/daily-question` 이
+> **매일 00:00~09:00(하루 9시간) 404** 였다. 이제 읽기 시 **뱅크에서만** 생성한다.
+> **AI 폴백은 여전히 크론 전용이다** — 그래서 아래 기각 사유 두 개가 성립하지 않는다.
+> <!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt ~ ensureTodayQuestionFromBank -->
 
 ### 기각한 선택지 (재론 방지)
 
@@ -87,8 +95,25 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 상시 서비스 불가, 크레딧 만료 후 갈 곳 없음 / (c)혼합 — 격리 구현 2벌, 드리프트 1순위.
 > 🔑 셋 다 *"상시 환경에도 분리를 올린다"* 를 전제한 게 공통 함정이었다. 확정안은 그 전제를 버린다.
 
-**G-2**: (b)요청 시 생성 — 첫 요청자가 AI 지연을 다 먹고 동시 요청 시 중복 과금 /
+**G-2**: ~~(b)요청 시 생성 — 첫 요청자가 AI 지연을 다 먹고 동시 요청 시 중복 과금~~ /
 (c)시드 결정론 — AI 호출 0으로 가장 단순하나 *"매일 새 문제"* 라는 제품 성격이 바뀐다.
+
+> 🔄 **(b) 부분 재채택 — 2026-08-18, 읽기 경로 + 뱅크 전용에 한해** (D-005 참조).
+> 기각 사유 두 개는 **AI 호출에 붙어 있었다.** 읽기 경로에서 AI 를 빼면 둘 다 성립하지 않는다:
+>
+> | 기각 사유 | 뱅크 전용에서는 |
+> |---|---|
+> | 첫 요청자가 AI 지연을 다 먹는다 | AI 를 안 부른다 → 지연 없음 (DB 조회 2회 + INSERT 1회) |
+> | 동시 요청 시 중복 과금 | 과금 자체가 없다. 동시 요청이 겹쳐도 UNIQUE 가 정리하고 진 쪽은 재조회 |
+>
+> ⚠️ **이 판정은 아래 전제 위에 서 있다. 전제가 바뀌면 재판정하라** — 그래서 실측 근거를 남긴다:
+> - prod 는 `transport: inprocess` 라 `read-timeout-ms` 가 적용되지 않는다 = **AI 호출에 타임아웃이 없다**
+>   <!-- verify: be/core/core-api/src/main/resources/application.yml ~ transport: inprocess -->
+> - `GET /api/v1/daily-question` 은 `permitAll` + **레이트 리밋 없음**(인터셉터는 `/evaluate`·`/explain` 에만)
+>   <!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/security/SecurityConfig.kt ~ daily-question -->
+> - UNIQUE 는 `save()` 만 dedup 한다 → **저장은 수렴해도 AI 비용은 수렴하지 않는다**
+>
+> 🔑 **AI 폴백을 읽기 경로에 넣고 싶어지면 여기부터 읽어라.** 위 3개가 그대로면 답은 여전히 "안 된다"다.
 
 ---
 
