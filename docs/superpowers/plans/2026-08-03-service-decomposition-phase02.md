@@ -110,7 +110,17 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 > - prod 는 `transport: inprocess` 라 `read-timeout-ms` 가 적용되지 않는다 = **AI 호출에 타임아웃이 없다**
 >   <!-- verify: be/core/core-api/src/main/resources/application.yml ~ transport: inprocess -->
 > - `GET /api/v1/daily-question` 은 `permitAll` + **레이트 리밋 없음**(인터셉터는 `/evaluate`·`/explain` 에만)
->   <!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/security/SecurityConfig.kt ~ daily-question -->
+>   <!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/api/config/WebMvcConfig.kt ~ addPathPatterns\("/api/v1/daily-question/explain"\) -->
+>
+>   ⚠️ **이 마커는 절반만 잠근다 — 도구의 한계를 정직하게 적는다.** `check-design-integrity.sh` 는
+>   정규식의 **존재**만 단언할 수 있고 **부재는 단언할 수 없다.** 그래서:
+>   - ✅ 잡는다: 누가 `/explain` 을 **bare 경로 `/api/v1/daily-question` 으로 바꾸면**
+>     (= GET 에 레이트 리밋이 걸리면) 이 정규식이 깨져 CI 가 막는다
+>   - ❌ 못 잡는다: 기존 줄을 그대로 두고 **새 인터셉터 등록을 추가**하는 경우
+>
+>   후자는 기계로 못 막으므로 **사람이 본다.** `WebMvcConfig.addInterceptors` 에 손대면
+>   이 결정(D-005)을 다시 읽어라. (같은 한계가 `design-change-procedure.md` 의
+>   *"검사기가 잡는 것 / 못 잡는 것"* 표에 이미 적혀 있다 — 새 사실이 아니라 적용 사례다)
 > - UNIQUE 는 `save()` 만 dedup 한다 → **저장은 수렴해도 AI 비용은 수렴하지 않는다**
 >
 > 🔑 **AI 폴백을 읽기 경로에 넣고 싶어지면 여기부터 읽어라.** 위 3개가 그대로면 답은 여전히 "안 된다"다.
