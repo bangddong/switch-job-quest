@@ -11,3 +11,9 @@
 0	git commit -F - <<'MSG'\nchore: 가드 설명\n\ngit push origin main 을 막는 훅이다\nMSG	heredoc 본문은 데이터 (오탐 방지)
 0	cat > doc.md <<'EOF'\n금지: git push origin main\nEOF	문서 작성 (오탐 방지)
 2	git commit -m x <<'MSG'\n설명\nMSG\ngit push origin main	heredoc 닫힌 뒤의 진짜 명령 → 차단
+0	git push -q && git log --oneline origin/main..HEAD	L-29 오탐: && 뒤의 읽기전용 git log를 push 인자로 오인
+0	git push; git diff origin/main	L-29 오탐: ; 뒤의 git diff
+0	git push -u origin fix/x && git log origin/main..HEAD	작업 브랜치 push + 뒤에 origin/main 조회
+0	git push && echo done | grep origin/main	파이프 뒤 origin/main 문자열
+2	git push origin main && git log origin/main..HEAD	진짜 차단은 유지 — 세그먼트 안에 origin main
+2	git log origin/main..HEAD && git push origin main	뒤쪽 세그먼트가 진짜 push

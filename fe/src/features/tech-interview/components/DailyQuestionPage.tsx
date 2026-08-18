@@ -9,7 +9,7 @@ async function fetchDailyQuestion(): Promise<string> {
   if (res.status === 404) {
     const json = await res.json().catch(() => ({}))
     const msg = (json as { error?: { message?: string } })?.error?.message
-    throw new Error(msg ?? '오늘의 질문을 아직 준비 중입니다. 오전 9시 이후 다시 확인해주세요.')
+    throw new Error(msg ?? '오늘의 질문을 준비하지 못했습니다. 잠시 후 다시 확인해주세요.')
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<{ question: string }> = await res.json()

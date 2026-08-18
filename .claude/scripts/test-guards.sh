@@ -152,7 +152,8 @@ echo
 #    → 총 건수 하한을 박는다. 케이스를 **추가**하면 이 숫자도 함께 올린다.
 #    ⚠️ 낮출 때는 반드시 **무엇을 지웠는지** 근거를 남긴다.
 #       08-17: qa-effect-guard.sh 삭제(배선된 적 없는 죽은 코드) → 9건 제거, 152 → 143.
-MIN_CASES=143
+#       08-18: assert-no-main-push 오탐 회귀 케이스 6건 추가(L-29), 143 → 149.
+MIN_CASES=149
 if [ "$((PASS+FAIL))" -lt "$MIN_CASES" ]; then
   echo "❌ 케이스 수가 줄었다: $((PASS+FAIL)) < ${MIN_CASES}"
   echo "   케이스 파일이 비었거나 러너 배선이 끊겼을 가능성이 높다."
