@@ -184,4 +184,93 @@ class DailyQuestionContentServiceTest {
         assertThatThrownBy { service.ensureTodayQuestion() }
             .isInstanceOf(DataIntegrityViolationException::class.java)
     }
+
+    // --- Phase 2 Stage A: ensureTodayQuestionFromBank (읽기 경로 전용, AI 폴백 없음) ---
+
+    @Test
+    fun `ensureTodayQuestionFromBank - 오늘 질문이 없고 뱅크에 후보가 있으면 뱅크에서 생성해 저장한다`() {
+        service = newService()
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any())).thenReturn(null)
+        whenever(dailyQuestionContentPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
+        whenever(techQuestionBankPort.findUnused(any(), anyOrNull()))
+            .thenReturn(TechQuestionBank(category = "java-spring", question = "뱅크 질문"))
+        whenever(dailyQuestionContentPort.save(any())).thenAnswer { it.arguments[0] }
+
+        val result = service.ensureTodayQuestionFromBank()
+
+        assertThat(result).isNotNull
+        assertThat(result?.question).isEqualTo("뱅크 질문")
+        assertThat(result?.source).isEqualTo("BANK")
+        verify(dailyQuestionContentPort).save(any())
+    }
+
+    @Test
+    fun `ensureTodayQuestionFromBank - 뱅크가 소진되면 AI를 호출하지 않고 null을 반환한다`() {
+        service = newService()
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any())).thenReturn(null)
+        whenever(dailyQuestionContentPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
+        whenever(techQuestionBankPort.findUnused(any(), anyOrNull())).thenReturn(null)
+
+        val result = service.ensureTodayQuestionFromBank()
+
+        assertThat(result).isNull()
+        verify(techInterviewPort, never()).generateDailyQuestion(any(), any())
+        verify(dailyQuestionContentPort, never()).save(any())
+    }
+
+    @Test
+    fun `ensureTodayQuestionFromBank - 오늘 질문이 이미 있으면 재생성하지 않고 그대로 반환한다`() {
+        service = newService()
+        val existing = DailyQuestionContent(
+            id = 1L,
+            questionDate = LocalDate.now(),
+            mailType = "TECH_INTERVIEW",
+            question = "기존 질문",
+            source = "BANK",
+        )
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any())).thenReturn(existing)
+
+        val result = service.ensureTodayQuestionFromBank()
+
+        assertThat(result).isEqualTo(existing)
+        verify(techQuestionBankPort, never()).findUnused(any(), anyOrNull())
+        verify(techInterviewPort, never()).generateDailyQuestion(any(), any())
+        verify(dailyQuestionContentPort, never()).save(any())
+    }
+
+    @Test
+    fun `ensureTodayQuestionFromBank - save 시 UNIQUE 위반이 나면 기존 값을 재조회해 반환한다 (F-3)`() {
+        service = newService()
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
+        val winner = DailyQuestionContent(
+            id = 1L,
+            questionDate = today,
+            mailType = "TECH_INTERVIEW",
+            question = "동시 생성 승자 질문",
+            source = "BANK",
+        )
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any()))
+            .thenReturn(null)
+            .thenReturn(winner)
+        whenever(dailyQuestionContentPort.findQuestionsSince(any(), any())).thenReturn(emptyList())
+        whenever(techQuestionBankPort.findUnused(any(), anyOrNull()))
+            .thenReturn(TechQuestionBank(category = "java-spring", question = "뱅크 질문"))
+        whenever(dailyQuestionContentPort.save(any()))
+            .thenThrow(DataIntegrityViolationException("uq_daily_question_content_date_type 위반"))
+
+        val result = service.ensureTodayQuestionFromBank()
+
+        assertThat(result).isEqualTo(winner)
+        verify(dailyQuestionContentPort, times(2)).findToday(eq("TECH_INTERVIEW"), any())
+    }
+
+    // --- 회귀 가드: ensureTodayQuestionFromBank에도 @Transactional이 없어야 한다 ---
+    @Test
+    fun `ensureTodayQuestionFromBank 회귀가드 - 메서드에 @Transactional이 붙어있지 않다 (구조적 검증)`() {
+        val method = DailyQuestionContentService::class.java.getMethod("ensureTodayQuestionFromBank")
+
+        assertThat(method.isAnnotationPresent(Transactional::class.java))
+            .`as`("ensureTodayQuestionFromBank()는 ensureTodayQuestion()과 동일한 트랜잭션 경계를 가져야 한다")
+            .isFalse()
+    }
 }

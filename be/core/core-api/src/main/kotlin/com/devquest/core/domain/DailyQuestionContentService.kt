@@ -1,6 +1,7 @@
 package com.devquest.core.domain
 
 import com.devquest.core.domain.model.DailyQuestionContent
+import com.devquest.core.domain.model.TechQuestionBank
 import com.devquest.core.domain.port.DailyQuestionContentPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.domain.port.TechQuestionBankPort
@@ -38,6 +39,16 @@ import java.time.ZoneId
  * [DataIntegrityViolationException]을 던진다. [ensureTodayQuestion]은 이를 잡아 기존 값을 재조회해
  * 반환한다(멱등성 최종 방어선). `replicas: 1` + 단일 스레드 스케줄러라 실무 발생 가능성은 낮지만,
  * UNIQUE 제약을 걸어두고 그 예외를 처리하지 않으면 제약이 "보호"가 아니라 "장애"가 된다.
+ *
+ * **[ensureTodayQuestionFromBank] (Phase 2 Stage A)**: `GET /api/v1/daily-question` 읽기 경로 전용.
+ * 뱅크에서만 질문을 채택하고 **AI 폴백을 절대 호출하지 않는다**. 이유(계획서
+ * `2026-08-03-service-decomposition-phase02.md` "기각한 선택지 G-2" 재확인):
+ * prod는 `transport: inprocess`라 `read-timeout-ms`가 적용되지 않아 타임아웃이 없고, GET은
+ * `permitAll` + 레이트리밋 없음이라 요청 시 AI 생성을 허용하면 동시 요청마다 비용이 발생한다
+ * (UNIQUE 제약은 `save()`만 dedup하므로 저장은 수렴해도 AI 호출 비용은 수렴하지 않는다).
+ * 뱅크가 소진되면 예외 없이 `null`을 반환한다 — 호출자(`DailyQuestionService`)가 404로 매핑한다.
+ * `ensureTodayQuestion()`과 마찬가지로 `@Transactional`을 붙이지 않는다(F-1과 동일한 커넥션 점유 우려는
+ * 이 경로엔 없지만, 두 메서드의 트랜잭션 경계를 다르게 가져갈 이유가 없다).
  */
 @Service
 class DailyQuestionContentService(
@@ -62,23 +73,13 @@ class DailyQuestionContentService(
      */
     fun ensureTodayQuestion(): DailyQuestionContent {
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
-        dailyQuestionContentPort.findToday(MAIL_TYPE, today)?.let { existing ->
-            log.info("오늘의 질문 이미 존재 — 재생성 skip: date=$today")
-            return existing
-        }
+        findExisting(today)?.let { return it }
 
-        val since = today.minusDays(RECENT_QUESTION_WINDOW_DAYS)
-        val recentQuestions = dailyQuestionContentPort.findQuestionsSince(MAIL_TYPE, since)
+        val recentQuestions = recentQuestionsSince(today)
         val bankQuestion = techQuestionBankPort.findUnused(recentQuestions)
         val content = if (bankQuestion != null) {
             log.info("질문 뱅크에서 질문 채택: category=${bankQuestion.category}")
-            DailyQuestionContent(
-                questionDate = today,
-                mailType = MAIL_TYPE,
-                question = bankQuestion.question,
-                source = "BANK",
-                category = bankQuestion.category,
-            )
+            bankContent(today, bankQuestion)
         } else {
             log.info("질문 뱅크 소진 — AI로 질문 생성")
             val question = techInterviewPort.generateDailyQuestion(techStack, recentQuestions)
@@ -90,6 +91,47 @@ class DailyQuestionContentService(
             )
         }
 
+        return saveWithUniqueRecovery(today, content)
+    }
+
+    /**
+     * 오늘의 질문을 뱅크에서만 조회/생성한다 — AI 폴백 없음. 뱅크가 소진되면 `null`을 반환한다.
+     * KDoc 상단 참조. 읽기 경로(`GET /api/v1/daily-question`) 전용.
+     */
+    fun ensureTodayQuestionFromBank(): DailyQuestionContent? {
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
+        findExisting(today)?.let { return it }
+
+        val recentQuestions = recentQuestionsSince(today)
+        val bankQuestion = techQuestionBankPort.findUnused(recentQuestions) ?: run {
+            log.info("질문 뱅크 소진 — 읽기 경로는 AI 폴백을 사용하지 않는다: date=$today")
+            return null
+        }
+        log.info("질문 뱅크에서 질문 채택 (읽기 경로): category=${bankQuestion.category}")
+
+        return saveWithUniqueRecovery(today, bankContent(today, bankQuestion))
+    }
+
+    private fun findExisting(today: LocalDate): DailyQuestionContent? =
+        dailyQuestionContentPort.findToday(MAIL_TYPE, today)?.also {
+            log.info("오늘의 질문 이미 존재 — 재생성 skip: date=$today")
+        }
+
+    private fun recentQuestionsSince(today: LocalDate): List<String> {
+        val since = today.minusDays(RECENT_QUESTION_WINDOW_DAYS)
+        return dailyQuestionContentPort.findQuestionsSince(MAIL_TYPE, since)
+    }
+
+    private fun bankContent(today: LocalDate, bankQuestion: TechQuestionBank) =
+        DailyQuestionContent(
+            questionDate = today,
+            mailType = MAIL_TYPE,
+            question = bankQuestion.question,
+            source = "BANK",
+            category = bankQuestion.category,
+        )
+
+    private fun saveWithUniqueRecovery(today: LocalDate, content: DailyQuestionContent): DailyQuestionContent {
         return try {
             val saved = dailyQuestionContentPort.save(content)
             log.info("오늘의 질문 생성 완료: date=$today, source=${saved.source}")

@@ -15,6 +15,7 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -23,6 +24,7 @@ class DailyQuestionServiceTest {
 
     @Mock lateinit var dailyQuestionContentPort: DailyQuestionContentPort
     @Mock lateinit var techInterviewPort: TechInterviewPort
+    @Mock lateinit var dailyQuestionContentService: DailyQuestionContentService
 
     @InjectMocks
     private lateinit var service: DailyQuestionService
@@ -38,14 +40,38 @@ class DailyQuestionServiceTest {
     }
 
     @Test
-    fun `getTodayQuestion - 오늘 질문이 없으면 CoreException(DAILY_QUESTION_NOT_FOUND)을 던진다`() {
+    fun `getTodayQuestion - 오늘 행이 있으면 뱅크 lazy 생성 로직을 호출하지 않는다 (멱등)`() {
         whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any()))
-            .thenReturn(null)
+            .thenReturn(DailyQuestionContent(question = "Java의 GC 동작 방식을 설명하세요.", mailType = "TECH_INTERVIEW"))
+
+        service.getTodayQuestion()
+
+        verify(dailyQuestionContentService, never()).ensureTodayQuestionFromBank()
+    }
+
+    @Test
+    fun `getTodayQuestion - 오늘 행이 없어도 뱅크에 후보가 있으면 뱅크에서 생성해 반환한다 (00시~09시 공백 해소)`() {
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any())).thenReturn(null)
+        whenever(dailyQuestionContentService.ensureTodayQuestionFromBank())
+            .thenReturn(DailyQuestionContent(question = "뱅크에서 생성된 질문", mailType = "TECH_INTERVIEW", source = "BANK"))
+
+        val result = service.getTodayQuestion()
+
+        assertThat(result).isEqualTo("뱅크에서 생성된 질문")
+        verify(techInterviewPort, never()).generateDailyQuestion(any(), any())
+    }
+
+    @Test
+    fun `getTodayQuestion - 오늘 행이 없고 뱅크도 소진이면 CoreException(DAILY_QUESTION_NOT_FOUND)을 던진다`() {
+        whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any())).thenReturn(null)
+        whenever(dailyQuestionContentService.ensureTodayQuestionFromBank()).thenReturn(null)
 
         assertThatThrownBy { service.getTodayQuestion() }
             .isInstanceOf(CoreException::class.java)
             .extracting { (it as CoreException).errorType }
             .isEqualTo(ErrorType.DAILY_QUESTION_NOT_FOUND)
+
+        verify(techInterviewPort, never()).generateDailyQuestion(any(), any())
     }
 
     @Test

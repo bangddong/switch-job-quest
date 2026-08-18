@@ -14,12 +14,21 @@ import java.time.ZoneId
 class DailyQuestionService(
     private val dailyQuestionContentPort: DailyQuestionContentPort,
     private val techInterviewPort: TechInterviewPort,
+    // Port가 아닌 구체 클래스 주입 — be/CLAUDE.md 컨벤션 위반이지만 선례가 있다
+    // (DailyMailScheduler도 동일하게 주입한다). DailyQuestionContentService는 Stage B에서
+    // 별도 라이브러리 모듈로 이동 예정이라 지금 Port를 새로 뽑으면 그때 다시 손대야 한다.
+    private val dailyQuestionContentService: DailyQuestionContentService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Phase 2 Stage A: 오늘 행이 없으면 뱅크 전용으로 lazy 생성한다(AI 폴백 없음).
+     * 뱅크까지 소진이면 404 — AI 폴백은 09:00 cron(`DailyQuestionContentService.ensureTodayQuestion`)에만 남긴다.
+     */
     fun getTodayQuestion(): String {
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         return dailyQuestionContentPort.findToday("TECH_INTERVIEW", today)?.question
+            ?: dailyQuestionContentService.ensureTodayQuestionFromBank()?.question
             ?: throw CoreException(ErrorType.DAILY_QUESTION_NOT_FOUND)
     }
 
