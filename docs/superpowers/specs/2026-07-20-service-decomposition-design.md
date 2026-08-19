@@ -101,7 +101,18 @@ flowchart TB
 ```
 
 - **공유 모듈**(core-enum·core-domain·db-core·client-ai)은 그대로 두고, **앱 모듈 3개**(`core-api`·`ai-api`·`daily-api`)가 필요한 것만 의존.
-- `client-ai`(평가자 구현)는 **ai-api에만** 묶임. core/daily는 core-domain의 포트를 **HTTP 어댑터**로 구현.
+- ~~`client-ai`(평가자 구현)는 **ai-api에만** 묶임. core/daily는 core-domain의 포트를 **HTTP 어댑터**로 구현.~~
+
+> 🔄 **2026-08-19 정정 — 이 줄은 실제와 다르다** (G-1 / `plans/…phase02.md` **D-006** 참조).
+> Phase 1 이 **롤백 불변식**(`client-ai` 의존 제거 금지, Phase 3까지 유효) 때문에 다르게 착지했다. 실측:
+> ```
+> be/clients/client-ai/                  ← 공유 모듈
+> be/core/core-api/build.gradle.kts:55   implementation(project(":clients:client-ai"))
+> be/core/ai-api/build.gradle.kts:20     implementation(project(":clients:client-ai"))
+> ```
+> **`client-ai` 는 두 앱이 함께 의존한다.** core-api 는 `transport: inprocess`(prod 기본값)로 인프로세스
+> 호출하고, `http` 로 바꾸면 ai-api 를 부른다 — **HTTP 어댑터로만 구현**한 게 아니라 **둘 다 갖고 스위치**한다.
+> 🔑 이 형태가 **G-1 이 daily 에 처방한 "구현 한 벌 · 조립 두 개"와 동일하다.** 선례가 먼저 있었다.
 
 ## 서비스 경계 상세
 
@@ -117,8 +128,18 @@ flowchart TB
   피처플래그(in-process ↔ HTTP)로 도입. 기존 동작 그대로.
 - **Phase 1 — ai-service 추출**: `client-ai`·평가자를 ai-api로 이동, ai-api를 독립 앱으로 기동.
   core의 포트 어댑터를 HTTP로 전환. **동작 확인**: 기존 AI 평가 결과 parity(같은 입력→같은 스키마 응답).
-- **Phase 2 — daily-service 추출 (+경량 FE 확정)**: DailyQuestion 로직을 daily-api로 이동(ai-service 호출),
-  무인증 경량 FE를 **함께** 출시(제품 먼저 검증). **동작 확인**: 무로그인으로 오늘의 질문→AI 설명까지 e2e.
+- **Phase 2 — daily-service 추출 (+경량 FE 확정)**: ~~DailyQuestion 로직을 daily-api로 이동~~(ai-service 호출),
+  ~~무인증 경량 FE를 **함께** 출시(제품 먼저 검증)~~. **동작 확인**: 무로그인으로 오늘의 질문→AI 설명까지 e2e.
+
+  > 🔄 **2026-08-19 정정 — 취소선 2건** (G-1 / **D-006**).
+  > ① *"daily-api로 이동"* → **이동이 아니라 라이브러리 추출**이다. Fly 가 계속 core-api 를 쓰므로
+  >   *"core 에서 daily 코드를 제거"* 하는 순간이 오지 않는다. 옮기면 구현이 두 벌 되어 드리프트가 확정된다.
+  >   → daily 로직은 **라이브러리 모듈**에 살고 `core-api`·`daily-api` **두 조립**이 공유한다.
+  > ② *"경량 FE 함께 출시"* → **이미 충족돼 불필요**하다. `/daily-question` 은 이미 무로그인으로 동작하고
+  >   G-1 로 `vercel.json` rewrite 도 그대로 맞다. `plans/…phase02.md` §닫힌 것에서 **FE 분리 안 함**으로 확정.
+  >
+  > ⚠️ **살아 있는 부분**: "ai-service 호출"과 동작 확인 기준(무로그인 e2e)은 유효하다.
+  > 사유 단위로 판정한 것이다 — 통째로 지웠다면 잘못된 결론에 갔다.
 - **Phase 3 — EKS 배포 토폴로지**: Deployment ×3 + Ingress path 라우팅(/api, /daily, ai는 내부),
   ai-service 서비스간 인증·NetworkPolicy. 2-cluster 위에 얹음. **동작 확인**: 클러스터에서 3서비스 e2e.
 

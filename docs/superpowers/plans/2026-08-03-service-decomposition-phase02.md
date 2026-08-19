@@ -43,7 +43,7 @@ Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행�
 | Stage | 목표 | 상태 |
 |---|---|:--|
 | **A** | daily 도메인을 core 안에서 자립시킨다 (게이트 무관) | 🚧 2.0·2.1·2.2 + 읽기 경로 자립(#387) 완료 / **prod 스모크 대기** |
-| **B** | daily 로직을 **라이브러리 모듈**로 (앱 아님 — G-1 귀결) | ⬜ |
+| **B** | daily **로직**을 라이브러리 모듈로 + 그걸 조립하는 얇은 `daily-api` 앱 (G-1 귀결) | ⬜ |
 | **C** | EKS 토폴로지 3서비스 (Fly 무작업) | ⬜ |
 
 > Stage A는 **에픽이 멈춰도 단독으로 가치가 있다.** 지금 `/daily-question`은 "로그인 유저 존재 +
@@ -63,6 +63,8 @@ Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행�
 
 ### G-1 → Fly는 단일 유지, 분리는 EKS에서만 (2026-08-03)
 
+> 📌 **D-006** · 상태 `✅유효` · 영향 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`(§103·104·120), `be/settings.gradle.kts`, `be/core/core-api/build.gradle.kts`, `be/core/ai-api/build.gradle.kts`, Stage B·C
+
 상시 prod는 `core-api` 하나 그대로다. 3서비스 토폴로지는 **EKS 실습에서만** 검증한다.
 
 **왜**: 설계가 *"EKS=실습 / Fly=상시"* 라고 못박았는데 §확정된 결정의 *"NetworkPolicy만"* 은 EKS
@@ -74,6 +76,27 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 > 🔑 **이 결정이 Stage B의 형태를 바꾼다.** Fly가 계속 core-api를 쓰므로 *"core에서 daily 코드를
 > 제거"* 하는 단계가 **영영 오지 않는다.** 앱 모듈로 빼면 구현이 두 벌이 되어 드리프트가 확정적이다.
 > → **라이브러리 모듈로 뺀다.** 한 벌의 구현을 두 조립이 공유한다.
+
+> 🔑 **"두 조립"이 무엇인지 못박는다 (2026-08-19 · 착수 전 모순 발견으로 추가).**
+> `daily 로직` = 라이브러리 모듈 / `조립 1` = `core-api`(Fly 상시) / `조립 2` = `daily-api`(EKS 전용).
+> **`daily-api` 앱 모듈은 Stage B 에서 만든다** — 완료 기준의 *"단독 기동"* 이 그것을 검증한다.
+> Stage C 는 그 산출물을 **EKS 에 배포**하는 단계이지 새로 만드는 단계가 아니다.
+>
+> 🔴 **이건 추론이 아니라 이미 살아 있는 선례다.** Phase 1 이 정확히 이 형태로 착지했다(실측):
+> ```
+> be/clients/client-ai/                  ← 공유 모듈 (ai-api 내부가 아니다)
+> be/core/core-api/build.gradle.kts:55   implementation(project(":clients:client-ai"))
+> be/core/ai-api/build.gradle.kts:20     implementation(project(":clients:client-ai"))
+> ```
+> <!-- verify: be/core/core-api/build.gradle.kts ~ clients:client-ai -->
+> <!-- verify: be/core/ai-api/build.gradle.kts ~ clients:client-ai -->
+>
+> ⚠️ **설계서 §104 는 이와 다르게 적혀 있다**(*"client-ai 는 ai-api 에만 묶임"*). 설계가 틀린 게 아니라
+> **Phase 1 이 롤백 불변식 때문에 다르게 착지했고 설계서에 반영되지 않았다.** 그쪽에 표시해뒀다.
+>
+> 📌 이전 표기(`라이브러리 모듈로 (앱 아님)`)는 *"로직이 앱 모듈에 살지 않는다"* 는 뜻이었으나
+> **완료 기준 `daily-api 단독 기동`·Global Constraints 의 `롤백 불변식이 daily-api 에는 적용되지 않는다`
+> 와 정면으로 읽혀** 착수 직전 혼선을 냈다. 그래서 문구를 고쳤다.
 
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
