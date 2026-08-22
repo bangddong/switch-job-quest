@@ -1,8 +1,8 @@
 package com.devquest.core.api.scheduler
 
-import com.devquest.core.domain.DailyQuestionContentService
 import com.devquest.core.domain.MailService
 import com.devquest.core.domain.port.DailyMailLogPort
+import com.devquest.core.domain.port.DailyQuestionGeneratorPort
 import com.devquest.core.domain.port.UserEmailPort
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -15,7 +15,9 @@ import java.time.ZoneId
 class DailyMailScheduler(
     private val userEmailPort: UserEmailPort,
     private val mailService: MailService,
-    private val dailyQuestionContentService: DailyQuestionContentService,
+    // Stage B-1: DailyQuestionContentService(구체 클래스, 이제 core:daily-core 모듈 소속)가 아니라
+    // Port를 주입한다 — 원장 L-27 해소.
+    private val dailyQuestionGeneratorPort: DailyQuestionGeneratorPort,
     private val dailyMailLogPort: DailyMailLogPort,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -24,7 +26,7 @@ class DailyMailScheduler(
     fun sendDailyTechInterviewMail() {
         // ① 콘텐츠 생성 — 유저 수·MAIL_ENABLED와 무관하게 항상 먼저 실행된다.
         // 아래의 early return(발송 대상 없음 등)이 콘텐츠 생성을 막아서는 안 된다.
-        val content = dailyQuestionContentService.ensureTodayQuestion()
+        val content = dailyQuestionGeneratorPort.ensureTodayQuestion()
         val question = content.question
 
         // ② 발송 게이트 — 여기부터는 메일 발송에만 관여하고, 콘텐츠 생성에는 영향을 주지 않는다.

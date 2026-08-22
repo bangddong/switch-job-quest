@@ -20,6 +20,7 @@ rootProject.name = "devquest"
 include(
     "core:core-enum",
     "core:core-domain",
+    "core:daily-core",
     "core:core-api",
     "core:ai-api",
     "storage:db-core",

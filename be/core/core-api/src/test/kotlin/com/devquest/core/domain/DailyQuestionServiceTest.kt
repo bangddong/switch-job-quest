@@ -3,6 +3,7 @@ package com.devquest.core.domain
 import com.devquest.core.domain.model.DailyQuestionContent
 import com.devquest.core.domain.model.evaluation.TechInterviewResult
 import com.devquest.core.domain.port.DailyQuestionContentPort
+import com.devquest.core.domain.port.DailyQuestionGeneratorPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
@@ -24,7 +25,7 @@ class DailyQuestionServiceTest {
 
     @Mock lateinit var dailyQuestionContentPort: DailyQuestionContentPort
     @Mock lateinit var techInterviewPort: TechInterviewPort
-    @Mock lateinit var dailyQuestionContentService: DailyQuestionContentService
+    @Mock lateinit var dailyQuestionGeneratorPort: DailyQuestionGeneratorPort
 
     @InjectMocks
     private lateinit var service: DailyQuestionService
@@ -46,13 +47,13 @@ class DailyQuestionServiceTest {
 
         service.getTodayQuestion()
 
-        verify(dailyQuestionContentService, never()).ensureTodayQuestionFromBank()
+        verify(dailyQuestionGeneratorPort, never()).ensureTodayQuestionFromBank()
     }
 
     @Test
     fun `getTodayQuestion - 오늘 행이 없어도 뱅크에 후보가 있으면 뱅크에서 생성해 반환한다 (00시~09시 공백 해소)`() {
         whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any())).thenReturn(null)
-        whenever(dailyQuestionContentService.ensureTodayQuestionFromBank())
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestionFromBank())
             .thenReturn(DailyQuestionContent(question = "뱅크에서 생성된 질문", mailType = "TECH_INTERVIEW", source = "BANK"))
 
         val result = service.getTodayQuestion()
@@ -64,7 +65,7 @@ class DailyQuestionServiceTest {
     @Test
     fun `getTodayQuestion - 오늘 행이 없고 뱅크도 소진이면 CoreException(DAILY_QUESTION_NOT_FOUND)을 던진다`() {
         whenever(dailyQuestionContentPort.findToday(eq("TECH_INTERVIEW"), any())).thenReturn(null)
-        whenever(dailyQuestionContentService.ensureTodayQuestionFromBank()).thenReturn(null)
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestionFromBank()).thenReturn(null)
 
         assertThatThrownBy { service.getTodayQuestion() }
             .isInstanceOf(CoreException::class.java)

@@ -53,6 +53,7 @@ dependencies {
     implementation(project(":support:monitoring"))
     implementation(project(":storage:db-core"))
     implementation(project(":clients:client-ai"))
+    implementation(project(":core:daily-core"))
 
     testImplementation(project(":tests:api-docs"))
 
