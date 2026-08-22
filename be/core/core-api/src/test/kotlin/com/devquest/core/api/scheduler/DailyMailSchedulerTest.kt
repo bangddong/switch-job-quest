@@ -1,9 +1,9 @@
 package com.devquest.core.api.scheduler
 
-import com.devquest.core.domain.DailyQuestionContentService
 import com.devquest.core.domain.MailService
 import com.devquest.core.domain.model.DailyQuestionContent
 import com.devquest.core.domain.port.DailyMailLogPort
+import com.devquest.core.domain.port.DailyQuestionGeneratorPort
 import com.devquest.core.domain.port.UserEmailPort
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -23,7 +23,7 @@ class DailyMailSchedulerTest {
 
     @Mock lateinit var userEmailPort: UserEmailPort
     @Mock lateinit var mailService: MailService
-    @Mock lateinit var dailyQuestionContentService: DailyQuestionContentService
+    @Mock lateinit var dailyQuestionGeneratorPort: DailyQuestionGeneratorPort
     @Mock lateinit var dailyMailLogPort: DailyMailLogPort
 
     private lateinit var scheduler: DailyMailScheduler
@@ -40,7 +40,7 @@ class DailyMailSchedulerTest {
         scheduler = DailyMailScheduler(
             userEmailPort = userEmailPort,
             mailService = mailService,
-            dailyQuestionContentService = dailyQuestionContentService,
+            dailyQuestionGeneratorPort = dailyQuestionGeneratorPort,
             dailyMailLogPort = dailyMailLogPort,
         )
     }
@@ -48,19 +48,19 @@ class DailyMailSchedulerTest {
     @Test
     fun `발송 대상이 없어도 오늘의 질문 생성은 항상 먼저 실행된다`() {
         // 콘텐츠 생성 → G-2: 유저 0명·MAIL_ENABLED=false와 무관하게 오늘의 질문이 생성돼야 한다.
-        whenever(dailyQuestionContentService.ensureTodayQuestion()).thenReturn(defaultContent)
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestion()).thenReturn(defaultContent)
         whenever(userEmailPort.findAll()).thenReturn(emptyList())
 
         scheduler.sendDailyTechInterviewMail()
 
-        verify(dailyQuestionContentService).ensureTodayQuestion()
+        verify(dailyQuestionGeneratorPort).ensureTodayQuestion()
         verify(mailService, never()).sendDailyTechInterview(any(), any(), any())
     }
 
     @Test
     fun `메일이 비활성화(MAIL_ENABLED=false)돼 발송이 전부 실패해도 오늘의 질문 생성은 이루어진다`() {
         // MailService.sendDailyTechInterview는 MAIL_ENABLED=false일 때 false를 반환한다(예외 아님).
-        whenever(dailyQuestionContentService.ensureTodayQuestion()).thenReturn(defaultContent)
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestion()).thenReturn(defaultContent)
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(false)
@@ -68,13 +68,13 @@ class DailyMailSchedulerTest {
 
         scheduler.sendDailyTechInterviewMail()
 
-        verify(dailyQuestionContentService).ensureTodayQuestion()
+        verify(dailyQuestionGeneratorPort).ensureTodayQuestion()
         verify(dailyMailLogPort, never()).save(any(), any(), any(), any())
     }
 
     @Test
     fun `오늘 이미 발송된 사용자는 메일을 skip한다`() {
-        whenever(dailyQuestionContentService.ensureTodayQuestion()).thenReturn(defaultContent)
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestion()).thenReturn(defaultContent)
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
             .thenReturn(true)
@@ -86,7 +86,7 @@ class DailyMailSchedulerTest {
 
     @Test
     fun `오늘 발송 이력이 없는 사용자에게 메일을 발송하고 로그를 저장한다`() {
-        whenever(dailyQuestionContentService.ensureTodayQuestion())
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestion())
             .thenReturn(defaultContent.copy(question = "오늘의 질문"))
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
         whenever(dailyMailLogPort.existsTodayLog(eq("user1"), eq("TECH_INTERVIEW"), any<LocalDate>()))
@@ -101,7 +101,7 @@ class DailyMailSchedulerTest {
 
     @Test
     fun `메일 발송 실패 시 로그 저장도 하지 않는다`() {
-        whenever(dailyQuestionContentService.ensureTodayQuestion()).thenReturn(defaultContent)
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestion()).thenReturn(defaultContent)
         whenever(userEmailPort.findAll()).thenReturn(listOf(Pair("user1", "user1@test.com")))
         whenever(dailyMailLogPort.existsTodayLog(any(), any(), any<LocalDate>())).thenReturn(false)
         whenever(mailService.sendDailyTechInterview(any(), any(), any()))
@@ -114,13 +114,13 @@ class DailyMailSchedulerTest {
 
     @Test
     fun `콘텐츠 생성은 유저 조회·중복 필터보다 먼저 호출된다`() {
-        whenever(dailyQuestionContentService.ensureTodayQuestion()).thenReturn(defaultContent)
+        whenever(dailyQuestionGeneratorPort.ensureTodayQuestion()).thenReturn(defaultContent)
         whenever(userEmailPort.findAll()).thenReturn(emptyList())
 
         scheduler.sendDailyTechInterviewMail()
 
-        val inOrder = org.mockito.Mockito.inOrder(dailyQuestionContentService, userEmailPort)
-        inOrder.verify(dailyQuestionContentService).ensureTodayQuestion()
+        val inOrder = org.mockito.Mockito.inOrder(dailyQuestionGeneratorPort, userEmailPort)
+        inOrder.verify(dailyQuestionGeneratorPort).ensureTodayQuestion()
         inOrder.verify(userEmailPort).findAll()
         assertThat(true).isTrue()
     }

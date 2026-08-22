@@ -54,7 +54,7 @@ Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행�
 | 주장 | 필요한 증거 |
 |---|---|
 | Stage A 완료 | ~~`./gradlew build` 그린 + prod 스모크(`/api/v1/daily-question` 200) + **유저 0명·`MAIL_ENABLED=false`에서도 200**~~ → ✅ **2026-08-21 충족.** ①`build` 497건 그린(#388) ②**prod 스모크 200 — 05:49 KST 실측**(09:00 cron 보다 **3시간 11분 먼저**, 그 시점엔 오늘 행이 존재할 수 없으므로 그 요청 자체가 lazy 생성을 유발했다) ③읽기 경로 3개 파일에 유저·메일 참조 **0건**. ⚠️ ③은 **prod 에서 유저 0명을 관측한 게 아니라** 코드 경로가 그것들과 무관함을 보인 것이다 — 구분해 적는다 |
-| Stage B 완료 | 기존 테스트 전량 그린 + daily-api 단독 기동 + **core-api 배포 산출물 불변** |
+| Stage B 완료 | 기존 테스트 전량 그린 + daily-api 단독 기동 + **core-api 배포 산출물 불변**<br>🔴 **"산출물 불변"의 정의 (2026-08-22 B-1 에서 확정)**: **바이트 동일이 아니다** — 클래스를 별도 Gradle 모듈로 빼는 순간 `BOOT-INF/classes/` → `BOOT-INF/lib/<모듈>.jar` 로 배치가 바뀌므로 원리적으로 불가능하다. **core-api 가 싣고 나가는 `com.devquest.*` 클래스 집합이 동일한가**로 판정한다(어느 jar 에 들었는지 무관). ⚠️ **기준선은 변경 전에 재둔다** — 바꾼 뒤엔 못 잰다. 측정법은 `bootJar` 를 열어 `BOOT-INF/classes/` + `BOOT-INF/lib/*.jar` 안의 `com/devquest/**/*.class` 를 합집합으로 모아 정렬·해시한다. B-1 실측: **333 → 334**(증가분은 L-27 해소로 신설한 `DailyQuestionGeneratorPort` 하나, 그 외 완전 일치). **의도된 증감은 diff 로 설명 가능해야 하고, 설명되지 않는 증감이 하나라도 있으면 실패다.** QA 가 `MANIFEST` Start-Class · Spring Boot 레이어 키 · 리소스 diff 까지 함께 확인해 "클래스 집합만 보면 놓치는 것"이 없음을 별도로 검증했다 |
 | Stage C 완료 | 클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지 |
 
 ---
@@ -100,7 +100,7 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
-> 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
+> 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-domain/src/main/kotlin/com/devquest/core/domain/port/DailyQuestionGeneratorPort.kt`, `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
 
 크론은 1개로 유지하고 메서드 안에서 게이트를 둘로 나눈다: ①콘텐츠 생성(유저 수·`MAIL_ENABLED`
 무관) ②메일 발송. 크론 자체를 쪼개지 않은 이유는 **실행 순서 경합** — 별도 크론이면 발송이 생성보다
@@ -110,7 +110,7 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 > 위 결정은 *"생성은 크론이 한다"* 를 함의했고, 그 결과 `GET /api/v1/daily-question` 이
 > **매일 00:00~09:00(하루 9시간) 404** 였다. 이제 읽기 시 **뱅크에서만** 생성한다.
 > **AI 폴백은 여전히 크론 전용이다** — 그래서 아래 기각 사유 두 개가 성립하지 않는다.
-> <!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt ~ ensureTodayQuestionFromBank -->
+> <!-- verify: be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt ~ ensureTodayQuestionFromBank -->
 
 ### 기각한 선택지 (재론 방지)
 

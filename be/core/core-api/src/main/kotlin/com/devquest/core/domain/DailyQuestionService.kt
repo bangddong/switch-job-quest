@@ -2,6 +2,7 @@ package com.devquest.core.domain
 
 import com.devquest.core.domain.model.evaluation.TechInterviewResult
 import com.devquest.core.domain.port.DailyQuestionContentPort
+import com.devquest.core.domain.port.DailyQuestionGeneratorPort
 import com.devquest.core.domain.port.TechInterviewPort
 import com.devquest.core.support.error.CoreException
 import com.devquest.core.support.error.ErrorType
@@ -14,10 +15,9 @@ import java.time.ZoneId
 class DailyQuestionService(
     private val dailyQuestionContentPort: DailyQuestionContentPort,
     private val techInterviewPort: TechInterviewPort,
-    // Port가 아닌 구체 클래스 주입 — be/CLAUDE.md 컨벤션 위반이지만 선례가 있다
-    // (DailyMailScheduler도 동일하게 주입한다). DailyQuestionContentService는 Stage B에서
-    // 별도 라이브러리 모듈로 이동 예정이라 지금 Port를 새로 뽑으면 그때 다시 손대야 한다.
-    private val dailyQuestionContentService: DailyQuestionContentService,
+    // Stage B-1: DailyQuestionContentService(구체 클래스, 이제 core:daily-core 모듈 소속)가 아니라
+    // Port를 주입한다 — 원장 L-27 해소.
+    private val dailyQuestionGeneratorPort: DailyQuestionGeneratorPort,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -28,7 +28,7 @@ class DailyQuestionService(
     fun getTodayQuestion(): String {
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
         return dailyQuestionContentPort.findToday("TECH_INTERVIEW", today)?.question
-            ?: dailyQuestionContentService.ensureTodayQuestionFromBank()?.question
+            ?: dailyQuestionGeneratorPort.ensureTodayQuestionFromBank()?.question
             ?: throw CoreException(ErrorType.DAILY_QUESTION_NOT_FOUND)
     }
 
