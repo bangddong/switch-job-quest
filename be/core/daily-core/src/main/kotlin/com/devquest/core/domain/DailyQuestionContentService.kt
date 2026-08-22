@@ -43,6 +43,15 @@ import java.time.ZoneId
  * 반환한다(멱등성 최종 방어선). `replicas: 1` + 단일 스레드 스케줄러라 실무 발생 가능성은 낮지만,
  * UNIQUE 제약을 걸어두고 그 예외를 처리하지 않으면 제약이 "보호"가 아니라 "장애"가 된다.
  *
+ * ⚠️ **알려진 한계 (기록용, 이번에 고치지 않음)**: 이 서비스는 "포트만 의존하는 순수 라이브러리"를
+ * 표방하면서도 [saveWithUniqueRecovery]에서 [DataIntegrityViolationException](`org.springframework.dao`,
+ * Spring Data 계열 어댑터의 예외)을 직접 잡는다 — 어댑터 구현 기술의 예외 타입이 포트 경계를
+ * 넘어 새어 들어온 것이다. 정석은 [DailyQuestionContentPort]가 자기 자신의 예외(예: 도메인
+ * `DuplicateContentException`)를 계약에 정의하고, 각 어댑터(`DailyQuestionContentAdapter`)가
+ * 자신의 기술 예외를 그 도메인 예외로 변환해 던지는 것이다. 이번 Stage B-1(모듈 추출)에서는
+ * 손대지 않는다 — Port 계약(`DailyQuestionContentPort.save`) 변경은 이 작업 범위 밖이고, #387이
+ * 만든 F-3 복구 동작(멱등성 최종 방어선)을 함께 건드리게 된다.
+ *
  * **[ensureTodayQuestionFromBank] (Phase 2 Stage A)**: `GET /api/v1/daily-question` 읽기 경로 전용.
  * 뱅크에서만 질문을 채택하고 **AI 폴백을 절대 호출하지 않는다**. 이유(계획서
  * `2026-08-03-service-decomposition-phase02.md` "기각한 선택지 G-2" 재확인):

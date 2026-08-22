@@ -9,7 +9,14 @@
 | core-api | 모든 모듈 (bootstrap) |
 | db-core | core-domain, core-enum |
 | client-ai | core-domain |
+| daily-core | core-domain (+ Spring 최소) |
 | support/* | 독립 |
+
+**daily-core가 core-api를 의존하면 안 되는 이유**: `DailyMailScheduler`(스케줄러 조립)와
+`DailyQuestionService`(웹 조립) 양쪽이 이 모듈의 콘텐츠 생성 로직(`DailyQuestionGeneratorPort`
+구현)을 공유해서 쓴다. core-api를 의존하면 방향이 역전되어 두 조립 지점이 서로를 통해서만
+콘텐츠 생성 로직에 닿게 되고, 장래 daily-api처럼 core-api가 아닌 별도 조립이 등장할 때 이
+모듈을 재사용할 수 없게 된다.
 
 **금지**: 어댑터 간 직접 의존 (db-core ↔ client-ai), core-domain에 Spring 어노테이션
 
