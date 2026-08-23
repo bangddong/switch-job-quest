@@ -1,11 +1,11 @@
 package com.devquest.parity
 
-import com.devquest.core.api.adapter.ai.http.BlogHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.CompanyFitHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.JdAnalysisHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.ResumeHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.TechInterviewHttpAdapter
-import com.devquest.core.api.config.buildAiApiRestClient
+import com.devquest.client.ai.http.BlogHttpEvaluator
+import com.devquest.client.ai.http.CompanyFitHttpEvaluator
+import com.devquest.client.ai.http.JdAnalysisHttpEvaluator
+import com.devquest.client.ai.http.ResumeHttpEvaluator
+import com.devquest.client.ai.http.TechInterviewHttpAdapter
+import com.devquest.client.ai.http.buildAiApiRestClient
 import com.devquest.core.domain.model.evaluation.AiEvaluationResult
 import com.devquest.core.domain.model.evaluation.CompanyFitResult
 import com.devquest.core.domain.model.evaluation.JdAnalysisResult

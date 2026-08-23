@@ -1,23 +1,23 @@
 package com.devquest.core.api.config
 
-import com.devquest.core.api.adapter.ai.http.ActClearReportHttpAdapter
-import com.devquest.core.api.adapter.ai.http.BlogHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.BossPackageHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.CodingHintHttpAdapter
-import com.devquest.core.api.adapter.ai.http.CodingProblemGeneratorHttpAdapter
-import com.devquest.core.api.adapter.ai.http.CompanyFitHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.DeveloperClassHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.EssayHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.InterviewCoachHttpAdapter
-import com.devquest.core.api.adapter.ai.http.InterviewHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.JdAnalysisHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.Judge0HttpAdapter
-import com.devquest.core.api.adapter.ai.http.JourneyReportHttpAdapter
-import com.devquest.core.api.adapter.ai.http.PersonalityHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.ResumeHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.SkillAssessmentHttpAdapter
-import com.devquest.core.api.adapter.ai.http.SystemDesignHttpEvaluator
-import com.devquest.core.api.adapter.ai.http.TechInterviewHttpAdapter
+import com.devquest.client.ai.http.ActClearReportHttpAdapter
+import com.devquest.client.ai.http.BlogHttpEvaluator
+import com.devquest.client.ai.http.BossPackageHttpEvaluator
+import com.devquest.client.ai.http.CodingHintHttpAdapter
+import com.devquest.client.ai.http.CodingProblemGeneratorHttpAdapter
+import com.devquest.client.ai.http.CompanyFitHttpEvaluator
+import com.devquest.client.ai.http.DeveloperClassHttpEvaluator
+import com.devquest.client.ai.http.EssayHttpEvaluator
+import com.devquest.client.ai.http.InterviewCoachHttpAdapter
+import com.devquest.client.ai.http.InterviewHttpEvaluator
+import com.devquest.client.ai.http.JdAnalysisHttpEvaluator
+import com.devquest.client.ai.http.Judge0HttpAdapter
+import com.devquest.client.ai.http.JourneyReportHttpAdapter
+import com.devquest.client.ai.http.PersonalityHttpEvaluator
+import com.devquest.client.ai.http.ResumeHttpEvaluator
+import com.devquest.client.ai.http.SkillAssessmentHttpAdapter
+import com.devquest.client.ai.http.SystemDesignHttpEvaluator
+import com.devquest.client.ai.http.TechInterviewHttpAdapter
 import com.devquest.core.domain.port.ActClearReportPort
 import com.devquest.core.domain.port.BlogEvaluatorPort
 import com.devquest.core.domain.port.BossPackageEvaluatorPort
@@ -63,7 +63,7 @@ import org.springframework.web.client.RestClient
  * 일어나지 않는다(둘 다 같은 조건이라야 하는 이유).
  *
  * Phase 1 Task 1.4a — 17개 `AiEvaluatorPort` + `Judge0Port` = 18개 포트 전부를 등록한다
- * (Judge0 포함 근거는 [com.devquest.core.api.adapter.ai.http.Judge0HttpAdapter] KDoc 참고).
+ * (Judge0 포함 근거는 [com.devquest.client.ai.http.Judge0HttpAdapter] KDoc 참고).
  */
 @Configuration
 class AiTransportConfig {

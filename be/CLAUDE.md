@@ -9,8 +9,15 @@
 | core-api | 모든 모듈 (bootstrap) |
 | db-core | core-domain, core-enum |
 | client-ai | core-domain |
+| client-ai-http | core-domain |
 | daily-core | core-domain (+ Spring 최소) |
 | support/* | 독립 |
+
+**client-ai-http가 core-api를 의존하면 안 되는 이유**: daily-api(계획 중, B-2b)처럼 core-api가 아닌
+별도 조립 지점이 AI 평가 HTTP 어댑터를 재사용해야 한다. client-ai-http가 core-api를 의존하면
+방향이 역전되어 daily-api가 core-api를 통해서만 이 어댑터에 닿게 되고, 애초에 core-api로부터
+분리한 목적(daily-api의 독립적 부팅)이 무효화된다. `client-ai`(인프로세스 구현)와도 서로 의존하지
+않는다 — 둘은 같은 Port의 형제 구현체다.
 
 **daily-core가 core-api를 의존하면 안 되는 이유**: `DailyMailScheduler`(스케줄러 조립)와
 `DailyQuestionService`(웹 조립) 양쪽이 이 모듈의 콘텐츠 생성 로직(`DailyQuestionGeneratorPort`
