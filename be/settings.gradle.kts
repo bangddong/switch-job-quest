@@ -25,6 +25,7 @@ include(
     "core:ai-api",
     "storage:db-core",
     "clients:client-ai",
+    "clients:client-ai-http",
     "support:logging",
     "support:monitoring",
     "tests:api-docs"

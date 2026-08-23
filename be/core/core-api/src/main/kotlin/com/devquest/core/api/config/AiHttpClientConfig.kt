@@ -1,13 +1,11 @@
 package com.devquest.core.api.config
 
+import com.devquest.client.ai.http.buildAiApiRestClient
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.web.client.RestClient
-import java.net.http.HttpClient
-import java.time.Duration
 
 /**
  * ai-api 호출용 공용 `RestClient` 빈. `devquest.ai.transport=http`일 때만 등록된다 — inprocess(기본값)
@@ -51,23 +49,4 @@ class AiHttpClientConfig {
         @Value("\${devquest.ai.http.connect-timeout-ms:3000}") connectTimeoutMs: Long,
         @Value("\${devquest.ai.http.read-timeout-ms:150000}") readTimeoutMs: Long,
     ): RestClient = buildAiApiRestClient(baseUrl, connectTimeoutMs, readTimeoutMs)
-}
-
-/**
- * `AiHttpClientConfig`의 `@Bean` 메서드가 실제로 수행하는 빌드 로직. Spring 컨테이너 없이도(플레인
- * 함수 호출) 테스트에서 재사용할 수 있도록 톱레벨 함수로 분리했다 — 타임아웃 동작 검증
- * (`AiHttpAdapterTimeoutAndAcceptHeaderTest`)이 실제 `JdkClientHttpRequestFactory` 설정을 그대로
- * 써야 하기 때문(예: `MockRestServiceServer`는 요청 팩토리 자체를 교체해 타임아웃 설정을 우회한다).
- */
-fun buildAiApiRestClient(baseUrl: String, connectTimeoutMs: Long, readTimeoutMs: Long): RestClient {
-    val httpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofMillis(connectTimeoutMs))
-        .build()
-    val requestFactory = JdkClientHttpRequestFactory(httpClient).apply {
-        setReadTimeout(Duration.ofMillis(readTimeoutMs))
-    }
-    return RestClient.builder()
-        .baseUrl(baseUrl)
-        .requestFactory(requestFactory)
-        .build()
 }
