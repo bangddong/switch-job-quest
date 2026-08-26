@@ -98,6 +98,41 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 > **완료 기준 `daily-api 단독 기동`·Global Constraints 의 `롤백 불변식이 daily-api 에는 적용되지 않는다`
 > 와 정면으로 읽혀** 착수 직전 혼선을 냈다. 그래서 문구를 고쳤다.
 
+### G-3 → 라이브러리는 순수하게, 웹/에러 배관은 각 조립이 소유 (2026-08-22 · 사용자 결정)
+
+> 📌 **D-007** · 상태 `✅유효` · 영향 `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/kotlin/com/devquest/core/support/`, `be/clients/client-ai-http/build.gradle.kts`, `be/CLAUDE.md`, Stage B·C
+
+**`com.devquest.core.support`(`ApiResponse`·`CoreException`·`ErrorType`·`ErrorCode`, 7파일 110줄)를 공유 모듈로 빼지 않는다.**
+라이브러리에는 **서비스만** 들어가고, **컨트롤러·DTO·예외 매핑은 각 앱이 소유**한다.
+
+**왜 이게 결정 사항이었나** (B-1 착수 조사에서 드러난 것):
+진짜 난이도는 *"daily 로직 옮기기"* 가 아니라 **웹/에러 배관을 어디까지 공유할지**였다.
+
+| 이동 후보 | core-api 결합 |
+|---|---|
+| `DailyQuestionContentService` | **0건** — 레포 내부 import 가 전부 `core-domain` |
+| `DailyQuestionService` | `CoreException` · `ErrorType` |
+| `DailyQuestionController` | `ApiResponse` + DTO |
+| 레이트리밋 `Abstract*` | `ErrorCode` |
+
+**기각한 대안**: `support:web` 공유 모듈 신설 → **core-api 의 22개 파일이 import 를 바꿔야** 하고
+*"core-api 배포 산출물 불변"* 검증이 까다로워진다. Stage B 가 **두 일(배관 공유 + daily 추출)을 동시에** 하게 된다.
+
+🔑 **수법**: 라이브러리 서비스는 **예외 대신 `null`/도메인 결과를 반환**하고 호출자가 매핑한다.
+#387 이 이미 쓴 방식이다(`ensureTodayQuestionFromBank()` → `null` → `DailyQuestionService` 가 404 매핑).
+
+⚠️ **감수하는 대가 (명시)**: `daily-api` 는 `ApiResponse` 를 못 쓰므로 **자체 응답 형식**을 갖는다.
+즉 **두 앱의 `/api/v1/daily-question` 응답 스키마가 갈라질 수 있다.**
+지금은 감수한다(다른 배포·다른 클라이언트). 🔑 **재검토 트리거: 두 응답이 반드시 같아야 하는 상황이 오면**
+그때 배관 공유를 다시 본다.
+
+📌 **부수 결정** (같은 자리에서 확정, B-1 에서 구현):
+- `DailyMailScheduler` → **core-api 잔류** (`MailService` 는 core 소유 — G-2 귀결. daily-api 엔 메일 없음)
+- 레이트리밋 `Abstract*` → **core-api 잔류** (`ErrorCode` 의존 + tech 인터셉터도 쓴다. 옮기면 방향 역전)
+- 라이브러리는 **`core-domain` 포트만** 의존, 어댑터 배선은 각 조립 (`client-ai` 패턴)
+- 모듈명 **`core:daily-core`** (`db-core` 의 *"-core = 공유 조각"* 관례)
+  <!-- verify: be/core/daily-core/build.gradle.kts ~ core:core-domain -->
+
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
 > 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-domain/src/main/kotlin/com/devquest/core/domain/port/DailyQuestionGeneratorPort.kt`, `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
