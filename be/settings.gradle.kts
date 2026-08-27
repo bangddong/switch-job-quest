@@ -23,6 +23,7 @@ include(
     "core:daily-core",
     "core:core-api",
     "core:ai-api",
+    "core:daily-api",
     "storage:db-core",
     "clients:client-ai",
     "clients:client-ai-http",
