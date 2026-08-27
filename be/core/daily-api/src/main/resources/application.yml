@@ -1,0 +1,63 @@
+# daily-api 기본(local) 설정. `classpath:db-core.yml`을 import하지 않는다 — daily-api는 자신의
+# `storage.datasource.core.*`를 직접 정의한다(함정 ① — db-core.yml의 ddl-auto: create-drop을
+# prod에서 오버라이드할 경로 자체를 없애기 위함, application-prod.yml 참고).
+spring:
+  application:
+    name: devquest-daily-api
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  h2:
+    console:
+      enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+
+server:
+  # core-api(8080) / ai-api(8081)와 겹치지 않도록 8082 사용 (함정 ⑧).
+  # ⚠️ be/Dockerfile:35의 `EXPOSE 8080`은 서비스별로 조정되지 않는다 — Dockerfile은 이번
+  # 범위에서 수정하지 않는다(Stage C에서 매니페스트/Dockerfile 작업 시 함께 처리).
+  port: 8082
+
+logging:
+  level:
+    com.devquest: DEBUG
+
+storage:
+  datasource:
+    core:
+      driver-class-name: org.h2.Driver
+      jdbc-url: jdbc:h2:mem:dailyapi;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+      username: sa
+      password:
+      maximum-pool-size: 5
+
+devquest:
+  # DailyQuestionContentService(daily-core)의 `@Value("${devquest.daily-question.tech-stack}")`가
+  # 기본값 없이 요구하는 키(함정 ⑥). core-api의 application.yml:93-94와 값이 반드시 동일해야
+  # 한다 — 값이 갈라지면 두 앱이 만드는 "AI 폴백 질문"의 기술 스택 범위가 조용히 달라진다.
+  daily-question:
+    tech-stack: "Java,Spring Boot,JPA,데이터베이스(SQL/인덱스/트랜잭션),네트워크(HTTP/TCP/DNS),운영체제(프로세스/스레드/메모리),자료구조/알고리즘,시스템 설계,Redis/캐시,Docker/쿠버네티스,CI-CD/Git"
+  ai:
+    http:
+      # ai-api 베이스 URL. 시크릿 아님 — 평문 기본값 허용(로컬 개발 기준 ai-api 포트 8081).
+      base-url: ${AI_API_BASE_URL:http://localhost:8081}
+      # DailyAiConfig 참고: 내부망 연결이라 3초 안에 안 붙으면 네트워크/기동 문제로 간주해 즉시 실패.
+      connect-timeout-ms: ${AI_API_CONNECT_TIMEOUT_MS:3000}
+      # DailyAiConfig 참고: ai-api 내부 AiCallExecutor(max-retry=3)가 같은 HTTP 응답 안에서 순차
+      # 재시도한다(1회 상한 가정 30초 × 3회 = 90초) + 안전 마진 60초 = 150초. core-api의
+      # AiHttpClientConfig와 동일한 계산 근거.
+      read-timeout-ms: ${AI_API_READ_TIMEOUT_MS:150000}
+  rate-limit:
+    # core-api/application.yml의 devquest.rate-limit.daily-explain / daily-evaluate와 동일 값.
+    daily-explain:
+      capacity: 5
+      refill-days: 1
+    daily-evaluate:
+      capacity: 1
+      refill-days: 1
