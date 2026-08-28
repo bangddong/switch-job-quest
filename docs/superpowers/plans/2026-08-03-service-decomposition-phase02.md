@@ -55,7 +55,7 @@ Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행�
 |---|---|
 | Stage A 완료 | ~~`./gradlew build` 그린 + prod 스모크(`/api/v1/daily-question` 200) + **유저 0명·`MAIL_ENABLED=false`에서도 200**~~ → ✅ **2026-08-21 충족.** ①`build` 497건 그린(#388) ②**prod 스모크 200 — 05:49 KST 실측**(09:00 cron 보다 **3시간 11분 먼저**, 그 시점엔 오늘 행이 존재할 수 없으므로 그 요청 자체가 lazy 생성을 유발했다) ③읽기 경로 3개 파일에 유저·메일 참조 **0건**. ⚠️ ③은 **prod 에서 유저 0명을 관측한 게 아니라** 코드 경로가 그것들과 무관함을 보인 것이다 — 구분해 적는다 |
 | Stage B 완료 | 기존 테스트 전량 그린 + daily-api 단독 기동 + **core-api 배포 산출물 불변**<br>🔴 **"산출물 불변"의 정의 (2026-08-22 B-1 에서 확정)**: **바이트 동일이 아니다** — 클래스를 별도 Gradle 모듈로 빼는 순간 `BOOT-INF/classes/` → `BOOT-INF/lib/<모듈>.jar` 로 배치가 바뀌므로 원리적으로 불가능하다. **core-api 가 싣고 나가는 `com.devquest.*` 클래스 집합이 동일한가**로 판정한다(어느 jar 에 들었는지 무관). ⚠️ **기준선은 변경 전에 재둔다** — 바꾼 뒤엔 못 잰다. 측정법은 `bootJar` 를 열어 `BOOT-INF/classes/` + `BOOT-INF/lib/*.jar` 안의 `com/devquest/**/*.class` 를 합집합으로 모아 정렬·해시한다. B-1 실측: **333 → 334**(증가분은 L-27 해소로 신설한 `DailyQuestionGeneratorPort` 하나, 그 외 완전 일치). **의도된 증감은 diff 로 설명 가능해야 하고, 설명되지 않는 증감이 하나라도 있으면 실패다.** QA 가 `MANIFEST` Start-Class · Spring Boot 레이어 키 · 리소스 diff 까지 함께 확인해 "클래스 집합만 보면 놓치는 것"이 없음을 별도로 검증했다 |
-| Stage C 완료 | 클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지 |
+| Stage C 완료 | ~~클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지~~ → 🔄 **정정 (2026-08-28, 사용자 결정 · D-008)**: 클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → **설명 요청이 daily-api → ai-api 를 거쳐 응답으로 돌아오는 것**까지. ⚠️ **AI 응답은 스텁이다** — 실제 Anthropic 호출이 아니다. 검증 대상은 **토폴로지(3서비스 라우팅·서비스 디스커버리·NetworkPolicy)** 이지 AI 품질이 아니다. 근거는 아래 D-008 |
 
 ---
 
@@ -134,6 +134,50 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 - 라이브러리는 **`core-domain` 포트만** 의존, 어댑터 배선은 각 조립 (`client-ai` 패턴)
 - 모듈명 **`core:daily-core`** (`db-core` 의 *"-core = 공유 조각"* 관례)
   <!-- verify: be/core/daily-core/build.gradle.kts ~ core:core-domain -->
+
+### G-4 → 학습 클러스터의 AI 호출은 **스텁**으로 대체 (2026-08-28)
+
+> 📌 **D-008** · 상태 `✅유효` · 영향 `docs/superpowers/plans/2026-08-03-service-decomposition-phase02.md`(Stage C 완료 기준), `infra/aws-eks/2-cluster/secrets.tf`, `be/core/ai-api/src/main/resources/application.yml`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml`, Stage C
+
+**`ANTHROPIC_API_KEY` 를 학습 클러스터에 넣지 않는다.** ai-api 에 **학습 전용 스텁 프로필**을 두고 고정 응답을 돌려준다.
+
+**왜 이게 결정 사항이었나** (2026-08-28 감사에서 드러남):
+Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 인프라 어디에도 없었다** — `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐이다. 그런데 키를 넣는 것 자체가 `secrets.tf` 가 세운 **명시적 원칙**(*"학습 클러스터에 prod 크리덴셜을 넣지 않는다"*)과 정면으로 부딪힌다. 같은 파일이 **더미 Grafana 키를 넣었다가 실제 스택에 인증 시도가 새어나간 사고**를 기록해뒀다 — 원칙이 경험에서 나온 것이다.
+
+🔴 **더 나쁜 성질**: `client-ai-anthropic.yml` 이 `${ANTHROPIC_API_KEY:}`(**빈 문자열 기본값**)라 키가 없어도 **부팅은 성공하고 AI 호출 시점에 실패**한다. CrashLoop 가 아니라 런타임 실패라 **과금 구간 안에서** 진단하게 된다 — SOP 가 가장 비싼 실수로 지목한 형태다.
+
+**기각한 대안**:
+- **별도 예산 키를 세션 동안만 주입** — 원칙의 취지(prod 자격증명 격리)는 지키지만 **사용자가 키 발급·한도 설정을 직접 해야 하고**, 실습마다 주입/삭제 절차가 늘어 *"끄는 걸 잊는 것"* 의 표면을 넓힌다.
+- **prod 키를 그대로 사용** — 가장 빠르나 `secrets.tf:111-118` 의 원칙을 깬다. 원칙을 바꾸려면 그 자체가 `design-change-procedure` 대상이다.
+
+⚠️ **감수하는 대가 (명시)**: **검증 범위가 좁아진다.** Stage C 가 증명하는 것은 **토폴로지**(3서비스가 클러스터에서 서로를 찾고 라우팅되는가)이지 *"AI 설명이 실제로 나온다"* 가 아니다. 완료 기준 문장을 그에 맞게 정정했다(위 표).
+🔑 **재검토 트리거**: ①실제 LLM 응답이 필요한 검증(응답 지연·타임아웃 튜닝·토큰 비용 실측)을 하게 되면 그때 **별도 예산 키**를 다시 본다 ②Phase 3 에서 분산 트레이싱을 붙일 때 스텁이 trace 를 왜곡하면 재판정.
+
+📌 **부수 결정** (같은 자리에서 확정):
+- **스텁은 ai-api 소유**다 — `client-ai` 를 건드리지 않는다(롤백 불변식: *"`client-ai` 의존 제거 금지"*, 아래 #193).
+- 스텁 활성화는 **프로필 또는 프로퍼티 opt-in**, **기본값 off**. 열린 결정 ① 이 세운 *"잊으면 터진다가 아니라 잊으면 안 돈다"* 형태를 따른다 — prod 에 스텁이 조용히 켜지는 일이 없어야 한다.
+- 🔴 **스텁 응답은 스텁임이 눈에 보여야 한다.** 고정 문자열에 식별 가능한 표식을 넣는다 — *"통과했다고 믿게 만드는 검사"* 를 만들지 않는다(Stage A 스모크에서 세운 원칙).
+
+### G-5 → 노드는 **t4g.medium 으로 상향** (2026-08-28)
+
+> 📌 **D-009** · 상태 `✅유효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `k8s/base/core-api.yaml`, `docs/eks-migration-log.md`, Stage C
+
+**`node_instance_type` 을 `t4g.small` → `t4g.medium` 으로 올린다.** 노드 대수는 1대 유지.
+
+**왜**: JVM 3개를 올려야 하는데 **파드도 메모리도 모자란다.**
+- 파드: 베이스라인 **10/11**(Stage 3b 의 `coredns replicaCount=1` 반영) → 2개 추가 시 **12 > 11**
+- 🔴 메모리가 먼저 막는다: Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다(`docs/eks-migration-log.md:1079`). requests 합 추정 **1792Mi**(512×3 + 256), limits 합 **3212Mi** — t4g.small 물리 2GiB 로는 requests 조차 안 들어간다
+
+**기각한 대안 — 노드 2대**: 파드 슬롯만 푼다. **파드 하나당 512Mi 요구라는 메모리 벽은 그대로**다. 게다가 `nodes.tf` 가 `subnet_ids` 를 `persistent_az` **단일 AZ 로 핀**해 2대가 같은 AZ 에 뜨므로 가용성 이득도 없다. DaemonSet 3개가 새 노드 자리를 먼저 먹어 순증은 11이 아니라 **8**(coredns 를 2로 되돌리는 자기 규율까지 따르면 **7**). 비용도 **+$0.026/h 로 medium(+$0.021 추정)보다 비싸다.**
+
+⚠️ **미확인 — 착수 시 반드시 실측한다** (레포에 기록 0건):
+| 값 | 현재 상태 |
+|---|---|
+| t4g.medium 온디맨드 단가 | 일지 `:1086` 의 *"$0.13→$0.16"* 은 **근거 미기재**. small `$0.0208` 의 2배로 계산하면 총 ≈`$0.149/h` 로 약 $0.01 어긋난다 |
+| t4g.medium 파드 상한 (*"17"*) | **근거 미기재.** small 의 11 은 `describe-instance-types` 로 2회 실측했으나 medium 은 0건 |
+| 노드 `Allocatable.memory` | **실측 0건** — 위 메모리 판정이 전부 추정이다 |
+
+🔑 **`addons.tf` 의 자기 규율은 여전히 유효하다** — *"노드를 2대 이상으로 늘리면 coredns 를 2로 되돌릴 것"*. 이 결정은 **1대를 유지**하므로 `replicaCount=1` 을 그대로 둔다.
 
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
@@ -331,11 +375,11 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | # | 블로커 | 근거 | 성격 |
 |---|---|---|---|
 | **C-1** | 🔴 **daily-api 에 헬스 엔드포인트가 없다.** actuator 의존 0건이고 전이 경로도 없다(`daily-core`→starter+tx, `client-ai-http`→restclient+jackson, `db-core`→data-jpa+json). `core-api.yaml` 을 복제하면 startupProbe 30회 실패 후 컨테이너가 죽는다 | `be/core/daily-api/build.gradle.kts` | **BE 코드 변경 + 이미지 재빌드** |
-| **C-2** | 🔴 **`ANTHROPIC_API_KEY` 가 인프라 어디에도 없다.** `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐. `client-ai-anthropic.yml` 은 `${ANTHROPIC_API_KEY:}`(빈 기본값)이라 **부팅은 성공하고 AI 호출 시점에 실패**한다 — CrashLoop 가 아니라 런타임 실패라 진단이 늦다 | `infra/aws-eks/2-cluster/secrets.tf`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml` | **결정 필요** (아래 ⚠️) |
+| **C-2** | ✅ **해소 — D-008 (스텁으로 대체)**. ~~🔴 `ANTHROPIC_API_KEY` 가 인프라 어디에도 없다.~~ `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐. `client-ai-anthropic.yml` 은 `${ANTHROPIC_API_KEY:}`(빈 기본값)이라 **부팅은 성공하고 AI 호출 시점에 실패**한다 — CrashLoop 가 아니라 런타임 실패라 진단이 늦다 | `infra/aws-eks/2-cluster/secrets.tf`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml` | **결정 필요** (아래 ⚠️) |
 | **C-3** | 🔴 **daily-api ECR 레포 부재 + 빌드 경로 없음.** `ecr_repositories` 기본값이 `["core-api","ai-api"]` 이고 `terraform.tfvars` 에 override 가 없다. `ecr-push.yml` 은 `options` 에 daily-api 가 없고, **PR 트리거엔 `inputs` 가 없어 항상 `core-api` 로 폴백**한다 | `infra/aws-eks/0-bootstrap/variables.tf`, `.github/workflows/ecr-push.yml` | 인프라 + 워크플로 |
-| **C-4** | 🔴 **노드 용량.** 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
+| **C-4** | ✅ **해소 — D-009 (t4g.medium 상향)**. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
 | **C-5** | 🟡 **NetworkPolicy 코드 0줄.** vpc-cni 는 `configuration_values` 없는 맨몸이고 `kind: NetworkPolicy` 매니페스트 0건. **ai-api 엔 Spring Security 도 없다**(의존 4개뿐) → `/internal/ai/**` 방어가 **네트워크·앱 양층 모두 0**. 게다가 ai-api 의 `include-message: always` 는 *"Phase 3 에서 NetworkPolicy 로 차단할 계획"* 을 근거로 켰다 — **아직 없는 통제를 근거로 삼은 결정** | `2-cluster/addons.tf`, `be/core/ai-api/build.gradle.kts`, `ai-api/application.yml` | 보안 |
-| **C-6** | 🟡 **e2e 노출 경로 미결정.** `k8s/README.md` 는 LoadBalancer/Ingress 를 **금지**한다(NLB/ALB 가 tofu state 밖에 생겨 destroy 후에도 과금). 반면 설계 `:213` 의 에픽 완료조건 4는 **Ingress 라우팅**이다 | `k8s/README.md`, `specs/...design.md:205,213` | **정면 충돌 — 결정 필요** |
+| **C-6** | ✅ **해소 — 충돌이 아니라 범위 차이였다 (2026-08-28 판정).** `k8s/README.md` 의 Ingress 금지와 설계 `:213` 의 *"3 Deployment + Ingress 라우팅"* 은 **다른 것의 완료 조건**이다 — 전자는 **Stage C**, 후자는 **에픽 전체**. Stage C 완료 기준(`:58`)은 Ingress 를 요구하지 않는다. → **Stage C 는 `kubectl port-forward` 로 e2e 를 검증하고, Ingress 는 Phase 3 로 남긴다.** 비용 규율(destroy 후 ALB 잔존 과금)이 학습 단계에서 우선한다 | `k8s/README.md`, `specs/...design.md:205,213` | 판정 완료 |
 
 ### 블로커가 **아닌** 것 (오해 방지)
 
