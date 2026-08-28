@@ -43,7 +43,7 @@ Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행�
 | Stage | 목표 | 상태 |
 |---|---|:--|
 | **A** | daily 도메인을 core 안에서 자립시킨다 (게이트 무관) | ✅ **완료 (2026-08-21)** — prod 실측 확인 <!-- verify: .github/workflows/prod-smoke-daily.yml ~ daily-question --> |
-| **B** | daily **로직**을 라이브러리 모듈로 + 그걸 조립하는 얇은 `daily-api` 앱 (G-1 귀결) | ⬜ |
+| **B** | daily **로직**을 라이브러리 모듈로 + 그걸 조립하는 얇은 `daily-api` 앱 (G-1 귀결) | ✅ **완료 (2026-08-27)** — B-1 `core:daily-core`(#392) · B-2a `clients:client-ai-http`(#393) · B-2b `core:daily-api`(#395). 완료 기준 3개 전부 충족: 519 tests 0 failures(직전 497 유지) · daily-api 단독 기동(RANDOM_PORT 실서버 + ai-api 없이 200/404) · **core-api 산출물 334 불변**(diff 공집합) <!-- verify: be/core/daily-api/build.gradle.kts --> |
 | **C** | EKS 토폴로지 3서비스 (Fly 무작업) | ⬜ |
 
 > Stage A는 **에픽이 멈춰도 단독으로 가치가 있다.** 지금 `/daily-question`은 "로그인 유저 존재 +
@@ -55,7 +55,7 @@ Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행�
 |---|---|
 | Stage A 완료 | ~~`./gradlew build` 그린 + prod 스모크(`/api/v1/daily-question` 200) + **유저 0명·`MAIL_ENABLED=false`에서도 200**~~ → ✅ **2026-08-21 충족.** ①`build` 497건 그린(#388) ②**prod 스모크 200 — 05:49 KST 실측**(09:00 cron 보다 **3시간 11분 먼저**, 그 시점엔 오늘 행이 존재할 수 없으므로 그 요청 자체가 lazy 생성을 유발했다) ③읽기 경로 3개 파일에 유저·메일 참조 **0건**. ⚠️ ③은 **prod 에서 유저 0명을 관측한 게 아니라** 코드 경로가 그것들과 무관함을 보인 것이다 — 구분해 적는다 |
 | Stage B 완료 | 기존 테스트 전량 그린 + daily-api 단독 기동 + **core-api 배포 산출물 불변**<br>🔴 **"산출물 불변"의 정의 (2026-08-22 B-1 에서 확정)**: **바이트 동일이 아니다** — 클래스를 별도 Gradle 모듈로 빼는 순간 `BOOT-INF/classes/` → `BOOT-INF/lib/<모듈>.jar` 로 배치가 바뀌므로 원리적으로 불가능하다. **core-api 가 싣고 나가는 `com.devquest.*` 클래스 집합이 동일한가**로 판정한다(어느 jar 에 들었는지 무관). ⚠️ **기준선은 변경 전에 재둔다** — 바꾼 뒤엔 못 잰다. 측정법은 `bootJar` 를 열어 `BOOT-INF/classes/` + `BOOT-INF/lib/*.jar` 안의 `com/devquest/**/*.class` 를 합집합으로 모아 정렬·해시한다. B-1 실측: **333 → 334**(증가분은 L-27 해소로 신설한 `DailyQuestionGeneratorPort` 하나, 그 외 완전 일치). **의도된 증감은 diff 로 설명 가능해야 하고, 설명되지 않는 증감이 하나라도 있으면 실패다.** QA 가 `MANIFEST` Start-Class · Spring Boot 레이어 키 · 리소스 diff 까지 함께 확인해 "클래스 집합만 보면 놓치는 것"이 없음을 별도로 검증했다 |
-| Stage C 완료 | 클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지 |
+| Stage C 완료 | ~~클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → AI 설명까지~~ → 🔄 **정정 (2026-08-28, 사용자 결정 · D-008)**: 클러스터에서 3서비스 e2e — 무로그인으로 오늘의 질문 → **설명 요청이 daily-api → ai-api 를 거쳐 응답으로 돌아오는 것**까지. ⚠️ **AI 응답은 스텁이다** — 실제 Anthropic 호출이 아니다. 검증 대상은 **토폴로지(3서비스 라우팅·서비스 디스커버리·NetworkPolicy)** 이지 AI 품질이 아니다. 근거는 아래 D-008 |
 
 ---
 
@@ -81,6 +81,8 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 > `daily 로직` = 라이브러리 모듈 / `조립 1` = `core-api`(Fly 상시) / `조립 2` = `daily-api`(EKS 전용).
 > **`daily-api` 앱 모듈은 Stage B 에서 만든다** — 완료 기준의 *"단독 기동"* 이 그것을 검증한다.
 > Stage C 는 그 산출물을 **EKS 에 배포**하는 단계이지 새로 만드는 단계가 아니다.
+>
+> ⚠️ **이 문장의 범위는 `be/` 산출물(Gradle 앱 모듈)에 한정된다 — 인프라 산출물이 아니다** (2026-08-28 감사에서 오독이 실제로 발생해 명시). 아래 #31이 적었듯 **매니페스트는 0건**이고, Stage C 는 그것 말고도 **ECR 레포·워크플로 옵션·NetworkPolicy·노드 용량·daily-api actuator 의존(=BE 코드 변경)**을 새로 만들어야 한다. 착수 전 목록은 아래 **§Stage C 착수 블로커** 참조.
 >
 > 🔴 **이건 추론이 아니라 이미 살아 있는 선례다.** Phase 1 이 정확히 이 형태로 착지했다(실측):
 > ```
@@ -132,6 +134,50 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 - 라이브러리는 **`core-domain` 포트만** 의존, 어댑터 배선은 각 조립 (`client-ai` 패턴)
 - 모듈명 **`core:daily-core`** (`db-core` 의 *"-core = 공유 조각"* 관례)
   <!-- verify: be/core/daily-core/build.gradle.kts ~ core:core-domain -->
+
+### G-4 → 학습 클러스터의 AI 호출은 **스텁**으로 대체 (2026-08-28)
+
+> 📌 **D-008** · 상태 `✅유효` · 영향 `docs/superpowers/plans/2026-08-03-service-decomposition-phase02.md`(Stage C 완료 기준), `infra/aws-eks/2-cluster/secrets.tf`, `be/core/ai-api/src/main/resources/application.yml`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml`, Stage C
+
+**`ANTHROPIC_API_KEY` 를 학습 클러스터에 넣지 않는다.** ai-api 에 **학습 전용 스텁 프로필**을 두고 고정 응답을 돌려준다.
+
+**왜 이게 결정 사항이었나** (2026-08-28 감사에서 드러남):
+Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 인프라 어디에도 없었다** — `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐이다. 그런데 키를 넣는 것 자체가 `secrets.tf` 가 세운 **명시적 원칙**(*"학습 클러스터에 prod 크리덴셜을 넣지 않는다"*)과 정면으로 부딪힌다. 같은 파일이 **더미 Grafana 키를 넣었다가 실제 스택에 인증 시도가 새어나간 사고**를 기록해뒀다 — 원칙이 경험에서 나온 것이다.
+
+🔴 **더 나쁜 성질**: `client-ai-anthropic.yml` 이 `${ANTHROPIC_API_KEY:}`(**빈 문자열 기본값**)라 키가 없어도 **부팅은 성공하고 AI 호출 시점에 실패**한다. CrashLoop 가 아니라 런타임 실패라 **과금 구간 안에서** 진단하게 된다 — SOP 가 가장 비싼 실수로 지목한 형태다.
+
+**기각한 대안**:
+- **별도 예산 키를 세션 동안만 주입** — 원칙의 취지(prod 자격증명 격리)는 지키지만 **사용자가 키 발급·한도 설정을 직접 해야 하고**, 실습마다 주입/삭제 절차가 늘어 *"끄는 걸 잊는 것"* 의 표면을 넓힌다.
+- **prod 키를 그대로 사용** — 가장 빠르나 `secrets.tf:111-118` 의 원칙을 깬다. 원칙을 바꾸려면 그 자체가 `design-change-procedure` 대상이다.
+
+⚠️ **감수하는 대가 (명시)**: **검증 범위가 좁아진다.** Stage C 가 증명하는 것은 **토폴로지**(3서비스가 클러스터에서 서로를 찾고 라우팅되는가)이지 *"AI 설명이 실제로 나온다"* 가 아니다. 완료 기준 문장을 그에 맞게 정정했다(위 표).
+🔑 **재검토 트리거**: ①실제 LLM 응답이 필요한 검증(응답 지연·타임아웃 튜닝·토큰 비용 실측)을 하게 되면 그때 **별도 예산 키**를 다시 본다 ②Phase 3 에서 분산 트레이싱을 붙일 때 스텁이 trace 를 왜곡하면 재판정.
+
+📌 **부수 결정** (같은 자리에서 확정):
+- **스텁은 ai-api 소유**다 — `client-ai` 를 건드리지 않는다(롤백 불변식: *"`client-ai` 의존 제거 금지"*, 아래 #193).
+- 스텁 활성화는 **프로필 또는 프로퍼티 opt-in**, **기본값 off**. 열린 결정 ① 이 세운 *"잊으면 터진다가 아니라 잊으면 안 돈다"* 형태를 따른다 — prod 에 스텁이 조용히 켜지는 일이 없어야 한다.
+- 🔴 **스텁 응답은 스텁임이 눈에 보여야 한다.** 고정 문자열에 식별 가능한 표식을 넣는다 — *"통과했다고 믿게 만드는 검사"* 를 만들지 않는다(Stage A 스모크에서 세운 원칙).
+
+### G-5 → 노드는 **t4g.medium 으로 상향** (2026-08-28)
+
+> 📌 **D-009** · 상태 `✅유효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `k8s/base/core-api.yaml`, `docs/eks-migration-log.md`, Stage C
+
+**`node_instance_type` 을 `t4g.small` → `t4g.medium` 으로 올린다.** 노드 대수는 1대 유지.
+
+**왜**: JVM 3개를 올려야 하는데 **파드도 메모리도 모자란다.**
+- 파드: 베이스라인 **10/11**(Stage 3b 의 `coredns replicaCount=1` 반영) → 2개 추가 시 **12 > 11**
+- 🔴 메모리가 먼저 막는다: Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다(`docs/eks-migration-log.md:1079`). requests 합 추정 **1792Mi**(512×3 + 256), limits 합 **3212Mi** — t4g.small 물리 2GiB 로는 requests 조차 안 들어간다
+
+**기각한 대안 — 노드 2대**: 파드 슬롯만 푼다. **파드 하나당 512Mi 요구라는 메모리 벽은 그대로**다. 게다가 `nodes.tf` 가 `subnet_ids` 를 `persistent_az` **단일 AZ 로 핀**해 2대가 같은 AZ 에 뜨므로 가용성 이득도 없다. DaemonSet 3개가 새 노드 자리를 먼저 먹어 순증은 11이 아니라 **8**(coredns 를 2로 되돌리는 자기 규율까지 따르면 **7**). 비용도 **+$0.026/h 로 medium(+$0.021 추정)보다 비싸다.**
+
+⚠️ **미확인 — 착수 시 반드시 실측한다** (레포에 기록 0건):
+| 값 | 현재 상태 |
+|---|---|
+| t4g.medium 온디맨드 단가 | 일지 `:1086` 의 *"$0.13→$0.16"* 은 **근거 미기재**. small `$0.0208` 의 2배로 계산하면 총 ≈`$0.149/h` 로 약 $0.01 어긋난다 |
+| t4g.medium 파드 상한 (*"17"*) | **근거 미기재.** small 의 11 은 `describe-instance-types` 로 2회 실측했으나 medium 은 0건 |
+| 노드 `Allocatable.memory` | **실측 0건** — 위 메모리 판정이 전부 추정이다 |
+
+🔑 **`addons.tf` 의 자기 규율은 여전히 유효하다** — *"노드를 2대 이상으로 늘리면 coredns 를 2로 되돌릴 것"*. 이 결정은 **1대를 유지**하므로 `replicaCount=1` 을 그대로 둔다.
 
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
@@ -228,8 +274,8 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | 6 | **Flyway가 모듈로 갈려 있다.** 버전이 **교차**한다 — core-api `V1~V6,V8,V9` / db-core `V7,V10~V13` | 각 모듈 `db/migration/` |
 | 7 | **세 번째 `@SpringBootApplication`도 `scanBasePackages=["com.devquest"]`** → Phase 0에서 43개 테스트를 깨뜨린 빈 누수가 3자로 재발 | `AiApiApplication.kt:15` |
 | 8 | **`TechInterviewPort` 하나를 daily·core가 나눠 쓴다.** 포트가 AI 방향으로만 경계를 긋는다 | `TechInterviewPort.kt:6-16` |
-| 10 | **HTTP 어댑터 인프라가 core-api 안에 있다.** daily가 ai-api를 부르려면 공유 승격 필요 | `core-api/.../adapter/ai/http/*` |
-| 11 | **`AiTransportConfig`가 core-api 전용** → daily는 태어날 때부터 HTTP-only | `AiTransportConfig.kt` |
+| 10 | ~~**HTTP 어댑터 인프라가 core-api 안에 있다.** daily가 ai-api를 부르려면 공유 승격 필요~~ → ✅ **해소 (2026-08-26, #393)**. `clients:client-ai-http` 로 추출됨(어댑터 15개 + `BaseAiHttpAdapter` + `AiApiRestClientBuilder`). *"공유 승격"* 은 이미 끝난 일이다 | `clients/client-ai-http/src/main/kotlin/com/devquest/client/ai/http/` |
+| 11 | **`AiTransportConfig`(전송 스위치)가 core-api 전용** → daily는 태어날 때부터 HTTP-only. ⚠️ 어댑터 **클래스**는 더 이상 core-api 소유가 아니다(#10 해소) — core-api 에 남은 것은 **배선(`@Bean`)** 이다. 🔴 **B-2b 에서 드러난 함정**: 그 배선의 `@ConditionalOnProperty(havingValue="http")` 를 복사하면 core-api 엔 있는 인프로세스 폴백이 daily-api 엔 없어 **`TechInterviewPort` 0개 → 컨텍스트 붕괴**. daily-api 는 **무조건 등록**한다 | `AiTransportConfig.kt`, `daily-api/.../config/DailyAiConfig.kt` |
 | 12 | **`core-api`는 `jar`가 꺼져 있어 다른 모듈이 의존 못 한다** | `core-api/build.gradle.kts:5-7` |
 | 13 | **`ArchAiPortConventionTest`가 포트 목록을 하드코딩** — 이 에픽의 유일한 구조 가드 | `ArchAiPortConventionTest.kt:23-42,62-76` |
 | 15 | **`fe/vercel.json`이 `/api/(.*)` 전부를 core 호스트로 rewrite** | `fe/vercel.json:4-5` |
@@ -253,7 +299,7 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | **28** | **CI 린트는 버전 중복만 본다** — 모듈 이동은 통과. 그리고 `be-ci.yml`은 PR에서만 돈다(CD엔 린트 없음) | `.github/workflows/be-ci.yml:54-67` |
 | **29** | **Dockerfile이 모듈 경로를 하드코딩** — daily-api는 반드시 `be/core/` 밑이어야 하고 `ecr-push.yml`의 choice 목록도 손대야 한다 | `be/Dockerfile:3,17,22` |
 | **30** | **`ai_call_log`(V7) 선례는 답이 아니다.** Phase 1은 테이블을 옮긴 게 아니라 **읽기 소비처가 0건이라 DB 의존을 버렸다.** daily는 실제로 읽고 쓴다 | `ai-api/.../AiCallLogObservabilityAdapter.kt:12-15` |
-| **31** | **ai-api는 한 번도 배포된 적이 없다.** `k8s/base/`에 매니페스트 0건 → "분리는 이미 검증됐다"는 빌드 수준이지 런타임 수준이 아니다 | `k8s/base/` |
+| **31** | **ai-api는 한 번도 배포된 적이 없다.** `k8s/base/`에 매니페스트 0건 → "분리는 이미 검증됐다"는 빌드 수준이지 런타임 수준이 아니다. 🔴 **2026-08-28 갱신: `daily-api`도 같은 상태다** — `k8s/base/` = `core-api.yaml`·`postgres.yaml`·`postgres-static.yaml` 셋뿐. 게다가 daily-api 는 **ECR 레포조차 없다**(`0-bootstrap/variables.tf:107` = `["core-api","ai-api"]`) | `k8s/base/`, `infra/aws-eks/0-bootstrap/variables.tf` |
 | **32** | **BE 모듈 규칙표에 daily-api/daily-domain의 자리가 없고 강제 장치도 없다.** ArchUnit 의존성 0건, 규칙은 문서에만 산다 | `be/CLAUDE.md:5-14` |
 
 ---
@@ -268,8 +314,21 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
       <!-- verify: be/storage/db-core/src/main/kotlin/com/devquest/storage/db/core/config/FlywayConfig.kt ~ ConditionalOnProperty -->
 - [ ] **② daily 테이블의 데이터 소유 (스키마 분리)** — 설계가 🔴확정(07-20)했으나 **코드 0줄**(#26).
       ①과 **직교한다** — ①은 *누가 돌리는가*, ②는 *어디에 사는가*. 기각이 아니라 순서를 매긴 것이라
-      `design-change-procedure` 대상이 아니다. **daily-api가 실제로 생기는 Stage C에서 필요해진다.**
-      ⚠️ 착수 시 `V13`의 `FROM daily_mail_log`(#21) 교차 의존을 함께 풀어야 한다.
+      `design-change-procedure` 대상이 아니다.
+      ~~**daily-api가 실제로 생기는 Stage C에서 필요해진다.** ⚠️ 착수 시 `V13`의 `FROM daily_mail_log`(#21) 교차 의존을 함께 풀어야 한다.~~
+
+      > 🔄 **정정 — 방향이 반대였다 (2026-08-28 감사, 근거 4개).**
+      > **지금 시행하면 Stage C 가 깨진다.** 공유 스키마는 Stage C 의 장애물이 아니라 **전제**다.
+      >
+      > | # | 근거 | 파일 |
+      > |---|---|---|
+      > | 1 | daily-api prod 는 `ddl-auto: validate` 로 **db-core 엔티티 15개 전부**를 기동 시 검증한다. daily 테이블만 다른 스키마로 옮기면 **validate 실패로 기동 불가** | `daily-api/src/main/resources/application-prod.yml`(함정 ⑦ 주석) |
+      > | 2 | 마이그레이션 주체가 **core-api 하나로 고정**(열린 결정 ①). daily-api 는 `migrate-on-startup` 을 의도적으로 안 켠다 → **daily 전용 스키마를 만들 주체가 존재하지 않는다** | 두 앱의 `application-prod.yml` |
+      > | 3 | `V13:40` 의 백필이 `FROM daily_mail_log`(V6, **core-api 모듈 소유**) — 둘 다 `public` 이라서 동작한다. 스키마를 가르면 교차 스키마 참조가 되어 `search_path` 없이는 깨진다 | `db-core/.../V13__create_daily_question_content.sql:40`, `core-api/.../V6__daily_mail_log.sql:1` |
+      > | 4 | daily-api 가 읽는 `daily_question_content`(V13)·`tech_question_bank`(V10·V11) 는 전부 db-core 소유이고 core-api 가 `public` 에 적용한다. `core-api-db` Secret 4키를 그대로 `envFrom` 하면 접속된다 → **공유 스키마에서 e2e 가 성립한다** | `k8s/eso/externalsecret-db-incluster.yaml` |
+      >
+      > 🔑 **실제 만기 시점 정정**: *"daily-api 가 생길 때"* 가 아니라 **"DB 를 물리 분리하거나 daily-api 가 자체 마이그레이션을 소유할 때"** 다.
+      > 설계 `:60` 의 🔴확정(*"daily=자체 스키마/테이블"*)은 **Stage C 를 통과한 뒤에도 미구현으로 남는다** — #26 이 지적한 *"확정했으나 코드 0줄"* 그대로다.
 - [x] **선행: 마이그레이션 CI 공백(#22)** → **해소** (2026-08-06 · PR #364 `6a3c163`).
       실제 Postgres 17.10에 Flyway를 돌린다. 이제 마이그레이션 결정을 **배포 전에 반증할 수 있다.**
       <!-- verify: be/core/core-api/src/test/kotlin/com/devquest/migration/FlywayMigrationIntegrationTest.kt ~ PostgreSQLContainer -->
@@ -299,10 +358,58 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 > ⚠️ **2.2에서 배운 함정**: `RateLimitResetScheduler`에 새 스토어 `clear()`를 빠뜨리면 자정 리셋이
 > 안 되어 **하루 1회 쓰고 영구 차단**된다. `RateLimitResetSchedulerTest`가 이 회귀를 고정한다.
 
+| Task | 내용 | 완료 |
+|---|---|---|
+| **A** | 읽기 경로 **뱅크 전용 lazy 생성** (G-2(b) 부분 재채택). 하루 9시간(00:00~09:00) 404 해소 | 2026-08-21 · PR #387·#388·#391 |
+| **B-1** | `core:daily-core` 추출 — 로직만. 원장 L-27 해소(`DailyQuestionGeneratorPort` 신설) <!-- verify: be/core/daily-core/build.gradle.kts --> | 2026-08-22 · PR #392 |
+| **B-2a** | `clients:client-ai-http` 추출 — AI HTTP 전송(어댑터 15개 + `BaseAiHttpAdapter`). ⚠️ 착수 시 범위를 **10배 오판**했다(상속을 안 봄) | 2026-08-26 · PR #393 |
+| **B-2b** | `core:daily-api` 앱 신설 — 조립 + 단독 기동. Blindspot Pass 가 **계획에 없던 파괴 경로 3개**를 잡았고(공유 `ddl-auto: create-drop` 상속 / `@EntityScan` 0건 / 전송 스위치 조건 복사), 빌더가 **4번째**(Flyway 가 두 모듈에 분산 → `repair()` 가 core-api 를 영구 부팅 불가로) 를 자체 발견 <!-- verify: be/core/daily-api/src/main/kotlin/com/devquest/daily/DailyApiApplication.kt --> | 2026-08-27 · PR #395 |
+
+---
+
+## 🚧 Stage C 착수 블로커 (2026-08-28 감사 — 실측)
+
+> 근거는 전부 레포 안의 코드·문서다. **클러스터는 꺼져 있었다**(과금 $0).
+> 추측과 실측을 구분해 적었다 — `미확인` 표시가 붙은 것은 Stage C 착수 시 **실제로 재야 한다**.
+
+| # | 블로커 | 근거 | 성격 |
+|---|---|---|---|
+| **C-1** | 🔴 **daily-api 에 헬스 엔드포인트가 없다.** actuator 의존 0건이고 전이 경로도 없다(`daily-core`→starter+tx, `client-ai-http`→restclient+jackson, `db-core`→data-jpa+json). `core-api.yaml` 을 복제하면 startupProbe 30회 실패 후 컨테이너가 죽는다 | `be/core/daily-api/build.gradle.kts` | **BE 코드 변경 + 이미지 재빌드** |
+| **C-2** | ✅ **해소 — D-008 (스텁으로 대체)**. ~~🔴 `ANTHROPIC_API_KEY` 가 인프라 어디에도 없다.~~ `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐. `client-ai-anthropic.yml` 은 `${ANTHROPIC_API_KEY:}`(빈 기본값)이라 **부팅은 성공하고 AI 호출 시점에 실패**한다 — CrashLoop 가 아니라 런타임 실패라 진단이 늦다 | `infra/aws-eks/2-cluster/secrets.tf`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml` | **결정 필요** (아래 ⚠️) |
+| **C-3** | 🔴 **daily-api ECR 레포 부재 + 빌드 경로 없음.** `ecr_repositories` 기본값이 `["core-api","ai-api"]` 이고 `terraform.tfvars` 에 override 가 없다. `ecr-push.yml` 은 `options` 에 daily-api 가 없고, **PR 트리거엔 `inputs` 가 없어 항상 `core-api` 로 폴백**한다 | `infra/aws-eks/0-bootstrap/variables.tf`, `.github/workflows/ecr-push.yml` | 인프라 + 워크플로 |
+| **C-4** | ✅ **해소 — D-009 (t4g.medium 상향)**. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
+| **C-5** | 🟡 **NetworkPolicy 코드 0줄.** vpc-cni 는 `configuration_values` 없는 맨몸이고 `kind: NetworkPolicy` 매니페스트 0건. **ai-api 엔 Spring Security 도 없다**(의존 4개뿐) → `/internal/ai/**` 방어가 **네트워크·앱 양층 모두 0**. 게다가 ai-api 의 `include-message: always` 는 *"Phase 3 에서 NetworkPolicy 로 차단할 계획"* 을 근거로 켰다 — **아직 없는 통제를 근거로 삼은 결정** | `2-cluster/addons.tf`, `be/core/ai-api/build.gradle.kts`, `ai-api/application.yml` | 보안 |
+| **C-6** | ✅ **해소 — 충돌이 아니라 범위 차이였다 (2026-08-28 판정).** `k8s/README.md` 의 Ingress 금지와 설계 `:213` 의 *"3 Deployment + Ingress 라우팅"* 은 **다른 것의 완료 조건**이다 — 전자는 **Stage C**, 후자는 **에픽 전체**. Stage C 완료 기준(`:58`)은 Ingress 를 요구하지 않는다. → **Stage C 는 `kubectl port-forward` 로 e2e 를 검증하고, Ingress 는 Phase 3 로 남긴다.** 비용 규율(destroy 후 ALB 잔존 과금)이 학습 단계에서 우선한다 | `k8s/README.md`, `specs/...design.md:205,213` | 판정 완료 |
+
+### 블로커가 **아닌** 것 (오해 방지)
+
+| 항목 | 판정 |
+|---|---|
+| `be/Dockerfile` 의 `ARG SERVICE` | ✅ **그대로 동작한다.** `settings.gradle.kts` 가 `core:daily-api` 를 include 하므로 `--build-arg SERVICE=daily-api` 로 경로 규칙을 만족한다 |
+| `be/Dockerfile:35` 의 `EXPOSE 8080` 고정 | ⚪ **블로커 아님**(추정, 표준 Docker 동작). `EXPOSE` 는 메타데이터일 뿐 포트 바인딩이 아니다 — K8s `containerPort` 를 8081/8082 로 맞추면 통신은 정상. **오해 유발 요소이지 차단 요소가 아니다** |
+| ESO 시크릿 분할 | ✅ **불필요.** `core-api-db` 의 4키(`DB_HOST`·`DB_NAME`·`DB_USERNAME`·`DB_PASSWORD`)가 daily-api 요구와 **정확히 동일**하다. `core-api-app`(JWT/OAuth)은 daily-api·ai-api 둘 다 불필요. 🟡 다만 이름이 `core-api-*` 라 3서비스가 공유하면 **소유권이 흐려진다** |
+| 열린 결정 ②(스키마 분리) | ⚪ **블로커 아님. 오히려 지금 하면 깨진다** — 위 §열린 결정 ② 정정 참조 |
+
+### ⚠️ C-2 는 **원칙 충돌**이라 사용자 결정이 필요하다
+
+Stage C 완료 기준(*"무로그인으로 오늘의 질문 → **AI 설명**까지"*)은 실제 Anthropic 호출을 요구한다.
+그런데 `secrets.tf` 가 *"학습 클러스터에 prod 크리덴셜을 넣지 않는다"* 를 **명시적 원칙**으로 못박았고,
+같은 파일이 **더미 Grafana 키를 넣었다가 실제 스택에 인증 시도가 새어나간 사고**를 기록해뒀다.
+→ 계획서·설계서 어디에도 이 항목이 없다. **완료 기준을 좁히거나, 키 주입 방식을 정하거나 둘 중 하나다.**
+
+### 🟡 Stage C 착수 시 **실제로 재야 하는** 값 (레포에 기록 0건)
+
+| 값 | 왜 | 명령 |
+|---|---|---|
+| 노드 `Allocatable.memory` | C-4 의 메모리 벽 판정이 전부 **추정**이다 | `kubectl describe node` |
+| t4g.medium 온디맨드 단가 | 일지 `:1086` 의 *"$0.13→$0.16"* 은 **근거 미기재**. small $0.0208 의 2배로 계산하면 ≈$0.149/h 로 약 $0.01 어긋난다 | `aws ec2 describe-spot-price-history` 아님 — 온디맨드 가격표 API |
+| t4g.medium 파드 상한 | *"상한 17"* 도 근거 미기재. small 의 11 은 `describe-instance-types` 로 **2회 실측**했으나 medium 은 0건 | `aws ec2 describe-instance-types` |
+| ai-api·daily-api 의 힙·Metaspace 실사용 | Dockerfile 의 JVM 플래그는 **Fly 512MB 예산**에서 나왔고 실측 근거는 **core-api prod 하나뿐**(사용 42MB/커밋 117MB). 3서비스에 동일 적용된다 | 배포 후 `jcmd` / actuator metrics |
+
 ---
 
 ## 다음 (이 계획 이후)
 
 **Phase 3**: EKS 배포 토폴로지, `client-ai` 컴파일 의존 제거, 분산 트레이싱.
 ⚠️ Stage C 착수 전 확인할 것 — vpc-cni에 `enableNetworkPolicy` 필요(현재 맨몸) ·
-t4g.small 파드 상한 11인데 Stage 3a에서 이미 11/11 → JVM 3개면 **노드 상향 선행**(비용 재산정).
+~~t4g.small 파드 상한 11인데 Stage 3a에서 이미 11/11~~ → **정정 (2026-08-28)**: Stage 3a 의 11/11 은 **Stage 3b 에서 `coredns` replicaCount 를 1로 낮추기 전** 숫자다(`2-cluster/addons.tf`). 현재 `.tf` 기준 베이스라인은 **10/11, 여유 1** → JVM 2개(ai-api·daily-api) 추가 시 **12 > 11, 정확히 1칸 부족**. 🔴 **그런데 파드 상한보다 메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다(`docs/eks-migration-log.md:1079`). 상세는 §Stage C 착수 블로커.
