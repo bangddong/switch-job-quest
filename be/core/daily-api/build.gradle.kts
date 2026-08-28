@@ -28,4 +28,14 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("com.bucket4j:bucket4j-core:8.10.1")
+    // C-1 — k8s 매니페스트 계약(k8s/base/core-api.yaml)이 요구하는 readiness probe
+    // (`/actuator/health/readiness`)를 충족하기 위해 추가. `/health`(liveness)는 이 모듈이 직접 만든
+    // 상수 컨트롤러라 actuator 없이도 동작하지만, readiness는 실제 DB 상태를 반영해야 하므로
+    // actuator의 DataSourceHealthIndicator가 필요하다.
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+    // readiness 회귀 테스트(DailyHealthReadinessTest)용 — Spring Boot 4는 웹mvc 테스트 지원(`@AutoConfigureMockMvc`)을
+    // `spring-boot-test-autoconfigure`에서 별도 아티팩트로 분리했다(core-api build.gradle.kts와 동일 이유,
+    // 패키지는 `org.springframework.boot.webmvc.test.autoconfigure`로 이동, 실측 확인).
+    testImplementation("org.springframework.boot:spring-boot-webmvc-test")
 }
