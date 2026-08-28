@@ -196,8 +196,26 @@ flowchart TB
 1. **vpc-cni addon에 NetworkPolicy 활성화** 🟡 — ai-service를 "NetworkPolicy만"으로 격리하는 인증 결정은
    **AWS VPC CNI가 NetworkPolicy를 강제해야** 성립. 현재 `addons.tf`의 vpc-cni는 설정 없이 맨몸 →
    `configuration_values`로 `enableNetworkPolicy: "true"`를 켜거나 Calico 도입 필요. **이 결정의 전제 인프라.**
-2. **노드 용량** 🟡 — Spring 앱 ~300~450MB × 3 ≈ 1~1.4GB + 시스템 파드 → **t4g.small(2GB) 빠듯**.
-   t4g.medium(4GB)로 승격 or 노드 2개. "1노드 미니멀" 가정 깨짐, 비용 소폭↑.
+2. **노드 용량** 🟡 — ~~Spring 앱 ~300~450MB × 3 ≈ 1~1.4GB + 시스템 파드 → **t4g.small(2GB) 빠듯**.
+   t4g.medium(4GB)로 승격 or 노드 2개.~~ "1노드 미니멀" 가정 깨짐, 비용 소폭↑.
+
+   > 🔄 **정정 (2026-08-28 감사) — 추정치가 매니페스트 실측보다 낮았고, 두 대안은 동등하지 않다.**
+   >
+   > | | 이 문서의 추정 | 매니페스트 실측 |
+   > |---|---|---|
+   > | Spring 앱 1개 | 300~450MB | **requests 512Mi / limits 900Mi** (`k8s/base/core-api.yaml`) |
+   > | 3개 합 | 1~1.4GB | **requests 1792Mi**(+postgres 256Mi) / **limits 3212Mi** |
+   >
+   > 🔴 **`t4g.medium 승격` 과 `노드 2개` 는 같은 문제를 풀지 않는다.**
+   > 노드 2개는 **파드 슬롯**만 푼다 — 파드 **하나당** 512Mi 를 요구하는 메모리 벽은 그대로다.
+   > 게다가 `nodes.tf` 가 `subnet_ids` 를 `persistent_az` **단일 AZ 로 핀**했으므로 2대가 같은 AZ 에 뜬다
+   > (학습장에선 무관하나 *"노드 2대 = 가용성"* 으로 읽으면 틀린다). 새 노드엔 DaemonSet 3개가 먼저
+   > 자리를 먹어 **순증은 11이 아니라 8**이고, `addons.tf` 주석의 자기 규율(*"노드 2대 이상이면 coredns 를 2로 되돌릴 것"*)을
+   > 따르면 **순증 7**이다.
+   >
+   > ⚠️ **아직 미확인**: 노드 `Allocatable.memory` 실측치가 레포에 **0건**이다 — 위 판정의 메모리 부분은
+   > 전부 추정이다. t4g.medium 의 **단가·파드 상한(17)** 도 근거 미기재다(small 의 11 은 2회 실측).
+   > 상세는 `plans/2026-08-03-service-decomposition-phase02.md` §Stage C 착수 블로커.
 
 ### 3분리로 새로/더 커지는 것
 - **Ingress/ALB** 🔴: path 라우팅(/api·/daily, ai 내부)이 토폴로지의 중심 → Ingress 컨트롤러가 조기 필요.
