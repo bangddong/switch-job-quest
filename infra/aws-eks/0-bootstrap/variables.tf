@@ -103,11 +103,17 @@ variable "github_repo" {
 }
 
 # ── ECR ──────────────────────────────────────────────────────────
-# 배포 대상 서비스마다 레포 하나. daily-api는 Phase 2 추출 시 추가.
+# 배포 대상 서비스마다 레포 하나.
+#
+# daily-api 추가 (2026-08-29, Stage C 준비 C-3): Phase 2 Stage B 에서 `core:daily-api` 앱 모듈이
+# 실제로 생겼다(#395). 이 목록에 없으면 이미지를 올릴 곳이 없어 Stage C 배포가 막힌다.
+# 🔒 증가 상한은 자동으로 붙는다 — `ecr.tf` 의 `aws_ecr_lifecycle_policy.app` 이
+#    `for_each = aws_ecr_repository.app` 이라 새 레포도 같은 정책(untagged 1일 + 최근 N개)을 받는다.
+#    상한 없는 영속 리소스를 만들 수 없는 구조다(PERSISTENT-RESOURCES.md 규칙).
 variable "ecr_repositories" {
   type        = list(string)
   description = "생성할 ECR 레포 목록 (devquest/<name> 으로 네이밍). 서비스 분해 대상 앱들."
-  default     = ["core-api", "ai-api"]
+  default     = ["core-api", "ai-api", "daily-api"]
 }
 
 variable "ecr_image_tag_mutability" {

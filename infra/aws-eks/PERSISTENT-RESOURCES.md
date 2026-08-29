@@ -48,6 +48,7 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **DynamoDB** `devquest-eks-tflock` | 0-bootstrap | state 잠금(동시 apply 방지) | 온디맨드, 항목 1개 | ~$0 | 2026-07 | — |
 | **ECR** `devquest/core-api` | 0-bootstrap | 이미지가 destroy마다 사라지면 세션당 재빌드 5~10분 | 🔒 **lifecycle 10개** (실측 10개 = 1.74 GB) | **$0.17** | 2026-07-27 | 2027-01-15 |
 | **ECR** `devquest/ai-api` | 0-bootstrap | 위와 동일 (Phase 2 대비) | 🔒 lifecycle 10개 (현재 0개) | $0 | 2026-07-27 | 2027-01-15 |
+| **ECR** `devquest/daily-api` | 0-bootstrap | 위와 동일. Stage C 3서비스 배포 대상 | 🔒 lifecycle 10개 (현재 0개) | $0 | 2026-08-29 | 2027-01-15 |
 | **IAM** OIDC 프로바이더 · GitHub Actions 역할 | 0-bootstrap | CI가 AWS에 붙는 통로 | 고정 | $0 | 2026-07 | — |
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
 | **Cost Anomaly** `devquest-eks-service-monitor` | 0-bootstrap | 이상 지출 감지(DAILY, $5) | 계정당 DIMENSIONAL 1개 | $0 | 2026-07-29 | — |
