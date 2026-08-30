@@ -24,7 +24,7 @@ on:
         required: true
         default: core-api
         type: choice
-        options: [core-api, ai-api]
+        options: [core-api, ai-api, daily-api]
   # PR 컨텍스트에서도 빌드한다. 이유는 편의가 아니라 **보안 경계** 때문:
   #   OIDC 역할의 신뢰정책(0-bootstrap/iam-github-oidc.tf)은 sub이
   #   `refs/heads/main` 또는 `pull_request`인 토큰만 허용한다. 임의 브랜치 push는 거부된다
