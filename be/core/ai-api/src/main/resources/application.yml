@@ -25,11 +25,32 @@ spring:
 server:
   port: 8081
 
+# Stage C 준비(C-7) — k8s/base/core-api.yaml 계약과 동일하게 readinessProbe는
+# `/actuator/health/readiness`를 찌른다. core-api·daily-api는 이 그룹을 `db,ping`으로 구성하지만
+# (실제 DB 상태 반영), ai-api는 **DataSource 빈이 아예 없다**(build.gradle.kts에 db-core 의존 없음 —
+# core-domain, clients:client-ai, web, actuator뿐). 실측 확인: `db,ping`을 그대로 넣으면
+# "Included health contributor 'db' in group 'readiness' does not exist"로 **컨텍스트 로드 자체가
+# 실패**한다(daily-api 설정을 그대로 복사하면 안 되는 이유 — 조용히 무시되는 게 아니라 기동 불가).
+#
+# ai-api가 기동 후 나빠질 수 있는 외부 의존이 있는가? client-ai가 요구하는 ChatModel 빈(Spring AI
+# Anthropic 오토컨피그)은 컨텍스트 로드 시점에 이미 해결되어 런타임에 다시 검사할 대상이 아니다.
+# Judge0(코딩 힌트/문제 평가)는 요청마다 호출하는 외부 API이지만 이 PR 범위에서 별도 HealthIndicator를
+# 만들지 않는다(요청에 없던 범위 확장 — 필요해지면 별도로 판단). 결과적으로 검사할 실제 의존성이 없으므로,
+# readiness 그룹을 항상 UP인 `ping`만으로 구성한다 — `db`를 빼고 `ping`을 넣은 임시방편이 아니라
+# "이 앱은 검사할 게 없다"는 사실을 그대로 반영한 것이다. `/health`(liveness, 상수)와 사실상 같은
+# 결과를 내지만 구현 경로가 다르다: liveness는 이 모듈이 직접 만든 하드코딩 상수, readiness는 actuator의
+# 표준 health 메커니즘을 그대로 쓴다 — 나중에 ai-api가 실제 외부 의존(예: Judge0)의 상태를 검사해야
+# 하게 되면 이 그룹에 인디케이터를 추가하기만 하면 되는 확장 지점으로 남겨둔다.
 management:
   endpoints:
     web:
       exposure:
         include: health
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: ping
 
 logging:
   level:

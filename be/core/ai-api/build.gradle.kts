@@ -21,4 +21,9 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+    // readiness 회귀 테스트용 — Spring Boot 4는 웹mvc 테스트 지원(`@AutoConfigureMockMvc`)을
+    // `spring-boot-test-autoconfigure`에서 별도 아티팩트로 분리했다(daily-api build.gradle.kts와
+    // 동일 이유, 패키지는 `org.springframework.boot.webmvc.test.autoconfigure`로 이동).
+    testImplementation("org.springframework.boot:spring-boot-webmvc-test")
 }
