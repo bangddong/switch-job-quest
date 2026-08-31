@@ -19,7 +19,36 @@ variable "kubernetes_version" {
 variable "node_instance_type" {
   description = "노드 인스턴스 타입 (ARM Graviton)"
   type        = string
-  default     = "t4g.small"
+
+  # t4g.small → t4g.medium 상향 (2026-08-31, Phase 2 Stage C · 결정 D-009).
+  #
+  # 왜: JVM 앱이 1개(core-api) → 3개(core-api·ai-api·daily-api)가 된다. small 로는 **파드도 메모리도**
+  #     모자란다. 파드 베이스라인 10/11(Stage 3b 의 coredns replicaCount=1 반영) → 2개 추가 시 12 > 11.
+  #     🔴 그리고 파드 상한보다 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가
+  #     `Insufficient memory, Too many pods` **둘 다**였다(docs/eks-migration-log.md).
+  #     requests 합 추정 1792Mi(512×3 + postgres 256) 는 small 물리 2048MiB 에 안 들어간다.
+  #
+  # 기각: **노드 2대**(node_desired_size=2). 파드 슬롯만 풀고 **파드당 512Mi 메모리 벽은 그대로**다.
+  #     nodes.tf 가 subnet_ids 를 persistent_az **단일 AZ 로 핀**해 2대가 같은 AZ 에 뜨므로
+  #     가용성 이득도 없다. DaemonSet 3개가 새 노드 자리를 먼저 먹어 순증은 11이 아니라 8이고,
+  #     addons.tf 의 자기 규율("노드 2대 이상이면 coredns 를 2로 되돌릴 것")까지 따르면 7.
+  #     비용도 +$0.026/h 로 medium(+$0.0208/h)보다 **비싸다**.
+  #
+  # 📏 실측 (2026-08-31, AWS API 조회 — 클러스터 미가동, 무료):
+  #     aws ec2 describe-instance-types --instance-types t4g.small t4g.medium
+  #       t4g.small  : ENI 3 × IPv4 4 → 파드 3×(4-1)+2 = 11  · 2048 MiB
+  #       t4g.medium : ENI 3 × IPv4 6 → 파드 3×(6-1)+2 = 17  · 4096 MiB
+  #     ↑ small 의 11 이 기존 2회 실측과 일치 → **공식이 검증된 상태에서** medium 17 을 얻었다.
+  #     aws pricing get-products (Seoul, Linux, Shared, OnDemand):
+  #       t4g.small $0.0208/h · t4g.medium $0.0416/h (정확히 2배)
+  #     → 세션 총액 $0.13/h → **$0.149/h**. ⚠️ 일지의 "$0.16" 은 근거 미기재 추정이었고 $0.011 과다였다.
+  #
+  # ⚠️ 아직 미확인: 노드 `Allocatable.memory`(kube-reserved·eviction 제외 후 실제 가용량).
+  #     레포에 기록 0건이라 위 메모리 판정은 여전히 추정이다 — **다음 apply 세션에서
+  #     `kubectl describe node` 로 재고 이 주석과 원장을 갱신할 것.**
+  #
+  # 🔑 노드는 **1대 유지**다. addons.tf 의 coredns replicaCount=1 규율은 그대로 둔다.
+  default = "t4g.medium"
 }
 
 variable "node_capacity_type" {
