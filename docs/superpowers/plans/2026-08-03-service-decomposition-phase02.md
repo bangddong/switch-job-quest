@@ -385,7 +385,7 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 
 | # | 블로커 | 근거 | 성격 |
 |---|---|---|---|
-| **C-7** | 🔴 **`ai-api` 에도 헬스 엔드포인트가 없다.** C-1 은 daily-api 만 다뤘는데 ai-api 도 같은 상태다 — `/health` 컨트롤러 **없음**, `management.endpoint.health.group.readiness` **미정의**, **`application-prod.yml` 파일 자체가 없음**(core-api·daily-api 는 둘 다 있다). `core-api.yaml` 을 복제하면 startupProbe 30회 실패 후 컨테이너 사망 | `be/core/ai-api/src/main/{kotlin,resources}/` | **BE 코드 변경** |
+| **C-7** | ✅ **해소 (08-31, PR 진행 중)** — `/health`(상수, `text/plain`) 컨트롤러 + `management.endpoint.health.group.readiness.include: **ping**` 추가. 🔑 **`daily-api` 의 `db,ping` 을 복사하면 안 된다는 것이 실측으로 확인됐다** — ai-api 는 `db-core` 미의존이라 `NoSuchHealthContributorException: Included health contributor 'db' in group 'readiness' does not exist` 로 **컨텍스트 로드 자체가 실패**한다(조용히 무시되는 게 아니다. QA 가 환경변수 오버라이드로 재현). ⚠️ **`application-prod.yml` 은 의도적으로 만들지 않았다** — ai-api 의 **유일한 실행 환경이 EKS 학습 클러스터**이고(Fly 는 core-api 만 배포), 거기서 `DEBUG` 로그는 결함이 아니라 **필요한 것**이다(3서비스 첫 기동의 유일한 관측 수단). 형식적 일관성을 위해 `INFO` 로 낮추는 파일을 만드는 것은 학습 목표에 역행한다. 🔑 재검토 트리거: ai-api 가 실제 배포 대상을 갖게 되면 즉시. 📌 남은 tech-debt 는 원장 **L-39**(readiness 가 liveness 와 등가 — Judge0 붙으면 인디케이터 추가) | `be/core/ai-api/src/main/{kotlin,resources}/` | 해소 |
 | **C-8** | 🔴 **`daily-api` 가 클러스터에서 자기 자신을 호출한다.** `DailyAiConfig.kt` 의 `@Value("\${devquest.ai.http.base-url:http://localhost:8081}")` 기본값이 살아 있는데 `application-prod.yml` 에 이 키가 **없다**. daily-api 자신의 포트는 8082 → 연결 실패 | `be/core/daily-api/.../DailyAiConfig.kt`, `application-prod.yml` | 매니페스트 env |
 
 > 🔑 **C-7·C-8 이 위험한 이유는 실패가 NetworkPolicy 와 구별되지 않기 때문이다.**
