@@ -16,7 +16,8 @@
 
 | 리소스 | 시작일 | 종료일 | 예상 비용 | 누적 소진 |
 |--------|--------|--------|----------|------------|
-| 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)* | |
+| 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **$0.149/h** (t4g.medium 상향 후, 08-31 실측). 종전 t4g.small 기준 $0.13/h | |
+| ECR `devquest/daily-api` (영속, 빈 레포) | 2026-08-30 | 없음 | **$0** (저장분만 $0.10/GB-월) | |
 | 🔴 **영속 EBS** `vol-0518b6d0dcd2b0d70` 10GiB gp3 | **2026-07-31** | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$1.0391 소진 / $200** (08-12 실측) |
 
 > 📌 **누적 소진 실측 $1.0391** (2026-08-12, `RECORD_TYPE=Usage` 필터 조회):
@@ -1900,3 +1901,83 @@ scram-sha-256 잔존 : 2건   ← 옛 마커였다면 통과했을 것 (장식 �
 status.podIP  잔존 : 0건   ← 새 마커가 잡는다
 → ::error:: verify 내용 단언 실패 — 'docs/eks-session-sop.md' 안에 없다: /status\.podIP/
 ```
+
+---
+
+## 2026-08-31
+
+### [비용] t4g.medium 상향 — 단가·파드 상한을 **처음으로 실측**했다 (D-009)
+
+Stage C(3서비스 배포) 착수 전 노드 용량 결정. **클러스터를 띄우지 않고** AWS API 조회만 했다(무료).
+
+**왜 재야 했나**: 08-28 감사에서 이 결정의 근거 숫자 3개가 전부 **근거 미기재**로 드러났다.
+일지 어딘가에 적힌 *"③ t4g.medium (상한 17) — 시간당 $0.13→$0.16"* 이 출처였는데,
+**어떻게 얻은 값인지 아무 데도 없었다.** t4g.small 의 11 은 `describe-instance-types` 로 2회 실측했으면서
+medium 은 0건이었다.
+
+```
+$ aws ec2 describe-instance-types --region ap-northeast-2 \
+    --instance-types t4g.small t4g.medium \
+    --query 'InstanceTypes[].{Type:InstanceType,MaxENI:NetworkInfo.MaximumNetworkInterfaces,IPv4perENI:NetworkInfo.Ipv4AddressesPerInterface,MemMiB:MemoryInfo.SizeInMiB}'
+
+| IPv4perENI  | MaxENI  | MemMiB  |    Type      |
+|  6          |  3      |  4096   |  t4g.medium  |
+|  4          |  3      |  2048   |  t4g.small   |
+```
+
+파드 상한 = `ENI × (IPv4−1) + 2`
+
+| 타입 | 계산 | 판정 |
+|---|---|---|
+| t4g.small | `3 × (4−1) + 2` = **11** | ✅ 기존 2회 실측과 일치 → **공식이 검증됐다** |
+| t4g.medium | `3 × (6−1) + 2` = **17** | ✅ 일지의 *"17"* 이 맞았다 |
+
+🔑 **medium 만 계산했으면 공식이 맞는지 알 수 없었다.** 이미 실측된 small 값이 재현되는 것을 먼저 확인하고,
+그 위에서 medium 을 얻었다. *"검산 가능한 것부터 검산한다"* 가 이 조회의 설계였다.
+
+```
+$ aws pricing get-products --region us-east-1 --service-code AmazonEC2 \
+    --filters ... Value=Asia Pacific (Seoul) ... Value=Linux ... Value=Shared ... capacitystatus=Used
+
+t4g.small  : 0.0208000000 Hrs
+t4g.medium : 0.0416000000 Hrs      ← 정확히 2배
+```
+
+**세션 시간당 총액 갱신**
+
+| 항목 | small 기준 | **medium 기준** |
+|---|---:|---:|
+| EKS 컨트롤플레인 | $0.1000 | $0.1000 |
+| EC2 ×1 | $0.0208 | **$0.0416** |
+| 퍼블릭 IPv4 ×1 | $0.0050 | $0.0050 |
+| EBS 10GiB + Secrets ×2 | $0.0024 | $0.0024 |
+| **합계** | **$0.1282** | **$0.1490** |
+
+🔴 **일지의 `$0.16` 은 틀렸다 — $0.011 과다.** 결론(medium 채택)은 바뀌지 않지만, 이제 추정이 아니다.
+
+**왕복 40~50분 세션 기준 $0.10 → $0.12.** 컨트롤플레인이 여전히 **67%** 를 차지한다
+(small 일 때 78%). → *"노드를 아끼자"* 보다 **"빨리 끄자"** 가 압도적으로 큰 레버라는 결론은 그대로다.
+
+### [결정] 노드 2대 대신 medium 1대 — 기각 근거
+
+| | 노드 2대 | **medium 1대 (채택)** |
+|---|---|---|
+| 파드 슬롯 | 순증 8 (DaemonSet 3개가 먼저 먹음). `addons.tf` 자기 규율(*"2대 이상이면 coredns 를 2로"*)까지 지키면 **7** | 11 → **17** |
+| 🔴 파드당 메모리 벽 | **그대로.** requests 512Mi 를 못 줄인다 | 2048 → **4096 MiB** |
+| 가용성 | **없음** — `nodes.tf` 가 `subnet_ids` 를 `persistent_az` **단일 AZ 로 핀** | 해당 없음 |
+| 비용 | +$0.026/h (EC2 $0.0208 + 퍼블릭 IPv4 $0.005) | **+$0.0208/h** |
+
+노드 2대는 **더 비싸면서 메모리 문제를 못 푼다.** 설계서 `:197-198` 이 두 안을 *"승격 or 노드 2개"* 로
+동등하게 놓았던 것을 08-28 감사에서 정정했다.
+
+### [메모] 아직 미확인 — 다음 apply 세션에서 잴 것
+
+**노드 `Allocatable.memory`** — 레포에 기록 **0건**이다. 물리 4096MiB 에서 kube-reserved·eviction
+threshold 를 뺀 실제 가용량을 모른다. requests 합 1792Mi 가 들어가는지는 **여전히 추정**이다.
+
+```bash
+kubectl describe node | grep -A6 Allocatable      # apply 세션에서 실행
+```
+
+⚠️ 재고 나면 `2-cluster/variables.tf` 의 `node_instance_type` 주석과 계획서
+`§Stage C 착수 블로커` 의 미확인 표를 **함께** 갱신할 것.
