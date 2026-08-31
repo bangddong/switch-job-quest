@@ -7,7 +7,10 @@
 ```
 k8s/
   base/
-    core-api.yaml      # Deployment + Service (ClusterIP)
+    core-api.yaml      # Deployment + Service (ClusterIP) — :8080, 마이그레이션 실행자
+    ai-api.yaml           # Stage C — :8081, 내부 전용(인증 없음 → NetworkPolicy 로 격리)
+    daily-api.yaml        # Stage C — :8082, e2e 진입점(port-forward 대상)
+    networkpolicy-ai-api.yaml  # Stage C — ai-api 에 core-api·daily-api 만 허용(ingress-only)
     postgres.yaml         # Stage 3a — StorageClass(동적) + Headless Service + StatefulSet(volumeClaimTemplates)
     postgres-static.yaml  # Stage 3b — StorageClass(no-provisioner) + PV + PVC + Service + StatefulSet
   eso/
@@ -147,20 +150,108 @@ kubectl get pvc postgres-data         # VOLUME 이 postgres-data 인지 확인
 
 ### 3. 배포
 
+**Stage C 부터 3서비스다.** `sed` 치환을 서비스마다 한 번씩 한다(kustomize 를 쓰지 않는 이유는 이 레포가
+생 yaml + 치환으로 일관돼 있기 때문 — 도구를 하나 더 들이는 것보다 절차가 눈에 보이는 편을 택했다).
+
 ```bash
-IMAGE=<account>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<sha>
-sed "s|IMAGE_PLACEHOLDER|$IMAGE|" k8s/base/core-api.yaml | kubectl apply -f -
+REG=<account>.dkr.ecr.ap-northeast-2.amazonaws.com
+
+# ① core-api — **마이그레이션 실행자다. 반드시 먼저.**
+#    daily-api 는 Flyway 를 안 돌리므로(그 이유는 daily-api.yaml 주석 참고)
+#    스키마가 없는 상태로 뜨면 ddl-auto: validate 에 걸려 기동 실패한다.
+sed "s|IMAGE_PLACEHOLDER|$REG/devquest/core-api:<sha>|"  k8s/base/core-api.yaml  | kubectl apply -f -
+kubectl rollout status deploy/core-api --timeout=5m
+
+# ② ai-api / daily-api
+sed "s|IMAGE_PLACEHOLDER|$REG/devquest/ai-api:<sha>|"    k8s/base/ai-api.yaml    | kubectl apply -f -
+sed "s|IMAGE_PLACEHOLDER|$REG/devquest/daily-api:<sha>|" k8s/base/daily-api.yaml | kubectl apply -f -
+```
+
+> ⚠️ **서비스마다 sha 가 다를 수 있다.** 세 이미지를 각각 다른 시점에 푸시했다면 태그도 다르다.
+> §1 의 태그 추출 스니펫을 `--repository-name devquest/<service>` 로 바꿔 서비스별로 뽑아라.
+
+### 3.5 NetworkPolicy — 🔴 **순서를 틀리면 조용히 무효가 된다**
+
+```bash
+kubectl apply -f k8s/base/networkpolicy-ai-api.yaml
+```
+
+**전제**: `2-cluster/addons.tf` 의 vpc-cni 에 `enableNetworkPolicy = "true"` 가 켜져 있어야 한다.
+`NetworkPolicy` 는 K8s **코어 API** 라 강제하는 CNI 가 없어도 API 서버가 **정상 수용**하고
+`... created` 를 출력한다 — **에러도 경고도 없다.** 즉 *"걸었다고 믿는데 안 걸린 상태"* 가 만들어진다.
+
+```bash
+# 플래그가 실제로 살아있는지 — tofu apply 출력으로 대신하지 마라(그건 "보냈다"만 말한다)
+aws eks describe-addon --cluster-name devquest-eks --addon-name vpc-cni \
+  --region ap-northeast-2 --query 'addon.configurationValues'
+kubectl get ds aws-node -n kube-system \
+  -o jsonpath='{.spec.template.spec.containers[*].name}'   # 두 번째 컨테이너 = 노드에이전트
 ```
 
 ### 4. 검증
 
 ```bash
-kubectl get pods -w                    # Running + READY 1/1 까지 (startupProbe로 최대 5분 허용)
-kubectl logs deploy/core-api --tail=50 # Spring 기동 로그 / Flyway 마이그레이션
-kubectl describe pod -l app=core-api   # Pending·ImagePullBackOff 등 진단
-kubectl port-forward svc/core-api 8080:8080 &
-curl -s localhost:8080/health          # 200 기대
+kubectl get pods -w                     # 전부 Running + READY 1/1 (startupProbe 로 최대 5분)
+kubectl logs deploy/core-api --tail=50  # Flyway 마이그레이션
+kubectl describe pod -l app=ai-api      # Pending·ImagePullBackOff 등 진단
 ```
+
+#### 4.1 NetworkPolicy — **차단/허용 쌍**으로만 증명된다
+
+*"created 됐다"* 는 증명이 아니다. 그리고 **파드 슬롯을 1칸도 쓰지 않고** 검증할 수 있다 —
+임시 파드를 띄우지 말고 **이미 뜬 `postgres-0` 에 exec** 한다(`kubectl run` 선례는 이 레포에 0건).
+
+```bash
+# ⚠️ **URL 을 변수로 둔다. 호스트·포트·경로를 한 줄에 붙여 쓰지 말 것.**
+#    붙여 쓰면 gitleaks 의 generic-api-key 가 오탐한다 — 규칙이 `api` 를 키워드로 보고
+#    콜론 뒤 10자 이상을 값으로 잡는다(entropy 3.55). 2026-08-31 에 실제로 CI 가 막혔다.
+#    🔴 되돌리지 말 것. 그리고 **유발 형태를 여기에 그대로 인용하지도 말 것** —
+#    인용 자체가 재검출된다(.gitleaksignore 가 같은 사고를 이미 기록해뒀고, 나도 한 번 밟았다).
+#    지문 등록은 해법이 아니다: squash merge 로 SHA 가 바뀌면 무효가 된다.
+AI_URL=http://ai-api:8081
+
+# ① 🔑 정책 적용 **전** — 성공해야 한다
+kubectl exec postgres-0 -- wget -qO- --timeout=5 "$AI_URL/actuator/health"
+
+# ② 정책 적용
+kubectl apply -f k8s/base/networkpolicy-ai-api.yaml
+
+# ③ 같은 명령 → **타임아웃/행** 이어야 한다 (VPC CNI 의 거부는 Connection refused 가 아니다)
+kubectl exec postgres-0 -- wget -qO- --timeout=5 "$AI_URL/actuator/health"
+
+# ④ 양성 대조 — 허용된 호출자는 **여전히 성공**해야 한다
+POD=$(kubectl get pod -l app=daily-api -o jsonpath='{.items[0].metadata.name}')
+kubectl exec "$POD" -- wget -qO- --timeout=5 "$AI_URL/actuator/health"
+
+# ⑤ probe 가 막히지 않았는지 — RESTARTS 가 0 인지 최소 1 주기 관찰
+kubectl get pod -l app=ai-api -w
+```
+
+> ⚠️ **①이 없으면 ③은 아무것도 증명하지 않는다** — 파드 미기동·Service 셀렉터 오류·DNS 실패가
+> 전부 "막혔다"와 똑같이 생겼다.
+> ⚠️ **④가 없으면** `podSelector: {}` + 빈 ingress(전면 차단)도 ③을 "통과" 한다.
+> ⚠️ 정책이 **0개 파드를 매칭**해도 생성은 성공한다. `kubectl describe netpol` 은 매칭 수를 알려주지 않는다:
+> ```bash
+> kubectl get netpol -o wide          # POD-SELECTOR 확인
+> kubectl get pods -l app=ai-api      # 그 셀렉터가 실제로 잡는 파드
+> ```
+> ⚠️ [미확인] `postgres:17-alpine` 에 `wget` 이 있는지 레포 기록 0건 — 이 레포는 정확히 이 가정으로 데인 적이 있다
+> (실측 `sh: openssl: not found`). ①이 그 확인을 겸한다.
+
+#### 4.2 e2e — 무로그인 오늘의 질문 → 설명 (Stage C 완료 기준)
+
+```bash
+kubectl port-forward svc/daily-api 8082:8082 &
+
+curl -s localhost:8082/api/v1/daily-question              # 200 + question (AI 호출 없음, 뱅크에서)
+curl -s -X POST localhost:8082/api/v1/daily-question/explain \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"q","answer":"a","feedback":"f","userQuestion":"왜?"}'
+```
+
+두 번째 호출이 **daily-api → `http://ai-api:8081` → 스텁** 을 거쳐 돌아온다.
+🔑 응답에 **`[STUB]` 표식**이 있어야 한다 — 없으면 스텁이 아니라 실제 AI 를 부른 것이거나(키가 없으니 실패했을 것)
+전혀 다른 경로를 탄 것이다. **증명하는 것은 토폴로지이지 AI 품질이 아니다**(결정 D-008).
 
 ### 5. 정리 (destroy 전 필수)
 

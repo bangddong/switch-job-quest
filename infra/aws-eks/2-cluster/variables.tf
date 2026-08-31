@@ -20,7 +20,7 @@ variable "node_instance_type" {
   description = "노드 인스턴스 타입 (ARM Graviton)"
   type        = string
 
-  # t4g.small → t4g.medium 상향 (2026-08-31, Phase 2 Stage C · 결정 D-009).
+  # t4g.small → t4g.medium 상향 (결정 D-009 = 2026-08-28 / 이 파일 반영 = 2026-08-31, #400).
   #
   # 왜: JVM 앱이 1개(core-api) → 3개(core-api·ai-api·daily-api)가 된다. small 로는 **파드도 메모리도**
   #     모자란다. 파드 베이스라인 10/11(Stage 3b 의 coredns replicaCount=1 반영) → 2개 추가 시 12 > 11.
