@@ -378,8 +378,26 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | **C-2** | ✅ **해소 — D-008 (스텁으로 대체)**. ~~🔴 `ANTHROPIC_API_KEY` 가 인프라 어디에도 없다.~~ `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐. `client-ai-anthropic.yml` 은 `${ANTHROPIC_API_KEY:}`(빈 기본값)이라 **부팅은 성공하고 AI 호출 시점에 실패**한다 — CrashLoop 가 아니라 런타임 실패라 진단이 늦다 | `infra/aws-eks/2-cluster/secrets.tf`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml` | **결정 필요** (아래 ⚠️) |
 | **C-3** | 🔴 **daily-api ECR 레포 부재 + 빌드 경로 없음.** `ecr_repositories` 기본값이 `["core-api","ai-api"]` 이고 `terraform.tfvars` 에 override 가 없다. `ecr-push.yml` 은 `options` 에 daily-api 가 없고, **PR 트리거엔 `inputs` 가 없어 항상 `core-api` 로 폴백**한다 | `infra/aws-eks/0-bootstrap/variables.tf`, `.github/workflows/ecr-push.yml` | 인프라 + 워크플로 |
 | **C-4** | ✅ **해소 — D-009 (t4g.medium 상향, `variables.tf` 반영 완료 08-31)**. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
-| **C-5** | 🟡 **NetworkPolicy 코드 0줄.** vpc-cni 는 `configuration_values` 없는 맨몸이고 `kind: NetworkPolicy` 매니페스트 0건. **ai-api 엔 Spring Security 도 없다**(의존 4개뿐) → `/internal/ai/**` 방어가 **네트워크·앱 양층 모두 0**. 게다가 ai-api 의 `include-message: always` 는 *"Phase 3 에서 NetworkPolicy 로 차단할 계획"* 을 근거로 켰다 — **아직 없는 통제를 근거로 삼은 결정** | `2-cluster/addons.tf`, `be/core/ai-api/build.gradle.kts`, `ai-api/application.yml` | 보안 |
+| **C-5** | 🔄 **부분 해소 (08-31)** — vpc-cni `enableNetworkPolicy = "true"` 를 `addons.tf` 에 켰다(스키마 실측: `{"type":"string","format":"boolean"}` — **문자열이다**, 불리언으로 쓰면 apply 사망). **남은 것: NetworkPolicy 매니페스트** — 매니페스트 2벌과 함께 만든다(레이블이 서로 맞아야 하므로). 🔴 **등급을 🟡→🔴 로 올린다** — 서술이 *"방어가 네트워크·앱 양층 모두 0"* 인데 노랑이었다(표기·서술 불일치). 🔑 착수 시 fail-open 3종 주의: ①`podSelector` 는 **파드 레이블**(`spec.template.metadata.labels`)만 본다 — Deployment 의 `metadata.labels` 가 아니다. 빠뜨리면 **0개 파드 선택 + 생성 성공 + 아무것도 안 막음** ②`k8s/base/*` 는 `namespace` 를 안 적는 관례인데 정책이 엉뚱한 ns 에 가면 **조용히** 무력화된다 → `namespace: default` 명시 ③**ingress-only 로 못박을 것** — egress 를 선언하는 순간 default-deny 가 되어 53/UDP·TCP 를 명시 허용하지 않으면 DNS 가 죽는다 | `2-cluster/addons.tf`, `k8s/base/` | 보안 |
 | **C-6** | ✅ **해소 — 충돌이 아니라 범위 차이였다 (2026-08-28 판정).** `k8s/README.md` 의 Ingress 금지와 설계 `:213` 의 *"3 Deployment + Ingress 라우팅"* 은 **다른 것의 완료 조건**이다 — 전자는 **Stage C**, 후자는 **에픽 전체**. Stage C 완료 기준(`:58`)은 Ingress 를 요구하지 않는다. → **Stage C 는 `kubectl port-forward` 로 e2e 를 검증하고, Ingress 는 Phase 3 로 남긴다.** 비용 규율(destroy 후 ALB 잔존 과금)이 학습 단계에서 우선한다 | `k8s/README.md`, `specs/...design.md:205,213` | 판정 완료 |
+
+### 🔴 감사에서 **새로 발견된** 블로커 (2026-08-31, NetworkPolicy Blindspot Pass)
+
+| # | 블로커 | 근거 | 성격 |
+|---|---|---|---|
+| **C-7** | 🔴 **`ai-api` 에도 헬스 엔드포인트가 없다.** C-1 은 daily-api 만 다뤘는데 ai-api 도 같은 상태다 — `/health` 컨트롤러 **없음**, `management.endpoint.health.group.readiness` **미정의**, **`application-prod.yml` 파일 자체가 없음**(core-api·daily-api 는 둘 다 있다). `core-api.yaml` 을 복제하면 startupProbe 30회 실패 후 컨테이너 사망 | `be/core/ai-api/src/main/{kotlin,resources}/` | **BE 코드 변경** |
+| **C-8** | 🔴 **`daily-api` 가 클러스터에서 자기 자신을 호출한다.** `DailyAiConfig.kt` 의 `@Value("\${devquest.ai.http.base-url:http://localhost:8081}")` 기본값이 살아 있는데 `application-prod.yml` 에 이 키가 **없다**. daily-api 자신의 포트는 8082 → 연결 실패 | `be/core/daily-api/.../DailyAiConfig.kt`, `application-prod.yml` | 매니페스트 env |
+
+> 🔑 **C-7·C-8 이 위험한 이유는 실패가 NetworkPolicy 와 구별되지 않기 때문이다.**
+> 셋 다 증상이 *"파드가 죽거나 연결이 안 된다"* 로 같다. 같은 세션에 정책을 막 걸어놨다면
+> **원인을 정책으로 오귀속**하고 엉뚱한 곳을 파게 된다 — 그것도 과금 구간 안에서.
+> → **C-7·C-8 을 먼저 닫고**, 그다음에 정책을 건다.
+
+> 📌 **C-9 (기록만)**: 정책의 *"core-api 허용"* 규칙은 **이번 세션에 한 번도 실행되지 않는다.**
+> core-api 는 `transport: inprocess` 라 클러스터에서 ai-api 를 HTTP 로 부르지 않는다
+> (`AiHttpClientConfig` 의 `havingValue = "http"` 게이트). daily-api 쪽만 검증되고 core-api 쪽은
+> **작동한다고 믿지만 통과시켜본 적 없는 규칙**으로 남는다 → 매니페스트 주석에 명시할 것.
+> 안 그러면 Phase 3 에서 `transport=http` 를 켰을 때 여기서 막히고 원인을 못 찾는다.
 
 ### 블로커가 **아닌** 것 (오해 방지)
 

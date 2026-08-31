@@ -194,8 +194,25 @@ flowchart TB
 
 ### ⚠️ 이미 머지한 2-cluster를 손대야 하는 것 (놓치기 쉬움)
 1. **vpc-cni addon에 NetworkPolicy 활성화** 🟡 — ai-service를 "NetworkPolicy만"으로 격리하는 인증 결정은
-   **AWS VPC CNI가 NetworkPolicy를 강제해야** 성립. 현재 `addons.tf`의 vpc-cni는 설정 없이 맨몸 →
-   `configuration_values`로 `enableNetworkPolicy: "true"`를 켜거나 Calico 도입 필요. **이 결정의 전제 인프라.**
+   **AWS VPC CNI가 NetworkPolicy를 강제해야** 성립. ~~현재 `addons.tf`의 vpc-cni는 설정 없이 맨몸 →
+   `configuration_values`로 `enableNetworkPolicy: "true"`를 켜거나 Calico 도입 필요.~~ **이 결정의 전제 인프라.**
+
+   > 🔄 **갱신 (2026-08-31)** — 세 가지가 바뀌었다.
+   >
+   > **① 시점**: ~~Phase 3~~ → **Phase 2 Stage C 블로커 C-5** 로 앞당겼다. `daily-api` 가 실제로 생겨
+   > 3서비스가 한 클러스터에 뜨는 순간부터 필요하기 때문이다.
+   > **② 구현**: `addons.tf` 에 `jsonencode({ enableNetworkPolicy = "true" })` 적용 완료.
+   > 값이 **문자열**임을 스키마 실측으로 확정했다 — `{"type":"string","format":"boolean"}`.
+   > 불리언 `true` 로 쓰면 `InvalidParameterException` 으로 apply 가 죽는다.
+   > **③ Calico 는 기각**: 여기 대안으로 적혀 있었으나 어디에도 기각 기록이 없었다(08-31 감사 지적).
+   > 기각 사유 — VPC CNI 는 **이미 클러스터에 있고 노드에이전트도 이미 떠 있다**(`aws-node` 2/2 컨테이너).
+   > 플래그 하나로 켜지므로 파드·비용 증가가 0이다. Calico 는 별도 DaemonSet 이라 **파드 슬롯을 먹고**
+   > (이 노드의 제약이 정확히 그것이다) 학습 목표인 *"EKS 기본 스택으로 어디까지 되나"* 에서도 벗어난다.
+   >
+   > ⚠️ **이 통제가 무엇을 해결하지 *않는지* 명시한다.** 정책은 *"core-api·daily-api 만 허용"* 이므로
+   > `ai-api` 의 `spring.web.error.include-message: always`(에러 원문 노출)는 **여전히 그 둘에게 흘러간다.**
+   > 정책이 줄이는 것은 **폭발 반경**(호출자 2개로 한정)이지 노출 자체가 아니다 —
+   > 정책을 걸었다고 그 설정의 근거 주석을 *"부채 상환 완료"* 로 고치면 **또 한 번 사실과 다른 근거**를 남기는 것이다.
 2. **노드 용량** 🟡 — ~~Spring 앱 ~300~450MB × 3 ≈ 1~1.4GB + 시스템 파드 → **t4g.small(2GB) 빠듯**.
    t4g.medium(4GB)로 승격 or 노드 2개.~~ "1노드 미니멀" 가정 깨짐, 비용 소폭↑.
 
