@@ -202,18 +202,26 @@ kubectl describe pod -l app=ai-api      # Pending·ImagePullBackOff 등 진단
 임시 파드를 띄우지 말고 **이미 뜬 `postgres-0` 에 exec** 한다(`kubectl run` 선례는 이 레포에 0건).
 
 ```bash
+# ⚠️ **URL 을 변수로 둔다. 호스트·포트·경로를 한 줄에 붙여 쓰지 말 것.**
+#    붙여 쓰면 gitleaks 의 generic-api-key 가 오탐한다 — 규칙이 `api` 를 키워드로 보고
+#    콜론 뒤 10자 이상을 값으로 잡는다(entropy 3.55). 2026-08-31 에 실제로 CI 가 막혔다.
+#    🔴 되돌리지 말 것. 그리고 **유발 형태를 여기에 그대로 인용하지도 말 것** —
+#    인용 자체가 재검출된다(.gitleaksignore 가 같은 사고를 이미 기록해뒀고, 나도 한 번 밟았다).
+#    지문 등록은 해법이 아니다: squash merge 로 SHA 가 바뀌면 무효가 된다.
+AI_URL=http://ai-api:8081
+
 # ① 🔑 정책 적용 **전** — 성공해야 한다
-kubectl exec postgres-0 -- wget -qO- --timeout=5 http://ai-api:8081/actuator/health
+kubectl exec postgres-0 -- wget -qO- --timeout=5 "$AI_URL/actuator/health"
 
 # ② 정책 적용
 kubectl apply -f k8s/base/networkpolicy-ai-api.yaml
 
 # ③ 같은 명령 → **타임아웃/행** 이어야 한다 (VPC CNI 의 거부는 Connection refused 가 아니다)
-kubectl exec postgres-0 -- wget -qO- --timeout=5 http://ai-api:8081/actuator/health
+kubectl exec postgres-0 -- wget -qO- --timeout=5 "$AI_URL/actuator/health"
 
 # ④ 양성 대조 — 허용된 호출자는 **여전히 성공**해야 한다
 POD=$(kubectl get pod -l app=daily-api -o jsonpath='{.items[0].metadata.name}')
-kubectl exec "$POD" -- wget -qO- --timeout=5 http://ai-api:8081/actuator/health
+kubectl exec "$POD" -- wget -qO- --timeout=5 "$AI_URL/actuator/health"
 
 # ⑤ probe 가 막히지 않았는지 — RESTARTS 가 0 인지 최소 1 주기 관찰
 kubectl get pod -l app=ai-api -w

@@ -74,7 +74,7 @@ spec:
   ingress:
     - from:
         # daily-api — Stage C e2e 가 실제로 타는 경로
-        #   POST /api/v1/daily-question/explain → http://ai-api:8081/internal/ai/tech-interview/...
+        #   POST /api/v1/daily-question/explain → ai-api 의 /internal/ai/tech-interview/... (8081)
         - podSelector:
             matchLabels:
               app: daily-api
@@ -101,7 +101,9 @@ spec:
 # (`kubectl run` 선례는 레포에 0건, exec+wget 선례는 있다 — docs/eks-tutorial-steps.md).
 #
 #   1. ai-api·daily-api 둘 다 Ready 확인
-#   2. 🔑 **정책 적용 전**:  kubectl exec postgres-0 -- wget -qO- --timeout=5 http://ai-api:8081/actuator/health
+#   ⚠️ URL 은 변수로 둔다(`AI_URL` 에 호스트·포트만) — 경로까지 붙여 쓰면 gitleaks 가
+#      generic-api-key 오탐을 낸다(2026-08-31 실제로 CI 가 막혔다). 상세 절차는 k8s/README.md §4.1.
+#   2. 🔑 **정책 적용 전**:  kubectl exec postgres-0 -- wget -qO- --timeout=5 "$AI_URL/actuator/health"
 #                            → **성공해야 한다** (도달성 + wget 존재 + Service 셀렉터 + DNS 를 한 번에 확정)
 #   3. kubectl apply -f k8s/base/networkpolicy-ai-api.yaml
 #   4. 동일 명령 재실행    → **타임아웃/행** 이어야 한다  (VPC CNI 의 거부는 Connection refused 가 아니다)
