@@ -2070,3 +2070,62 @@ kubectl get ds aws-node -n kube-system -o jsonpath='{.spec.template.spec.contain
 
 ⚠️ [미확인] `postgres:17-alpine` 에 `wget` 이 있는지 레포 기록 0건. 이 레포는 정확히 이 가정으로 데인 적이 있다
 (*"`postgres:17-alpine`에 openssl 없음(실측 `sh: openssl: not found`)"*). 2단계가 그 확인을 겸한다.
+
+### [막힘] ECR 이미지 3개 중 2개가 아예 없었다 — 블로커 표가 "구울 수 있다"만 검증했다
+
+Stage C apply 직전 사전 점검(SOP §2b)에서 발견. **과금 시작 전이라 비용 0.**
+
+```
+$ aws ecr describe-repositories --query 'repositories[].repositoryName' --output text
+devquest/ai-api   devquest/daily-api   devquest/core-api      ← 레포는 3개 다 있다
+
+$ for r in core-api ai-api daily-api; do ... describe-images ... done
+core-api   latest   2026-08-31T11:35:43+09:00
+ai-api     None                                                ← 🔴 이미지 0개
+daily-api  None                                                ← 🔴 이미지 0개
+```
+
+C-3 은 *"ECR 레포 `devquest/daily-api` 생성 확인 + `ecr-push.yml` options 에 추가"* 로 닫혔다.
+그건 **빌드 경로의 존재**를 증명한 것이지 **이미지의 존재**가 아니다. 블로커 표에 이 구분이 없었다.
+→ 표에 **C-9(이미지 3개 실재)** 를 추가하고, 합격 기준을 `describe-images` 출력으로 못박는다.
+
+추가로 core-api 이미지도 SOP §2b 판정이 🔴였다:
+
+```
+$ git cat-file -t ca0e0ef8f080edba10cb38e77ceebb0efe21c345
+fatal: git cat-file: could not get object info
+```
+
+SOP 가 예고한 그대로 — PR 컨텍스트의 `github.sha` 는 **머지 커밋**이라 히스토리에 없다.
+오탐이 아니라 정책이므로(*"지금 도는 이미지가 어느 커밋인지 특정 가능해야 한다"*) main 에서 재빌드했다.
+
+### [막힘] main 에서 3개를 연달아 dispatch 하면 가운데 것이 **조용히** 취소된다
+
+```
+33361782159  core-api    in_progress
+33361787944  ai-api      cancelled   ← job 0개 · 8초
+33361793272  daily-api   pending
+```
+
+원인: `concurrency.group = ecr-push-${{ github.ref }}`. 서비스가 키에 없어 셋 다
+`ecr-push-refs/heads/main` 한 그룹에 들어간다. `cancel-in-progress: false` 는 **실행 중인 것**을
+지키는 옵션이지 대기열을 지키지 않는다 — 새 run 이 오면 **대기 중 run 을 교체**한다.
+job 이 하나도 생성되지 않은 것(8초)이 큐 단계 대체의 증거다. OIDC 거부·러너 부족이면 job 이
+생성됐다 실패했을 것이므로 반증됨.
+
+🔴 **위험한 것은 실패 방식이다.** `cancelled` 는 `failure` 가 아니라 CI 에 빨간불이 안 뜬다.
+이미지가 없는 줄 모르고 apply 하면 **과금 중에** `ImagePullBackOff` 를 디버깅하게 된다
+— 컨트롤플레인 $0.10/h 가 도는 동안.
+
+### [해결] 그룹 키에 서비스를 넣는다
+
+```yaml
+group: ecr-push-${{ github.ref }}-${{ github.event.inputs.service || 'core-api' }}
+```
+
+서비스별 빌드는 서로 다른 ECR 레포를 쓰므로 간섭하지 않는다 → 병렬이 옳다.
+⚠️ `workflow_dispatch` 는 **main 의 워크플로 정의**를 읽으므로 이 수정은 머지 후부터 유효하다.
+이번 세션은 **직렬 dispatch** 로 우회했다(core-api → daily-api → ai-api).
+
+> 📌 하네스 동결 규칙의 해제 조건(*"제품 작업이 실제로 차단되면 그 PR 안에서 최소한으로 고친다"*)에
+> 해당한다 — 이론적 구멍이 아니라 **지금 Stage C 준비를 실제로 막았다.** 수정은 한 줄.
