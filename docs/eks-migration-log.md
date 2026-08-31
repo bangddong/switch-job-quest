@@ -1981,3 +1981,92 @@ kubectl describe node | grep -A6 Allocatable      # apply 세션에서 실행
 
 ⚠️ 재고 나면 `2-cluster/variables.tf` 의 `node_instance_type` 주석과 계획서
 `§Stage C 착수 블로커` 의 미확인 표를 **함께** 갱신할 것.
+
+### [결정] vpc-cni `enableNetworkPolicy` 켬 — 스키마 실측으로 타입 함정을 먼저 제거했다 (C-5)
+
+`ai-api` 격리의 유일한 수단. 착수 전 Blindspot Pass 가 **HIGH 위험 하나**를 지목했다:
+*"값이 문자열인지 불리언인지 레포에 근거 0건. 틀리면 apply 가 과금 중에 죽는다."*
+
+이 레포는 ebs-csi 에서 이미 **애드온 스키마를 실측하는 예방책**을 썼는데(`addons.tf`, 07-30),
+**vpc-cni 에는 한 번도 안 썼다.** 클러스터 없이 무료로 되는 조회다.
+
+```
+$ aws eks describe-addon-configuration --region ap-northeast-2 \
+    --addon-name vpc-cni --addon-version v1.22.3-eksbuild.1 --query 'configurationSchema'
+
+$.definitions.VpcCni.properties.enableNetworkPolicy
+  { "format": "boolean", "type": "string" }
+```
+
+🔴 **문자열이다.** `jsonencode({ enableNetworkPolicy = true })` 로 썼으면 `InvalidParameterException`.
+
+⚠️ **같은 스키마 안에서 타입이 갈린다** — 이게 진짜 함정이다:
+
+| 키 | 타입 |
+|---|---|
+| `enableNetworkPolicy` | `"type": "string"` (format: boolean) |
+| `nodeAgent.enablePolicyEventLogs` | `"type": "string"` (format: boolean) |
+| **`nodeAgent.enabled`** | **`"type": "boolean"`** ← 진짜 불리언 |
+
+일관되게 쓰려다 하나를 틀리기 딱 좋다. 실측 안 했으면 반반이었다.
+
+로컬 검증: `tofu fmt -check` 통과 · `tofu validate` → `Success! The configuration is valid.`
+
+### [메모] 파드 상한 걱정은 근거가 없었다 — 답이 이미 이 일지에 있었다
+
+착수 전 나는 *"`enableNetworkPolicy` 를 켜면 노드에이전트가 추가돼 방금 medium 으로 확보한 여유를 먹는다"*
+고 우려했다. **틀렸다.** 근거는 이 파일 안에 이미 있었다:
+
+```
+:329   kube-system: aws-node 2/2·coredns×2·kube-proxy 전부 Running
+                              ↑ aws-node 는 처음부터 컨테이너 2개짜리다
+:968   kubectl get pods -A 전수 목록 — 별도 정책 파드 0건
+```
+
+`aws-node` 는 정책 활성화와 **무관하게** 노드에이전트를 사이드카로 달고 있다. 플래그는 파드를
+만드는 게 아니라 **이미 붙은 컨테이너의 동작을 켠다.** 파드 상한 17 에 영향 0이고, Stage 3a/3b 의
+메모리 실측치도 이 컨테이너가 뜬 상태의 값이라 requests 가 바뀌지 않는다.
+
+🔑 **일지를 안 읽고 걱정부터 했다.** 조회 가능한 사실을 추론으로 대체하려던 것 — 이 레포가 반복해서
+경계하는 형태다. Blindspot Pass 가 같은 파일의 라인을 인용해 바로잡았다.
+
+### [메모] 🔴 조용한 무효 — 순서를 틀리면 "걸었다고 믿는데 안 걸린다"
+
+`NetworkPolicy` 는 K8s **코어 API**(`networking.k8s.io/v1`)다. CRD 가 아니다.
+→ 강제하는 CNI 가 없어도 API 서버가 **정상 수용**하고 `... created` 를 출력한다.
+**에러도 경고도 없다.** 애드온을 켜기 전에 매니페스트를 apply 하면 정확히 그 상태가 된다.
+
+이 레포에 NetworkPolicy 적용 이력이 0건이라 이 함정을 밟은 기록도 없다. 순서를 못박는다:
+
+```
+addons.tf 수정 → tofu apply(클러스터 생성) → 플래그 실제 반영 확인 → 매니페스트 apply → 차단/허용 쌍
+```
+
+⚠️ **"확인" 을 `tofu apply` 출력으로 대신하지 마라** — tofu 는 자기가 보낸 설정이 반영됐다고만 말한다.
+노드 쪽에서 봐야 한다:
+```bash
+aws eks describe-addon --addon-name vpc-cni --query 'addon.configurationValues'
+kubectl get ds aws-node -n kube-system -o jsonpath='{.spec.template.spec.containers[*].name}'
+```
+그래도 이건 **"켜졌다"** 까지만 증명한다. **"막는다"** 의 증명은 차단/허용 쌍 검증뿐이다.
+
+### [메모] 파드 슬롯을 안 먹는 검증 순서 (apply 세션용)
+
+레포에 `kubectl run` 임시 파드 선례가 **0건**이고, 대신 **기존 파드에 exec** 하는 선례가 있다
+(`docs/eks-tutorial-steps.md`). 이미 뜬 `postgres-0` 을 "허용되지 않은 호출자" 로 쓴다.
+
+```
+1. ai-api·daily-api apply → 둘 다 Ready
+2. 🔑 정책 적용 **전**: kubectl exec postgres-0 -- wget -qO- --timeout=5 http://ai-api:8081/... → 성공해야 함
+3. NetworkPolicy apply
+4. 동일 명령 → 타임아웃/행 이어야 함
+5. kubectl exec <daily-api> -- wget ... → 여전히 성공해야 함 (양성 대조)
+```
+
+**2단계가 없으면 4단계는 아무것도 증명하지 않는다** — 도달 불가·Service 셀렉터 오류·파드 미기동이
+전부 "막혔다"와 똑같이 생겼기 때문이다. VPC CNI 의 거부는 `Connection refused` 가 아니라 **타임아웃**이다.
+**5단계가 없으면** `podSelector: {}` + 빈 ingress(전면 차단)도 4단계를 "통과" 한다 — 그건 Stage C
+완료 기준을 정면으로 깨는 정책이다.
+
+⚠️ [미확인] `postgres:17-alpine` 에 `wget` 이 있는지 레포 기록 0건. 이 레포는 정확히 이 가정으로 데인 적이 있다
+(*"`postgres:17-alpine`에 openssl 없음(실측 `sh: openssl: not found`)"*). 2단계가 그 확인을 겸한다.
