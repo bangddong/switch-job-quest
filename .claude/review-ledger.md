@@ -75,6 +75,8 @@
 | L-9-b | `fix/timezone-consistency/F-3` | ~~LOW~~ | 배포 전/후 저장값 **불연속**(백필 미실시) | 🔴 **obsolete — 전제가 무너졌다.** prod가 원래 KST였으므로 #336 배포 전후로 저장 zone이 바뀌지 않는다 = **불연속 자체가 없다** |
 | L-9-c | (#336 잔존 가치) | — | 오진이었지만 **#336의 코드 변경은 유지할 가치가 있다** | ✅ **유지 확정(#337).** ①`be/build.gradle.kts` 테스트 jvmArgs — CI 러너는 UTC이고 TZ가 없어 **테스트는 UTC, prod는 KST**로 돌고 있었다. 이건 실재하던 CI≢prod 갭이고 이 변경이 닫았다 ②`TimezoneConsistencyTest` — 위 갭의 회귀 가드 ③Dockerfile `-Duser.timezone` — TZ와 중복이지만 **배포 설정이 유실돼도 버티는 이중 안전장치**로 유지(주석을 사실대로 정정) |
 
+| L-42 | `stage/eks-4-three-service` (세션 관찰) | LOW | **EKS 세션 마커의 `applied_at` 이 1차 apply 때 32분 이르게 찍혔다.** 1차 apply 15:28:49 인데 마커는 `14:56:23`. 2차 apply(16:00:55)에서는 `16:00:50` 으로 정확했다(PreToolUse 가 명령 직전에 도는 것과 일치) | 🔎 **원인 미상 — 추측으로 메우지 않는다.** 훅 정규식은 직접 시험해 오탐 가능성을 배제했다: `tofu init`·`tofu plan`·`git commit -m 'tofu apply 관련'` 전부 **no match**, `tofu apply`·`cd x && tofu apply` 만 MATCH(명령 위치 앵커링이 의도대로 동작). 영향은 *"감시가 실제보다 일찍 시작된다"* 쪽이라 **안전한 방향**이고, 비용 정산에는 마커가 아니라 apply 로그의 실제 시각을 썼다. 🔑 **미루는 이유**: 하네스 동결 규칙 — 제품 작업이 이것 때문에 막힌 적이 없고, 틀린 방향이 보수적이다. 재현되면 그때 판다 |
+
 ---
 
 ## 이미 다른 곳에 기록된 것 (원장 중복 등재 안 함)

@@ -2129,3 +2129,137 @@ group: ecr-push-${{ github.ref }}-${{ github.event.inputs.service || 'core-api' 
 
 > 📌 하네스 동결 규칙의 해제 조건(*"제품 작업이 실제로 차단되면 그 PR 안에서 최소한으로 고친다"*)에
 > 해당한다 — 이론적 구멍이 아니라 **지금 Stage C 준비를 실제로 막았다.** 수정은 한 줄.
+
+## 2026-08-31 — Stage C 3서비스 배포 세션 (유료)
+
+### [비용] 세션 시작 — 2026-08-31 14:56:18 KST
+
+`tofu plan` = **29 to add / 0 to change / 0 to destroy** (순증만, 영속 EBS `vol-0518b6d0dcd2b0d70` 재사용).
+
+| 항목 | 요율 | 비고 |
+|---|---|---|
+| EKS 컨트롤플레인 1.36 | **$0.10/h** | 세션 비용의 67% — "빨리 끄자" 가 유일한 큰 레버 |
+| 노드그룹 t4g.medium ×1 (AL2023_ARM_64) | ~$0.042/h | D-009 상향(small→medium), 파드 슬롯 11→17 |
+| Secrets Manager ×3 | $0.40/월 프로레이트 | `recovery_window_in_days = 0` → destroy 시 즉시 소멸 |
+| IAM·OIDC·애드온 4종·자체서명 TLS | $0 | |
+
+합계 **~$0.149/h**. 목표 왕복 40~50분 ≈ **$0.12**. 누적 $0.481/$200 (0.24%).
+
+**이 세션의 목표** (Stage C 완료 기준):
+1. 3서비스(core-api·ai-api·daily-api) 동시 기동 — 파드·메모리 둘 다 들어가는지
+2. NetworkPolicy **차단/허용 쌍** 검증 — "생성됐다" 가 아니라 실제로 막는지
+3. daily-api → ai-api e2e — 응답에 `[STUB]` 표식
+4. 🔑 **노드 `Allocatable.memory` 실측** — 레포 기록 0건. C-4 의 메모리 벽 판정이 전부 추정이었다
+
+### [막힘] 노드가 뜨지 않는다 — **계정 Free Tier 플랜이 인스턴스 타입을 제한한다**
+
+노드그룹이 10분 넘게 `CREATING`(07-28 실측은 2m48s). `health.issues` 는 **비어 있고**,
+ASG 는 `desired=1` 인데 `Instances: []`. 즉 EKS 층에는 아무 증상이 없다 — **ASG 활동 로그에만 있다.**
+
+```
+$ aws autoscaling describe-scaling-activities --auto-scaling-group-name eks-devquest-eks-ng-...
+StatusCode: Failed   (5회 연속: 06:35 / 06:36 / 06:38 / 06:42 / 06:50 UTC)
+"Could not launch On-Demand Instances. InvalidParameterCombination -
+ The specified instance type is not eligible for Free Tier."
+```
+
+🔴 **D-009(t4g.small → t4g.medium 상향)의 전제가 틀렸다.** 결정할 때 **시간당 단가와 파드 슬롯 공식**은
+따졌지만 **계정이 그 타입을 띄울 수 있는지**를 확인하지 않았다. 이 계정은 신 Free Tier 플랜이라
+`free-tier-eligible=true` 인 타입만 launch 가 허용된다.
+
+```
+$ aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true
+arch     mem      type              vcpu
+arm64    2048     t4g.small         2      ← arm64 상한
+arm64    1024     t4g.micro         2
+x86_64   2048     t3.small          2
+x86_64   1024     t3.micro          2
+x86_64   4096     c7i-flex.large    2
+x86_64   8192     m7i-flex.large    2      ← 최대
+```
+
+**arm64 는 2 GiB 가 상한이다.** 그 이상은 전부 x86_64 → 우리 이미지는 전부 arm64 로 구워져 있어
+(`runs-on: ubuntu-24.04-arm`, `ami_type = AL2023_ARM_64_STANDARD`) **재빌드 없이는 못 쓴다.**
+
+⚠️ **진단이 EKS 층에 안 보인다는 점이 이 실패의 진짜 교훈이다.** `describe-nodegroup` 의
+`health.issues` 가 비어 있어 "그냥 느린 것" 과 구별되지 않았다. 다음부터 노드가 안 뜨면
+**ASG 활동 로그를 먼저** 본다.
+
+### [해결] t4g.small 로 재적용 성공 — 그리고 **C-4 의 메모리 벽이 실측으로 확정됐다**
+
+`tofu apply -var node_instance_type=t4g.small` → `Apply complete! 3 added, 0 changed, 1 destroyed.`
+노드그룹 destroy 6m50s + create ~2m. 노드 `Ready`, AL2023 aarch64, containerd 2.2.5, v1.36.3-eks.
+
+🔑 **레포 기록이 0건이던 `Allocatable` 을 드디어 쟀다** (`kubectl get node -o json`):
+
+| t4g.small | capacity | allocatable | 차이 |
+|---|---|---|---|
+| memory | **1885252Ki** (1841Mi) | **1397828Ki (1365Mi)** | **-476Mi (26%)** |
+| cpu | 2 | 1930m | -70m |
+| pods | 11 | 11 | 0 |
+
+> ⚠️ **공칭 2 GiB 가 아니라 1841Mi 가 capacity 다** (커널·펌웨어 예약). 거기서 kubelet/system
+> 예약이 **476Mi(26%)** 를 더 떼간다. "2 GiB 노드" 라는 말에서 출발해 추정하면 **500Mi 가까이 과대평가**하게 된다.
+
+여기에 시스템 파드의 requests 가 이미 들어가 있다 (`kubectl describe node`):
+
+```
+memory   406Mi (29%)   limits 1802Mi (132%)      ← aws-node, coredns, ebs-csi-controller, ebs-csi-node, kube-proxy
+cpu      340m (17%)
+```
+
+**따라서 우리 워크로드가 쓸 수 있는 것은 1365 - 406 = 959Mi 다.**
+
+| 필요 (매니페스트 실측) | |
+|---|---|
+| postgres 256Mi + core-api 512Mi + ai-api 512Mi + daily-api 512Mi | **1792Mi** |
+| 가용 | **959Mi** |
+| **부족** | **-833Mi** |
+
+🔴 **결론: t4g.small 에 3 JVM + postgres 는 들어가지 않는다. 추정이 아니라 산술이다.**
+현재 requests 로는 **앱 1개 + postgres(768Mi)** 가 상한이고, **앱 2개면 1280Mi 로 이미 초과**한다.
+(Stage 3b 가 core-api 하나만 띄웠던 것이 우연이 아니었다.)
+
+**파드 슬롯은 제약이 아니었다** — 11칸 중 5칸 사용, 6칸 여유. 필요한 건 4칸. CPU 도 1590m 여유.
+C-4 가 *"메모리가 먼저 막는다"* 고 본 것은 맞았고, 이제 숫자가 붙었다.
+
+📌 **D-009(t4g.medium) 는 옳은 방향이었으나 실행 불가능한 수단이었다.** 필요한 것은
+**free-tier-eligible 하면서 메모리가 큰 타입** = `c7i-flex.large`(4 GiB) 또는 `m7i-flex.large`(8 GiB),
+**둘 다 x86_64** → 이미지 재빌드(현재 전부 arm64)가 선행 조건.
+
+### [비용] 세션 종결 — destroy 16:20:45, **29 destroyed**
+
+| 구간 | 시각 | 소요 |
+|---|---|---|
+| 1차 apply (t4g.medium) | 15:28:49 ~ | 컨트롤플레인 6m1s ACTIVE, **노드그룹은 끝내 안 뜸** |
+| 진단 + 사용자 결정 | ~16:00 | ASG 활동 로그에서 Free Tier 제한 확인 |
+| 2차 apply (t4g.small) | 16:00:55 ~ 16:10:5x | 노드그룹 destroy 6m50s + create ~2m, 애드온 4/4 |
+| 측정·판정 | ~16:13 | Allocatable 실측 → 3서비스 불가 확정 |
+| destroy | 16:14:13 ~ 16:20:45 | **6m32s**, 29 destroyed |
+
+**총 과금 51m56s × $0.149/h ≈ $0.129.** 누적 $0.481 → **약 $0.61/$200** (0.31%).
+
+**고아 전수 검증 = 전 항목 0건** (tofu state 0 · EKS 0 · ELB 0 · NAT 0 · 고아 EBS 0 · RDS 0 ·
+Secrets Manager 0(삭제대기 포함) · EC2 0).
+**영속 인벤토리 대조 = 일치** — `vol-0518b6d0dcd2b0d70` 10 GiB `ap-northeast-2a` `available` 1개,
+`PERSISTENT-RESOURCES.md` 의 *"정확히 1개"* 와 부합.
+
+### [메모] 세션 마커 타임스탬프가 설명되지 않는다 (미해결, 안전한 방향)
+
+1차 apply(15:28:49) 시점에 마커의 `applied_at_h` 가 **14:56:23** 이었다 — 32분 이르다.
+2차 apply(16:00:55)에서는 `16:00:50` 으로 정확했다(PreToolUse 가 명령 직전에 도는 것과 일치).
+
+훅 정규식을 직접 시험해 `init`·`plan` 오탐 가능성은 **배제**했다:
+
+```
+tofu init …                    no
+tofu plan …                    no
+tofu apply -auto-approve       MATCH
+cd x && tofu apply             MATCH
+git commit -m 'tofu apply 관련'  no      ← 명령 위치 앵커링이 의도대로 동작
+tofu destroy …                 no
+```
+
+→ **원인 미상.** 추측으로 메우지 않는다(이 레포는 근거 없는 정정으로 데인 전례가 있다 — SOP §1 참조).
+영향은 *"감시가 실제보다 일찍 시작된다"* 쪽이라 **안전한 방향**이고, 비용 정산에는 마커가 아니라
+apply 로그의 실제 시각을 썼다. 원장 **L-42** 로 남긴다.
