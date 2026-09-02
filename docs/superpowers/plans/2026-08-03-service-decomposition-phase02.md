@@ -160,7 +160,7 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 
 ### G-5 → 노드는 **t4g.medium 으로 상향** (2026-08-28)
 
-> 📌 **D-009** · 상태 `✅유효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `k8s/base/core-api.yaml`, `docs/eks-migration-log.md`, Stage C
+> 📌 **D-009** · 상태 `❌폐기` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `k8s/base/core-api.yaml`, `docs/eks-migration-log.md`, Stage C · 재판정 `D-010 (2026-08-31 유료 세션 실측 — 계정이 t4g.medium 을 launch 하지 못한다)`
 
 **`node_instance_type` 을 `t4g.small` → `t4g.medium` 으로 올린다.** 노드 대수는 1대 유지.
 
@@ -180,6 +180,108 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 🔑 **`addons.tf` 의 자기 규율은 여전히 유효하다** — *"노드를 2대 이상으로 늘리면 coredns 를 2로 되돌릴 것"*. 이 결정은 **1대를 유지**하므로 `replicaCount=1` 을 그대로 둔다.
 
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
+
+
+> 📌 **D-010** · 상태 `✅유효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `.github/workflows/ecr-push.yml`, `docs/eks-migration-log.md`, Stage C
+
+**`node_instance_type` 을 `t4g.small` 로 되돌린다.** D-009(medium 상향)를 폐기한다.
+
+**왜 — D-009 는 방향은 옳았으나 실행 불가능한 수단이었다.** 단가와 파드 공식은 맞게 따졌는데
+**계정이 그 타입을 띄울 수 있는지**를 확인하지 않았다. 이 계정은 신 Free Tier 플랜이라
+`free-tier-eligible=true` 인 타입만 launch 가 허용된다. 2026-08-31 유료 세션에서 apply 가
+노드 없이 10분간 매달렸고, 원인은 **ASG 활동 로그에만** 있었다:
+
+```
+StatusCode: Failed (5회) — "InvalidParameterCombination -
+  The specified instance type is not eligible for Free Tier."
+```
+
+🔴 **`describe-nodegroup` 의 `health.issues` 는 빈 배열이었다** — EKS 층에서는 "그냥 느린 것" 과
+구별되지 않는다. 노드가 안 뜨면 **ASG 활동 로그를 먼저 본다.**
+
+**free-tier-eligible 전수** (`aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true`):
+
+| arch | 타입 | 메모리 |
+|---|---|---|
+| arm64 | t4g.micro / **t4g.small** | 1024 / **2048 MiB** ← arm64 상한 |
+| x86_64 | t3.micro / t3.small / c7i-flex.large / **m7i-flex.large** | 1024 / 2048 / 4096 / **8192 MiB** |
+
+→ **메모리를 늘리려면 x86_64 로 가야 하고, 그러면 이미지 재빌드가 선행 조건이다**
+(현재 전부 arm64: `runs-on: ubuntu-24.04-arm`, `ami_type = AL2023_ARM_64_STANDARD`).
+
+**📏 Allocatable 실측 — C-4 가 "미확인" 으로 남겨뒀던 값** (`kubectl get node -o json`, t4g.small):
+
+| | capacity | allocatable | 차이 |
+|---|---|---|---|
+| memory | **1885252Ki (1841Mi)** | **1397828Ki (1365Mi)** | **-476Mi (26%)** |
+| cpu | 2 | 1930m | -70m |
+| pods | 11 | 11 | 0 |
+
+⚠️ **공칭 2 GiB 가 아니라 capacity 부터 1841Mi** 다(커널·펌웨어 예약). "2 GiB 노드" 에서 출발해
+추정하면 500Mi 가까이 과대평가한다. 시스템 파드 requests 가 이미 **406Mi(29%)** 를 점유
+(aws-node·coredns·ebs-csi×2·kube-proxy) → **가용 959Mi**, 필요 **1792Mi**, **-833Mi 부족.**
+
+🔴 **t4g.small 은 앱 1개 + postgres(768Mi)가 상한이다.** 앱 2개만 돼도 1280Mi 로 초과한다.
+**파드 슬롯은 제약이 아니었다** — 11칸 중 5칸 사용, 6칸 여유(필요 4칸). CPU 도 1590m 여유.
+C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었다.
+
+**왜 기본값을 medium 으로 남겨두지 않는가**: medium 은 이 계정에서 **launch 자체가 안 된다.**
+띄울 수 없는 값을 기본값으로 두면 다음 사람이 같은 벽에 부딪히며 **과금 중에** 시간을 태운다.
+
+**🔴 Stage C 재개 경로 — 정정 (2026-08-31, 사용자 지적으로 발견).**
+
+**1순위: 노드 2대 (`-var node_desired_size=2`). x86 전환보다 먼저 시도한다.**
+
+기존 서술은 *"x86 으로 가야 한다"* 였는데 **D-009 의 '노드 2대' 기각 사유를 재검토하지 않은 결과였다.**
+그 사유 셋 중 둘이 이미 썩어 있었다:
+
+| D-009 의 기각 사유 | 지금 |
+|---|---|
+| *"비용 +$0.026/h 로 medium(+$0.021 **추정**)보다 비싸다"* | 🔴 **무효.** medium 을 실측하니 `$0.0416/h` = small 의 **정확히 2배** → `2 × small = 1 × medium` **동일 비용**. 추정이 실측으로 바뀐 순간 이 문장은 거짓이 됐는데 **아무도 기각 사유로 돌아가지 않았다** (CLAUDE.md 의 *"일지에 적어뒀으니 됐어"* 전형) |
+| *"파드당 512Mi 메모리 벽은 그대로"* | 🟡 **논점 이탈.** 스케일 아웃이 푸는 것은 **총량**이다. 파드 하나(512Mi)는 어차피 한 노드(959Mi)에 들어간다 |
+| *"단일 AZ 라 가용성 이득 없음"* | ✅ 유효. 다만 학습 클러스터에서 가용성은 목표가 아니다 |
+
+**용량 계산** (필요 1792Mi):
+
+| | allocatable | 시스템 파드 | 가용 |
+|---|---|---|---|
+| 노드 A | 1365Mi | **406Mi 실측** (DaemonSet 3 + coredns + ebs-csi-controller) | **959Mi** |
+| 노드 B | 1365Mi | DaemonSet 3개만 | **~1179Mi** 🟡 추정 |
+
+배치: A = `core-api + postgres` 768Mi · B = `ai-api + daily-api` 1024Mi.
+
+> 🟡 **[미확인 — 다음 세션 필수 측정]**: 406Mi 의 **DaemonSet 몫 ÷ Deployment 몫 분리를 안 쟀다.**
+> 노드 B 가 1024Mi 를 받으려면 Deployment(coredns·ebs-csi-controller) 몫이 **≥65Mi** 여야 한다.
+> coredns 하나가 보통 100Mi 라 여유는 있어 보이나 **추정이다.**
+> → `kubectl get pods -A -o json` 으로 파드별 requests 를 쪼개서 기록할 것.
+>
+> ⚠️ `addons.tf` 의 자기 규율(*"노드 2대 이상이면 coredns 를 2 로"*)을 지키면 노드 B 가
+> **~1079Mi** 로 줄어든다. 1024Mi 는 들어가지만 여유가 **55Mi** 뿐이다.
+>
+> 🔑 `node_max_size` 는 **이미 2** 다(`variables.tf:102`). desired 만 바꾸면 된다 — 한 줄.
+
+🔴 **착수 전 필수 — 위 배치는 지금 아무것도 강제하지 않는다 (QA F-4/F-5, 원장 L-43)**
+
+위 용량 계산은 *노드A = core-api+postgres · 노드B = ai-api+daily-api* 를 전제하는데,
+그렇게 붙잡아 두는 **`nodeSelector`·`podAntiAffinity` 가 어디에도 없다.**
+postgres 의 `nodeAffinity` 는 **AZ 단위**(`topology.kubernetes.io/zone`)라 노드를 고르지 못하고,
+두 노드가 같은 AZ 에 뜨므로 **둘 다 통과시킨다.**
+
+기본 스케줄러가 `core-api + ai-api` 를 같은 노드에 얹으면 **1024Mi > 959Mi 로 즉시 초과**다.
+
+⚠️ **진짜 위험은 실패가 아니라 오귀속이다** — 배치가 어긋나 터지면 증상이 *"용량 부족"* 으로 보여
+추정치(노드 B ~1179Mi)를 의심하게 되고 엉뚱한 곳을 판다. **과금 중에.**
+
+> 📌 이 경고가 **여기** 있어야 하는 이유: 위 재개 절차는 `-var node_desired_size=2` **CLI 플래그**를
+> 안내하므로, 그대로 따르면 `variables.tf` 를 **열지 않고도** 적용된다. 경고가 그 파일에만 있으면
+> 정확히 이 경로에서 놓친다. (실제로 원장 L-43 이 *"세 곳에 남겼다"* 고 적었으나 **여기엔 없었다** —
+> 개수를 세지 않고 주장한 결과다. QA F-5 에서 적발.)
+
+**2순위 (1순위가 실패하면): x86 전환** — ①~③ 은 전부 $0 구간에서 끝낸 뒤 apply
+① `ecr-push.yml` `runs-on` → x86 러너, 이미지 3개 재빌드 ② `nodes.tf` `ami_type` → `AL2023_x86_64_STANDARD`
+③ `node_instance_type` → `c7i-flex.large`(4 GiB) 또는 `m7i-flex.large`(8 GiB)
+⚠️ 비용이 2 × t4g.small 의 2배 이상이고 arm64 를 잃는다. **먼저 쓸 카드가 아니다.**
+
 
 > 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-domain/src/main/kotlin/com/devquest/core/domain/port/DailyQuestionGeneratorPort.kt`, `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
 
@@ -377,7 +479,7 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | **C-1** | ✅ **해소 (2026-08-28, #397)** — ~~🔴 daily-api 에 헬스 엔드포인트가 없다.** actuator 의존 0건이고 전이 경로도 없다(`daily-core`→starter+tx, `client-ai-http`→restclient+jackson, `db-core`→data-jpa+json). `core-api.yaml` 을 복제하면 startupProbe 30회 실패 후 컨테이너가 죽는다 | `be/core/daily-api/build.gradle.kts` | **BE 코드 변경 + 이미지 재빌드** |
 | **C-2** | ✅ **해소 — D-008 (스텁으로 대체)**. ~~🔴 `ANTHROPIC_API_KEY` 가 인프라 어디에도 없다.~~ `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐. `client-ai-anthropic.yml` 은 `${ANTHROPIC_API_KEY:}`(빈 기본값)이라 **부팅은 성공하고 AI 호출 시점에 실패**한다 — CrashLoop 가 아니라 런타임 실패라 진단이 늦다 | `infra/aws-eks/2-cluster/secrets.tf`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml` | **결정 필요** (아래 ⚠️) |
 | **C-3** | ✅ **해소 (2026-08-30, #399)** — ECR 레포 `devquest/daily-api` 생성 확인(`Apply complete! 2 added`), `ecr-push.yml` `options` 에 추가. ~~🔴 daily-api ECR 레포 부재 + 빌드 경로 없음.** `ecr_repositories` 기본값이 `["core-api","ai-api"]` 이고 `terraform.tfvars` 에 override 가 없다. `ecr-push.yml` 은 `options` 에 daily-api 가 없고, **PR 트리거엔 `inputs` 가 없어 항상 `core-api` 로 폴백**한다 | `infra/aws-eks/0-bootstrap/variables.tf`, `.github/workflows/ecr-push.yml` | 인프라 + 워크플로 |
-| **C-4** | ✅ **해소 (2026-08-31, #400)** — D-009 (t4g.medium 상향, `variables.tf` 반영 완료). ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
+| **C-4** | 🔴 **재개봉 (2026-08-31 실측) — 해소가 아니었다.** ~~✅ 해소 (#400) — D-009 (t4g.medium 상향)~~ → **D-009 가 폐기됐다**(계정 Free Tier 플랜이 medium 을 launch 하지 못한다 → D-010). 🔑 **메모리 벽이 실측으로 확정**: allocatable **1365Mi** − 시스템 파드 **406Mi** = **가용 959Mi** vs 필요 **1792Mi** → **-833Mi**. t4g.small 은 **앱 1개 + postgres 가 상한**. **파드 슬롯은 제약이 아니었다**(11칸 중 6칸 여유, 필요 4칸) — 아래 파드 계산은 맞았지만 **막은 것은 메모리 하나**다. 해소 경로 = D-010 의 x86 전환 3단계. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
 | **C-5** | ✅ **해소 (2026-08-31)** — ①vpc-cni `enableNetworkPolicy = "true"`(#402, 스키마 실측: **문자열**) ②`k8s/base/networkpolicy-ai-api.yaml` 신설 — `ai-api` 에 `core-api`·`daily-api` 만, **ingress-only**, `namespace: default` 명시, TCP/8081 로 포트 제한. 🔑 **fail-open 3경로를 ruby YAML 파싱으로 기계 검증**: 정책 `podSelector` ↔ `ai-api.yaml` 의 **template 레이블** 일치 · `namespace` 명시 · `egress` 키 부재. ⚠️ **"막는다"의 증명은 아직 없다** — 클러스터가 떠야 한다. 차단/허용 쌍 검증 절차를 `k8s/README.md §4.1` 과 매니페스트 주석에 적어뒀다(파드 슬롯 0 소모 — 임시 파드 대신 `postgres-0` 에 exec) | `2-cluster/addons.tf`, `k8s/base/networkpolicy-ai-api.yaml` | 해소 |
 | **C-6** | ✅ **해소 — 충돌이 아니라 범위 차이였다 (2026-08-28 판정).** `k8s/README.md` 의 Ingress 금지와 설계 `:213` 의 *"3 Deployment + Ingress 라우팅"* 은 **다른 것의 완료 조건**이다 — 전자는 **Stage C**, 후자는 **에픽 전체**. Stage C 완료 기준(`:58`)은 Ingress 를 요구하지 않는다. → **Stage C 는 `kubectl port-forward` 로 e2e 를 검증하고, Ingress 는 Phase 3 로 남긴다.** 비용 규율(destroy 후 ALB 잔존 과금)이 학습 단계에서 우선한다 | `k8s/README.md`, `specs/...design.md:205,213` | 판정 완료 |
 
@@ -387,6 +489,9 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 |---|---|---|---|
 | **C-7** | ✅ **해소 (2026-08-31, #403)** — `/health`(상수, `text/plain`) 컨트롤러 + `management.endpoint.health.group.readiness.include: **ping**` 추가. 🔑 **`daily-api` 의 `db,ping` 을 복사하면 안 된다는 것이 실측으로 확인됐다** — ai-api 는 `db-core` 미의존이라 `NoSuchHealthContributorException: Included health contributor 'db' in group 'readiness' does not exist` 로 **컨텍스트 로드 자체가 실패**한다(조용히 무시되는 게 아니다. QA 가 환경변수 오버라이드로 재현). ⚠️ **`application-prod.yml` 은 의도적으로 만들지 않았다** — ai-api 의 **유일한 실행 환경이 EKS 학습 클러스터**이고(Fly 는 core-api 만 배포), 거기서 `DEBUG` 로그는 결함이 아니라 **필요한 것**이다(3서비스 첫 기동의 유일한 관측 수단). 형식적 일관성을 위해 `INFO` 로 낮추는 파일을 만드는 것은 학습 목표에 역행한다. 🔑 재검토 트리거: ai-api 가 실제 배포 대상을 갖게 되면 즉시. 📌 남은 tech-debt 는 원장 **L-39**(readiness 가 liveness 와 등가 — Judge0 붙으면 인디케이터 추가) | `be/core/ai-api/src/main/{kotlin,resources}/` | 해소 |
 | **C-8** | ✅ **해소 (2026-08-31)** — `daily-api.yaml` 에 `DEVQUEST_AI_HTTP_BASE_URL=http://ai-api:8081` 주입. `DailyAiConfig` 의 기본값 `http://localhost:8081` 이 살아 있는데 daily-api 자신의 포트는 8082 라 **자기 자신을 호출**하게 되는 문제였다. ⚠️ 증상(연결 실패)이 **NetworkPolicy 차단과 구별되지 않아** 정책으로 오귀속되기 쉬운 자리 — 매니페스트 주석에 그 사실을 남겼다 | `k8s/base/daily-api.yaml` | 해소 |
+
+| **C-10** | 🔴→✅ **해소 (2026-08-31)** — **ECR 에 이미지가 3개 중 1개뿐이었다.** `ai-api`·`daily-api` 는 `describe-images` 가 **`None`** — 한 번도 구워진 적이 없다. 🔑 **C-3 이 이걸 못 잡은 이유**: C-3 의 합격 기준이 *"레포 생성 + `ecr-push.yml` options 추가"* 였는데 그건 **빌드 경로의 존재**이지 **이미지의 존재**가 아니다. 표에 그 구분이 없었다. 추가로 `core-api` 도 SOP §2b 판정이 🔴였다 — 태그 `ca0e0ef8…` 가 PR 머지 커밋이라 `git cat-file` 이 `could not get object info`(*"지금 도는 이미지가 어느 커밋인지"* 에 답 불가). → main 에서 3개 전부 재빌드. **합격 기준을 `describe-images` 출력 + 태그가 main 조상임으로 못박는다**: 실측 `core-api`·`ai-api`·`daily-api` 전부 `bd51e18f…` ✅. ⚠️ 부수 발견 = **워크플로 `concurrency` 결함**(아래) | ECR 실측, `.github/workflows/ecr-push.yml` | 해소 |
+| **C-11** | 🔴→✅ **해소 (2026-08-31)** — **main 에서 3개를 연달아 dispatch 하면 가운데 것이 조용히 취소된다.** `concurrency.group` 이 `ecr-push-${{ github.ref }}` 뿐이라 서비스가 키에 없다 → 셋 다 한 그룹. `cancel-in-progress: false` 는 **실행 중인 것**을 지키는 옵션이지 대기열을 지키지 않아, 새 run 이 오면 **대기 중 run 을 교체**한다. 실측: `33361787944` = `cancelled`, **job 0개·8초**(큐 단계 대체의 증거 — OIDC 거부·러너 부족이면 job 이 생성됐다 실패했을 것이므로 반증됨). 🔴 **위험한 건 실패 방식이다** — `cancelled` 는 `failure` 가 아니라 **CI 에 빨간불이 안 뜬다.** 이미지가 없는 줄 모르고 apply 하면 **과금 중에** `ImagePullBackOff` 를 디버깅하게 된다. → 그룹 키에 서비스를 넣었다(한 줄). ⚠️ `workflow_dispatch` 는 **main 의 정의**를 읽으므로 머지 후부터 유효 — 이번 세션은 **직렬 dispatch** 로 우회했다. 📌 하네스 동결 규칙의 해제 조건(*"제품 작업이 실제로 차단되면"*)에 해당 — 이론적 구멍이 아니라 지금 실제로 막았다 | `.github/workflows/ecr-push.yml` | 해소 |
 
 > 🔑 **C-7·C-8 이 위험한 이유는 실패가 NetworkPolicy 와 구별되지 않기 때문이다.**
 > 셋 다 증상이 *"파드가 죽거나 연결이 안 된다"* 로 같다. 같은 세션에 정책을 막 걸어놨다면

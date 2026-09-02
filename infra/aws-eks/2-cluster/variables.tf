@@ -17,38 +17,85 @@ variable "kubernetes_version" {
 }
 
 variable "node_instance_type" {
-  description = "노드 인스턴스 타입 (ARM Graviton)"
+  description = "노드 인스턴스 타입 (ARM Graviton). 🔴 free-tier-eligible 타입만 launch 가능한 계정이다"
   type        = string
 
-  # t4g.small → t4g.medium 상향 (결정 D-009 = 2026-08-28 / 이 파일 반영 = 2026-08-31, #400).
+  # 🔴 t4g.medium → t4g.small **되돌림** (2026-08-31 유료 세션 실측. D-009 정정 = D-010).
   #
-  # 왜: JVM 앱이 1개(core-api) → 3개(core-api·ai-api·daily-api)가 된다. small 로는 **파드도 메모리도**
-  #     모자란다. 파드 베이스라인 10/11(Stage 3b 의 coredns replicaCount=1 반영) → 2개 추가 시 12 > 11.
-  #     🔴 그리고 파드 상한보다 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가
-  #     `Insufficient memory, Too many pods` **둘 다**였다(docs/eks-migration-log.md).
-  #     requests 합 추정 1792Mi(512×3 + postgres 256) 는 small 물리 2048MiB 에 안 들어간다.
+  # **D-009(medium 상향)는 방향은 옳았으나 실행 불가능한 수단이었다.** 단가·파드공식은 맞게 따졌는데
+  # **계정이 그 타입을 띄울 수 있는지**를 확인하지 않았다. 이 계정은 신 Free Tier 플랜이라
+  # `free-tier-eligible=true` 인 타입만 launch 가 허용된다.
   #
-  # 기각: **노드 2대**(node_desired_size=2). 파드 슬롯만 풀고 **파드당 512Mi 메모리 벽은 그대로**다.
-  #     nodes.tf 가 subnet_ids 를 persistent_az **단일 AZ 로 핀**해 2대가 같은 AZ 에 뜨므로
-  #     가용성 이득도 없다. DaemonSet 3개가 새 노드 자리를 먼저 먹어 순증은 11이 아니라 8이고,
-  #     addons.tf 의 자기 규율("노드 2대 이상이면 coredns 를 2로 되돌릴 것")까지 따르면 7.
-  #     비용도 +$0.026/h 로 medium(+$0.0208/h)보다 **비싸다**.
+  # 실패는 EKS 층에 안 보였다 — `describe-nodegroup` 의 `health.issues` 가 **빈 배열**이라
+  # "그냥 느린 것"과 구별되지 않았고 10분을 태웠다. 증거는 **ASG 활동 로그에만** 있었다:
+  #   aws autoscaling describe-scaling-activities --auto-scaling-group-name eks-devquest-eks-ng-...
+  #   StatusCode: Failed (5회) — "InvalidParameterCombination - The specified instance type
+  #                              is not eligible for Free Tier."
+  # 👉 다음에 노드가 안 뜨면 **ASG 활동 로그를 먼저 본다.**
   #
-  # 📏 실측 (2026-08-31, AWS API 조회 — 클러스터 미가동, 무료):
-  #     aws ec2 describe-instance-types --instance-types t4g.small t4g.medium
-  #       t4g.small  : ENI 3 × IPv4 4 → 파드 3×(4-1)+2 = 11  · 2048 MiB
-  #       t4g.medium : ENI 3 × IPv4 6 → 파드 3×(6-1)+2 = 17  · 4096 MiB
-  #     ↑ small 의 11 이 기존 2회 실측과 일치 → **공식이 검증된 상태에서** medium 17 을 얻었다.
-  #     aws pricing get-products (Seoul, Linux, Shared, OnDemand):
-  #       t4g.small $0.0208/h · t4g.medium $0.0416/h (정확히 2배)
-  #     → 세션 총액 $0.13/h → **$0.149/h**. ⚠️ 일지의 "$0.16" 은 근거 미기재 추정이었고 $0.011 과다였다.
+  # 📏 free-tier-eligible 전수 (aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true):
+  #     arm64 : t4g.micro 1024 · **t4g.small 2048**            ← arm64 는 2 GiB 가 상한
+  #     x86_64: t3.micro 1024 · t3.small 2048 · c7i-flex.large 4096 · m7i-flex.large 8192
+  #   → **메모리를 늘리려면 x86_64 로 가야 하고, 그러면 이미지 재빌드가 선행 조건이다**
+  #     (현재 전부 arm64: ecr-push.yml `runs-on: ubuntu-24.04-arm`, nodes.tf `AL2023_ARM_64_STANDARD`).
   #
-  # ⚠️ 아직 미확인: 노드 `Allocatable.memory`(kube-reserved·eviction 제외 후 실제 가용량).
-  #     레포에 기록 0건이라 위 메모리 판정은 여전히 추정이다 — **다음 apply 세션에서
-  #     `kubectl describe node` 로 재고 이 주석과 원장을 갱신할 것.**
+  # 📏 **Allocatable 실측 (2026-08-31) — 이 주석이 "미확인"으로 남겨뒀던 바로 그 값이다:**
+  #     kubectl get node -o json → t4g.small
+  #       capacity    : memory 1885252Ki (1841Mi) · cpu 2    · pods 11
+  #       allocatable : memory 1397828Ki (1365Mi) · cpu 1930m · pods 11
+  #     ⚠️ 공칭 2 GiB 가 아니라 **capacity 부터 1841Mi** 다(커널·펌웨어 예약). 거기서 kubelet/system
+  #        예약이 **476Mi(26%)** 를 더 뗀다. "2 GiB 노드"에서 출발해 추정하면 500Mi 가까이 과대평가한다.
+  #     시스템 파드 requests 가 이미 406Mi(29%) 를 점유(aws-node·coredns·ebs-csi×2·kube-proxy).
+  #     → **우리 워크로드 가용 = 1365 - 406 = 959Mi.**
+  #        필요 = postgres 256 + 앱 512×3 = **1792Mi** → **-833Mi 부족.**
   #
-  # 🔑 노드는 **1대 유지**다. addons.tf 의 coredns replicaCount=1 규율은 그대로 둔다.
-  default = "t4g.medium"
+  # 🔴 결론(산술이지 추정이 아니다): t4g.small 은 **앱 1개 + postgres(768Mi)가 상한**이다.
+  #     앱 2개만 돼도 1280Mi 로 초과한다. Stage 3b 가 core-api 하나만 띄운 게 우연이 아니었다.
+  #     **파드 슬롯은 제약이 아니었다** — 11칸 중 5칸 사용, 6칸 여유. 필요한 건 4칸. CPU 도 1590m 여유.
+  #     C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었다.
+  #
+  # 🔑 **왜 기본값을 medium 이 아니라 small 로 두는가**: medium 은 이 계정에서 **launch 자체가 안 된다.**
+  #     띄울 수 없는 값을 기본값으로 두면 다음 사람이 같은 벽에 부딪히며 과금 중에 10분을 태운다.
+  #     "동작하는 값"을 기본으로 두고, 늘리는 경로는 아래 주석으로 안내한다.
+  #
+  # ~~기각: 노드 2대~~ → 🔴 **기각 철회 (2026-08-31)**. 아래 "재개 경로" 참조.
+  #     D-009 의 기각 사유 중 *"파드당 메모리 벽은 그대로"* 는 **논점 이탈**이었다
+  #     (스케일 아웃이 푸는 것은 총량이다). *"medium 보다 비싸다"* 는 실측으로 무효가 됐다.
+  #     남아 있는 유효한 사유는 *"단일 AZ 라 가용성 이득 없음"* 뿐인데, 학습 클러스터에서
+  #     가용성은 목표가 아니다. DaemonSet 3개가 새 노드 자리를 먼저 먹는 것은 사실이나
+  #     파드 슬롯은 애초에 제약이 아니었다(11칸 중 6칸 여유).
+  #
+  # ▶ 3서비스로 가려면 (Stage C 재개 경로) — 🔴 2026-08-31 정정
+  #
+  #   **1순위: 노드 2대.** `-var node_desired_size=2` 한 줄. 이 파일은 그대로 둔다.
+  #     `node_max_size` 는 이미 2 다(아래). ami_type 도 arm64 그대로 → **이미지 재빌드 불필요.**
+  #     비용 2×$0.0208 = $0.0416/h 로 medium 과 **동일**하다.
+  #     ⚠️ D-009 는 이 대안을 *"medium 보다 비싸다"* 며 기각했는데, 그건 medium 단가가
+  #        **추정**이던 시점의 문장이다. 실측하니 정확히 2배라 **두 방안의 비용이 같아졌고**,
+  #        그런데도 기각 사유로 돌아가지 않았다. 추정이 실측으로 바뀌면 그 추정에 기대던
+  #        결정을 **반드시 다시 열어볼 것.**
+  #     🟡 빠듯하다: 노드 B 가용 ~1179Mi 추정에 필요 1024Mi. coredns 를 2로 되돌리면 여유 55Mi.
+  #        [미확인] 406Mi 의 DaemonSet ÷ Deployment 분리 — 다음 세션에 반드시 쪼개서 잴 것.
+  #
+  #     🔴 **착수 전 필수 — 이 배치는 지금 아무것도 강제하지 않는다** (QA F-4, 원장 L-43):
+  #        위 용량 계산은 *노드A = core-api+postgres · 노드B = ai-api+daily-api* 를 전제하는데,
+  #        그렇게 붙잡아 두는 `nodeSelector`·`podAntiAffinity` 가 **어디에도 없다.**
+  #        postgres 의 nodeAffinity 는 **AZ 단위**(topology.kubernetes.io/zone)라 노드를 못 고른다 —
+  #        게다가 두 노드가 같은 AZ 에 뜨므로 그 제약은 둘 다 통과시킨다.
+  #        기본 스케줄러가 core-api+ai-api 를 같은 노드에 얹으면 **1024Mi > 959Mi 로 즉시 초과**다.
+  #        → 2대 경로를 시도하기 **전에** 배치 제약을 먼저 넣을 것. 안 그러면 스케줄러 운에 맡기는 것이고,
+  #          실패해도 원인이 "용량 부족" 으로 보여 추정치를 의심하게 된다(엉뚱한 곳을 판다).
+  #
+  #   **2순위(1순위 실패 시): x86 전환.** 비용 2배 이상 + arm64 상실 → 먼저 쓸 카드가 아니다.
+  #     ① ecr-push.yml `runs-on` → x86 러너, 이미지 3개 재빌드
+  #     ② nodes.tf `ami_type` → AL2023_x86_64_STANDARD
+  #     ③ 이 기본값 → c7i-flex.large(4 GiB) 또는 m7i-flex.large(8 GiB)
+  #     ④ ①~③ 은 전부 $0 구간에서 끝낸 뒤 apply 할 것
+  #
+  # 🔑 **현재 기본값은 1대**이고, 그래서 addons.tf 의 coredns replicaCount=1 규율이 유효하다.
+  #    ⚠️ 위 "1순위: 노드 2대" 를 실행하는 순간 그 규율의 전제가 깨진다 — addons.tf 가
+  #       *"노드 2대 이상이면 coredns 를 2 로 되돌릴 것"* 이라고 스스로 적어뒀다. 같이 볼 것.
+  default = "t4g.small"
 }
 
 variable "node_capacity_type" {
