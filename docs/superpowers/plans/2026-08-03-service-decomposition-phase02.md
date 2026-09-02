@@ -228,9 +228,42 @@ C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었�
 **왜 기본값을 medium 으로 남겨두지 않는가**: medium 은 이 계정에서 **launch 자체가 안 된다.**
 띄울 수 없는 값을 기본값으로 두면 다음 사람이 같은 벽에 부딪히며 **과금 중에** 시간을 태운다.
 
-**Stage C 재개 경로** (①~③ 은 전부 $0 구간에서 끝낸 뒤 apply):
+**🔴 Stage C 재개 경로 — 정정 (2026-08-31, 사용자 지적으로 발견).**
+
+**1순위: 노드 2대 (`-var node_desired_size=2`). x86 전환보다 먼저 시도한다.**
+
+기존 서술은 *"x86 으로 가야 한다"* 였는데 **D-009 의 '노드 2대' 기각 사유를 재검토하지 않은 결과였다.**
+그 사유 셋 중 둘이 이미 썩어 있었다:
+
+| D-009 의 기각 사유 | 지금 |
+|---|---|
+| *"비용 +$0.026/h 로 medium(+$0.021 **추정**)보다 비싸다"* | 🔴 **무효.** medium 을 실측하니 `$0.0416/h` = small 의 **정확히 2배** → `2 × small = 1 × medium` **동일 비용**. 추정이 실측으로 바뀐 순간 이 문장은 거짓이 됐는데 **아무도 기각 사유로 돌아가지 않았다** (CLAUDE.md 의 *"일지에 적어뒀으니 됐어"* 전형) |
+| *"파드당 512Mi 메모리 벽은 그대로"* | 🟡 **논점 이탈.** 스케일 아웃이 푸는 것은 **총량**이다. 파드 하나(512Mi)는 어차피 한 노드(959Mi)에 들어간다 |
+| *"단일 AZ 라 가용성 이득 없음"* | ✅ 유효. 다만 학습 클러스터에서 가용성은 목표가 아니다 |
+
+**용량 계산** (필요 1792Mi):
+
+| | allocatable | 시스템 파드 | 가용 |
+|---|---|---|---|
+| 노드 A | 1365Mi | **406Mi 실측** (DaemonSet 3 + coredns + ebs-csi-controller) | **959Mi** |
+| 노드 B | 1365Mi | DaemonSet 3개만 | **~1179Mi** 🟡 추정 |
+
+배치: A = `core-api + postgres` 768Mi · B = `ai-api + daily-api` 1024Mi.
+
+> 🟡 **[미확인 — 다음 세션 필수 측정]**: 406Mi 의 **DaemonSet 몫 ÷ Deployment 몫 분리를 안 쟀다.**
+> 노드 B 가 1024Mi 를 받으려면 Deployment(coredns·ebs-csi-controller) 몫이 **≥65Mi** 여야 한다.
+> coredns 하나가 보통 100Mi 라 여유는 있어 보이나 **추정이다.**
+> → `kubectl get pods -A -o json` 으로 파드별 requests 를 쪼개서 기록할 것.
+>
+> ⚠️ `addons.tf` 의 자기 규율(*"노드 2대 이상이면 coredns 를 2 로"*)을 지키면 노드 B 가
+> **~1079Mi** 로 줄어든다. 1024Mi 는 들어가지만 여유가 **55Mi** 뿐이다.
+>
+> 🔑 `node_max_size` 는 **이미 2** 다(`variables.tf:102`). desired 만 바꾸면 된다 — 한 줄.
+
+**2순위 (1순위가 실패하면): x86 전환** — ①~③ 은 전부 $0 구간에서 끝낸 뒤 apply
 ① `ecr-push.yml` `runs-on` → x86 러너, 이미지 3개 재빌드 ② `nodes.tf` `ami_type` → `AL2023_x86_64_STANDARD`
 ③ `node_instance_type` → `c7i-flex.large`(4 GiB) 또는 `m7i-flex.large`(8 GiB)
+⚠️ 비용이 2 × t4g.small 의 2배 이상이고 arm64 를 잃는다. **먼저 쓸 카드가 아니다.**
 
 
 > 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-domain/src/main/kotlin/com/devquest/core/domain/port/DailyQuestionGeneratorPort.kt`, `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
