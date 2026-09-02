@@ -260,6 +260,23 @@ C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었�
 >
 > 🔑 `node_max_size` 는 **이미 2** 다(`variables.tf:102`). desired 만 바꾸면 된다 — 한 줄.
 
+🔴 **착수 전 필수 — 위 배치는 지금 아무것도 강제하지 않는다 (QA F-4/F-5, 원장 L-43)**
+
+위 용량 계산은 *노드A = core-api+postgres · 노드B = ai-api+daily-api* 를 전제하는데,
+그렇게 붙잡아 두는 **`nodeSelector`·`podAntiAffinity` 가 어디에도 없다.**
+postgres 의 `nodeAffinity` 는 **AZ 단위**(`topology.kubernetes.io/zone`)라 노드를 고르지 못하고,
+두 노드가 같은 AZ 에 뜨므로 **둘 다 통과시킨다.**
+
+기본 스케줄러가 `core-api + ai-api` 를 같은 노드에 얹으면 **1024Mi > 959Mi 로 즉시 초과**다.
+
+⚠️ **진짜 위험은 실패가 아니라 오귀속이다** — 배치가 어긋나 터지면 증상이 *"용량 부족"* 으로 보여
+추정치(노드 B ~1179Mi)를 의심하게 되고 엉뚱한 곳을 판다. **과금 중에.**
+
+> 📌 이 경고가 **여기** 있어야 하는 이유: 위 재개 절차는 `-var node_desired_size=2` **CLI 플래그**를
+> 안내하므로, 그대로 따르면 `variables.tf` 를 **열지 않고도** 적용된다. 경고가 그 파일에만 있으면
+> 정확히 이 경로에서 놓친다. (실제로 원장 L-43 이 *"세 곳에 남겼다"* 고 적었으나 **여기엔 없었다** —
+> 개수를 세지 않고 주장한 결과다. QA F-5 에서 적발.)
+
 **2순위 (1순위가 실패하면): x86 전환** — ①~③ 은 전부 $0 구간에서 끝낸 뒤 apply
 ① `ecr-push.yml` `runs-on` → x86 러너, 이미지 3개 재빌드 ② `nodes.tf` `ami_type` → `AL2023_x86_64_STANDARD`
 ③ `node_instance_type` → `c7i-flex.large`(4 GiB) 또는 `m7i-flex.large`(8 GiB)
