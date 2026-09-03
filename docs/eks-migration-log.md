@@ -2312,9 +2312,12 @@ apply 로그의 실제 시각을 썼다. 원장 **L-42** 로 남긴다.
    2대: 512→A(959→447)  512→B(959→447)  세 번째 512 → 어느 쪽도 안 들어감  ✗ Pending
    3대: 512→A  512→B  512→C  256→아무 노드(각 447 여유)                    ✓
 
-② 낙관 (DaemonSet ≈ ebs-csi-node 120Mi → A 959 · B 1245, 합 2204)
+② 낙관 (DaemonSet ≈ ebs-csi-node 120Mi 🟡추정 → A 959 · B 1245, 합 2204)
+   🟡 120Mi 근거: ebs-csi-node 3컨테이너 × 40Mi. aws-node·kube-proxy 는 메모리 requests 없음 가정.
+      교차검증: 이 모델의 CPU 합 315m vs 실측 340m 로 근접. 메모리는 직접 미확인.
+      결론은 ① 비관 가정으로 냈으므로 이 추정이 틀려도 3대 판단은 안 바뀐다.
    2대: 스케줄 순서 의존.  pg→B, core-api→B, ai-api→A 순이면
-        daily-api 차례에 A 423 · B 477 → 둘 다 부족                        ✗ Pending
+        daily-api 차례에 A 447 · B 477 → 둘 다 부족                        ✗ Pending
    3대: ✓
 ```
 
