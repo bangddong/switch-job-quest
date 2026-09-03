@@ -19,7 +19,11 @@ spec:
   replicas: 1
 
   # core-api.yaml 과 같은 이유로 Recreate. RollingUpdate 는 maxSurge 만큼 **빈 파드 슬롯**을 요구하는데
-  # 이 노드는 슬롯이 유한하다(t4g.medium = 17). 여유가 있어도 롤아웃이 구조적으로 슬롯을 먹는 사실은 같다.
+  # 이 노드는 슬롯이 유한하다. 여유가 있어도 롤아웃이 구조적으로 슬롯을 먹는 사실은 같다.
+  # ~~(t4g.medium = 17)~~ 🔴 **D-009 잔재였다 (2026-09-03 정정, QA F-4).** 그 타입은 이 계정에서
+  #   launch 되지 않는다(D-010) → 노드는 t4g.small, 슬롯은 **노드당 11**. Stage C 재개는 **3대 = 33칸**
+  #   이고 총 15칸을 쓰므로 슬롯은 여유가 있다. 🔑 지금 Recreate 를 유지하는 이유는 슬롯이 아니라
+  #   **메모리**다 — RollingUpdate 는 새 파드(512Mi)를 먼저 띄우므로 노드 여유(비관 447Mi)에 안 들어간다.
   strategy:
     type: Recreate
 

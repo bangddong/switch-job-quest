@@ -16,7 +16,7 @@
 
 | 리소스 | 시작일 | 종료일 | 예상 비용 | 누적 소진 |
 |--------|--------|--------|----------|------------|
-| 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **$0.149/h** (t4g.medium 상향 후, 08-31 실측). 종전 t4g.small 기준 $0.13/h | |
+| 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **노드 1대 $0.128/h · 2대 $0.154/h · 3대 $0.180/h** (t4g.small `$0.0208/h` + 공인 IPv4 `$0.005/h` per node, pricing API 실측)<br>▸ ~~$0.149/h (t4g.medium 상향 후)~~ — **medium 은 이 계정에서 launch 불가**(D-010)<br>▸ 🔴 **Stage C 재개 = 3대** (D-011) → 50분 세션 ≈ **$0.150** | |
 | ECR `devquest/daily-api` (영속, 빈 레포) | 2026-08-30 | 없음 | **$0** (저장분만 $0.10/GB-월) | |
 | 🔴 **영속 EBS** `vol-0518b6d0dcd2b0d70` 10GiB gp3 | **2026-07-31** | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$1.0391 소진 / $200** (08-12 실측) |
 
@@ -2291,3 +2291,93 @@ apply 로그의 실제 시각을 썼다. 원장 **L-42** 로 남긴다.
 ⚠️ `addons.tf` 자기 규율(coredns→2)을 지키면 노드 B 여유가 **55Mi** 로 줄어든다.
 
 `node_max_size` 는 **이미 2** 라(`variables.tf:102`) `-var node_desired_size=2` 한 줄이면 된다.
+
+
+---
+
+## 2026-09-03 — Stage C 재개 경로 재검토 (무과금, $0)
+
+### [결정] 노드 **2대 → 3대**. 2대는 안전을 증명할 수 없다 (D-011)
+
+08-31 세션이 남긴 "재개 1순위 = 노드 2대" 를 착수 전에 산술로 검산했더니 **성립하지 않았다.**
+클러스터를 띄우지 않고 전부 $0 로 확인했다.
+
+**전제 (전부 기존 실측)**: 노드당 allocatable **1365Mi**, 시스템 파드 requests **406Mi**(1대 기준),
+필요 **1792Mi** = postgres 256 + 앱 512×3.
+
+406Mi 의 **DaemonSet ÷ Deployment 분리가 미측정**이므로 양극단을 모두 따졌다.
+
+```
+① 비관 (406Mi 전부가 노드당 DaemonSet → 모든 노드 여유 959Mi)
+   2대: 512→A(959→447)  512→B(959→447)  세 번째 512 → 어느 쪽도 안 들어감  ✗ Pending
+   3대: 512→A  512→B  512→C  256→아무 노드(각 447 여유)                    ✓
+
+② 낙관 (DaemonSet ≈ ebs-csi-node 120Mi 🟡추정 → A 959 · B 1245, 합 2204)
+   🟡 120Mi 근거: ebs-csi-node 3컨테이너 × 40Mi. aws-node·kube-proxy 는 메모리 requests 없음 가정.
+      교차검증: 이 모델의 CPU 합 315m vs 실측 340m 로 근접. 메모리는 직접 미확인.
+      결론은 ① 비관 가정으로 냈으므로 이 추정이 틀려도 3대 판단은 안 바뀐다.
+   2대: 스케줄 순서 의존.  pg→B, core-api→B, ai-api→A 순이면
+        daily-api 차례에 A 447 · B 477 → 둘 다 부족                        ✗ Pending
+   3대: ✓
+```
+
+🔴 **3대는 비관 가정에서도 성립한다 = 결론이 미측정 값에 의존하지 않는다.**
+2대는 어느 가정에서도 "안전하다" 를 말할 수 없다.
+
+**비용**: 노드 1대 = EC2 `$0.0208/h` + 공인 IPv4 `$0.005/h` = `$0.0258/h`.
+50분 세션 2대 $0.128 vs 3대 $0.150 → **차액 $0.021.**
+검증 불가능한 스케줄링 제약을 **과금 중에** 거는 것보다 2센트로 여유를 사는 쪽이 낫다.
+
+### [해결] D-010·L-43 의 오류 두 개
+
+| 종전 서술 | 실제 |
+|---|---|
+| *"core-api+ai-api 가 한 노드에 얹히면 1024Mi > 959Mi 로 **즉시 초과**"* | **틀렸다.** 스케줄러는 안 맞는 노드에 파드를 **놓지 않는다.** 증상은 OOM 이 아니라 `Pending / Insufficient memory`. 위험은 초과가 아니라 **조각화** — 총량은 남는데 512Mi 들어갈 연속 자리가 없다 |
+| *"`podAntiAffinity` 로 배치를 강제하면 해소"* | **불충분하다.** 앱을 tier 로 갈라도 **시스템 Deployment**(coredns ~70Mi + ebs-csi-controller ~240Mi)의 노드는 통제되지 않는다. 그 둘이 ai tier 노드에 앉으면 여유 935Mi < 1024Mi 로 **또 막힌다.** 노드를 진짜로 지정하려면 노드 라벨이 필요하고, 단일 노드그룹은 노드마다 다른 라벨을 못 주므로 **노드그룹을 쪼개야** 한다 |
+
+👉 3대로 가면 두 문제가 모두 사라진다. **원장 L-43 을 블로커 → 관찰 항목으로 강등.**
+
+### [막힘] 406Mi 분리 측정에 $0 경로가 **없다** (음성 결과)
+
+이 레포가 이미 성공한 기법(*"apply 전 `aws ... describe-*` 로 실물 조회"*)을 그대로 시도했다:
+
+```
+$ aws eks describe-addon-configuration --addon-name coredns \
+    --addon-version v1.14.3-eksbuild.14 --query configurationSchema
+  → $.definitions.Coredns.properties.resources = { "$ref": "#/definitions/Resources" }
+    $.definitions.Resources = { properties: { limits, requests } }
+```
+
+**스키마만 나오고 기본값은 없다.** `replicaCount` 는 `default`/`minimum` 이 스키마에 박혀 있어
+07-30 에 사전 조회가 통했지만, `resources` 는 그렇지 않다.
+→ **406Mi 분리는 클러스터가 떠야 잴 수 있다** (`kubectl get pods -A -o json`).
+D-011 이 이 값에 의존하지 않게 설계된 것이 다행이었다.
+
+### [메모] 부수 실측 2건
+
+**ESO 3파드는 requests 가 비어 있다.**
+
+```
+$ helm show values external-secrets/external-secrets --version 2.8.0 | grep -n 'resources: {}'
+  287:  resources: {}     # controller
+  732:  resources: {}     # webhook
+  934:  resources: {}     # cert-controller
+```
+
+→ 스케줄러 예산 기여 **0** 이라 위 산술은 안 바뀐다. 단 **BestEffort** QoS 라
+노드 메모리 압박 시 **가장 먼저 evict** 된다(기존 Secret 은 남으므로 실행 중 파드는 무사).
+파드 슬롯은 3칸 소비 — 3대 = 33칸 중 총 15칸 사용이라 여유 충분.
+
+⚠️ **ESO 는 tofu 가 아니라 helm 수동 설치**(`k8s/README.md`)라, 08-31 에 측정한 406Mi 에는
+**포함되지 않았다.** requests 가 0 이라 결과적으로 무해했지만, *"시스템 파드 406Mi"* 를
+**전부**로 읽으면 안 된다.
+
+**노드그룹은 단일 서브넷 고정** (`nodes.tf:28`, `persistent_az`) → 3대 모두 같은 AZ 에 뜬다.
+postgres 의 AZ `nodeAffinity` 는 세 노드를 모두 통과시키므로 추가 제약이 필요 없다.
+
+### [메모] *"2 × small = 1 × medium 동일 비용"* 은 🟡 부정확했다
+
+08-31 일지의 저 문장은 **공인 IPv4 를 빼먹었다.** 노드마다 $0.005/h 가 붙으므로
+`2×small = $0.0516/h` vs `1×medium = $0.0466/h` 로 **small 2대가 $0.005/h 비싸다.**
+medium 이 launch 되지 않으므로 실익 없는 정정이지만, **비용 비교에서 per-node 부대비용을
+빼먹는 습관**은 그대로 남아 있었다 — 3대 산정에는 반영했다.
