@@ -182,7 +182,7 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
 
-> 📌 **D-010** · 상태 `✅유효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `.github/workflows/ecr-push.yml`, `docs/eks-migration-log.md`, Stage C
+> 📌 **D-010** · 상태 `🔄부분무효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `.github/workflows/ecr-push.yml`, `docs/eks-migration-log.md`, Stage C · 재판정 `D-011 (2026-09-03 $0 산술 — 재개 경로가 노드 2대 → 3대. t4g.small 되돌림 자체는 유효)`
 
 **`node_instance_type` 을 `t4g.small` 로 되돌린다.** D-009(medium 상향)를 폐기한다.
 
@@ -230,7 +230,11 @@ C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었�
 
 **🔴 Stage C 재개 경로 — 정정 (2026-08-31, 사용자 지적으로 발견).**
 
-**1순위: 노드 2대 (`-var node_desired_size=2`). x86 전환보다 먼저 시도한다.**
+> 🔴 **아래 "1순위 = 노드 2대" 는 D-011 (2026-09-03) 로 대체됐다 — 지금 따라가지 말 것.**
+> 2대는 **비관 가정에서 Pending 이 증명된다.** 스케일 아웃이 옳다는 이 절의 결론은 유효하고,
+> 바뀐 것은 **대수(2 → 3)** 와 그 근거다. 아래 기각 사유 재검토 표는 여전히 유효한 기록이다.
+
+~~**1순위: 노드 2대 (`-var node_desired_size=2`). x86 전환보다 먼저 시도한다.**~~
 
 기존 서술은 *"x86 으로 가야 한다"* 였는데 **D-009 의 '노드 2대' 기각 사유를 재검토하지 않은 결과였다.**
 그 사유 셋 중 둘이 이미 썩어 있었다:
@@ -281,6 +285,56 @@ postgres 의 `nodeAffinity` 는 **AZ 단위**(`topology.kubernetes.io/zone`)라 
 ① `ecr-push.yml` `runs-on` → x86 러너, 이미지 3개 재빌드 ② `nodes.tf` `ami_type` → `AL2023_x86_64_STANDARD`
 ③ `node_instance_type` → `c7i-flex.large`(4 GiB) 또는 `m7i-flex.large`(8 GiB)
 ⚠️ 비용이 2 × t4g.small 의 2배 이상이고 arm64 를 잃는다. **먼저 쓸 카드가 아니다.**
+
+
+> 📌 **D-011** · 상태 `✅유효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `.claude/review-ledger.md`, `docs/eks-migration-log.md`, Stage C
+
+**Stage C 재개 경로를 노드 2대 → `-var node_desired_size=3` (3대)로 바꾼다.**
+`node_max_size` 기본값을 2 → 3 으로 올린다. `node_desired_size` 기본값은 **1 그대로** 두므로
+이 결정만으로는 비용이 늘지 않는다.
+
+**왜 — 2대는 "안전하다"를 증명할 수 없다.** 필요 1792Mi(postgres 256 + 앱 512×3),
+노드당 allocatable **1365Mi**(08-31 실측). 406Mi 의 **DaemonSet ÷ Deployment 분리가 미측정**이라
+양극단을 모두 따졌다:
+
+| 가정 | 노드당 여유 | 2대 | 3대 |
+|---|---|---|---|
+| **비관** — 406Mi 전부가 노드당 DaemonSet | 959Mi × N | 512→A(→447) · 512→B(→447) · **세 번째 512 가 어느 쪽도 안 들어감 → Pending** ✗ | 512→A · 512→B · 512→C · 256→아무 노드 ✓ |
+| **낙관** — DaemonSet ≈ ebs-csi-node 120Mi | A 959 · B 1245 (합 2204) | **스케줄 순서에 따라 갈린다.** 예: pg→B, core-api→B, ai-api→A 면 daily-api 차례에 A 423 · B 477 로 둘 다 부족 → Pending | ✓ |
+
+🔴 **핵심: 3대는 비관 가정에서도 성립한다** = 결론이 **미측정 값에 의존하지 않는다.**
+2대는 어느 가정에서도 안전을 말할 수 없다.
+
+**비용**: 노드 1대 = EC2 `$0.0208/h` + 공인 IPv4 `$0.005/h` = **`$0.0258/h`** (둘 다 pricing API 실측).
+50분 세션 기준 2대 $0.128 vs 3대 $0.150 → **차액 $0.021**.
+검증 불가능한 스케줄링 제약을 **과금 중에** 거는 것보다 2센트로 여유를 사는 쪽이 낫다.
+
+**🔑 D-010 이 틀렸던 것 두 가지** (둘 다 이번 $0 검토에서 드러났다):
+
+1. *"core-api+ai-api 가 한 노드에 얹히면 **1024Mi > 959Mi 로 즉시 초과**"* → **틀렸다.**
+   스케줄러는 **안 맞는 노드에 파드를 놓지 않는다.** 실제 증상은 OOM 이 아니라
+   `Pending / Insufficient memory` 이고, 위험은 초과가 아니라 **조각화**다
+   (총량은 남는데 512Mi 들어갈 연속 자리가 없는 상태).
+2. *"`nodeSelector`·`podAntiAffinity` 를 넣으면 해소"* → **불충분하다.**
+   앱을 tier 로 갈라도 **시스템 Deployment**(coredns ~70Mi + ebs-csi-controller ~240Mi)가
+   어느 노드에 앉을지는 통제되지 않는다. 그 둘이 ai tier 노드에 앉으면 여유가 935Mi 로 떨어져
+   1024Mi 가 **또 안 들어간다.** 노드를 진짜로 지정하려면 노드 라벨이 필요한데 단일 노드그룹은
+   노드마다 다른 라벨을 줄 수 없으므로 **노드그룹을 쪼개야** 한다 — 3대면 이 인프라 변경이 불필요하다.
+   → 원장 **L-43** 을 블로커에서 **관찰 항목**으로 강등한다.
+
+**📏 부수 실측 (2026-09-03, $0)**
+
+- `aws eks describe-addon-configuration` 은 애드온의 `resources` **스키마만** 노출하고
+  **기본값은 주지 않는다** → 406Mi 분리는 $0 경로가 **없다**(클러스터 필요). 음성 결과로 기록한다.
+- ESO 3파드는 requests 가 **비어 있다** (`helm show values external-secrets/external-secrets
+  --version 2.8.0` → `resources: {}` ×3). 스케줄러 예산은 **0** 이라 위 산술을 바꾸지 않지만,
+  **BestEffort** 라 노드 메모리 압박 시 **가장 먼저 evict** 된다. 파드 슬롯은 3칸 소비
+  (3대 = 33칸, 총 15칸 사용 → 여유 충분).
+- 노드그룹은 **단일 서브넷**(`persistent_az`)에 고정돼 있다(`nodes.tf:28`) → 3대 모두 같은 AZ.
+  postgres 의 AZ nodeAffinity 는 세 노드 모두를 통과시키므로 **추가 제약이 필요 없다.**
+
+🟡 **남은 미확인**: 406Mi 의 DaemonSet ÷ Deployment 분리(원장 L-43). 3대 결정은 이 값과
+무관하지만 coredns 실제 requests 등 다른 추정치를 확정해 준다. **다음 세션에 측정하되 블로커는 아니다.**
 
 
 > 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-domain/src/main/kotlin/com/devquest/core/domain/port/DailyQuestionGeneratorPort.kt`, `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
@@ -479,7 +533,7 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | **C-1** | ✅ **해소 (2026-08-28, #397)** — ~~🔴 daily-api 에 헬스 엔드포인트가 없다.** actuator 의존 0건이고 전이 경로도 없다(`daily-core`→starter+tx, `client-ai-http`→restclient+jackson, `db-core`→data-jpa+json). `core-api.yaml` 을 복제하면 startupProbe 30회 실패 후 컨테이너가 죽는다 | `be/core/daily-api/build.gradle.kts` | **BE 코드 변경 + 이미지 재빌드** |
 | **C-2** | ✅ **해소 — D-008 (스텁으로 대체)**. ~~🔴 `ANTHROPIC_API_KEY` 가 인프라 어디에도 없다.~~ `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐. `client-ai-anthropic.yml` 은 `${ANTHROPIC_API_KEY:}`(빈 기본값)이라 **부팅은 성공하고 AI 호출 시점에 실패**한다 — CrashLoop 가 아니라 런타임 실패라 진단이 늦다 | `infra/aws-eks/2-cluster/secrets.tf`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml` | **결정 필요** (아래 ⚠️) |
 | **C-3** | ✅ **해소 (2026-08-30, #399)** — ECR 레포 `devquest/daily-api` 생성 확인(`Apply complete! 2 added`), `ecr-push.yml` `options` 에 추가. ~~🔴 daily-api ECR 레포 부재 + 빌드 경로 없음.** `ecr_repositories` 기본값이 `["core-api","ai-api"]` 이고 `terraform.tfvars` 에 override 가 없다. `ecr-push.yml` 은 `options` 에 daily-api 가 없고, **PR 트리거엔 `inputs` 가 없어 항상 `core-api` 로 폴백**한다 | `infra/aws-eks/0-bootstrap/variables.tf`, `.github/workflows/ecr-push.yml` | 인프라 + 워크플로 |
-| **C-4** | 🔴 **재개봉 (2026-08-31 실측) — 해소가 아니었다.** ~~✅ 해소 (#400) — D-009 (t4g.medium 상향)~~ → **D-009 가 폐기됐다**(계정 Free Tier 플랜이 medium 을 launch 하지 못한다 → D-010). 🔑 **메모리 벽이 실측으로 확정**: allocatable **1365Mi** − 시스템 파드 **406Mi** = **가용 959Mi** vs 필요 **1792Mi** → **-833Mi**. t4g.small 은 **앱 1개 + postgres 가 상한**. **파드 슬롯은 제약이 아니었다**(11칸 중 6칸 여유, 필요 4칸) — 아래 파드 계산은 맞았지만 **막은 것은 메모리 하나**다. 해소 경로 = D-010 의 x86 전환 3단계. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
+| **C-4** | 🔴 **재개봉 (2026-08-31 실측) — 해소가 아니었다.** ~~✅ 해소 (#400) — D-009 (t4g.medium 상향)~~ → **D-009 가 폐기됐다**(계정 Free Tier 플랜이 medium 을 launch 하지 못한다 → D-010). 🔑 **메모리 벽이 실측으로 확정**: allocatable **1365Mi** − 시스템 파드 **406Mi** = **가용 959Mi** vs 필요 **1792Mi** → **-833Mi**. t4g.small 은 **앱 1개 + postgres 가 상한**. **파드 슬롯은 제약이 아니었다**(11칸 중 6칸 여유, 필요 4칸) — 아래 파드 계산은 맞았지만 **막은 것은 메모리 하나**다. ~~해소 경로 = D-010 의 x86 전환 3단계.~~ 🔴 **정정 (2026-09-03, D-011): 해소 경로 = `-var node_desired_size=3` (노드 3대).** x86 은 2순위다. 이 행이 x86 을 가리킨 것은 D-010 이 스스로 재개 경로를 "노드 2대 1순위" 로 고쳐 쓴 뒤에도 **갱신되지 않은 잔재**였다. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
 | **C-5** | ✅ **해소 (2026-08-31)** — ①vpc-cni `enableNetworkPolicy = "true"`(#402, 스키마 실측: **문자열**) ②`k8s/base/networkpolicy-ai-api.yaml` 신설 — `ai-api` 에 `core-api`·`daily-api` 만, **ingress-only**, `namespace: default` 명시, TCP/8081 로 포트 제한. 🔑 **fail-open 3경로를 ruby YAML 파싱으로 기계 검증**: 정책 `podSelector` ↔ `ai-api.yaml` 의 **template 레이블** 일치 · `namespace` 명시 · `egress` 키 부재. ⚠️ **"막는다"의 증명은 아직 없다** — 클러스터가 떠야 한다. 차단/허용 쌍 검증 절차를 `k8s/README.md §4.1` 과 매니페스트 주석에 적어뒀다(파드 슬롯 0 소모 — 임시 파드 대신 `postgres-0` 에 exec) | `2-cluster/addons.tf`, `k8s/base/networkpolicy-ai-api.yaml` | 해소 |
 | **C-6** | ✅ **해소 — 충돌이 아니라 범위 차이였다 (2026-08-28 판정).** `k8s/README.md` 의 Ingress 금지와 설계 `:213` 의 *"3 Deployment + Ingress 라우팅"* 은 **다른 것의 완료 조건**이다 — 전자는 **Stage C**, 후자는 **에픽 전체**. Stage C 완료 기준(`:58`)은 Ingress 를 요구하지 않는다. → **Stage C 는 `kubectl port-forward` 로 e2e 를 검증하고, Ingress 는 Phase 3 로 남긴다.** 비용 규율(destroy 후 ALB 잔존 과금)이 학습 단계에서 우선한다 | `k8s/README.md`, `specs/...design.md:205,213` | 판정 완료 |
 
@@ -520,14 +574,19 @@ Stage C 완료 기준(*"무로그인으로 오늘의 질문 → **AI 설명**까
 같은 파일이 **더미 Grafana 키를 넣었다가 실제 스택에 인증 시도가 새어나간 사고**를 기록해뒀다.
 → 계획서·설계서 어디에도 이 항목이 없다. **완료 기준을 좁히거나, 키 주입 방식을 정하거나 둘 중 하나다.**
 
-### 🟡 Stage C 착수 시 **실제로 재야 하는** 값 (레포에 기록 0건)
+### 🟡 Stage C 착수 시 **실제로 재야 하는** 값 — 🔄 2026-09-03 갱신 (4건 중 3건 해소)
 
-| 값 | 왜 | 명령 |
+| 값 | 상태 | 결과 / 남은 이유 |
 |---|---|---|
-| 노드 `Allocatable.memory` | C-4 의 메모리 벽 판정이 전부 **추정**이다 | `kubectl describe node` |
-| t4g.medium 온디맨드 단가 | 일지 `:1086` 의 *"$0.13→$0.16"* 은 **근거 미기재**. small $0.0208 의 2배로 계산하면 ≈$0.149/h 로 약 $0.01 어긋난다 | `aws ec2 describe-spot-price-history` 아님 — 온디맨드 가격표 API |
-| t4g.medium 파드 상한 | *"상한 17"* 도 근거 미기재. small 의 11 은 `describe-instance-types` 로 **2회 실측**했으나 medium 은 0건 | `aws ec2 describe-instance-types` |
-| ai-api·daily-api 의 힙·Metaspace 실사용 | Dockerfile 의 JVM 플래그는 **Fly 512MB 예산**에서 나왔고 실측 근거는 **core-api prod 하나뿐**(사용 42MB/커밋 117MB). 3서비스에 동일 적용된다 | 배포 후 `jcmd` / actuator metrics |
+| 노드 `Allocatable.memory` | ✅ **실측 (08-31)** | capacity 1841Mi / **allocatable 1365Mi** / pods 11. D-010 표 참조 |
+| t4g.medium 온디맨드 단가 | ✅ **실측 (08-31)** | `$0.0416/h` = small(`$0.0208`)의 **정확히 2배**. 일지 `:1086` 의 *"$0.13→$0.16"* 은 근거 없는 수치였다. 🔑 이 실측이 D-009 의 "노드 2대 기각" 을 무효화했는데 **그때 아무도 되돌아가지 않았다** |
+| t4g.medium 파드 상한 | ⚪ **무의미해짐** | 이 계정은 medium 을 **launch 하지 못한다**(D-010). 재지 않는다 |
+| ai-api·daily-api 힙·Metaspace 실사용 | 🔴 **여전히 0건** | Dockerfile JVM 플래그는 **Fly 512MB 예산**에서 나왔고 실측 근거는 core-api prod 하나뿐(사용 42MB/커밋 117MB). 3서비스에 그대로 복사돼 있다 → `requests: 512Mi` 의 근거가 없다. 배포 후 `jcmd` / actuator metrics |
+| **406Mi 의 DaemonSet ÷ Deployment 분리** | 🔴 **신규 (L-43)** | $0 경로 없음 — `describe-addon-configuration` 은 `resources` **스키마만** 주고 기본값을 안 준다(09-03 확인). 클러스터가 떠야 한다: `kubectl get pods -A -o json`. **D-011(3대) 결정은 이 값과 무관** — 블로커 아님 |
+
+> 🔑 **`requests: 512Mi` 자체가 근거 없는 수치**라는 점이 위 표에서 가장 큰 미확인이다.
+> 필요 총량 1792Mi 의 86% 가 이 값에서 나오므로, 실측 후 낮출 수 있다면 노드 대수 판단
+> (D-011)도 다시 열어야 한다. **다음 세션에서 3서비스가 뜨면 즉시 잴 것.**
 
 ---
 
