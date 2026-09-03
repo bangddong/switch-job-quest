@@ -2381,3 +2381,57 @@ postgres 의 AZ `nodeAffinity` 는 세 노드를 모두 통과시키므로 추�
 `2×small = $0.0516/h` vs `1×medium = $0.0466/h` 로 **small 2대가 $0.005/h 비싸다.**
 medium 이 launch 되지 않으므로 실익 없는 정정이지만, **비용 비교에서 per-node 부대비용을
 빼먹는 습관**은 그대로 남아 있었다 — 3대 산정에는 반영했다.
+
+---
+
+## 2026-09-03 — Stage C 2차 시도 (유료 세션, 노드 3대)
+
+### [메모] 세션 시작 — 사전 점검 전부 $0 에서 통과
+
+| 항목 | 결과 |
+|---|---|
+| 도구 | tofu · kubectl · aws · helm 존재 |
+| 자격증명 | `bootstrap-admin` |
+| K8s 1.36 | STANDARD_SUPPORT (2027-08-02) — `variables.tf` 핀과 일치 |
+| 크레딧 누적 | **$1.9043 / $200** (0.95%) — 7월 $0.4877 + 8월 $1.3652 + 9월 $0.0514 |
+| 리퍼 | `com.devquest.eks-reaper` 등록·정상 (dead man's switch 가동) |
+| 세션 마커 | 없음 = 미과금 상태에서 출발 |
+| 확보 시간 | **~65분** (사용자 확인) |
+
+**목표**: ①노드 3대로 3서비스 기동 ②daily-api → ai-api e2e ③**C-5 NetworkPolicy 차단/허용 쌍 검증**
+(여러 세션 미검증으로 남아 있던 것) ④미측정 2건 — 406Mi 의 DaemonSet÷Deployment 분리,
+`requests: 512Mi` 의 실사용.
+
+### [해결] ECR 이미지 재빌드 — SOP §2b 가 🔴 를 냈고, 처방대로 main 에서 다시 구웠다
+
+```
+$ SOP 2b 검사
+최신 태그: a9b3a49c51ae724c06bc62067511a8b48017aa1c
+🔴 재빌드 필요
+```
+
+원인은 **`pull_request` 컨텍스트의 `github.sha` 가 GitHub 이 만든 일회성 머지 커밋**이라는 것.
+`gh api …/commits/a9b3a49` → `Merge 74c2f843 into bd51e18f`. `git log` 로는 `fatal: bad object`.
+
+🔑 **이건 SOP §2b 가 이미 문서화해 둔 알려진 동작이었다** (PR #355 실측 인용까지 있다).
+그런데 나는 사전점검 중 이걸 **새 결함으로 판단해 원장 L-44 로 등재**했다 —
+*"이미 기록돼 있는지"* 를 찾아보지 않았다. SOP 는 CLAUDE.md 표에 *"과금 시작 전 반드시"* 로
+링크된 문서다. 👉 **교훈: 발견을 등재하기 전에 그 발견이 이미 있는지 먼저 검색한다.**
+(L-44 는 `latest` 서비스 간 불일치 관찰만 남고, 그것도 이 재빌드로 소멸 → `obsolete` 처리 예정)
+
+`workflow_dispatch` 3건을 main 에서 굽고 결과:
+
+```
+devquest/core-api : ['14cb335e66670470e674f0eb76d62e84ee76e0e5', 'latest']
+devquest/ai-api   : ['14cb335e66670470e674f0eb76d62e84ee76e0e5', 'latest']
+devquest/daily-api: ['14cb335e66670470e674f0eb76d62e84ee76e0e5', 'latest']
+→ SOP 2b 재검사 ✅ OK
+```
+
+📌 **#405 의 concurrency 수정이 실제로 동작했다** — 3건이 각자 별도 run 으로 완주했다.
+종전 키(`ref` 만)였다면 가운데(`ai-api`)가 큐에서 조용히 대체됐을 것이다(08-31 실측).
+**결함을 고친 뒤 그 고침이 duplicated 되는 것을 실제로 확인한 첫 사례다.**
+
+📌 세 이미지 모두 `arm64/linux` 확인 (config blob 의 `architecture` 직접 조회).
+노드 ami_type `AL2023_ARM_64_STANDARD` 와 일치 — x86 이미지였다면 과금 중에
+`exec format error` 를 디버깅했을 것이다.
