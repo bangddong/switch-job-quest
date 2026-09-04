@@ -10,7 +10,20 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || ec
 
 # `tofu apply`만 대상 (plan/destroy 제외). 명령 위치로 앵커링해 문자열 오탐 방지
 # (예: git commit -m "tofu apply 관련" 은 매칭 안 됨 — 명령 시작/구분자 뒤만 인정).
-echo "$COMMAND" | grep -qE "(^|[;&|(]|&&|\|\|)[[:space:]]*tofu[[:space:]]+apply" || exit 0
+#
+# 🔴 **래퍼를 허용한다 (2026-09-04, 유료 세션에서 실제로 뚫렸다).**
+#   종전 패턴은 구분자 뒤에 `tofu` 가 **바로** 와야 했다. 그래서
+#     … && nohup tofu apply -auto-approve plan.tfplan > log 2>&1 &
+#   가 매칭되지 않아 **마커 없이 apply 가 돌았다.** 실패 방향이 나쁘다 —
+#   apply 는 정상 진행하고 경고도 없이 **dead man's switch 만 조용히 꺼진다**
+#   (`eks-reaper.sh:55` 가 `[ -f "$MARKER" ] || exit 0` 이라 AWS 조회조차 안 한다).
+#   우회를 일으키는 접두사는 전부 흔한 관용구다: nohup · time · timeout N · env X=1 · stdbuf -oL.
+#   종전 회귀 테스트는 `cd x && tofu apply` 만 확인했고 **래퍼는 한 건도 없었다**(그래서 아래 케이스 추가).
+#
+#   허용 토큰(반복 가능): 래퍼 명령 · `timeout <N>` · `VAR=값` · `-옵션`
+#   ⚠️ 앵커(`^` 또는 구분자)는 **그대로 유지**한다 — 이걸 풀면 문자열 오탐이 돌아온다.
+WRAP='((nohup|time|stdbuf|command|exec|env)[[:space:]]+|timeout[[:space:]]+[0-9]+[smhd]?[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+|-[^[:space:]]+[[:space:]]+)*'
+echo "$COMMAND" | grep -qE "(^|[;&|(]|&&|\|\|)[[:space:]]*${WRAP}tofu[[:space:]]+apply" || exit 0
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 DIR="$ROOT/.claude/eks-session"

@@ -1,0 +1,21 @@
+1	tofu apply -auto-approve
+1	cd infra/aws-eks/2-cluster && tofu apply
+1	nohup tofu apply -auto-approve /tmp/p.tfplan > /tmp/a.log 2>&1 &
+1	date | tee /tmp/x && nohup tofu apply -auto-approve plan.tfplan > log 2>&1 &
+1	time tofu apply
+1	timeout 600 tofu apply -auto-approve
+1	timeout 30m tofu apply
+1	env TF_LOG=DEBUG tofu apply
+1	TF_LOG=DEBUG tofu apply
+1	stdbuf -oL tofu apply -no-color
+1	nohup env TF_LOG=INFO timeout 900 tofu apply -auto-approve &
+1	( tofu apply )
+1	foo; tofu apply
+1	a || tofu apply
+0	tofu plan
+0	tofu init
+0	tofu destroy -auto-approve
+0	git commit -m 'tofu apply 관련'
+0	echo "run tofu apply later"
+0	grep -rn "tofu apply" docs/
+0	kubectl get pods
