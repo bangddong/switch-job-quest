@@ -125,6 +125,41 @@ PY
   PASS=$((PASS+p)); FAIL=$((FAIL+f2))
 }
 
+# ── EKS 세션 마커 훅 ────────────────────────────────────────────────
+# 이 훅은 **절대 exit 1을 내지 않는다**(apply를 막으면 안 되므로) → run_txt로는 못 잰다.
+# 판정 신호는 종료코드가 아니라 **마커 파일이 생겼는가**다. exp=1 생성 · exp=0 미생성.
+#
+# 🔴 격리가 필수다: 훅은 `git rev-parse --show-toplevel`로 ROOT를 잡고 거기에 마커를 쓴다.
+#    이 레포에서 그냥 돌리면 **테스트가 진짜 마커를 만들어** 리퍼를 깨우고 lastcheck·
+#    state.cache를 지운다. 그래서 케이스마다 임시 git 레포를 만들어 그 안에서 실행한다.
+# 🔴 가짜 `aws`를 PATH 앞에 둔다: 훅 후반의 영속 볼륨 조회가 케이스마다 네트워크를 타면
+#    스위트가 느려지고(주석 규칙 ② "훅이 느리면 사람이 훅을 끈다") 결과가 자격증명 유무에 흔들린다.
+run_marker() {
+  local script="$ROOT/.claude/scripts/eks-session-marker.sh" file="$T/eks-marker-cases.txt"
+  local label="$1" p=0 f=0
+  [ -f "$script" ] && [ -f "$file" ] || { echo "  ⚠️  건너뜀 (eks-session-marker.sh 또는 케이스 없음)"; return; }
+  local sandbox; sandbox=$(mktemp -d)
+  mkdir -p "$sandbox/bin"
+  printf '#!/bin/sh\nexit 1\n' > "$sandbox/bin/aws"; chmod +x "$sandbox/bin/aws"
+  while IFS=$'\t' read -r exp raw note; do
+    [ -n "${raw:-}" ] || continue
+    local c repo got
+    c=$(printf '%b' "$raw")
+    repo=$(mktemp -d); ( cd "$repo" && git init -q . ) 2>/dev/null
+    ( cd "$repo" && PATH="$sandbox/bin:$PATH" \
+        python3 -c 'import json,sys;print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' "$c" \
+        | bash "$script" ) >/dev/null 2>&1
+    if [ -f "$repo/.claude/eks-session/active" ]; then got=1; else got=0; fi
+    rm -rf "$repo"
+    if [ "$got" = "$exp" ]; then p=$((p+1)); else
+      f=$((f+1)); printf '  \xe2\x9d\x8c %-28s exp=%s got=%s  %s\n' "eks-session-marker.sh" "$exp" "$got" "${note:-$c}"
+    fi
+  done < "$file"
+  rm -rf "$sandbox"
+  printf '  %-28s %2d/%d  %s\n' "eks-session-marker.sh" "$p" "$((p+f))" "$label"
+  PASS=$((PASS+p)); FAIL=$((FAIL+f))
+}
+
 run_json  assert-orchestrator-path.sh aop-cases.json      "에이전트 판별 · fail-closed"
 run_multi path-guard-cases.json                           "be/fe 경로 가드 · 상속 회귀 방지"
 run_txt  assert-qa-readonly.sh       qa-guard-cases.txt   "정상 리뷰 명령 + 우회 시도"
@@ -133,6 +168,7 @@ run_txt  assert-qa-readonly.sh       qa-cases3.txt        "따옴표 오탐(L-21
 run_txt  assert-qa-readonly.sh       qa-cases4.txt        "셸 키워드·ANSI-C 우회(F-1·F-9)"
 run_txt  assert-no-admin.sh          hook-cases.txt       "브랜치 보호 우회 경로"
 run_txt  assert-no-main-push.sh      push-guard-cases.txt "main push 차단 + heredoc 오탐"
+run_marker "세션 마커 생성 · 래퍼(nohup/time/timeout/env/stdbuf) 회귀"
 run_probes
 
 # 게이트 자체 테스트 — findings/원장을 임시로 바꿔치기하므로 별도 스크립트다.
@@ -153,7 +189,7 @@ echo
 #    ⚠️ 낮출 때는 반드시 **무엇을 지웠는지** 근거를 남긴다.
 #       08-17: qa-effect-guard.sh 삭제(배선된 적 없는 죽은 코드) → 9건 제거, 152 → 143.
 #       08-18: assert-no-main-push 오탐 회귀 케이스 6건 추가(L-29), 143 → 149.
-MIN_CASES=149
+MIN_CASES=173   # 149 + eks-marker-cases 24건 (2026-09-04)
 if [ "$((PASS+FAIL))" -lt "$MIN_CASES" ]; then
   echo "❌ 케이스 수가 줄었다: $((PASS+FAIL)) < ${MIN_CASES}"
   echo "   케이스 파일이 비었거나 러너 배선이 끊겼을 가능성이 높다."

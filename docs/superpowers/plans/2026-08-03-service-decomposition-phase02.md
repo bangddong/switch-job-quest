@@ -326,8 +326,21 @@ C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었�
 🔴 **핵심: 3대는 비관 가정에서도 성립한다** = 결론이 **미측정 값에 의존하지 않는다.**
 2대는 어느 가정에서도 안전을 말할 수 없다.
 
-**비용**: 노드 1대 = EC2 `$0.0208/h` + 공인 IPv4 `$0.005/h` = **`$0.0258/h`** (둘 다 pricing API 실측).
-50분 세션 기준 2대 $0.128 vs 3대 $0.150 → **차액 $0.021**.
+**비용**: 노드 1대 = EC2 `$0.0208/h` + 공인 IPv4 `$0.005/h` ~~= **`$0.0258/h`**~~
+🔴 **+ 루트 EBS 20GiB `$0.0025/h` = `$0.0283/h`** (2026-09-04 정정 — `nodes.tf` 에 `disk_size` 가
+없어 EKS 기본값 20GiB 가 노드마다 붙는다. 🟡 문서 기본값이고 실측은 아직). 50분 세션 차액
+~~$0.021~~ → **$0.0236**. 결론은 안 바뀐다.
+~~50분 세션 기준 2대 $0.128 vs 3대 $0.150 → **차액 $0.021**.~~
+🔴 **정정 (2026-09-04, 루트 EBS 포함)** — ⚠️ 아래 표의 `→` 는 *"오답→정답"* 이 아니라
+*"시간당 단가 → 50분 세션 총액"* 이다(위 취소선과 화살표 뜻이 다르니 주의):
+
+| 노드 | 시간당 | 50분 세션 |
+|---|---|---|
+| 2대 | `$0.1582/h` | $0.1318 |
+| 3대 | `$0.1865/h` | $0.1554 |
+| | | **차액 $0.0236** |
+
+📌 `$0.1865/h` 는 **유효한 현행 값**이다 — 09-04 실청구 계산(`33m06s × $0.1865/h ≈ $0.1029`)의 근거다.
 검증 불가능한 스케줄링 제약을 **과금 중에** 거는 것보다 2센트로 여유를 사는 쪽이 낫다.
 
 **🔑 D-010 이 틀렸던 것 두 가지** (둘 다 이번 $0 검토에서 드러났다):
@@ -554,8 +567,8 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | **C-1** | ✅ **해소 (2026-08-28, #397)** — ~~🔴 daily-api 에 헬스 엔드포인트가 없다.** actuator 의존 0건이고 전이 경로도 없다(`daily-core`→starter+tx, `client-ai-http`→restclient+jackson, `db-core`→data-jpa+json). `core-api.yaml` 을 복제하면 startupProbe 30회 실패 후 컨테이너가 죽는다 | `be/core/daily-api/build.gradle.kts` | **BE 코드 변경 + 이미지 재빌드** |
 | **C-2** | ✅ **해소 — D-008 (스텁으로 대체)**. ~~🔴 `ANTHROPIC_API_KEY` 가 인프라 어디에도 없다.~~ `devquest-eks/app` 시크릿의 키는 `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET` 3개뿐. `client-ai-anthropic.yml` 은 `${ANTHROPIC_API_KEY:}`(빈 기본값)이라 **부팅은 성공하고 AI 호출 시점에 실패**한다 — CrashLoop 가 아니라 런타임 실패라 진단이 늦다 | `infra/aws-eks/2-cluster/secrets.tf`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml` | **결정 필요** (아래 ⚠️) |
 | **C-3** | ✅ **해소 (2026-08-30, #399)** — ECR 레포 `devquest/daily-api` 생성 확인(`Apply complete! 2 added`), `ecr-push.yml` `options` 에 추가. ~~🔴 daily-api ECR 레포 부재 + 빌드 경로 없음.** `ecr_repositories` 기본값이 `["core-api","ai-api"]` 이고 `terraform.tfvars` 에 override 가 없다. `ecr-push.yml` 은 `options` 에 daily-api 가 없고, **PR 트리거엔 `inputs` 가 없어 항상 `core-api` 로 폴백**한다 | `infra/aws-eks/0-bootstrap/variables.tf`, `.github/workflows/ecr-push.yml` | 인프라 + 워크플로 |
-| **C-4** | 🔴 **재개봉 (2026-08-31 실측) — 해소가 아니었다.** ~~✅ 해소 (#400) — D-009 (t4g.medium 상향)~~ → **D-009 가 폐기됐다**(계정 Free Tier 플랜이 medium 을 launch 하지 못한다 → D-010). 🔑 **메모리 벽이 실측으로 확정**: allocatable **1365Mi** − 시스템 파드 **406Mi** = **가용 959Mi** vs 필요 **1792Mi** → **-833Mi**. t4g.small 은 **앱 1개 + postgres 가 상한**. **파드 슬롯은 제약이 아니었다**(11칸 중 6칸 여유, 필요 4칸) — 아래 파드 계산은 맞았지만 **막은 것은 메모리 하나**다. ~~해소 경로 = D-010 의 x86 전환 3단계.~~ 🔴 **정정 (2026-09-03, D-011): 해소 경로 = `-var node_desired_size=3` (노드 3대).** x86 은 2순위다. 이 행이 x86 을 가리킨 것은 D-010 이 스스로 재개 경로를 "노드 2대 1순위" 로 고쳐 쓴 뒤에도 **갱신되지 않은 잔재**였다. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
-| **C-5** | ✅ **해소 (2026-08-31)** — ①vpc-cni `enableNetworkPolicy = "true"`(#402, 스키마 실측: **문자열**) ②`k8s/base/networkpolicy-ai-api.yaml` 신설 — `ai-api` 에 `core-api`·`daily-api` 만, **ingress-only**, `namespace: default` 명시, TCP/8081 로 포트 제한. 🔑 **fail-open 3경로를 ruby YAML 파싱으로 기계 검증**: 정책 `podSelector` ↔ `ai-api.yaml` 의 **template 레이블** 일치 · `namespace` 명시 · `egress` 키 부재. ⚠️ **"막는다"의 증명은 아직 없다** — 클러스터가 떠야 한다. 차단/허용 쌍 검증 절차를 `k8s/README.md §4.1` 과 매니페스트 주석에 적어뒀다(파드 슬롯 0 소모 — 임시 파드 대신 `postgres-0` 에 exec) | `2-cluster/addons.tf`, `k8s/base/networkpolicy-ai-api.yaml` | 해소 |
+| **C-4** | ✅ **해소 (2026-09-04 유료 세션) — 노드 3대로 3서비스 기동 확인.** 전 파드 Ready·재시작 0, 실측 여유 **1689Mi**(노드별 1029/1261/1191). 🔑 **배치 강제는 불필요했다** — 스케줄러가 D-010 이 바라던 배치를 강제 없이 만들었다. 🔴 다만 `requests: 512Mi` 가 **실사용의 2배**임이 드러났다(합 842Mi vs 1792Mi) → 부하 상태 재측정 후 D-011 을 다시 연다. 이하 이력: ~~🔴 재개봉 (2026-08-31 실측) — 해소가 아니었다.~~ ~~✅ 해소 (#400) — D-009 (t4g.medium 상향)~~ → **D-009 가 폐기됐다**(계정 Free Tier 플랜이 medium 을 launch 하지 못한다 → D-010). 🔑 **메모리 벽이 실측으로 확정**: allocatable **1365Mi** − 시스템 파드 **406Mi** = **가용 959Mi** vs 필요 **1792Mi** → **-833Mi**. t4g.small 은 **앱 1개 + postgres 가 상한**. **파드 슬롯은 제약이 아니었다**(11칸 중 6칸 여유, 필요 4칸) — 아래 파드 계산은 맞았지만 **막은 것은 메모리 하나**다. ~~해소 경로 = D-010 의 x86 전환 3단계.~~ 🔴 **정정 (2026-09-03, D-011): 해소 경로 = `-var node_desired_size=3` (노드 3대).** x86 은 2순위다. 이 행이 x86 을 가리킨 것은 D-010 이 스스로 재개 경로를 "노드 2대 1순위" 로 고쳐 쓴 뒤에도 **갱신되지 않은 잔재**였다. ~~🔴 노드 용량.~~ 베이스라인 10/11(coredns=1 반영) → JVM 2개 추가 시 **12 > 11**. 🔴 **메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다. requests 합 추정 512Mi×3 + 256Mi = **1792Mi**, limits 합 **3212Mi** (물리 2GiB 초과) | `docs/eks-migration-log.md:1079`, `k8s/base/core-api.yaml`, `k8s/base/postgres.yaml` | 비용 결정 |
+| **C-5** | ✅ **해소 (2026-09-04) — NetworkPolicy 가 실제로 막는 것을 차단/허용 쌍으로 확인.** ②정책 전 `postgres-0 → ai-api` 성공 → ③apply → ④동일 명령 **`wget: download timed out`(8초)** → ⑤`daily-api → ai-api` **여전히 성공** → ⑤b 앱 e2e 재실행 성공 → ⑥ai-api RESTARTS **0**. 🔑 ②·⑤ 가 없었으면 ④는 아무것도 증명 못 한다(②는 도달성·DNS·셀렉터·`wget` 존재 확정, ⑤는 전면차단 정책 배제). 📌 부수: `postgres:17-alpine` 에 `wget` **있다**(매니페스트의 [미확인] 해소). 📌 거부 서명은 **타임아웃**이지 `Connection refused` 가 아니다. 이하 원문:  ✅ **해소 (2026-08-31)** — ①vpc-cni `enableNetworkPolicy = "true"`(#402, 스키마 실측: **문자열**) ②`k8s/base/networkpolicy-ai-api.yaml` 신설 — `ai-api` 에 `core-api`·`daily-api` 만, **ingress-only**, `namespace: default` 명시, TCP/8081 로 포트 제한. 🔑 **fail-open 3경로를 ruby YAML 파싱으로 기계 검증**: 정책 `podSelector` ↔ `ai-api.yaml` 의 **template 레이블** 일치 · `namespace` 명시 · `egress` 키 부재. ⚠️ **"막는다"의 증명은 아직 없다** — 클러스터가 떠야 한다. 차단/허용 쌍 검증 절차를 `k8s/README.md §4.1` 과 매니페스트 주석에 적어뒀다(파드 슬롯 0 소모 — 임시 파드 대신 `postgres-0` 에 exec) | `2-cluster/addons.tf`, `k8s/base/networkpolicy-ai-api.yaml` | 해소 |
 | **C-6** | ✅ **해소 — 충돌이 아니라 범위 차이였다 (2026-08-28 판정).** `k8s/README.md` 의 Ingress 금지와 설계 `:213` 의 *"3 Deployment + Ingress 라우팅"* 은 **다른 것의 완료 조건**이다 — 전자는 **Stage C**, 후자는 **에픽 전체**. Stage C 완료 기준(`:58`)은 Ingress 를 요구하지 않는다. → **Stage C 는 `kubectl port-forward` 로 e2e 를 검증하고, Ingress 는 Phase 3 로 남긴다.** 비용 규율(destroy 후 ALB 잔존 과금)이 학습 단계에서 우선한다 | `k8s/README.md`, `specs/...design.md:205,213` | 판정 완료 |
 
 ### 🔴 감사에서 **새로 발견된** 블로커 (2026-08-31, NetworkPolicy Blindspot Pass)

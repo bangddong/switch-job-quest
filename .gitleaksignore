@@ -26,3 +26,21 @@
 892e39757a157bb236348d296a4e0fedb4053745:k8s/README.md:generic-api-key:212
 892e39757a157bb236348d296a4e0fedb4053745:k8s/README.md:generic-api-key:216
 892e39757a157bb236348d296a4e0fedb4053745:k8s/base/networkpolicy-ai-api.yaml:generic-api-key:104
+
+# docs/eks-migration-log.md (generic-api-key) — 2026-09-04, PR #409
+#   → C-5 검증 결과표에 적은 **문서 서술**이 걸린 것. 실제 키가 아니다.
+#     08-31(위 892e397 블록)과 **완전히 같은 오탐**이다 — 규칙이 `api` 를 키워드로 보고
+#     콜론 뒤를 값으로 잡는다.
+#   🔴 **경고를 읽고도 같은 형태로 썼다.** `k8s/base/networkpolicy-ai-api.yaml:105` 가
+#     *"경로까지 붙여 쓰면 gitleaks 가 오탐한다(08-31 에 실제로 CI 가 막혔다)"* 라고 적어뒀는데,
+#     그 경고가 **명령어**에 대한 것이라 문서에는 해당 없다고 여겼다. 스캐너는 그 구분을 안 한다.
+#   → 현재 트리에서는 **유발 형태 자체를 제거**했다(호스트·포트를 변수로, 경로를 분리).
+#     아래 지문은 **수정 전 커밋 c8954f5 의 blob** 하나만 억제한다.
+#     히스토리 재작성은 force push 가 필요해 이 레포에서 금지된 우회다(08-31 과 동일 판단).
+#   ⚠️ squash merge 후 main 에는 c8954f5 가 없으므로 이 줄은 **사문**이 된다.
+#   ※ 유발 문자열은 인용하지 않는다 — 인용 자체가 재검출된다(64a0bd8 전례).
+c8954f53fdc9206098d3c79fa0d9397505bd3358:docs/eks-migration-log.md:generic-api-key:2580
+
+# 📌 정리 메모 (2026-09-04 확인): 위 `64a0bd8…` 1줄은 커밋이 실제로 사라져 **사문 확정**이다
+#   (`git cat-file -e` → 없음). 나머지 892e397·387a3a7·0dc6fb6 은 로컬 오브젝트에 아직 존재한다.
+#   다음에 이 파일을 손댈 때 `gitleaks detect` 로 0건을 재확인한 뒤 사문 항목을 지울 것.
