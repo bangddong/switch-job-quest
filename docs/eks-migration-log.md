@@ -2478,3 +2478,65 @@ date … | tee … && nohup tofu apply -no-color -auto-approve /tmp/stagec.tfpla
 *"영향이 안전한 방향"* 이라 미뤘는데, 오늘 나온 것은 **안전하지 않은 방향**이다.
 🔑 **하네스 동결 규칙의 해제 조건에 해당한다** — 이론적 구멍이 아니라 **실제 과금 세션에서
 안전장치가 꺼진 채 돌았다.** 다음 PR 에서 최소 수정(래퍼 허용 + 회귀 테스트에 래퍼 5종 추가).
+
+### [해결] apply 성공 — **t4g.small 3대가 Free Tier 에서 정상 launch** (09:43:46 → 09:52:49, 9m03s)
+
+```
+Apply complete! Resources: 29 added, 0 changed, 0 destroyed.
+  aws_eks_cluster.main     6m11s
+  aws_eks_node_group.main  1m48s     ← 08-31 에 medium 이 5회 Failed 하던 자리
+  vpc_cni 44s · kube_proxy 34s · coredns 14s · ebs_csi 34s
+```
+
+노드 3대 전부 `Ready`, 전부 `ap-northeast-2a`(단일 서브넷 핀 그대로),
+`allocatable.memory 1397828Ki` = **1365Mi** — 08-31 실측과 **정확히 동일**. pods 11/노드 = 33칸.
+
+### [해결] 🔑 **측정 ① — 406Mi 의 DaemonSet ÷ Deployment 분리 (레포 최초 기록)**
+
+`kubectl get pods -A -o json` 으로 파드별 requests 를 쪼갰다. **앱 배포 전** 상태다.
+
+| 파드 | 소유자 | 컨테이너 | requests |
+|---|---|---|---|
+| `ebs-csi-controller` | ReplicaSet | 6 | **232Mi** |
+| `ebs-csi-node` ×3 | DaemonSet | 3 | **104Mi / 노드** |
+| `coredns` ×1 | ReplicaSet | 1 | **70Mi** |
+| `aws-node` ×3 | DaemonSet | 2 | **0Mi** |
+| `kube-proxy` ×3 | DaemonSet | 1 | **0Mi** |
+
+**DaemonSet = 104Mi/노드 · Deployment = 302Mi(232+70) · 합 406Mi**
+→ 08-31 의 1노드 총합 **406Mi 와 정확히 일치**한다(교차검증 성립).
+
+**예측 대조** (D-011 의 🟡 추정):
+
+| | 예측 | 실측 | |
+|---|---|---|---|
+| DaemonSet/노드 | 120Mi (3컨테이너×40) | **104Mi** | 근접 |
+| `aws-node`·`kube-proxy` 메모리 requests 0 | 가정 | **맞음** | ✅ |
+| `coredns` | ~70Mi (계획서) / **~100Mi** (addons.tf 🟡) | **70Mi** | 🔴 `addons.tf` 의 100Mi 가 틀렸다 |
+| `ebs-csi-controller` | ~240Mi | **232Mi** | 근접 |
+
+**실측 노드별 여유** (1365 − 배치된 시스템 requests):
+
+| 노드 | 시스템 | 여유 |
+|---|---|---|
+| `…4-169` | 336Mi (ebs-csi-controller + ebs-csi-node) | **1029Mi** |
+| `…4-5` | 104Mi (ebs-csi-node) | **1261Mi** |
+| `…7-144` | 174Mi (ebs-csi-node + coredns) | **1191Mi** |
+| 합 | | **3481Mi** vs 필요 1792Mi → 여유 **1689Mi** |
+
+### [결정] 🔴 **D-011 이 실측으로 확증됐다 — 2대였다면 실제로 Pending 이었다**
+
+실측값을 2노드 배치에 대입(Deployment 가 한 노드에 몰린 08-31 과 동일 조건, LeastAllocated):
+
+```
+노드A 959Mi (DS+Deploy) · 노드B 1261Mi (DS만)
+  postgres  256Mi → 배치.  남은 A 959 · B 1005
+  core-api  512Mi → 배치.  남은 A 959 · B  493
+  ai-api    512Mi → 배치.  남은 A 447 · B  493
+  daily-api 512Mi → 🔴 A 447 · B 493 둘 다 부족 = Pending
+```
+
+👉 **경계값 추론으로 내린 결정이 실측으로 맞았다.** 내 낙관 추정(노드B 1245Mi)은
+실측(1261Mi)과 **16Mi** 차이였다. 🔑 더 중요한 것은 **결론을 비관 가정으로 냈다는 점**이다 —
+낙관 추정이 16Mi 빗나가도 판단이 안 흔들렸다. 미측정 값이 있을 때 **어느 가정으로 결론을
+내느냐**가 추정의 정확도보다 중요하다.
