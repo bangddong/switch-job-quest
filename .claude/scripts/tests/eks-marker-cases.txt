@@ -19,3 +19,6 @@
 0	echo "run tofu apply later"
 0	grep -rn "tofu apply" docs/
 0	kubectl get pods
+1	git commit -m 'x && nohup tofu apply y'	🟡 받아들인 오탐 — 따옴표 안 래퍼. 안전한 방향(과잉감시)+자가치유
+0	git commit -m 'tofu apply 관련'	앵커 유지 확인 — 래퍼 없는 문자열은 여전히 거부
+0	echo 'see: nohup tofu apply' > note.txt	래퍼가 있어도 구분자가 없으면 거부
