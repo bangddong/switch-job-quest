@@ -2435,3 +2435,46 @@ devquest/daily-api: ['14cb335e66670470e674f0eb76d62e84ee76e0e5', 'latest']
 📌 세 이미지 모두 `arm64/linux` 확인 (config blob 의 `architecture` 직접 조회).
 노드 ami_type `AL2023_ARM_64_STANDARD` 와 일치 — x86 이미지였다면 과금 중에
 `exec format error` 를 디버깅했을 것이다.
+
+### [막힘] 🔴 세션 마커가 안 생겼다 — `nohup`이 훅 정규식을 빗나갔다 (과금 중 발견)
+
+apply 직후 `.claude/eks-session/` 에 `active` 가 **없었다**. `heartbeat` 만 있었다.
+
+원인 — `eks-session-marker.sh:13` 의 앵커:
+
+```bash
+grep -qE "(^|[;&|(]|&&|\|\|)[[:space:]]*tofu[[:space:]]+apply"
+```
+
+구분자 뒤에 **`tofu` 가 바로** 와야 한다. 내가 실행한 명령은:
+
+```
+date … | tee … && nohup tofu apply -no-color -auto-approve /tmp/stagec.tfplan > /tmp/apply3.log 2>&1 &
+```
+
+`&&` 뒤가 `nohup tofu apply` 라 **매칭 실패**. 마커 없이 apply 가 돌았다.
+
+🔴 **이게 위험한 이유는 실패 방향이다.** 마커가 없으면 리퍼가 감시할 대상 자체를 모른다 —
+`tofu apply` 는 정상 진행하고, 아무 경고도 안 뜨고, **dead man's switch 만 조용히 꺼진다.**
+내가 그대로 사라졌다면 하트비트가 stale 돼도 리퍼가 아무것도 안 했을 것이다.
+(SOP 가 *"사람 규율만으로는 못 막는다"* 며 만든 장치가, 사람이 명령을 조금 다르게 쓰자 무력화됐다.)
+
+**우회를 정확히 일으키는 접두사들**: `nohup` · `env X=1` · `time` · `timeout 600` · `stdbuf`.
+전부 "명령을 감싸는" 흔한 관용구다. 종전 회귀 테스트는 `cd x && tofu apply` 만 확인했다
+(08-31 일지의 정규식 시험 목록에 래퍼가 **한 건도 없다**).
+
+**즉시 조치**: 마커를 손으로 만들고(훅과 동일 형식), 리퍼를 DRYRUN 으로 돌려 실제로 무는지 확인:
+
+```
+[2026-09-04 09:45:14 KST] 🔴 DEAD MAN'S SWITCH 발동 — 하트비트 31513s stale(TTL 7200s),
+                          생존: EKS[devquest-eks] RDS[없음].
+   destroy 실행: …/infra/aws-eks/2-cluster
+   [DRYRUN] 실제 destroy 생략
+```
+
+→ 마커 인식·클러스터 탐지·destroy 경로 전부 정상. 감시 복구됨.
+
+📌 **08-31 의 "마커 타임스탬프가 32분 이르다"(L-42, 원인 미상)와 같은 파일이다.** 그때는
+*"영향이 안전한 방향"* 이라 미뤘는데, 오늘 나온 것은 **안전하지 않은 방향**이다.
+🔑 **하네스 동결 규칙의 해제 조건에 해당한다** — 이론적 구멍이 아니라 **실제 과금 세션에서
+안전장치가 꺼진 채 돌았다.** 다음 PR 에서 최소 수정(래퍼 허용 + 회귀 테스트에 래퍼 5종 추가).
