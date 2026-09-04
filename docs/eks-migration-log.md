@@ -2578,12 +2578,19 @@ ai-api 로그: [STUB] TechInterviewStubEvaluator.explainFollowup 호출됨   ←
 
 | 단계 | 명령 | 기대 | 실제 |
 |---|---|---|---|
-| ② 정책 **전** | `postgres-0 → ai-api:8081/actuator/health` | 성공 | `{"status":"UP"}` ✅ |
+| ② 정책 **전** | `postgres-0` → `$AI_URL` + `/actuator/health` | 성공 | `{"status":"UP"}` ✅ |
 | ③ | `kubectl apply -f …networkpolicy-ai-api.yaml` | created | created (셀렉터가 ai-api 파드 1개 매칭 확인) |
 | ④ 정책 **후** | 같은 명령 | **타임아웃** | `wget: download timed out` (8초) ✅ |
 | ⑤ 양성 대조 | `daily-api → ai-api` | 여전히 성공 | `{"status":"UP"}` ✅ |
 | ⑤b | 앱 e2e 재실행 | 여전히 성공 | `[STUB] …` ✅ |
 | ⑥ | ai-api RESTARTS | 0 유지 | **0** ✅ (kubelet probe 는 노드에서 오므로 안 막힌다) |
+
+⚠️ **위 표에서 URL 을 `$AI_URL` + 경로로 쪼개 쓴 이유** — `호스트:포트/경로` 를 한 덩어리로 적으면
+gitleaks 가 `generic-api-key` 로 **오탐**한다. 실제로 이 PR 의 CI 가 그것으로 막혔다
+(`docs/eks-migration-log.md:2581`, `leaks found: 1`). 🔑 **`networkpolicy-ai-api.yaml:105` 가
+정확히 이 경고를 적어뒀는데(08-31 에 이미 한 번 막혔다) 나는 그걸 읽고도 같은 형태로 문서를 썼다.**
+경고가 *명령어* 에 대한 것이라 **문서에는 적용 안 되는 줄 알았다** — 스캐너는 그 구분을 안 한다.
+📌 `.gitleaksignore` 로 덮지 않았다. 억제하면 진짜 유출이 같은 규칙으로 통과한다.
 
 🔑 **②와 ⑤가 없었으면 ④는 아무것도 증명하지 못했다.** ②는 도달성·DNS·Service 셀렉터·`wget` 존재를
 한 번에 확정하고, ⑤는 *"전면 차단(`podSelector: {}`)도 ④를 통과한다"* 를 배제한다.
