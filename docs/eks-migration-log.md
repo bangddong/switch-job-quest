@@ -2540,3 +2540,73 @@ Apply complete! Resources: 29 added, 0 changed, 0 destroyed.
 실측(1261Mi)과 **16Mi** 차이였다. 🔑 더 중요한 것은 **결론을 비관 가정으로 냈다는 점**이다 —
 낙관 추정이 16Mi 빗나가도 판단이 안 흔들렸다. 미측정 값이 있을 때 **어느 가정으로 결론을
 내느냐**가 추정의 정확도보다 중요하다.
+
+### [해결] 🎉 **Stage C 완료 — 3서비스 기동 + e2e + C-5 전부 통과**
+
+배치(스케줄러가 강제 없이 만든 결과) — **D-010 이 바라던 그 배치가 그냥 나왔다**:
+
+| 노드 | 파드 | requests | 여유 |
+|---|---|---|---|
+| `…4-169` | postgres + core-api + ebs-csi-controller/node + aws-node + kube-proxy | 1104Mi | 261Mi |
+| `…4-5` | ai-api + ESO×2 + DS 3 | 616Mi | 749Mi |
+| `…7-144` | daily-api + coredns + ESO webhook + DS 3 | 686Mi | 679Mi |
+
+전 파드 `Ready`, **재시작 0**, 파드 6/11 × 3노드 = 18/33.
+
+**영속 볼륨이 destroy 를 건너 살아남았다** (3b 의 약속이 세션을 넘어 확인됨):
+Flyway 이력 **13개** · 테이블 15개(3b 증거 테이블 `stage3b_proof` 포함) · 질문뱅크 **26행**.
+
+**e2e** (`daily-api` 파드 안에서):
+
+```
+GET  /api/v1/daily-question
+  → {"result":"SUCCESS","data":{"question":"@Transactional의 전파(propagation) …"}}
+POST /api/v1/daily-question/explain
+  → {"result":"SUCCESS","data":{"explanation":"[STUB] 추가 질문(…)에 대한 설명입니다 …"}}
+ai-api 로그: [STUB] TechInterviewStubEvaluator.explainFollowup 호출됨   ← 실제 경유 확인
+```
+
+⚠️ **첫 두 번은 400 이었다.** DTO 가 `question`·`answer`·`userQuestion`·`feedback` **네 개 모두**를
+요구하는데 한 번에 하나씩만 채웠다. 🔑 **다행히 실패가 시끄러웠다** —
+`Validation failed: [userQuestion: must not be blank, feedback: …, question: …]` 가
+정확히 무엇이 빠졌는지 알려줬다. 이 트랙에서 반복해 온 *"부재가 성공과 똑같이 생긴"* 실패와 대비된다.
+
+### [해결] 🔑 **C-5 검증 — NetworkPolicy 가 실제로 막는다 (여러 세션 미검증이던 것)**
+
+`networkpolicy-ai-api.yaml` 이 규정한 **차단/허용 쌍**을 순서대로 전부 돌렸다.
+
+| 단계 | 명령 | 기대 | 실제 |
+|---|---|---|---|
+| ② 정책 **전** | `postgres-0 → ai-api:8081/actuator/health` | 성공 | `{"status":"UP"}` ✅ |
+| ③ | `kubectl apply -f …networkpolicy-ai-api.yaml` | created | created (셀렉터가 ai-api 파드 1개 매칭 확인) |
+| ④ 정책 **후** | 같은 명령 | **타임아웃** | `wget: download timed out` (8초) ✅ |
+| ⑤ 양성 대조 | `daily-api → ai-api` | 여전히 성공 | `{"status":"UP"}` ✅ |
+| ⑤b | 앱 e2e 재실행 | 여전히 성공 | `[STUB] …` ✅ |
+| ⑥ | ai-api RESTARTS | 0 유지 | **0** ✅ (kubelet probe 는 노드에서 오므로 안 막힌다) |
+
+🔑 **②와 ⑤가 없었으면 ④는 아무것도 증명하지 못했다.** ②는 도달성·DNS·Service 셀렉터·`wget` 존재를
+한 번에 확정하고, ⑤는 *"전면 차단(`podSelector: {}`)도 ④를 통과한다"* 를 배제한다.
+📌 부수 확인: **`postgres:17-alpine` 에 `wget` 이 있다** — 매니페스트가 `[미확인]` 으로 남겨둔 것.
+📌 거부 서명은 **타임아웃**이지 `Connection refused` 가 아니다(VPC CNI 는 조용히 떨군다).
+
+### [해결] 🔴 **측정 ② — `requests: 512Mi` 는 실사용의 2배였다**
+
+metrics-server 가 없어 컨테이너 cgroup 을 직접 읽었다(`/sys/fs/cgroup/memory.current`).
+
+| 서비스 | 실사용 | requests | 과다 |
+|---|---|---|---|
+| `core-api` | **337Mi** | 512Mi | +52% |
+| `daily-api` | **287Mi** | 512Mi | +78% |
+| `ai-api` | **183Mi** | 512Mi | +180% |
+| `postgres` | **35Mi** | 256Mi | +631% |
+| **합** | **842Mi** | **1792Mi** | **+113%** |
+
+🟡 **부하 없는 기동 직후 값이다** — JVM 힙은 트래픽에 따라 자란다. 상한이 아니다.
+그래도 방향은 분명하다: **D-011(노드 3대)의 전제가 실사용의 2배인 requests 위에 서 있다.**
+requests 를 실측 기반으로 다시 잡으면(여유 35% 가정: 448+384+256+192 = **1280Mi**)
+**노드 2대로도 충분**해진다(노드A 959 + 노드B 1261 = 2220Mi).
+
+👉 **다음 착수 항목**: 부하를 준 상태의 힙·RSS 를 재고 requests 를 근거 있게 재산정.
+그 결과가 나오면 **D-011 을 다시 연다** (계획서가 이미 그렇게 하라고 적어뒀다).
+⚠️ 단 *"idle 337Mi 니까 384Mi 로 줄이자"* 는 **금지** — 부하 측정 없이 줄이면 노드 압박 시
+evict 되고, 그 증상이 다시 "용량 부족" 으로 보인다.
