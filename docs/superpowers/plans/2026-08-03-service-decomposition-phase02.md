@@ -615,7 +615,7 @@ Stage C 완료 기준(*"무로그인으로 오늘의 질문 → **AI 설명**까
 | 노드 `Allocatable.memory` | ✅ **실측 (08-31)** | capacity 1841Mi / **allocatable 1365Mi** / pods 11. D-010 표 참조 |
 | t4g.medium 온디맨드 단가 | ✅ **실측 (08-31)** | `$0.0416/h` = small(`$0.0208`)의 **정확히 2배**. 일지 `:1086` 의 *"$0.13→$0.16"* 은 근거 없는 수치였다. 🔑 이 실측이 D-009 의 "노드 2대 기각" 을 무효화했는데 **그때 아무도 되돌아가지 않았다** |
 | t4g.medium 파드 상한 | ⚪ **무의미해짐** | 이 계정은 medium 을 **launch 하지 못한다**(D-010). 재지 않는다 |
-| ai-api·daily-api 힙·Metaspace 실사용 | 🔴 **여전히 0건** | Dockerfile JVM 플래그는 **Fly 512MB 예산**에서 나왔고 실측 근거는 core-api prod 하나뿐(사용 42MB/커밋 117MB). 3서비스에 그대로 복사돼 있다 → `requests: 512Mi` 의 근거가 없다. 배포 후 `jcmd` / actuator metrics |
+| ai-api·daily-api 힙·Metaspace 실사용 | 🔴 **여전히 0건** — 🔄 **측정 수단 정정 (2026-09-05, $0 실측)** | Dockerfile JVM 플래그는 **Fly 512MB 예산**에서 나왔고 실측 근거는 core-api prod 하나뿐(사용 42MB/커밋 117MB). 3서비스에 그대로 복사돼 있다 → `requests: 512Mi` 의 근거가 없다. ~~배포 후 `jcmd` / actuator metrics~~ → 🔴 **둘 다 성립하지 않는다**: ①런타임 이미지가 `21-jre-alpine` 이라 **`jcmd` 가 없다**(JDK 전용) ②`ai-api`·`daily-api` 는 `exposure.include: health` 뿐이고 micrometer 레지스트리도 없어 `/actuator/prometheus` 자체가 없다. `core-api` 만 있고 그마저 `SecurityConfig` 가 IP 로 제한한다(prod 외부 GET **403** 실측 · 허용목록의 `fdaa::/16` 은 **Fly 사설망**이라 EKS 에선 무의미) → **파드 안 localhost 로만**. 🔑 그리고 더 큰 것: **`limits: 900Mi` 가 `MaxHeap 316Mi` 를 정하고 있다** — Dockerfile 주석의 *"약 179MB"* 는 Fly 512MB 기준이다. 대체 절차·판정 규칙 = `plans/2026-09-05-memory-rightsizing.md` |
 | **406Mi 의 DaemonSet ÷ Deployment 분리** | 🔴 **신규 (L-43)** | $0 경로 없음 — `describe-addon-configuration` 은 `resources` **스키마만** 주고 기본값을 안 준다(09-03 확인). 클러스터가 떠야 한다: `kubectl get pods -A -o json`. **D-011(3대) 결정은 이 값과 무관** — 블로커 아님 |
 
 > 🔑 **`requests: 512Mi` 자체가 근거 없는 수치**라는 점이 위 표에서 가장 큰 미확인이다.
