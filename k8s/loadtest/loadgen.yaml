@@ -44,7 +44,7 @@ data:
     post_explain(){ code --post-data "$BODY" --header "$CT" "$DAILY/api/v1/daily-question/explain"; }
     get_core()    { code "$CORE/api/v1/daily-question"; }
 
-    if [ "$CONC" = "warmup" ] || [ "$1" = "warmup" ]; then
+    if [ "$1" = "warmup" ]; then
       # 🔑 Metaspace 는 요청 수가 아니라 **밟은 코드 경로**로 자란다.
       #    만 번 GET 을 때려도 explain 을 안 밟으면 그 클래스는 안 올라온다.
       echo "GET  daily  -> $(get_daily)"
