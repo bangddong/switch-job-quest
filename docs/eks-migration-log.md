@@ -2687,3 +2687,130 @@ RDS 인스턴스/수동스냅샷/자동스냅샷 0 · Secrets Manager 0(삭제�
 > 그 회차에서 처음으로 분류 오류가 0건이었다(QA 확인).
 >
 > 📌 **부수 규칙**: 산문을 정정하면 **같은 절의 표도 같이 본다.** F-7 이 정확히 그 누락이었다.
+
+---
+
+## 2026-09-05 — 부하 측정 사전 준비 (무과금, $0)
+
+**목적**: 09-04 가 남긴 *"부하 상태에서 메모리 재측정 → requests 재산정 → D-011 다시 열기"* 를
+**클러스터 없이** 실행 가능한 절차로 바꾼다. 계획서 = `docs/superpowers/plans/2026-09-05-memory-rightsizing.md`.
+
+### [막힘] 계획서가 적어둔 측정 수단 두 개가 **존재하지 않는다**
+
+`plans/2026-08-03-...phase02.md:617` 은 *"배포 후 `jcmd` / actuator metrics"* 라고 적어뒀다. 둘 다 확인했다.
+
+```
+$ docker run --rm --platform linux/arm64 eclipse-temurin:21-jre-alpine sh -c '...'
+jcmd: 없음    jmap: 없음    jstat: 없음    jhsdb: 없음    jinfo: 없음
+JAVA_HOME/bin: java jfr jrunscript jwebserver keytool rmiregistry
+```
+
+런타임 스테이지가 `eclipse-temurin:21-jre-alpine` = **JRE** 다. 진단 툴은 JDK 에만 있다.
+(`jfr` 은 있다 — 단 라이브 JVM 에 붙이려면 `jcmd JFR.start` 가 필요하고, JVM 기동 플래그로
+`-XX:StartFlightRecording` 을 주면 **이미지 재빌드 3건**이다.)
+
+actuator 쪽은 **앱마다 다르다**:
+
+| 앱 | `exposure.include` | micrometer 레지스트리 | `/actuator/prometheus` |
+|---|---|---|---|
+| `core-api` | `health,prometheus` (`support/monitoring/…/monitoring.yml:5`) | `micrometer-registry-prometheus` (`runtimeOnly`) | **있음** |
+| `ai-api` | `health` (`application.yml:47`) | 없음 | 없음 |
+| `daily-api` | `health` (`application.yml:35`) | 없음 | 없음 |
+
+그 `core-api` 조차 `SecurityConfig.kt:41` 이 `/actuator/**` 를 IP 로 제한한다:
+
+```kotlin
+"hasIpAddress('127.0.0.1') or hasIpAddress('::1') or hasIpAddress('fdaa::/16')"
+```
+
+prod 실측(읽기 전용 GET):
+```
+/actuator/prometheus → HTTP 403
+/actuator/metrics    → HTTP 403
+/actuator/health     → HTTP 200
+```
+📌 `fdaa::/16` 은 **Fly 사설망**이다. EKS 파드 IP 는 VPC IPv4 라 **이 규칙이 EKS 에서는 아무것도
+열지 않는다** → 파드 **안에서 localhost** 로만 접근 가능. 다른 파드에서 긁는 절차를 짰으면
+과금 중에 403 을 만났을 것이다.
+
+### [결정] 🔴 **`limits` 가 힙 상한을 정하고 있었다 — 문제의 방향이 바뀐다**
+
+09-04 결론은 *"실사용 842Mi vs requests 1792Mi → 줄일 수 있다"* 였다. 그 위에 이게 선다.
+
+```
+$ docker run --rm --platform linux/arm64 --memory=<N>m eclipse-temurin:21-jre-alpine \
+    java -XX:+UseContainerSupport -XX:MaxRAMPercentage=35.0 -XX:MaxMetaspaceSize=160m \
+         -XX:ReservedCodeCacheSize=96m -Xss512k -XX:+PrintFlagsFinal -version
+```
+
+| `limits` | `MaxHeapSize` | GC |
+|---|---|---|
+| 384Mi | 136Mi | Serial |
+| **512Mi** | **180Mi** | Serial |
+| 640Mi | 224Mi | Serial |
+| 768Mi | 270Mi | Serial |
+| **900Mi (현행 k8s)** | **316Mi** | Serial |
+
+🔑 **`be/Dockerfile:38` 의 *"최대 약 179MB"* 는 Fly 512MB 예산의 값이다.** 위 표의 `512Mi → 180Mi`
+가 그것과 일치한다 — 그 주석이 어느 예산에서 쓰였는지의 **직접 증거**다.
+**같은 이미지가 EKS 에서는 힙 상한 1.77배로 돌아간다.** `core-api` 가 EKS idle 337Mi 를
+쓴 것은 **우리가 900Mi 를 줬기 때문일 수 있다.**
+
+→ 예약 상한 합 = 힙 316 + Metaspace 160 + CodeCache 96 = **572Mi > `requests: 512Mi`**.
+즉 requests 는 JVM 설정에서 **유도된 값이 아니다**.
+⚠️ Metaspace·CodeCache 는 *예약*이지 커밋이 아니다 — *"572Mi 를 실제로 쓴다"* 는 주장이 **아니다.**
+
+📌 부수: GC 가 **SerialGC** 다(컨테이너가 server-class 문턱 1792MB 미만). G1 전제의 감각이 안 통한다.
+
+### [막힘] 레이트 리밋이 부하 테스트를 원천 봉쇄한다
+
+`daily-api/application.yml:74-79` — **IP당·하루** 기준:
+
+| 엔드포인트 | capacity |
+|---|---|
+| `GET /api/v1/daily-question` | **무제한** (`DailyWebMvcConfig` 가 인터셉터를 안 건다) |
+| `POST …/explain` | **5** |
+| `POST …/evaluate` | **1** |
+
+`explain` 이 **3서비스를 전부 태우는 유일한 경로**인데 파드 하나당 5요청에서 429 다.
+→ 부하 세션에 한해 `SPRING_APPLICATION_JSON` 으로 상향(이미지 재빌드 0).
+환경변수 relaxed-binding 형태(`DEVQUEST_RATELIMIT_…`)는 **틀리면 조용히 무시**되므로 안 쓴다.
+**검증 = `explain` 6회 중 6번째가 200 인가** (5회까지는 상향 여부와 무관하게 성공한다).
+
+### [해결] 준비물 2개 작성 + **클러스터 없이 돌려서** 검증
+
+`k8s/loadtest/measure-memory.sh` · `k8s/loadtest/loadgen.yaml`.
+
+📌 `memory.peak` 이 cgroup v2 에 있다 — 09-04 는 `memory.current`(순간값)만 읽었다.
+📌 `memory.current` 는 페이지 캐시 포함 → working set = `current − inactive_file` 로 계산.
+   `postgres` 는 버퍼드 IO 라 이걸 안 빼면 필요량이 부풀어 보인다.
+
+검증 결과: 컨테이너 리더 2종 실행 ✅ · 전 경로(가짜 kubectl) ✅ · 실패 경로 ✅ ·
+YAML 배선(ruby) ✅ · `code()` 상태코드 추출 실서버 ✅(`200/404/ERR`).
+
+### [메모] 🔴 검증이 **자기 자신에게서** 결함 2건을 잡았다
+
+**① 첫 문법 검사가 거짓 통과였다.** `-v /tmp/load.sh:/load.sh:ro` 를 걸었는데 colima 가 그
+호스트 경로를 VM 에 안 넘겨 docker 가 **빈 디렉터리**를 만들었다. 디렉터리에 `sh -n` 을 걸면
+**exit 0** 이다 → 나는 `✅ 문법 OK` 를 출력했다.
+
+```
+$ docker run --rm -v /tmp/load.sh:/load.sh:ro busybox:1.38.0 sh -c 'wc -l < /load.sh'
+wc: standard input: Is a directory
+```
+
+→ stdin 으로 넘기고, **일부러 깨뜨린 스크립트(`fi` 누락)가 실패하는지 먼저 확인**한 뒤 본검사를 했다.
+🔑 이번 트랙의 08-11 교훈(*"검사가 주장보다 헐겁다"*)이 **내 검증 코드에서 재현**됐다.
+
+**② `code()` 가 도달 불가 시 빈 문자열을 냈다.** DNS 실패·NetworkPolicy 차단·타임아웃이면
+`sed` 가 아무것도 못 뽑는다. 마지막 `sort | uniq -c` 집계에서 **빈 줄은 실패로 보이지 않는다** —
+*"부재가 성공과 똑같이 생긴"* 실패 그대로다. → `ERR` 로 이름을 붙였다.
+
+**③ (내 오판) *"측정 검증이 버그를 잡았다"* 고 한 번 잘못 말했다.** `postgres:17-alpine` 출력이
+37줄로 나와 스크립트 결함이라 판단했는데, 원인은 **첫 실행이 이미지를 pull 했고 그 진행 로그가
+stderr 로 나온 것**을 내가 `2>&1` 로 데이터에 섞은 것이었다. stdout/stderr 를 분리하니
+`stdout 1줄 / stderr 0줄`. 🔑 **`docker run` 출력을 `2>&1` 로 파싱하지 말 것 — pull 진행 로그가 섞인다.**
+
+### [비용] $0 — AWS 리소스 접촉 0건. 누적 **$2.0072 / $200 (1.00%)** 변동 없음
+
+전부 로컬 docker(colima)·레포 파일·prod HTTP GET 으로만 했다.
