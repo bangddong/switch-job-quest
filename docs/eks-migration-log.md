@@ -2856,3 +2856,40 @@ QA 지적 두 가지 다 맞다:
 `DailyExplainRateLimitInterceptor.kt:22` 의 `@Value("${devquest.rate-limit.daily-explain.capacity:5}")`
 와 **문자 그대로 일치**한다(`@Value` 는 relaxed binding 이 아니라 정확 매칭).
 그래도 6회 검사는 유지한다: 그 검사가 막는 것은 *"이름 오타"* 가 아니라 *"적용 안 됨"* 이다.
+
+---
+
+## 2026-09-06 — 부하 상태 메모리 측정 세션 (유료, 노드 3대)
+
+**목적**: `requests: 512Mi` 를 부하 실측으로 재산정한다. 절차·판정 규칙은 09-05 에 $0 로 확정
+(`plans/2026-09-05-memory-rightsizing.md`). **과금 구간에는 실행만 남겼다.**
+
+### [메모] 사전 점검 — 전부 $0, 재빌드 불필요
+
+| 항목 | 결과 |
+|---|---|
+| 도구 | `tofu`·`kubectl`·`aws`·`ruby` 전부 존재 |
+| 자격증명 | `arn:aws:iam::<account>:user/bootstrap-admin` |
+| K8s 표준지원 | 1.36 (2027-08-02) · 1.35 · 1.34 — 핀 1.36 유효 |
+| 과금 리소스 | EKS 0 · EC2 0 · RDS 0 (깨끗한 시작) |
+| **ECR 3종** | 전부 `14cb335e…` · **main 조상 ✅** · arm64(09-04 확인) |
+| **`be/` 변경** | `14cb335e..origin/main` **0건 → 재빌드 불필요** (약 10분 절약) |
+| `tofu plan` | **29 to add / 0 to change / 0 to destroy** (08-11·09-04 실측과 일치) |
+| 영속 볼륨 | `vol-0518b6d0dcd2b0d70` — 인벤토리의 *"정확히 1개"* 와 부합 |
+
+🔑 **09-04 의 교훈이 그대로 작동했다** — *"개수가 아니라 태그 일치를 봐라"*. 개수(3/3)만 보지 않고
+세 태그가 **동일하고 main 조상인지**, 그리고 **`be/` 가 그 커밋 이후 안 바뀐지**까지 확인했다.
+후자가 재빌드 10분을 없앴다.
+
+### [결정] 레이트리밋 상향을 매니페스트 편집 → `kubectl set env` 로 변경
+
+계획서 §2 는 `k8s/base/daily-api.yaml` 에 `SPRING_APPLICATION_JSON` 을 넣으라고 적었다.
+**파일을 안 건드리는 쪽으로 바꾼다**:
+
+```
+kubectl set env deploy/daily-api SPRING_APPLICATION_JSON='{"devquest.rate-limit.daily-explain.capacity":100000}'
+kubectl set env deploy/daily-api SPRING_APPLICATION_JSON-      # 원복
+```
+
+이유: 매니페스트 편집은 **세션 후 원복을 잊으면 레포에 남는다.** 절차 9단계에 원복이 있지만
+*"절차에 적혀 있다"* 는 이 트랙에서 여러 번 부족했다. 파일을 안 건드리면 그 실패 경로가 사라진다.
