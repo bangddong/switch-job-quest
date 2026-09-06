@@ -78,5 +78,11 @@ while [ "$i" -le "$COUNT" ]; do
   [ "$COUNT" -gt 1 ] && printf '\n=== 샘플 %d/%d ===\n' "$i" "$COUNT"
   sample_once
   i=$((i + 1))
-  [ "$i" -le "$COUNT" ] && sleep "$INTERVAL"
+  if [ "$i" -le "$COUNT" ]; then sleep "$INTERVAL"; fi
 done
+
+# 🔴 명시적 exit 0 — 없으면 스크립트 종료코드가 **마지막 명령의 상태**가 된다.
+#    루프의 마지막 판정 `[ "$i" -le "$COUNT" ]` 는 종료 시 반드시 거짓이므로
+#    **정상 실행인데 exit 1** 이 나왔다(09-06 유료 세션 실측 — 출력은 멀쩡했다).
+#    `&&` 를 `if` 로 바꾼 것도 같은 이유다. 호출부가 `|| true` 로 덮으면 진짜 실패까지 삼킨다.
+exit 0
