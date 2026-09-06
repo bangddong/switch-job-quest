@@ -179,6 +179,40 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 
 🔑 **`addons.tf` 의 자기 규율은 여전히 유효하다** — *"노드를 2대 이상으로 늘리면 coredns 를 2로 되돌릴 것"*. 이 결정은 **1대를 유지**하므로 `replicaCount=1` 을 그대로 둔다.
 
+### G-6 → 노드 **2대**, `requests` 를 부하 실측으로 재산정 (2026-09-06)
+
+> 📌 **D-012** · 상태 `🟡산술확정·미검증` · 영향 `k8s/base/core-api.yaml`, `k8s/base/ai-api.yaml`, `k8s/base/daily-api.yaml`, `k8s/base/postgres-static.yaml`, `infra/aws-eks/2-cluster/variables.tf`, `.claude/review-ledger.md`(L-47), `docs/eks-migration-log.md`, Stage C 이후
+
+**`requests` 를 1792Mi → 1280Mi 로 낮추고 재개 경로를 노드 3대 → 2대로 되돌린다.**
+
+| 서비스 | W_peak(실측) | req 신규 | (현행) | lim 신규 | (현행) |
+|---|---|---|---|---|---|
+| `core-api` | 401Mi | **480** | 512 | 576 | 900 |
+| `ai-api` | 212Mi | **256** | 512 | **448** ←하한 | 900 |
+| `daily-api` | 363Mi | **448** | 512 | 512 | 900 |
+| `postgres` | 63Mi | **96** | 256 | 128 | 512 |
+
+**왜 D-011 이 뒤집히나.** D-011 은 *"필요 1792Mi"* 를 입력으로 받았는데 **그 1792 가 근거 없는 값**이었다
+(`requests: 512Mi` 는 Fly 512MB 머신 예산에서 복사된 것). 부하 실측으로 다시 잡으니 1280Mi 다.
+비관 가정(시스템 Deployment 가 전부 한 노드 → 노드A 959 · B 1261)에서도
+**1280 ≤ 2220** 이고 **가장 큰 앱 480 ≤ 959** 라 조각화도 통과한다.
+
+🔑 **D-011 이 틀렸던 게 아니다.** 512Mi requests 를 전제하면 3대가 옳았고, 09-04 실측이 그걸 확증했다.
+바뀐 것은 **전제**다 — *"추정이 실측으로 바뀌면 그 추정에 기대 내린 결정을 반드시 다시 연다"*
+(08-31 교훈)를 이번엔 **제때** 적용했다.
+
+🔴 **상태가 `✅유효` 가 아닌 이유 — 실측 검증을 못 했다.**
+09-06 세션에서 `kubectl set resources` 를 넣으려는 순간 리퍼가 이미 클러스터를 destroy 한 뒤였다
+(과금 중 사용자 질문 → 127분 대기). **08-31 은 정확히 이 자리에서 산술 없이 믿었다가 유료 세션을 날렸다.**
+→ 원장 `L-47`. **다음 유료 세션의 첫 15분에 검증한다** — 절차는 이미 확정돼 있으므로 질문 없이 실행만.
+
+**검증 전까지 매니페스트를 바꾸지 않는다.** 검증 안 된 값을 커밋하는 것은 빨간 깃발
+*"지금은 배선 못 하지만 코드는 남겨두자"*(L-24)에 해당한다. 값은 이 표와 원장에만 둔다.
+
+**기각한 대안**: `limits` 를 더 공격적으로 낮추기 → **효과가 거의 없다.**
+실측상 힙은 상한 316Mi 중 **70Mi 만** 쓰고, 실제 소비자는 **Metaspace 125.6Mi**(고정, `limits` 무관).
+`limits` 를 조이면 **이미 안 쓰는 여유**만 깎인다.
+
 ### G-2 → 생성과 발송을 분리 (2026-08-03)
 
 
@@ -308,7 +342,7 @@ C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었�
 ⚠️ 비용이 2 × t4g.small 의 2배 이상이고 arm64 를 잃는다. **먼저 쓸 카드가 아니다.**
 
 
-> 📌 **D-011** · 상태 `✅유효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `.claude/review-ledger.md`, `docs/eks-migration-log.md`, Stage C
+> 📌 **D-011** · 상태 `🔄부분무효` · 영향 `infra/aws-eks/2-cluster/variables.tf`, `infra/aws-eks/2-cluster/addons.tf`, `.claude/review-ledger.md`, `docs/eks-migration-log.md`, Stage C · 재판정 `D-012 (2026-09-06 부하 실측 — requests 를 근거 있게 낮추면 2대가 성립한다. 3대 자체는 512Mi requests 전제에서는 여전히 옳았다)`
 
 **Stage C 재개 경로를 노드 2대 → `-var node_desired_size=3` (3대)로 바꾼다.**
 `node_max_size` 기본값을 2 → 3 으로 올린다. `node_desired_size` 기본값은 **1 그대로** 두므로
