@@ -1,8 +1,10 @@
-# 부하 생성 파드 — 메모리 재산정 측정용 (docs/superpowers/plans/2026-09-05-memory-rightsizing.md)
+# 점검용 파드 — 부하 전 워밍업·레이트리밋 확인 (계획서 `2026-09-05-memory-rightsizing.md`)
 #
-# 🔴 왜 별도 파드인가: 측정 대상 컨테이너 안에서 부하 루프를 돌리면 **그 프로세스의 메모리가
-#   측정값에 섞인다.** 09-04 e2e 는 daily-api 파드 안에서 wget 을 돌렸는데 그건 도달성 확인이라
-#   상관없었다. 측정 중에는 안 된다.
+# 🔴 **부하 생성은 `k8s/loadtest/k6.yaml` 이 한다.** 여기는 점검만.
+#
+# 🔴 왜 별도 파드인가: 측정 대상 컨테이너 안에서 돌리면 **그 프로세스의 메모리가 측정값에 섞인다.**
+#   09-04 e2e 는 daily-api 파드 안에서 wget 을 돌렸는데 그건 도달성 확인이라 상관없었다.
+#   측정 중에는 안 된다.
 #
 # ⚠️ 이 파드는 **ai-api 를 직접 못 때린다** — networkpolicy-ai-api.yaml 이 core-api·daily-api 만
 #   허용한다. 결함이 아니라 **C-5 가 살아 있다는 증거**다. ai-api 부하는 daily-api/explain 경유로만.
@@ -16,8 +18,12 @@ metadata:
 data:
   load.sh: |
     #!/bin/sh
-    # $1 = 동시성(기본 20), $2 = 지속 초(기본 180)
-    CONC="${1:-20}"; DUR="${2:-180}"
+    # 🔴 부하 생성은 여기 없다 — `k8s/loadtest/k6.yaml` 로 옮겼다 (2026-09-07).
+    #    여기 있던 wget 루프는 **closed loop + 요청마다 프로세스 생성**이라 클라이언트가 병목이었고,
+    #    무엇보다 **자기 한계를 보고하지 못했다**(서버 한가함과 생성기 병목이 똑같이 "에러 0").
+    #    남긴 것은 부하 전에 반드시 하는 **점검 2종**뿐이다.
+    #      warmup    — 모든 엔드포인트 1회씩 (Metaspace 는 밟은 코드 경로로 자란다)
+    #      ratecheck — 레이트리밋 상향이 **먹었는지** (6번째가 200인가)
     # ⚠️ **호스트:포트와 경로를 한 토큰으로 붙여 쓰지 말 것.** 붙이면 gitleaks 의 generic-api-key 가
     #    오탐해 CI 가 막힌다(08-31·09-04 실제 발생). 아래처럼 호스트는 변수에, 경로는 사용처에 둔다.
     #    🔴 **유발 형태를 주석에 인용하지도 말 것** — 인용 자체가 재검출된다(`k8s/README.md` §4.1).
@@ -53,6 +59,14 @@ data:
       exit 0
     fi
 
+    if [ "$1" != "warmup" ] && [ "$1" != "ratecheck" ]; then
+      # 🔴 조용한 무동작 금지. 부하 루프를 걷어낸 뒤 인자 없이 부르면 exit 0 으로 아무 말 없이
+      #    끝났다 — 이 레포가 반복해 데인 "부재가 성공과 똑같이 생긴" 실패 그대로다.
+      echo "사용법: sh /scripts/load.sh {warmup|ratecheck}" >&2
+      echo "  부하 생성은 여기 없다 → k8s/loadtest/k6.yaml (k6 run -e RATE=<n> /scripts/journey.js)" >&2
+      exit 2
+    fi
+
     if [ "$1" = "ratecheck" ]; then
       # 상향이 **먹었는지** 확인한다. 5회까지는 상향과 무관하게 성공하므로 6번째가 유일한 판별점.
       i=1; while [ $i -le 6 ]; do echo "explain #$i -> $(post_explain)"; i=$((i+1)); done
@@ -60,17 +74,6 @@ data:
       exit 0
     fi
 
-    END=$(( $(date +%s) + DUR ))
-    rm -f /tmp/w.*; echo "동시성 $CONC · ${DUR}초 시작"
-    i=1
-    while [ $i -le "$CONC" ]; do
-      ( while [ "$(date +%s)" -lt "$END" ]; do
-          { get_daily; post_explain; get_core; } >> "/tmp/w.$i"
-        done ) &
-      i=$((i+1))
-    done
-    wait
-    echo "── 상태코드 분포 ──"; cat /tmp/w.* | sort | uniq -c | sort -rn
 ---
 apiVersion: v1
 kind: Pod
