@@ -32,14 +32,19 @@ read -r -d '' READER <<'EOF' || true
 cur=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
 peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo 0)
 max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo 0)
-awk -v c="$cur" -v p="$peak" -v m="$max" '
+# CPU — 09-06 에 안 쟀다가 "서버가 힘들었는지 알 수 없다" 로 귀결된 지표.
+#   usage_usec  : 누적 CPU 시간(µs). 두 샘플의 델타 ÷ 경과시간 = 사용 코어 수
+#   nr_throttled: 스로틀 발생 횟수. 🔑 지연 급등이 **메모리가 아니라 CPU 제한** 때문인 경우를 가른다
+cpu=$(awk '$1=="usage_usec"{print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+thr=$(awk '$1=="nr_throttled"{print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+awk -v c="$cur" -v p="$peak" -v m="$max" -v cpu="$cpu" -v thr="$thr" '
   $1=="anon"         {anon=$2}
   $1=="file"         {file=$2}
   $1=="inactive_file"{inf=$2}
   $1=="slab"         {slab=$2}
   END {
     ws = c - inf
-    printf "%d %d %d %d %d %d %d\n", ws, c, p, anon, file, slab, m
+    printf "%d %d %d %d %d %d %d %d %d\n", ws, c, p, anon, file, slab, m, cpu, thr
   }' /sys/fs/cgroup/memory.stat
 EOF
 
@@ -47,7 +52,7 @@ mib() { awk -v b="$1" 'BEGIN{ if (b+0 > 9000000000000) print "max"; else printf 
 
 emit_header() {
   printf '# %s  (%s)\n' "$LABEL" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  printf 'pod\tws(Mi)\tcurrent\tpeak\tanon\tfile\tslab\tlimit\n'
+  printf 'pod\tws(Mi)\tcurrent\tpeak\tanon\tfile\tslab\tlimit\tcpu(s)\tthrottled\n'
 }
 
 sample_once() {
@@ -67,9 +72,11 @@ sample_once() {
       continue
     fi
     set -- $out
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    # cpu 는 누적 µs → 초. 델타는 두 샘플을 비교해 사람이 계산한다(스크립트가 상태를 들지 않는다).
+    cpus=$(awk -v u="$8" 'BEGIN{printf "%.1f", u/1000000}')
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$name" "$(mib "$1")" "$(mib "$2")" "$(mib "$3")" \
-      "$(mib "$4")" "$(mib "$5")" "$(mib "$6")" "$(mib "$7")"
+      "$(mib "$4")" "$(mib "$5")" "$(mib "$6")" "$(mib "$7")" "$cpus" "$9"
   done
 }
 

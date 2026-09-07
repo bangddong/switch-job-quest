@@ -181,7 +181,14 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 
 ### G-6 → 노드 **2대**, `requests` 를 부하 실측으로 재산정 (2026-09-06)
 
-> 📌 **D-012** · 상태 `🟡산술확정·미검증` · 영향 `k8s/base/core-api.yaml`, `k8s/base/ai-api.yaml`, `k8s/base/daily-api.yaml`, `k8s/base/postgres-static.yaml`, `infra/aws-eks/2-cluster/variables.tf`, `.claude/review-ledger.md`(L-47), `docs/eks-migration-log.md`, Stage C 이후
+> 📌 **D-012** · 상태 `⚪보류 — 입력 신뢰도 부족` · 영향 `k8s/base/core-api.yaml`, `k8s/base/ai-api.yaml`, `k8s/base/daily-api.yaml`, `k8s/base/postgres-static.yaml`, `infra/aws-eks/2-cluster/variables.tf`, `.claude/review-ledger.md`(L-47), `docs/eks-migration-log.md`, Stage C 이후
+
+🔴 **2026-09-07 강등 — 이 결정을 실행하지 마라. 입력이 약하다.**
+아래 `W_peak` 는 **부하 생성기가 신뢰할 수준이 아닌 상태에서** 얻은 값이다:
+closed loop + 요청마다 `wget` 프로세스 생성이라 **클라이언트가 병목이었을 가능성이 크고**,
+지연·CPU 를 재지 않아 **서버가 한계 근처였는지 알 수 없다.** 에러 0건은 잘 된 게 아니라
+**포화를 못 시켰다는 신호**다. 따라서 `W_peak` 는 실제 최대의 **하한**이며 그 여유폭이 미상이다.
+→ **재설계된 부하 테스트(계획서 §9)를 통과하기 전까지 매니페스트를 바꾸지 않는다.**
 
 **`requests` 를 1792Mi → 1280Mi 로 낮추고 재개 경로를 노드 3대 → 2대로 되돌린다.**
 
