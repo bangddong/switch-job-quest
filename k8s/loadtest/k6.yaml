@@ -1,0 +1,90 @@
+# 부하 생성기 — k6 (계획서 `2026-09-05-memory-rightsizing.md` §9)
+#
+# 🔴 왜 셸 루프를 버렸나: 09-06 세션의 busybox wget 루프는 **자기 한계를 보고하지 못했다.**
+#   서버가 한가한 것과 클라이언트가 못 밀어넣는 것이 **똑같이 "에러 0"** 으로 보였다.
+#   k6 의 `constant-arrival-rate` 는 목표 RPS 를 못 지키면 `dropped_iterations` 로 **보고한다** —
+#   그 한 지표가 *"서버 포화"* 와 *"생성기 병목"* 을 가른다.
+#
+# 실행 (스테이지당 한 번씩, 사이에 measure-memory.sh):
+#   kubectl exec k6 -- k6 run -e RATE=25  /scripts/journey.js   # 스테이지1 =  75 req/s
+#   kubectl exec k6 -- k6 run -e RATE=50  /scripts/journey.js   # 스테이지2 = 150 req/s
+#   ... 100(300) · 200(600) · 400(1200)  — 계획서 §9.3 스테이지 표와 동일한 값이다
+#
+# 🔴 RATE 는 req/s 가 아니라 **회전/s** 다. 1 iteration = 요청 3개 → 실제 req/s = RATE × 3.
+#    (로컬 실측: RATE=25 → http_reqs 75.29/s)
+#
+# ⚠️ 한 번에 램프를 돌리지 않는 이유: 스테이지별 요약이 깨끗하게 나오고,
+#    무릎이 보이면 **즉시 멈춰 과금을 아낄 수 있다.**
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-script
+data:
+  journey.js: |
+    import http from 'k6/http';
+
+    // 호스트는 변수로, 경로는 사용처에 — 붙여 쓰면 gitleaks generic-api-key 가 오탐한다
+    // (08-31·09-04 실제 발생, `k8s/README.md` §4.1).
+    const DAILY = __ENV.DAILY || 'http://daily-api:8082';
+    const CORE  = __ENV.CORE  || 'http://core-api:8080';
+    const RATE  = parseInt(__ENV.RATE || '25');
+    const DUR   = __ENV.DUR || '60s';
+
+    // explain DTO 는 question·answer·feedback·userQuestion **네 개 모두** NotBlank.
+    // 09-04 에 하나씩만 채워 400 을 두 번 맞았다.
+    const BODY = JSON.stringify({
+      question: '부하테스트', answer: '부하테스트',
+      feedback: '부하테스트', userQuestion: '부하테스트',
+    });
+    const JSON_HDR = { headers: { 'Content-Type': 'application/json' } };
+
+    export const options = {
+      discardResponseBodies: true,   // 본문을 안 들고 있어야 k6 자신의 메모리가 안 샌다
+      scenarios: {
+        journey: {
+          executor: 'constant-arrival-rate',  // 🔑 오픈 루프 — 서버가 느려도 도착률을 유지하려 한다
+          rate: RATE, timeUnit: '1s', duration: DUR,
+          preAllocatedVUs: 100, maxVUs: 2000,
+        },
+      },
+      thresholds: {
+        // 🔴 이 둘이 이 테스트의 판정이다. 통과/실패가 종료코드로 나온다.
+        'http_req_failed':    ['rate<0.01'],
+        'dropped_iterations': ['count<1'],   // >0 이면 **생성기가 병목** → 이 회차 데이터는 버린다
+      },
+    };
+
+    // 1 iteration = 요청 3개 (= 1 회전). 따라서 실제 req/s ≈ RATE × 3.
+    export default function () {
+      http.get(`${DAILY}/api/v1/daily-question`);
+      http.post(`${DAILY}/api/v1/daily-question/explain`, BODY, JSON_HDR);
+      http.get(`${CORE}/api/v1/daily-question`);
+    }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: k6
+  labels:
+    app: k6
+spec:
+  restartPolicy: Never
+  containers:
+    - name: k6
+      image: grafana/k6:0.58.0 # 태그 고정 — latest 는 세션마다 다른 것을 가리킨다
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: script
+          mountPath: /scripts
+      resources:
+        # 🔴 생성기에 CPU 를 넉넉히 준다. 여기가 마르면 dropped_iterations 가 뜨고
+        #    그 회차는 통째로 버려야 한다(= 과금 낭비). busybox 때와 달리 k6 는 무겁다.
+        requests:
+          cpu: 500m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+  volumes:
+    - name: script
+      configMap:
+        name: k6-script

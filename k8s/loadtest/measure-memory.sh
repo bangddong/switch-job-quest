@@ -32,14 +32,19 @@ read -r -d '' READER <<'EOF' || true
 cur=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
 peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo 0)
 max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo 0)
-awk -v c="$cur" -v p="$peak" -v m="$max" '
+# CPU — 09-06 에 안 쟀다가 "서버가 힘들었는지 알 수 없다" 로 귀결된 지표.
+#   usage_usec  : 누적 CPU 시간(µs). 두 샘플의 델타 ÷ 경과시간 = 사용 코어 수
+#   nr_throttled: 스로틀 발생 횟수. 🔑 지연 급등이 **메모리가 아니라 CPU 제한** 때문인 경우를 가른다
+cpu=$(awk '$1=="usage_usec"{print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+thr=$(awk '$1=="nr_throttled"{print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+awk -v c="$cur" -v p="$peak" -v m="$max" -v cpu="$cpu" -v thr="$thr" '
   $1=="anon"         {anon=$2}
   $1=="file"         {file=$2}
   $1=="inactive_file"{inf=$2}
   $1=="slab"         {slab=$2}
   END {
     ws = c - inf
-    printf "%d %d %d %d %d %d %d\n", ws, c, p, anon, file, slab, m
+    printf "%d %d %d %d %d %d %d %d %d\n", ws, c, p, anon, file, slab, m, cpu, thr
   }' /sys/fs/cgroup/memory.stat
 EOF
 
@@ -47,7 +52,7 @@ mib() { awk -v b="$1" 'BEGIN{ if (b+0 > 9000000000000) print "max"; else printf 
 
 emit_header() {
   printf '# %s  (%s)\n' "$LABEL" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  printf 'pod\tws(Mi)\tcurrent\tpeak\tanon\tfile\tslab\tlimit\n'
+  printf 'pod\tws(Mi)\tcurrent\tpeak\tanon\tfile\tslab\tlimit\tcpu(s)\tthrottled\n'
 }
 
 sample_once() {
@@ -67,9 +72,11 @@ sample_once() {
       continue
     fi
     set -- $out
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    # cpu 는 누적 µs → 초. 델타는 두 샘플을 비교해 사람이 계산한다(스크립트가 상태를 들지 않는다).
+    cpus=$(awk -v u="$8" 'BEGIN{printf "%.1f", u/1000000}')
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$name" "$(mib "$1")" "$(mib "$2")" "$(mib "$3")" \
-      "$(mib "$4")" "$(mib "$5")" "$(mib "$6")" "$(mib "$7")"
+      "$(mib "$4")" "$(mib "$5")" "$(mib "$6")" "$(mib "$7")" "$cpus" "$9"
   done
 }
 
@@ -78,5 +85,11 @@ while [ "$i" -le "$COUNT" ]; do
   [ "$COUNT" -gt 1 ] && printf '\n=== 샘플 %d/%d ===\n' "$i" "$COUNT"
   sample_once
   i=$((i + 1))
-  [ "$i" -le "$COUNT" ] && sleep "$INTERVAL"
+  if [ "$i" -le "$COUNT" ]; then sleep "$INTERVAL"; fi
 done
+
+# 🔴 명시적 exit 0 — 없으면 스크립트 종료코드가 **마지막 명령의 상태**가 된다.
+#    루프의 마지막 판정 `[ "$i" -le "$COUNT" ]` 는 종료 시 반드시 거짓이므로
+#    **정상 실행인데 exit 1** 이 나왔다(09-06 유료 세션 실측 — 출력은 멀쩡했다).
+#    `&&` 를 `if` 로 바꾼 것도 같은 이유다. 호출부가 `|| true` 로 덮으면 진짜 실패까지 삼킨다.
+exit 0
