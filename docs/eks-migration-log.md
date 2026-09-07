@@ -2881,6 +2881,22 @@ QA 지적 두 가지 다 맞다:
 세 태그가 **동일하고 main 조상인지**, 그리고 **`be/` 가 그 커밋 이후 안 바뀐지**까지 확인했다.
 후자가 재빌드 10분을 없앴다.
 
+### [메모] 🟡 `tofu init -upgrade` 가 프로바이더를 올렸다 — 붙일 이유가 없었다 (QA F-3)
+
+`.terraform.lock.hcl` 의 `hashicorp/tls` 가 **4.3.0 → 4.4.0** 으로 바뀌었다.
+내가 `tofu init -upgrade` 를 썼기 때문이고, **`-upgrade` 를 붙일 이유가 없었다**
+(레이어 구성은 09-04 이후 그대로였다).
+
+⚠️ **과금 직전에 프로바이더를 바꾸는 건 불필요한 변수다.** `tls_private_key`·`tls_self_signed_cert` 는
+postgres TLS 를 발급하는 리소스라, 프로바이더가 바뀌었으면 **인증서 재발급 → 앱 기동 실패**로
+과금 중에 번질 수 있었다. 실제로는 `29 to add / 0 to change / 0 to destroy` 였고 apply 도 정상이었지만,
+**결과가 좋았던 것이지 판단이 좋았던 게 아니다.**
+
+📌 이 변경이 "docs" 커밋(`5e7e7fb`)에 조용히 섞여 들어갔고 일지에 없었다 — **QA 가 잡았다**(F-3).
+CLAUDE.md 의 일지 규칙(*"도구 선택은 즉시 기록"*)에 걸리는 누락이다.
+→ 규칙: **유료 세션 직전 `init` 에는 `-upgrade` 를 붙이지 않는다.** 올릴 거면 $0 구간에서 따로,
+plan diff 를 보고 올린다.
+
 ### [결정] 레이트리밋 상향을 매니페스트 편집 → `kubectl set env` 로 변경
 
 계획서 §2 는 `k8s/base/daily-api.yaml` 에 `SPRING_APPLICATION_JSON` 을 넣으라고 적었다.

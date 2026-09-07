@@ -181,7 +181,7 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 
 ### G-6 → 노드 **2대**, `requests` 를 부하 실측으로 재산정 (2026-09-06)
 
-> 📌 **D-012** · 상태 `⚪보류 — 입력 신뢰도 부족` · 영향 `k8s/base/core-api.yaml`, `k8s/base/ai-api.yaml`, `k8s/base/daily-api.yaml`, `k8s/base/postgres-static.yaml`, `infra/aws-eks/2-cluster/variables.tf`, `.claude/review-ledger.md`(L-47), `docs/eks-migration-log.md`, Stage C 이후
+> 📌 **D-012** · 상태 `🚧진행중` *(= 방향은 정해졌으나 **입력이 약해 실행 금지**. 아래 🔴 참조)* · 영향 `k8s/base/core-api.yaml`, `k8s/base/ai-api.yaml`, `k8s/base/daily-api.yaml`, `k8s/base/postgres-static.yaml`, `infra/aws-eks/2-cluster/variables.tf`, `.claude/review-ledger.md`(L-47), `docs/eks-migration-log.md`, Stage C 이후
 
 🔴 **2026-09-07 강등 — 이 결정을 실행하지 마라. 입력이 약하다.**
 아래 `W_peak` 는 **부하 생성기가 신뢰할 수준이 아닌 상태에서** 얻은 값이다:

@@ -6,8 +6,12 @@
 #   그 한 지표가 *"서버 포화"* 와 *"생성기 병목"* 을 가른다.
 #
 # 실행 (스테이지당 한 번씩, 사이에 measure-memory.sh):
-#   kubectl exec k6 -- k6 run -e RATE=25  /scripts/journey.js
-#   kubectl exec k6 -- k6 run -e RATE=50  /scripts/journey.js   ... 100, 200, 400
+#   kubectl exec k6 -- k6 run -e RATE=25  /scripts/journey.js   # 스테이지1 =  75 req/s
+#   kubectl exec k6 -- k6 run -e RATE=50  /scripts/journey.js   # 스테이지2 = 150 req/s
+#   ... 100(300) · 200(600) · 400(1200)  — 계획서 §9.3 스테이지 표와 동일한 값이다
+#
+# 🔴 RATE 는 req/s 가 아니라 **회전/s** 다. 1 iteration = 요청 3개 → 실제 req/s = RATE × 3.
+#    (로컬 실측: RATE=25 → http_reqs 75.29/s)
 #
 # ⚠️ 한 번에 램프를 돌리지 않는 이유: 스테이지별 요약이 깨끗하게 나오고,
 #    무릎이 보이면 **즉시 멈춰 과금을 아낄 수 있다.**
