@@ -40,11 +40,21 @@ pod_not_ready() {
   return 1
 }
 
-# 노드 n 위의 측정 대상 개수
+# 파드 스냅샷 한 번 조회 — 실패하면 **빈 결과가 아니라 실패로** 알린다.
+# 🔴 F-7: `... | grep -c x || true` 는 "정말 0개"와 "kubectl 이 실패해 입력이 빔"을
+#   **구분하지 못한다**(둘 다 0). 검증 루프가 그 0 을 보면 `left=0 notready=0` 이 되어
+#   ✅ 를 조기 선언한다 — 이 스크립트가 없애려던 *"부재가 성공과 똑같이 생긴"* 실패가
+#   검증 단계 자체에 재도입되는 것이다. 그래서 조회를 분리하고 **종료코드를 본다.**
+# 부수 효과: 루프 반복당 kubectl 호출이 2회 → 1회로 줄고, left 와 notready 가
+#   **같은 스냅샷**에서 나와 서로 어긋나지 않는다.
+pod_snapshot() {
+  kubectl get pods -n "$NS" --no-headers \
+    -o custom-columns=NODE:.spec.nodeName,APP:.metadata.labels.app,PHASE:.status.phase,READY:.status.containerStatuses[*].ready
+}
+
+# 스냅샷($1) 안에서 노드($2) 위의 측정 대상 개수
 count_apps_on() {
-  kubectl get pods -n "$NS" \
-    -o custom-columns=NODE:.spec.nodeName,APP:.metadata.labels.app --no-headers |
-    awk -v n="$1" '$1==n {print $2}' |
+  echo "$1" | awk -v n="$2" '$1==n {print $2}' |
     while read -r a; do is_app "$a" && echo x; done | grep -c x || true
 }
 
@@ -74,12 +84,13 @@ elif [ "$labeled_n" -gt 1 ]; then
   exit 1
 elif [ "$labeled_n" -eq 1 ]; then
   NODE="$labeled"
-  echo "── 생성기 노드 = $NODE (이미 지정돼 있어 재사용 — 새로 cordon 하지 않는다)"
+  echo "── 생성기 노드 = $NODE (이미 지정돼 있어 재사용 — 새 노드를 고르지 않는다. cordon·라벨은 멱등이라 아래에서 다시 적용된다)"
 else
+  snap=$(pod_snapshot) || { echo "🔴 파드 조회 실패 — 노드를 고를 수 없다." >&2; exit 1; }
   pick=""; pick_n=-1
   echo "── 측정 대상 파드 분포"
   for n in $nodes; do
-    c=$(count_apps_on "$n")
+    c=$(count_apps_on "$snap" "$n")
     echo "   $n : $c"
     if [ "$pick_n" -lt 0 ] || [ "$c" -lt "$pick_n" ]; then pick="$n"; pick_n="$c"; fi
   done
@@ -100,9 +111,10 @@ kubectl label node "$NODE" "${LABEL_KEY}=${LABEL_VAL}" --overwrite
 # ⚠️ `|| true` 가 필요하다 — 개별 delete 가 NotFound(경쟁 상태로 이미 사라짐)로 실패하면
 #   `set -e` 가 파이프라인째 죽여서 ④ 검증에 **도달조차 못 한다.** 그러면 명확한 실패
 #   메시지 대신 kubectl 에러만 남는다. 성패 판정은 여기가 아니라 ④ 가 한다.
-kubectl get pods -n "$NS" \
-  -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,APP:.metadata.labels.app \
-  --no-headers | while read -r pname pnode papp; do
+evict_list=$(kubectl get pods -n "$NS" --no-headers \
+  -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,APP:.metadata.labels.app) ||
+  { echo "🔴 파드 조회 실패 — 무엇을 내보낼지 알 수 없다. 중단한다." >&2; exit 1; }
+echo "$evict_list" | while read -r pname pnode papp; do
     [ "$pnode" = "$NODE" ] || continue
     is_app "$papp" || continue
     echo "   내보냄: $pname ($papp)"
@@ -115,12 +127,16 @@ i=0
 left=-1
 notready=-1
 while [ "$i" -lt "$WAIT_SECS" ]; do
-  left=$(count_apps_on "$NODE")
+  # 🔴 조회 실패를 "0 개"로 읽지 않는다(F-7). 실패한 샘플은 **버리고 다시 잰다** —
+  #   성공으로 세면 격리가 안 됐는데 ✅ 가 나간다.
+  if ! snap=$(pod_snapshot) || [ -z "$snap" ]; then
+    echo "   ⚠️ 파드 조회 실패/빈 결과 — 이 샘플은 버린다(성공으로 세지 않는다)" >&2
+    sleep 5; i=$((i + 5)); continue
+  fi
+  left=$(count_apps_on "$snap" "$NODE")
   # ⚠️ **측정 대상만** 본다. 네임스페이스 전체를 보면 무관한 파드(과거 Job 의 Error 잔해 등)
   #   하나 때문에 원인 불명 타임아웃이 난다.
-  notready=$(kubectl get pods -n "$NS" \
-    -o custom-columns=APP:.metadata.labels.app,PHASE:.status.phase,READY:.status.containerStatuses[*].ready \
-    --no-headers | while read -r a phase ready; do
+  notready=$(echo "$snap" | while read -r _nd a phase ready; do
       is_app "$a" || continue
       pod_not_ready "$phase" "$ready" && echo x
     done | grep -c x || true)
@@ -139,8 +155,14 @@ while [ "$i" -lt "$WAIT_SECS" ]; do
   i=$((i + 5))
 done
 
-echo "🔴 ${WAIT_SECS}s 안에 비우지 못했다 (남은 측정 대상 ${left}개 · 비Ready ${notready}개)." >&2
-echo "   흔한 원인: 나머지 노드에 용량이 없다 → 파드가 갈 데가 없어 되돌아오거나 Pending." >&2
+if [ "$left" -lt 0 ]; then
+  # 센티널 -1 = 유효한 샘플을 **한 번도** 못 얻었다. "0개였다"와 전혀 다른 상황이다.
+  echo "🔴 ${WAIT_SECS}s 동안 유효한 파드 조회를 한 번도 못 했다 (kubectl 조회가 계속 실패)." >&2
+  echo "   격리 성패는 **알 수 없다** — 성공도 실패도 아니다. 클러스터 접속부터 확인할 것." >&2
+else
+  echo "🔴 ${WAIT_SECS}s 안에 비우지 못했다 (남은 측정 대상 ${left}개 · 비Ready ${notready}개)." >&2
+  echo "   흔한 원인: 나머지 노드에 용량이 없다 → 파드가 갈 데가 없어 되돌아오거나 Pending." >&2
+fi
 echo "   그대로 부하를 걸지 말 것 — 생성기 오염이 섞인 데이터는 09-06 것과 같은 신세가 된다." >&2
 echo "   ℹ️ $NODE 는 cordon + 라벨된 채로 남는다. 재실행하면 **같은 노드를 재사용**한다." >&2
 echo "      원위치:  kubectl uncordon $NODE && kubectl label node $NODE ${LABEL_KEY}-" >&2
