@@ -87,10 +87,11 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
 
-          # core-api 와 동일하게 잡는다. ai-api 는 스텁 모드라 실사용이 더 가벼울 가능성이 높지만,
-          # ⚠️ **ai-api 의 힙·Metaspace 실사용 측정치가 레포에 0건**이라 근거 있는 축소가 불가능하다
-          #    (Dockerfile 의 JVM 플래그는 Fly 512MB 예산에서 나왔고 실측 근거는 core-api prod 하나뿐).
-          #    검증된 값에서 출발하고, apply 세션에서 실측한 뒤 조정한다.
+          # ~~core-api 와 동일하게 잡는다.~~ ~~**ai-api 의 힙·Metaspace 실사용 측정치가 레포에 0건**이라
+          # 근거 있는 축소가 불가능하다.~~
+          # 🔴 **해소됨 (2026-09-08 부하 실측).** 이제 측정치가 있고, core-api 와 **다른 값**이 됐다
+          #   (ai 320/448 vs core 480/576). 위 서술은 *"측정 전이라 보수적으로 맞춰 둔다"* 는
+          #   과도기 근거였고 그 전제가 사라졌다.
           resources:
             requests:
               cpu: 200m
