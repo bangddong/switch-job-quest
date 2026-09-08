@@ -69,6 +69,49 @@ metadata:
     app: k6
 spec:
   restartPolicy: Never
+
+  # ── 🔴 생성기 격리 (계획서 §9.5 "측정 대상과 다른 노드에 고정") ──────────────
+  #
+  # 왜 필요한가: k6 는 requests cpu 500m — t4g.small 2 vCPU 의 **25%** 다. 측정 대상과
+  # 같은 노드에 뜨면 앱의 CPU·메모리를 빼앗은 채로 그 앱을 측정하게 된다. 그러면
+  # *"서버가 포화됐다"* 와 *"생성기가 옆에서 자원을 먹었다"* 가 **구분되지 않는다** —
+  # 09-06 부하를 폐기하게 만든 실패(생성기 오염을 알 방법이 없음)와 정확히 같은 종류다.
+  #
+  # 🔴 **단순 nodeSelector 하나로는 안 된다.** 측정 대상이 4개(ai-api·core-api·daily-api·
+  #   postgres)라 노드 2~3대를 **전부 채울 수 있다**(비둘기집). 빈 노드는 저절로 생기지 않는다.
+  #   → **세션 절차에서 노드 하나를 비워 두고**, 아래 셋으로 거기에만 넣는다.
+  #
+  # ① nodeSelector — 라벨을 붙인 노드에만 간다. 라벨을 안 붙였으면 **Pending**(조용한 오염 대신 정지)
+  # ② tolerations  — `cordon` 은 `node.kubernetes.io/unschedulable:NoSchedule` **taint** 다.
+  #                  이게 없으면 비워 둔 노드에 k6 자신도 못 들어간다. cordon 과 짝이다.
+  # ③ anti-affinity(required) — **가드**. 앱이 어쩌다 이 노드에 있으면 k6 가 Pending 으로
+  #                  **시끄럽게 실패**한다. 막는 장치가 아니라 *침묵을 막는* 장치다.
+  #                  ⚠️ preferred 로 낮추지 말 것 — 그러면 오염이 다시 조용해진다.
+  #
+  # 📋 세션 절차 (계획서 §9.7):
+  #   NODE=$(kubectl get nodes -o name | tail -1 | cut -d/ -f2)
+  #   kubectl cordon "$NODE"                                   # 앱이 새로 오지 못하게
+  #   kubectl label node "$NODE" devquest.io/role=loadgen      # k6 목적지 지정
+  #   kubectl rollout restart deploy/ai-api deploy/core-api deploy/daily-api
+  #   kubectl delete pod postgres-0                            # StatefulSet 은 재생성으로 이동
+  #   # → 앱이 전부 나머지 노드로 옮겨간 뒤에 k6 apply
+  nodeSelector:
+    devquest.io/role: loadgen
+
+  tolerations:
+    - key: node.kubernetes.io/unschedulable
+      operator: Exists
+      effect: NoSchedule
+
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [ai-api, core-api, daily-api, postgres]
   containers:
     - name: k6
       image: grafana/k6:0.58.0 # 태그 고정 — latest 는 세션마다 다른 것을 가리킨다
