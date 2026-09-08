@@ -15,6 +15,12 @@
 #
 # ⚠️ 한 번에 램프를 돌리지 않는 이유: 스테이지별 요약이 깨끗하게 나오고,
 #    무릎이 보이면 **즉시 멈춰 과금을 아낄 수 있다.**
+# 🔴 **이 파일은 ConfigMap 과 Pod 를 함께 담고 있다.**
+#   세션 중에 스크립트를 손보고 나서 `kubectl apply -f k6.yaml` 을 하면 **패치가 원복된다.**
+#   09-08 에 실제로 밟았다 — `PREVUS` 실험이 조용히 무효가 됐고, 마침 그 회차 수치가
+#   좋아져서 하마터면 *"VU 를 늘려 고쳤다"* 는 **틀린 결론**을 쓸 뻔했다(`vus_max` 로 잡음).
+#   → 스크립트만 바꿔 재실행할 때는 **Pod 만** 적용한다:
+#     ruby -ryaml -e 'puts YAML.dump(YAML.load_stream(File.read("k8s/loadtest/k6.yaml")).find{|d| d["kind"]=="Pod"})' | kubectl apply -f -
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -44,7 +50,13 @@ data:
         journey: {
           executor: 'constant-arrival-rate',  // 🔑 오픈 루프 — 서버가 느려도 도착률을 유지하려 한다
           rate: RATE, timeUnit: '1s', duration: DUR,
-          preAllocatedVUs: 100, maxVUs: 2000,
+          // 🔴 09-08 실측: `preAllocatedVUs: 100` 고정이 상위 스테이지에서 `dropped_iterations` 를 냈다.
+          //   RATE=400(1200 req/s) 에서 129 회 → **그 회차를 통째로 버려야 했다**(= 과금 낭비).
+          //   `PREVUS=800` 으로 올리니 **0** 이 됐다.
+          //   ⚠️ 다만 같은 설정(100)의 두 회차가 129 vs 12 로 갈렸다 — 편차가 커서
+          //      *"VU 사전할당이 원인"* 이라고 단정하지 않는다. 확인된 것은 800 에서 0 이 나왔다는 사실뿐.
+          //      (실제 사용 VU 는 47 뿐이었다. 부족이 아니라 **할당 지연**이 의심되나 미확정.)
+          preAllocatedVUs: parseInt(__ENV.PREVUS || '800'), maxVUs: 2000,
         },
       },
       thresholds: {

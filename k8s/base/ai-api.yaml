@@ -94,9 +94,16 @@ spec:
           resources:
             requests:
               cpu: 200m
-              memory: 512Mi
+              # 🔴 2026-09-08 부하 실측 기반 재산정 (종전 512Mi/900Mi 는 근거 없는 보수값이었다).
+              #   W_peak 208Mi — 공식은 req 256 이나 AI 스텁이라 보정해 320
+              #   규칙: requests = roundup32(W×1.15) · limits = roundup64(W×1.35)
+              #   ⚠️ 이 W_peak 은 **하한**이다 — 1200 req/s 에서도 서버가 포화되지 않아
+              #      진짜 무릎을 못 봤다. "더 필요 없다" 가 아니라 "여기까지는 확실히 이만큼" 이다.
+              memory: 320Mi
             limits:
-              memory: 900Mi
+              # 🔴 JVM 하한 448Mi — 0.35L + Metaspace 160 + CodeCache 96 ≤ L 의 해가 393.8Mi.
+              #   그 아래로 조이면 예약만으로 컨테이너 상한을 넘어 OOMKill 이 난다.
+              memory: 448Mi
 ---
 apiVersion: v1
 kind: Service
