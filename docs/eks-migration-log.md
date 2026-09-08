@@ -3335,6 +3335,24 @@ k6 가 **cordon 된 노드에 떴다** — toleration 이 없었으면 k6 자신
 
 CPU 스로틀 **전 컨테이너 0** · evict **0** · 실패 **0**. **1200 req/s 에서도 서버는 한가했다.**
 
+**[막힘→해결] `daily-api` 재시작 2회 — 중단 조건에 걸렸는데 중단하지 않았다. 근거는 *시각*이다.**
+중단 조건 셋 중 하나가 *"파드 재시작/evict 발생"* 이라 그대로 읽으면 무릎을 선언했어야 한다.
+그런데 `lastState.terminated` 를 열어보니:
+
+```
+exitCode=1  reason=Error  startedAt=2026-09-08T01:37:39Z  finishedAt=2026-09-08T01:37:47Z
+이벤트: Startup probe failed: Get "http://10.0.6.244:8082/health": ...
+```
+
+**`01:37:47Z` 는 램프 시작 전이다** — 기준선 측정이 `01:38:49Z`, 스테이지1 이 `01:39` 다.
+격리(10:38:22)에서 `daily-api` 와 `postgres` 가 **동시에** 축출됐고, daily-api 가 postgres 보다
+먼저 떠서 startup probe 에 걸려 8초 만에 두 번 죽었다가 세 번째에 붙었다. **부하와 무관하다.**
+
+🔑 **`restartCount` 는 누적값이라 "언제" 를 담지 않는다.** 램프 끝에 `kubectl get pods` 만 보면
+*"부하가 파드를 죽였다"* 로 읽힌다 — 그러면 스테이지 4 를 무릎으로 잘못 선언하고,
+requests 를 실제보다 크게 잡았을 것이다. **카운터를 볼 때는 반드시 타임스탬프를 함께 본다.**
+→ 계획서 §9.3 중단 조건에 "재시작 시각 확인" 단서를 추가했다.
+
 **[막힘→해결] 🔴 내가 ConfigMap 을 덮어써서 실험 하나를 무효로 만들었다.**
 `PREVUS` env 를 넣으려고 ConfigMap 을 패치한 뒤 **`kubectl apply -f k8s/loadtest/k6.yaml`** 을 했는데,
 그 파일이 **ConfigMap 도 포함**하고 있어 패치가 원복됐다. 결과 `vus_max min=100` — env 가 안 먹었다.
