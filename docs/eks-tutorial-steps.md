@@ -422,9 +422,27 @@ Plan: <N> to add, 0 to change, 0 to destroy.
 > *"29가 나왔으니 제대로 설정됐다"* 가 성립하지 않는다 — **검사가 주장보다 헐거운** 전형이다.
 > 모드를 확인하려면 개수가 아니라 **RDS 리소스가 계획에 있는지**를 본다:
 > ```bash
-> tofu -chdir=infra/aws-eks/2-cluster show -json /tmp/stage.tfplan \
->   | grep -c '"aws_db_instance"'      # rds 모드면 ≥1, in-cluster면 0
+> tofu -chdir=infra/aws-eks/2-cluster show -no-color /tmp/stage.tfplan \
+>   | grep -q 'aws_db_instance' && echo "rds 모드 (RDS 생성됨)" || echo "in-cluster 모드 (RDS 없음)"
 > ```
+>
+> 🔴 **`show -json ... | grep -c '"aws_db_instance"'` 은 쓰지 마라 — 이 자리에 그렇게 적혀
+> 있었고 틀렸다 (2026-09-09 재현에서 발견).** `-json` 출력의 `configuration` 절은 **`count = 0`
+> 이라 만들어지지 않는 리소스의 *선언*까지** 담는다. 그래서 in-cluster 인데도 **1** 이 나온다:
+> ```
+> resource_changes  aws_db_instance: 0    ← 실제로 만드는 것
+> configuration     aws_db_instance: 1    ← 옛 grep 이 세던 것
+> ```
+> 문서를 그대로 따르면 *"rds 모드구나"* 로 오판하고 `-var db_mode=rds` 를 붙이게 된다 —
+> **RDS 를 실수로 켜서 $0.025/hr 을 태우는** 방향이다. 위 명령은 사람이 읽는 plan 출력
+> (= 실제 변경분만 담긴다)을 보므로 이 함정이 없다.
+>
+> 📌 이 결함이 아픈 이유: 이 검사는 바로 위 *"개수는 `db_mode` 를 구분 못 한다"* 를 고치려고
+> 도입된 **대체 검사**였다. **대체 검사가 같은 병에 걸렸다** — 세는 대상이 답해야 할 질문
+> ("무엇을 만드는가")이 아니라 다른 질문("무엇을 선언했는가")에 답하고 있었다.
+> 🔑 개수(`grep -c`)가 아니라 **유무(`grep -q`)로 바꾼 것도 의도적이다.** 텍스트 plan 에
+> `grep -c` 를 쓰면 rds 모드에서 **2** 가 나오는데(리소스 헤더 + 본문 줄), 그 2 는
+> *"RDS 를 2개 만든다"* 가 아니다. **뜻을 오해하게 만드는 숫자보다 유무가 낫다.**
 
 #### 🔑 `db_mode` — 이 문서에서 가장 중요한 스위치
 
@@ -1686,8 +1704,23 @@ kubectl exec $POD -- sh -c 'wget -qO- http://localhost:8080/actuator/health/read
 ```
 ```
 {"result":"SUCCESS","data":"DevQuest API is running","error":null}
-{"status":"UP","components":{"db":{"status":"UP",...},"ping":{"status":"UP"}}}
+{"status":"UP"}
 ```
+
+> 🔴 **`components` 는 안 나온다 — 이 자리에 나온다고 적혀 있었고 틀렸다 (2026-09-09 재현에서 발견).**
+> `application.yml` 에 `management.endpoint.health.show-details` 가 **없어서** Spring 기본값
+> `never` 가 걸린다. 그래서 응답은 `{"status":"UP"}` **한 줄뿐**이다.
+> 문제는 단순 오탈자가 아니다 — 이 단계의 목적이 *"readiness 가 진짜 `db` 를 본다"* 를 보이는 것인데
+> **문서가 시킨 명령으로는 그걸 볼 수 없다.** 기대 출력만 보고 맞춰 보려 하면
+> *"설정이 덜 됐나"* 로 오판하고 없는 문제를 쫓게 된다.
+>
+> `db` 가 그룹에 실제로 들어 있다는 증거는 **출력이 아니라 두 곳**에 있다:
+> ① 선언 — `application.yml` 의 `readiness: include: db,ping`
+> ② 행동 — DB 를 멈추면 T+30 에 파드가 `0/1` 로 빠지고 엔드포인트에서 제외된다
+>   (2026-08-12 실측, `docs/eks-migration-log.md`). **재시작은 0회** — liveness 는 `/health`(상수)라서다.
+>
+> 💡 `show-details: always` 를 켜서 눈으로 보고 싶어질 수 있는데, **켜지 마라.** 그 엔드포인트는
+> 파드 IP로 열려 있어(kubelet 이 찔러야 하므로) DB 호스트·드라이버·버전이 그대로 노출된다.
 
 > ⚠️ `mail`이 `readiness`에 **없어야 정상**이다. 학습 클러스터엔 SMTP 자격증명이 없어
 > `/actuator/health`(전체)는 **503**을 준다 — 메일 발송 능력과 HTTP 요청 처리 능력은 무관한데

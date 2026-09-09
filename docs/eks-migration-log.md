@@ -3476,3 +3476,138 @@ dead man's switch 는 이번 세션 내내 무장돼 있었고 **발동할 일�
 ⚠️ QA 가 sandbox 제약으로 `ruby`/`kubectl` 을 못 돌려 **YAML 을 육안으로만** 검토했다고 밝혔다.
 → orchestrator 가 파서로 재확인했다: 5개 매니페스트 전부 `YAML OK`, 값은
 core 480/576 · daily 512/640 · ai 320/448 · postgres 256/512 로 문서와 일치.
+
+---
+
+## 2026-09-09 — ⓒ 유료 완전 재현 + 3서비스 메모리 검증 (유료 세션)
+
+**세션 시작 09:19:15 KST** (과금 전 준비 구간). 브랜치 `stage/eks-8-repro`.
+
+- `[결정]` **세션 범위 = ⓑ 2단계**. ①`eks-tutorial-steps.md`**만** 보고 Stage 0→3b 완주(노드 1대,
+  튜토리얼이 노드 수를 명시하지 않아 기본값 `node_desired_size=1`) → 재현 판정을 **먼저 봉인** →
+  ②노드 3대로 늘려 daily-api·ai-api 적용 → #414 의 신규 `requests/limits` 실환경 검증 → destroy.
+  - 두 목표가 **같은 구성을 요구하지 않는다**(재현=1대 / 3서비스=3대)는 것이 apply 전에 드러났다.
+    섞으면 재현 판정이 오염되므로 **순서로 분리**한다.
+  - Stage 4(ALB)는 이번에 안 한다 — "문서가 맞나"(검증)와 "새 IaC 작성"(구축)을 섞으면
+    깨졌을 때 원인이 안 갈린다(CONTEXT:327).
+- `[비용]` 예상 **~$0.21 / ~90분**. 1대 $0.1299/h × 60분 + 3대 $0.1865/h × 25분.
+- `[메모]` 사전 점검 통과: `tofu`·`kubectl`·`aws`·`ruby` 존재 · 자격증명 OK ·
+  **SOP §2b ECR 이미지 검사 ✅ `14cb335e66670470e674f0eb76d62e84ee76e0e5`**
+  (그 커밋의 `OtlpMetricsConfig.kt` 에 `GRAFANA_API_KEY:}` 존재 = 관측 기본값 수정 포함).
+- `[메모]` `tofu plan` = **`29 to add, 0 to change, 0 to destroy`** — 08-11 에 정정한 실측치와 일치.
+  과금 리소스는 29개 중 **2개뿐**(`aws_eks_cluster.main` $0.100/h · `aws_eks_node_group.main` $0.0283/h/대).
+  `persistent_az = ap-northeast-2a` · `postgres_data_volume_id = vol-0518b6d0dcd2b0d70` 로 영속 EBS 참조 확인.
+- `[막힘]` **09:2x — 튜토리얼 결함 ①(과금 전 발견).** 0-1 의 `db_mode` 확인 명령이 **거짓 양성**을 낸다.
+  ```
+  $ tofu ... show -json /tmp/stage.tfplan | grep -c '"aws_db_instance"'
+  1                    ← 문서 기대값은 "in-cluster 면 0"
+  ```
+  실제 내역(ruby 로 절을 갈라 확인):
+  ```
+  resource_changes  aws_db_instance: 0     ← 실제로 만드는 것
+  planned_values    aws_db_instance: 0
+  configuration     aws_db_instance: 1     ← grep 이 세던 것
+  variables.db_mode = "in-cluster"
+  ```
+- `[해결]` `-json` 의 `configuration` 절은 **`count = 0` 이라 만들어지지 않는 리소스의 선언까지** 담는다.
+  → 사람이 읽는 plan 출력을 보는 **유무 검사**로 교체. 양방향 반증 통과:
+  ```
+  기본값     → in-cluster 모드 (RDS 없음)
+  -var db_mode=rds → rds 모드 (RDS 생성됨)
+  ```
+  🔑 `grep -c` 가 아니라 `grep -q` 로 바꾼 것도 의도 — 텍스트 plan 에 `-c` 를 쓰면 rds 모드에서
+  **2** 가 나오는데 그건 *"RDS 2개"* 가 아니다(헤더+본문 줄). **오해를 부르는 숫자보다 유무가 낫다.**
+  🔴 **이 검사는 *"개수는 `db_mode` 를 구분 못 한다"* 를 고치려고 도입된 대체 검사였다.
+  대체 검사가 같은 병에 걸렸다** — 세는 대상이 "무엇을 만드는가"가 아니라 "무엇을 선언했는가"였다.
+  문서대로 따랐다면 `-var db_mode=rds` 를 붙여 **RDS 를 실수로 켰을 것**($0.025/hr).
+
+### 1단계 — ⓒ 유료 완전 재현 (09:22:02 apply → 09:38 판정 봉인)
+
+- `[해결]` **apply `29 added` · 8m46s.** 컨트롤플레인 6m44s · 노드그룹 1m17s · coredns 14s · ebs-csi 45s.
+  노드 AZ `ap-northeast-2a` = 볼륨 AZ 일치(3b-2). ESO IRSA 파드 안 주입 확인
+  (`AWS_ROLE_ARN=...role/devquest-eks-eso`), CRD `v1 served=true` (문서와 동일).
+- `[해결]` **static PV 바인딩 성공.** `PV Bound / Retain / gp3-static`, AWS 직접 조회
+  `vol-0518b6d0dcd2b0d70  in-use  /dev/xvdaa` — 문서 예시와 동일.
+- `[해결]` **데이터 생존 재확인**: `Successfully validated 13 migrations` + `Current version: 13`
+  (= `applied` 가 아니다). `Started DevQuestApplicationKt in 19.21 seconds`.
+- `[메모]` **비밀번호 동기화가 무행동이었다** — 파드 IP(`scram-sha-256` 경로)로 **동기화 전에 이미 `1`**.
+  L-14 수정(#373, 비밀번호를 `0-bootstrap` 으로 이동) 이후의 **정상 상태**다. 볼륨과 비밀번호가
+  같은 레이어에 있어 세션을 넘어 함께 산다. 그래도 `ALTER USER` 는 문서대로 실행했다(멱등).
+- `[메모]` **core-api 신규 requests/limits 실환경 첫 확인** — `requests 480Mi / limits 576Mi` 적용 확인.
+  유휴 실측 `working_set=342Mi · peak=344Mi · limit=576Mi · restarts=0`.
+  09-08 부하 실측 W_peak 408Mi 와 대조하면 상한까지 **168Mi** 여유. **단 이건 유휴값이다.**
+
+#### 재현 판정 — **조건부 통과 (결함 2건, 둘 다 문서 수정으로 해소)**
+
+문서만 보고 Stage 0→3b 최종 상태에 **도달했다.** 코드를 열어야 했던 지점은 없었다.
+다만 문서를 그대로 따랐을 때 **오판을 유발하는** 결함이 2건 있었고 둘 다 이 세션에서 고쳤다.
+
+| # | 위치 | 증상 | 따랐다면 |
+|:-:|---|---|---|
+| ① | 0-1 `db_mode` 확인 | `grep -c '"aws_db_instance"'` 가 in-cluster 인데 **1** 을 낸다 (`-json` 의 `configuration` 절이 `count=0` 리소스 선언까지 담음) | *"rds 모드구나"* → `-var db_mode=rds` → **RDS 실수 기동 $0.025/hr** |
+| ② | 3b-7 probe 확인 | 기대 출력에 `components:{db,ping}` 이 있으나 `show-details` 미설정(기본 `never`)이라 **`{"status":"UP"}` 만 나온다** | *"설정이 덜 됐나"* → 없는 문제를 쫓음. 게다가 **그 단계가 증명하려는 것을 그 명령으로는 볼 수 없다** |
+
+🔑 두 결함이 **같은 병**이다 — 08-11·08-12 에 잡은 것들과도 같다: **검사가 주장보다 헐겁거나 빗나간다.**
+특히 ①은 *"개수는 `db_mode` 를 구분 못 한다"* 를 고치려고 도입한 **대체 검사가 같은 병에 걸린** 경우다.
+
+### 2단계 — 3서비스 메모리 재산정 실환경 검증 (09:39:32 노드 증설 → 09:43:10)
+
+- `[결정]` **노드를 3대가 아니라 2대로 갔다 (계획 대비 편차).** 앱 requests 합이 #414 로
+  1792 → **1568Mi** 로 줄어 2대에 여유가 계산됐고, 그러면 L-47 이 *이론으로만* 답한
+  *"2노드에 들어간다"* 를 **실제로 돌려서** 확인하게 된다. Pending 이 나면 3대로 올리면 되고
+  그 비용은 2분 · ~$0.001 이라 실패 비용이 비대칭으로 작았다.
+  실측 `allocatable = 1397828Ki = 1365Mi/노드` (t4g.small 2GB 에서 커널·kubelet 제외분).
+- `[해결]` **2노드에 4개 파드 전부 배치 — Pending 0.** 노드 증설 52초(`0 to add, 1 to change`).
+  ```
+  ai-api      → ip-10-0-10-76     daily-api → ip-10-0-10-76
+  core-api    → ip-10-0-15-139    postgres  → ip-10-0-15-139
+  ```
+  → **L-47 의 답이 실측으로 확정됐다.** #414 는 산술로 "들어간다"고 했고 이번에 스케줄러가 동의했다.
+- `[해결]` **신규 requests/limits 전부 정상 기동. 재시작 0 · OOMKilling 이벤트 0.**
+
+  | 파드 | requests | limits | working_set | peak | 09-08 부하 W_peak | 상한까지 |
+  |---|---|---|---|---|---|---|
+  | core-api | 480Mi | 576Mi | 345Mi | 346Mi | 408Mi | 168Mi |
+  | daily-api | 512Mi | 640Mi | 282Mi | 283Mi | 434Mi | 206Mi |
+  | **ai-api** | 320Mi | **448Mi** | **175Mi** | 175Mi | 208Mi | **240Mi** |
+  | postgres | 256Mi | 512Mi | 33Mi | 38Mi | 68Mi | 444Mi |
+
+- `[메모]` 🔴 **ai-api 의 "마진 35.2Mi" 는 실재하지만 성격이 다르다 — 컨테이너 안에서 직접 확인:**
+  ```
+  java -XX:+UseContainerSupport -XX:MaxRAMPercentage=35.0 -XX:MaxMetaspaceSize=160m
+       -XX:ReservedCodeCacheSize=96m -Xss512k -Xlog:gc::time,level,tags ...
+  ```
+  (플래그는 env 가 아니라 **이미지 ENTRYPOINT 에 구워져 있다** — `JAVA_TOOL_OPTIONS`·`JAVA_OPTS` 둘 다 빈 값)
+  → 예약 천장 `156.8(heap) + 160(metaspace) + 96(codecache) = 412.8Mi` vs limit 448Mi.
+  **그러나 이 셋은 최댓값이지 약정이 아니다.** 실제 점유는 유휴 175Mi · 09-08 부하 208Mi 로
+  천장에서 한참 멀다. 위험이 실현되려면 metaspace 가 160 캡까지 차야 하는데
+  core-api 실측(09-06)이 125.6Mi 였고 ai-api 는 그보다 작은 서비스다.
+  ⚠️ **확도 구분**: "기동한다 · 부하 208Mi 에서 안전하다" = 🔴 실측.
+  "metaspace 가 캡에 닿는 시나리오는 없다" = ⚪ **미확인** — 이번에 부하를 걸지 않았고,
+  `jcmd` 가 이미지에 없어(슬림 JRE) 풀별 분해도 못 봤다. 클래스가 늘면 재확인 대상이다.
+- `[메모]` NetworkPolicy 는 **일부러 적용하지 않았다** — 이번 목표는 메모리이고 C-5 는 #409 에서
+  이미 검증됐다. 범위를 과금 중에 늘리지 않는다.
+
+### 종료 — teardown · 고아 검증 · 비용 결산
+
+- `[해결]` **`29 destroyed`** (09:43:34 → 09:53:36, 10m02s). ExternalSecret·SecretStore 선삭제,
+  ingress 0건, **PVC 는 남겼다**(static PV — 지우면 `Released` + `claimRef` 잔존으로 다음 세션에
+  실패 ④를 밟는다. 클러스터와 함께 사라진다).
+- `[해결]` **고아 0 (§9 전수)**: tofu state 0 · EKS 0 · LB 0 · NAT 0 · RDS 인스턴스 0 · 수동 스냅샷 0 ·
+  `Persistent` 태그 없는 available EBS **0** · Secrets Manager **0**(삭제대기 포함 조회).
+- `[해결]` **§9b 영속 인벤토리 = 원장과 일치**: `vol-0518b6d0dcd2b0d70 · 10GiB · ap-northeast-2a · available` **1개**.
+  (§9 와 §9b 는 반대 방향 검사다 — 전자는 "없어야", 후자는 "정확히 이만큼 있어야".)
+- `[비용]` **명시적 `date` 스탬프로 계산한다 — 파일 mtime 을 쓰지 않는다**(09-08 에 그걸로
+  destroy 시작보다 이른 종료 시각이 나왔다).
+  ```
+  과금 창       : 09:22:02 → 09:53:36 = 31분 34초 (0.5261 h)
+  컨트롤플레인  : 0.5261 h × $0.100                  = $0.0526
+  노드          : 0.6392 node-h × $0.0283            = $0.0181
+                  (1대 09:29:19~ · 2대째 09:39:32~)
+  Secrets Mgr   : 3종 일할                            = $0.0009
+  ─────────────────────────────────────────────────────────────
+  합계                                                 $0.0716
+  ```
+  **누적 $2.6710 / $200 (1.34%)**. 예상 $0.21 대비 **1/3** — 90분을 잡았는데 31분에 끝났다.
+  🔑 짧게 끝난 이유는 요령이 아니라 **준비**다: 결정(범위·노드 수 기준)을 전부 apply 전에 했고,
+  절차를 미리 읽어뒀고, 문서 결함 ①을 **$0 구간에서** 잡았다. 09-06 의 반대 사례($0.4622 중 85% 가 유휴).
