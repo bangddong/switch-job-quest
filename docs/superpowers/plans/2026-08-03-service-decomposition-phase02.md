@@ -44,7 +44,7 @@ Task 2.1이 동작하려면 테이블이 지금 필요해서였다 — **실행�
 |---|---|:--|
 | **A** | daily 도메인을 core 안에서 자립시킨다 (게이트 무관) | ✅ **완료 (2026-08-21)** — prod 실측 확인 <!-- verify: .github/workflows/prod-smoke-daily.yml ~ daily-question --> |
 | **B** | daily **로직**을 라이브러리 모듈로 + 그걸 조립하는 얇은 `daily-api` 앱 (G-1 귀결) | ✅ **완료 (2026-08-27)** — B-1 `core:daily-core`(#392) · B-2a `clients:client-ai-http`(#393) · B-2b `core:daily-api`(#395). 완료 기준 3개 전부 충족: 519 tests 0 failures(직전 497 유지) · daily-api 단독 기동(RANDOM_PORT 실서버 + ai-api 없이 200/404) · **core-api 산출물 334 불변**(diff 공집합) <!-- verify: be/core/daily-api/build.gradle.kts --> |
-| **C** | EKS 토폴로지 3서비스 (Fly 무작업) | ⬜ |
+| **C** | EKS 토폴로지 3서비스 (Fly 무작업) | ✅ **완료 (2026-09-03, PR #409)** — 노드 3대로 3서비스 기동 + C-5(NetworkPolicy 가 실제로 막는가) 검증. 2026-09-09 재확인: 신규 requests 로 **2노드에 4파드 전부 배치**(Pending 0) <!-- verify: k8s/base/ai-api.yaml ~ app:[[:space:]]*ai-api --> |
 
 > Stage A는 **에픽이 멈춰도 단독으로 가치가 있다.** 지금 `/daily-question`은 "로그인 유저 존재 +
 > 메일 발송 성공"에 매달려 있고 그 사실이 어디에도 안 적혀 있다.
