@@ -82,3 +82,38 @@ output "persistent_az" {
   description = "영속 EBS·노드가 함께 놓인 AZ (static PV의 nodeAffinity). 0-bootstrap 소유값의 중계."
   value       = data.terraform_remote_state.bootstrap.outputs.persistent_az
 }
+
+# ── Stage 4: AWS Load Balancer Controller helm install 에 넣을 값 ──
+#
+# 세 값을 한자리에 모아 둔다. LBC 는 이 셋을 **전부 명시로** 받아야 한다 —
+# 왜 그런지는 각 output 의 설명 참조.
+
+output "alb_controller_role_arn" {
+  description = <<-EOT
+    LBC ServiceAccount 에 annotation 으로 달 IRSA 역할 ARN.
+    helm install 시:
+      --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=<이 값>
+    ⚠️ annotation 키의 **점을 이스케이프**할 것 — 빠뜨리면 helm 이 중첩 맵을 만들어
+       에러 없이 엉뚱한 구조를 넣는다(= IRSA 가 조용히 안 붙는다).
+  EOT
+  value       = aws_iam_role.alb_controller.arn
+}
+
+output "vpc_id" {
+  description = <<-EOT
+    LBC helm install 의 `--set vpcId=<이 값>` 에 쓴다.
+
+    🔴 **생략하지 마라 — 생략하면 LBC 가 IMDS 로 VPC 를 알아내려 한다.**
+    ESO·EBS CSI 는 IRSA(projected token)만 쓰므로 IMDS 를 건드리지 않았고, 그래서
+    이 실패 경로가 이 클러스터에서 **아직 한 번도 드러난 적이 없다.**
+    IMDS hop limit 이 1 이면 파드에서 도달할 수 없어
+    `failed to introspect vpcID from EC2Metadata` 로 CrashLoop 한다.
+    값은 1-network 가 소유한다 — 여기서는 중계만 한다(세션 작업 디렉토리가 2-cluster 라서).
+  EOT
+  value       = data.terraform_remote_state.network.outputs.vpc_id
+}
+
+output "region" {
+  description = "LBC helm install 의 `--set region=<이 값>`. vpcId 와 같은 이유로 명시한다."
+  value       = var.region
+}
