@@ -1842,9 +1842,310 @@ vol-0518b6d0dcd2b0d70   available     ← 이게 남는 것이 이 단계의 성
 
 ---
 
-## Stage 4~5 — (예정)
+## Stage 4 — ALB Ingress로 밖에서 접속하기
+
+> 🚧 **이 절은 코드가 먼저 작성됐고 유료 검증은 아직이다 (2026-09-11).**
+> 아래 명령·기대 출력 중 "실측"이라 표시되지 않은 것은 **문서·차트 조회에 근거한 예상**이다.
+> 세션이 끝나면 실제 출력으로 교체한다. **`✅`는 "머지됐다"가 아니라 "실클러스터에서
+> 확인했다"는 뜻**이라는 이 문서의 규칙(진행 현황 표 주석)이 여기에도 적용된다.
+
+지금까지 앱에 접근하려면 `kubectl exec`로 파드 **안**에 들어가야 했다. Stage 4는 그걸 바꾼다 —
+인터넷에서 URL로 접근할 수 있게 만든다.
+
+### 4-0. 개념 — Ingress는 "요청"이고 컨트롤러가 "실행"한다
+
+K8s에는 `Ingress`라는 오브젝트가 있는데, **그 자체로는 아무 일도 하지 않는다.** 그냥
+*"이런 경로로 오는 트래픽을 이 서비스로 보내주세요"* 라고 적어둔 **주문서**다.
+
+주문서를 읽고 실제로 일하는 것이 **Ingress 컨트롤러**다. 클라우드마다 다르고, AWS에서는
+**AWS Load Balancer Controller(LBC)** 가 그 역할을 한다:
+
+```
+[사람]  kubectl apply -f ingress.yaml
+            ↓  (Ingress 오브젝트가 생김 — 아직 아무 일도 안 일어남)
+[LBC]   Ingress를 감시하다 발견
+            ↓
+[AWS]   ALB 생성 → 리스너 생성 → 타겟그룹 생성 → 파드 IP를 타겟으로 등록
+            ↓
+[인터넷] http://k8s-xxx.ap-northeast-2.elb.amazonaws.com/api/v1/...
+```
+
+🔑 **컨트롤러가 없으면 Ingress는 영원히 주문서로만 남는다.** `kubectl get ingress`는 정상으로
+보이고 `ADDRESS` 칸만 비어 있다. 그래서 Stage 4의 절반은 "컨트롤러를 제대로 띄우는 것"이다.
+
+| 용어 | 뜻 |
+|---|---|
+| **Ingress** | 라우팅 규칙을 적은 K8s 오브젝트(주문서) |
+| **IngressClass** | 이 주문서를 **어느 컨트롤러가** 처리할지 지정. 여기선 `alb` |
+| **ALB** | AWS Application Load Balancer. 실제로 트래픽을 받는 물건 |
+| **타겟그룹** | ALB가 트래픽을 보낼 대상 묶음. 여기엔 **파드 IP**가 등록된다 |
+
+### 4-1. 왜 helm인가 — 애드온이 아니다 (착수 전 무료 확인)
+
+이 레포는 애드온을 `aws_eks_addon`으로 관리한다(`2-cluster/addons.tf`: vpc-cni·kube-proxy·
+coredns·ebs-csi). LBC도 그렇게 되나 확인부터 한다:
+
+```bash
+aws eks describe-addon-versions --addon-name aws-load-balancer-controller \
+  --region ap-northeast-2 --query 'addons[0].addonVersions[0].addonVersion' --output text
+```
+```
+None
+```
+
+**실측(2026-09-11): 제공되지 않는다.** 그래서 ESO와 같은 방식 — **CLI helm**으로 깐다.
+
+> 🔑 이 확인은 **무료이고 30초**다. 안 하고 `addons.tf`에 한 줄 넣었다면 apply가 실패했을 것이고,
+> 그건 **과금이 시작된 뒤**다. 이 문서가 반복해서 말하는 원칙이다 —
+> **`aws ... describe-*`로 실물을 먼저 조회한다.**
+>
+> 📌 레포의 실제 관례는 *"AWS 1st-party 애드온만 `aws_eks_addon`, 서드파티는 CLI helm"* 이다.
+> `2-cluster/versions.tf`에 helm/kubernetes provider가 **아예 없다**는 것이 그 증거다.
+
+### 4-2. IRSA 역할 — tofu가 이미 만들어 뒀다
+
+LBC 파드는 ALB를 만들고 지워야 하므로 AWS 권한이 필요하다. 권한을 노드가 아니라
+ServiceAccount에 묶는 IRSA를 쓴다(원리는 Stage 2 참조). 역할은 `2-cluster`가 소유한다:
+
+<!-- verify: infra/aws-eks/2-cluster/irsa-alb.tf ~ aws_iam_role" "alb_controller -->
+<!-- verify: infra/aws-eks/2-cluster/irsa-alb.tf ~ policy[[:space:]]*=[[:space:]]*jsonencode\(jsondecode -->
+
+```bash
+tofu -chdir=infra/aws-eks/2-cluster output -raw alb_controller_role_arn
+```
+```
+arn:aws:iam::<account>:role/devquest-eks-alb-controller
+```
+
+#### 🔴 정책 크기 상한 — 공식 JSON을 그대로 쓰면 apply가 실패한다
+
+LBC에는 AWS 관리형 정책이 **없다.** 공식 `iam_policy.json`을 직접 넣어야 하는데:
+
+```
+공식 파일(들여쓰기 포함)  8,955자
+IAM customer managed 상한 6,144자     ← 넘는다
+jsonencode(jsondecode())  5,196자     ← 공백을 걷어내면 통과 (여유 948자)
+```
+
+그래서 `irsa-alb.tf`가 이렇게 쓴다:
+
+```hcl
+policy = jsonencode(jsondecode(file("${path.module}/iam-policy-alb-controller.json")))
+```
+
+`file()`만 쓰면 `LimitExceeded`로 죽는다. **버전을 올릴 때는 크기부터 재라** — 여유가 크지 않다.
+
+#### 🔴 와일드카드는 줄이지 않는다, 그리고 tfsec는 이걸 못 본다
+
+정책 16개 statement 중 **10개가 `Resource: "*"`** 다. LBC는 자기가 **앞으로 만들** ALB·타겟그룹·
+보안그룹을 미리 알 수 없어서(ARN이 런타임에 생긴다) 조건 키로 좁히는 것이 공식 설계다.
+임의로 깎으면 **과금 중에** `AccessDenied`를 만난다.
+
+> ⚠️ **이 레포의 tfsec 게이트는 이 파일을 검사하지 못한다.** `aws-iam-no-policy-wildcards`는
+> HCL 안의 정책 문서를 보는데, 외부 JSON을 `file()`로 읽으면 대상 밖이라 **조용히 통과**한다.
+> 즉 *"CI가 통과했으니 와일드카드가 없다"* 는 추론이 **여기서는 성립하지 않는다.**
+> 이건 우회가 아니라 도구의 한계지만, **한계를 모르는 것이 진짜 위험**이라 코드 주석과
+> 여기 양쪽에 적어 둔다. 파일 무결성은 sha256으로 확인한다(`irsa-alb.tf` 주석).
+
+### 4-3. LBC 설치 — 인자 셋을 반드시 명시한다
+
+```bash
+cd infra/aws-eks/2-cluster
+ROLE=$(tofu output -raw alb_controller_role_arn)
+VPC=$(tofu output -raw vpc_id)
+REG=$(tofu output -raw region)
+cd -
+
+# 🔴 형식 검사 — Stage 2와 같은 이유다(아래 설명)
+case "$ROLE" in
+  arn:aws:iam::*:role/*) echo "✅ $ROLE" ;;
+  *) echo "🔴 role ARN이 아니다 — 여기서 멈출 것" ;;
+esac
+case "$VPC" in
+  vpc-*) echo "✅ $VPC" ;;
+  *) echo "🔴 vpc id가 아니다 — 여기서 멈출 것" ;;
+esac
+
+helm repo add eks https://aws.github.io/eks-charts && helm repo update
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  --version 3.5.0 --namespace kube-system \
+  --set clusterName=devquest-eks \
+  --set region="$REG" \
+  --set vpcId="$VPC" \
+  --set replicaCount=1 \
+  --set resources.requests.cpu=50m \
+  --set resources.requests.memory=96Mi \
+  --set resources.limits.memory=192Mi \
+  --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$ROLE" \
+  --wait --timeout 5m
+```
+
+인자를 하나씩 왜 넣는지:
+
+| 인자 | 왜 |
+|---|---|
+| `region` · `vpcId` | 🔴 **생략하면 IMDS로 알아내려 한다.** hop limit이 1이면 파드에서 도달 못 해 `failed to introspect vpcID from EC2Metadata`로 CrashLoop. ESO·EBS CSI는 IRSA(projected token)만 써서 IMDS를 안 건드렸다 — **그 선례가 이 실패를 덮어주지 않는다** |
+| `replicaCount=1` | 기본값 **2**. 노드가 적어 HA가 성립하지 않는다. `addons.tf`가 coredns에 같은 조치를 한 전례 |
+| `resources.requests.*` | 🔴 **차트 기본값이 `resources: {}`** = BestEffort. 그러면 `Pending`이 아니라 **그냥 스케줄되고**, 여유 없는 노드에 얹혀 **앱을 evict시킨다.** Pending은 시끄러운 실패지만 evict는 조용하다 |
+| `serviceAccount.annotations` | 점을 **이스케이프**해야 한다. 안 하면 helm이 `eks → amazonaws → com/role-arn` 중첩 맵을 만들어 **에러 없이** 엉뚱한 구조를 넣는다 |
+
+> 🔴 **형식 검사를 지우지 마라.** apply가 안 끝난 상태에서 `tofu output`을 읽으면 tofu가
+> `Warning: No outputs found`를 **종료코드 0으로** 뱉고, 그 경고문이 그대로 변수에 담긴다.
+> helm은 그걸 값으로 받고 K8s도 항의하지 않는다 → **IRSA가 안 붙은 채로 컨트롤러가 뜬다.**
+> 2026-08-12에 ESO에서 실제로 밟았고, 그때 배운 것이 *"비었나(`-z`)보다 **그 모양이 맞나**가 강하다"* 였다.
+
+IRSA가 실제로 붙었는지는 **helm 출력이 아니라 파드 안**을 본다:
+
+```bash
+POD=$(kubectl get pod -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller \
+  -o jsonpath='{.items[0].metadata.name}')
+kubectl get pod -n kube-system "$POD" \
+  -o jsonpath='{range .spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}'
+```
+```
+AWS_ROLE_ARN=arn:aws:iam::<account>:role/devquest-eks-alb-controller
+AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token
+```
+
+### 4-4. Ingress 적용 — 💰 여기서 ALB 과금이 시작된다
+
+```bash
+kubectl apply -f k8s/base/ingress.yaml
+```
+
+<!-- verify: k8s/base/ingress.yaml ~ io/target-type:[[:space:]]*ip -->
+<!-- verify: k8s/base/ingress.yaml ~ io/healthcheck-path:[[:space:]]*/health -->
+
+이 파일이 왜 그렇게 생겼는지가 Stage 4의 핵심이다. **세 가지가 전부 "조용한 실패"를 막는다.**
+
+#### ① `target-type: ip` — 기본값이면 ALB가 안 생긴다
+
+기본값 `instance`는 **Service가 NodePort여야** 동작한다. 우리 Service는 전부 `ClusterIP`다.
+기본값으로 두면:
+
+```
+kubectl apply   → ingress.networking.k8s.io/devquest created     ← 성공처럼 보인다
+kubectl get ingress → ADDRESS 칸이 영원히 빈다
+실제 에러       → kubectl describe ingress devquest 의 Events 에만
+```
+
+`ip` 모드는 ALB가 **파드 IP로 직접** 보낸다. VPC CNI가 파드에 VPC IP를 주기 때문에 가능한 것으로,
+**EKS 고유 기능이다**(kind로는 배울 수 없다). 홉이 하나 줄고 NodePort 범위를 열 필요도 없다.
+
+#### ② `healthcheck-path: /health` — 기본값 `/`는 401이다
+
+`SecurityConfig.kt`가 `anyRequest().authenticated()`이고 permitAll 목록에 `/`가 없다.
+
+```
+ALB가 / 를 찌름 → 401 → success-codes(200) 불일치 → 전 타겟 unhealthy → 502
+그런데 kubectl get pods 는 1/1 Running     ← kubelet은 /health 를 찌르니까
+```
+
+**파드는 멀쩡한데 밖에서만 502**다. 원인이 앱에 있다고 착각하기 딱 좋다.
+
+#### ③ actuator를 라우팅하지 않는다
+
+`SecurityConfig`는 `/actuator/health/readiness`를 `permitAll`로 뚫어놨다. 그 근거는
+**kubelet이 파드 IP로 찌르기 때문**이고, 그 판단이 내려질 때 **ALB는 없었다.** ALB가 `/*`를
+라우팅하면 DB 헬스 상태가 인터넷에 공개된다.
+
+→ Ingress rule을 `/api/v1`로 좁혀 해결한다. **코드를 고치는 것보다 얕고 되돌리기 쉽다.**
+
+#### 🔴 경로 순서가 의미를 갖는다 — 두 서비스가 같은 경로를 서빙한다
+
+```
+core-api  : /api/v1/{ai-check,auth,coach,coding,companies,daily-question,progress,resume,...}
+daily-api : /api/v1/daily-question                    ← 겹친다
+```
+
+Phase 2 strangler 이관이 롤백 보존을 위해 core-api 쪽 구현을 남겨뒀기 때문이다. 그래서 단순
+prefix 분할이 성립하지 않고, **구체적인 것을 먼저** 둔다:
+
+```yaml
+- path: /api/v1/daily-question   → daily-api    # ① 새 서비스로
+- path: /api/v1                  → core-api     # ② 나머지 전부
+```
+
+🔑 **이게 strangler 패턴의 실제 모습이다.** 라우터가 경로 단위로 트래픽을 새 서비스에 옮기고,
+문제가 생기면 규칙 ① 하나만 지워 즉시 되돌린다.
+
+> ⚠️ **LBC는 rules 배열 순서대로 ALB 규칙 우선순위를 매긴다.** 둘을 바꿔 쓰면 `/api/v1`이 먼저
+> 매칭되어 **daily-api로는 트래픽이 한 건도 안 간다.** 그리고 그건 에러가 아니라 "잘 도는 것처럼"
+> 보인다 — core-api에도 같은 엔드포인트가 있으니 **200이 온다.**
+
+### 4-5. 검증 — 🔴 응답 코드로 판정하지 마라
+
+```bash
+kubectl get ingress devquest -w        # ADDRESS 가 채워질 때까지 (2~3분)
+ALB=$(kubectl get ingress devquest -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+echo "$ALB"
+```
+
+타겟이 healthy가 될 때까지 기다린 뒤(ALB 헬스체크는 기본 15초 간격 × 2회 성공):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB/api/v1/daily-question"
+```
+
+**200이 왔다고 끝이 아니다.** 위 ⚠️대로 순서가 뒤집혀도 200이 온다. **어느 파드가 응답했는지**를
+봐야 한다:
+
+```bash
+# 요청 직후 두 파드의 최근 로그를 비교한다
+kubectl logs -l app=daily-api --tail=5 --since=30s
+kubectl logs -l app=core-api  --tail=5 --since=30s
+```
+
+| 확인 | 합격 |
+|---|---|
+| `/api/v1/daily-question` | **daily-api 로그에** 찍힘 (core-api엔 없음) |
+| `/api/v1/companies` 등 | **core-api 로그에** 찍힘 |
+| `/actuator/health` | **404 또는 라우팅 안 됨** (노출되면 안 된다) |
+
+> 🔑 이 레포가 반복해 배운 것이다 — **검사가 주장보다 헐거우면 통과가 의미를 잃는다.**
+> "200이 왔다"는 *"ALB가 붙었다"* 는 답할 수 있어도 *"라우팅이 의도대로다"* 는 답하지 못한다.
+
+### 4-6. 🔴 teardown — ALB는 tofu가 모른다
+
+ALB는 LBC가 만들었으므로 **tofu state 밖**이다. `tofu destroy`는 이것을 지우지 않는다.
+
+```bash
+kubectl delete ingress --all -A --timeout=180s
+kubectl get ingress -A                                    # → No resources found
+aws elbv2 describe-load-balancers --region ap-northeast-2 \
+  --query 'length(LoadBalancers)' --output text           # → 0
+```
+
+**0이 아니면 여기서 멈춘다.** 두 가지가 겹치기 때문이다:
+- ALB가 고아로 남아 **월 ~$16.43 + 퍼블릭 IP $7.30**
+- LBC가 만든 SG를 참조하는 규칙 때문에 `DependencyViolation`으로 **destroy 자체가 실패**
+
+> 🔑 **`kubectl delete`를 친 것과 ALB가 사라진 것은 다르다.** Ingress에는 finalizer가 붙어서
+> LBC가 실물을 지운 뒤에야 오브젝트가 사라진다. 컨트롤러가 먼저 죽었으면 delete가 **영구 hang**한다.
+>
+> 🛡️ **리퍼(dead man's switch)도 이제 이걸 한다** (`.claude/scripts/eks-reaper.sh`).
+> 리퍼가 도는 조건 = 사람이 자리를 비운 상황 = 위 수동 절차가 실행되지 않는 상황이라,
+> 방어가 없으면 가장 위험한 경로였다. destroy **전에** Ingress를 지우고(SG 의존성 회피),
+> 후에 잔존 ALB를 경고한다. 회귀 테스트: `.claude/scripts/tests/reaper-alb-test.sh` (무과금).
+
+### 4-7. 비용 — 세션 단가가 25% 오른다
+
+| 항목 | 단가 |
+|---|---|
+| ALB 고정 | **$0.0225/h** |
+| 퍼블릭 IPv4 × 2 AZ | **$0.010/h** |
+| 합계 추가분 | **+$0.0325/h** (세션 $0.1299 → **$0.1624/h**) |
+
+🔴 **LCU(용량 단위)가 별도다.** 신규 연결 1 LCU = 100 connections/s 기준으로, 09-08 램프가
+도달한 1200 req/s를 ALB로 태우면 최악 ~12 LCU × $0.008 = **$0.096/h** — 고정비의 4배다.
+→ **부하 테스트와 Stage 4를 같은 세션에 넣지 마라.** 예산 모델이 깨진다.
+
+---
+
+## Stage 5 — (선택, 미착수)
 
 | Stage | 세울 것 | 새로 배우는 것 |
 |:--:|---|---|
-| **4** | AWS Load Balancer Controller → ALB Ingress | IngressClass, ALB target-type |
 | **5** | metrics-server·HPA, Karpenter, ArgoCD | 오토스케일, GitOps |
+
+> `infra/aws-eks/README.md`가 **"선택"** 으로 표시해 둔 단계다. EKS 이관 완료의 필수 조건이 아니다.
