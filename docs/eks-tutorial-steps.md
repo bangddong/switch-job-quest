@@ -1844,10 +1844,13 @@ vol-0518b6d0dcd2b0d70   available     ← 이게 남는 것이 이 단계의 성
 
 ## Stage 4 — ALB Ingress로 밖에서 접속하기
 
-> 🚧 **이 절은 코드가 먼저 작성됐고 유료 검증은 아직이다 (2026-09-11).**
-> 아래 명령·기대 출력 중 "실측"이라 표시되지 않은 것은 **문서·차트 조회에 근거한 예상**이다.
-> 세션이 끝나면 실제 출력으로 교체한다. **`✅`는 "머지됐다"가 아니라 "실클러스터에서
-> 확인했다"는 뜻**이라는 이 문서의 규칙(진행 현황 표 주석)이 여기에도 적용된다.
+> ✅ **유료 세션으로 검증됨 (2026-09-11, 30분 44초 · $0.0996 · 고아 0).**
+> 아래 명령은 전부 실제로 실행된 것이고, 기대 출력도 실측이다.
+> 실측 상세는 `docs/eks-migration-log.md` 2026-09-11 엔트리.
+>
+> 🔑 **한 가지는 예상이 빗나갔다** — 라우팅 검증을 응답으로 하려 했으나 **불가능했다.**
+> 두 서비스가 같은 DB의 같은 행을 읽어 **응답 본문이 완전히 동일**했고, 앱이 액세스 로그를
+> 안 찍어 로그 대조도 안 됐다. 4-5절이 그 대안(반증 실험)으로 바뀌었다.
 
 지금까지 앱에 접근하려면 `kubectl exec`로 파드 **안**에 들어가야 했다. Stage 4는 그걸 바꾼다 —
 인터넷에서 URL로 접근할 수 있게 만든다.
@@ -2073,37 +2076,119 @@ prefix 분할이 성립하지 않고, **구체적인 것을 먼저** 둔다:
 > 매칭되어 **daily-api로는 트래픽이 한 건도 안 간다.** 그리고 그건 에러가 아니라 "잘 도는 것처럼"
 > 보인다 — core-api에도 같은 엔드포인트가 있으니 **200이 온다.**
 
-### 4-5. 검증 — 🔴 응답 코드로 판정하지 마라
+### 4-5. 검증 — 🔴 응답으로는 판정할 수 없다 (실측에서 드러남)
 
 ```bash
-kubectl get ingress devquest -w        # ADDRESS 가 채워질 때까지 (2~3분)
+kubectl get ingress devquest        # ADDRESS 가 채워지는지
+```
+```
+devquest  alb  *  k8s-default-devquest-3675af8c03-775497815.ap-northeast-2.elb.amazonaws.com  80  20s
+```
+
+🔑 **ADDRESS가 20초 만에 채워졌다는 것 자체가 `target-type: ip`가 맞았다는 증거다.**
+기본값 `instance`였다면 Service가 ClusterIP라 ALB가 안 생기고 이 칸이 **영원히 비었을 것**이다.
+
+ALB가 `active`가 되고 타겟이 `healthy`가 될 때까지 **2분 30초** 걸렸다(실측):
+
+```bash
+aws elbv2 describe-load-balancers --region ap-northeast-2 \
+  --query 'LoadBalancers[0].State.Code' --output text        # → active
+```
+
+타겟이 **파드 IP**로 등록됐는지 확인한다 — 이게 `ip` 모드의 실물이다:
+
+```bash
+for tg in $(aws elbv2 describe-target-groups --region ap-northeast-2 \
+              --query 'TargetGroups[].TargetGroupArn' --output text); do
+  aws elbv2 describe-target-health --region ap-northeast-2 --target-group-arn "$tg" \
+    --query 'TargetHealthDescriptions[].[Target.Id,Target.Port,TargetHealth.State]' --output text
+done
+kubectl get pods -l 'app in (core-api,daily-api)' \
+  -o custom-columns=NAME:.metadata.name,IP:.status.podIP --no-headers
+```
+```
+10.0.3.131    8080   healthy        ← 타겟그룹이 말하는 것
+10.0.12.186   8082   healthy
+core-api-...  10.0.3.131            ← kubectl 이 말하는 것 — 일치한다
+daily-api-... 10.0.12.186
+```
+
+> 📌 **비자명: 타겟그룹의 `Port`가 `1`로 보인다.** `ip` 모드에서 그건 **무의미한 자리표시자**다 —
+> 타겟마다 포트를 개별로 갖기 때문이다(위 8080/8082). 타겟그룹 레벨 `Port`를 보고
+> *"포트 설정이 틀렸다"* 고 오판하지 말 것. 봐야 하는 건 **`Target.Port`** 다.
+
+ALB 규칙이 Ingress 배열 순서대로 매겨졌는지도 확인한다:
+
+```bash
+LB=$(aws elbv2 describe-load-balancers --region ap-northeast-2 --query 'LoadBalancers[0].LoadBalancerArn' --output text)
+LSN=$(aws elbv2 describe-listeners --region ap-northeast-2 --load-balancer-arn "$LB" --query 'Listeners[0].ListenerArn' --output text)
+aws elbv2 describe-rules --region ap-northeast-2 --listener-arn "$LSN" \
+  --query 'Rules[].[Priority,Conditions[0].Values[0]]' --output text
+```
+```
+1        /api/v1/daily-question      ← dailyapi 타겟그룹
+2        /api/v1                     ← coreapi  타겟그룹
+default  None                        ← 404
+```
+
+#### 응답 코드
+
+```bash
 ALB=$(kubectl get ingress devquest -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-echo "$ALB"
+for p in /api/v1/daily-question /api/v1/companies /actuator/health/readiness /health /; do
+  printf "%-32s %s\n" "$p" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://$ALB$p")"
+done
 ```
 
-타겟이 healthy가 될 때까지 기다린 뒤(ALB 헬스체크는 기본 15초 간격 × 2회 성공):
+| 경로 | 실측 | 뜻 |
+|---|:--:|---|
+| `/api/v1/daily-question` | 200 | — **아래 참조. 이걸로는 아무것도 증명 못 한다** |
+| `/api/v1/companies` | 403 | core-api 도달 + 인증 요구 = 정상 |
+| `/actuator/health/readiness` | **404** | ✅ **인터넷에 노출되지 않았다** |
+| `/health` · `/` | 404 | ✅ 라우팅 안 됨 |
+
+#### 🔴 여기서 막혔다 — 200이 어느 파드에서 왔는지 알 수 없다
+
+`/api/v1/daily-question`은 **두 서비스 모두** 갖고 있다. 라우팅이 뒤집혀 core-api로 가도 200이다.
+구분하려고 두 가지를 시도했고 **둘 다 실패했다**:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB/api/v1/daily-question"
+# 시도 ①: 응답 본문 비교 → 실패. 셋이 완전히 동일했다
+kubectl exec $POD -- wget -qO- http://core-api:8080/api/v1/daily-question   # {"result":"SUCCESS","data":{"question":"Kafka와...
+kubectl exec $POD -- wget -qO- http://daily-api:8082/api/v1/daily-question  # {"result":"SUCCESS","data":{"question":"Kafka와...
+curl -s "http://$ALB/api/v1/daily-question"                                 # {"result":"SUCCESS","data":{"question":"Kafka와...
 ```
-
-**200이 왔다고 끝이 아니다.** 위 ⚠️대로 순서가 뒤집혀도 200이 온다. **어느 파드가 응답했는지**를
-봐야 한다:
+두 서비스가 **같은 DB의 같은 행**(오늘의 질문)을 읽으니 당연하다.
 
 ```bash
-# 요청 직후 두 파드의 최근 로그를 비교한다
-kubectl logs -l app=daily-api --tail=5 --since=30s
-kubectl logs -l app=core-api  --tail=5 --since=30s
+# 시도 ②: 앱 로그 대조 → 실패. Spring Boot 기본값은 액세스 로그를 안 찍는다
+kubectl logs -l app=daily-api --since=60s | grep daily-question    # (매치 없음)
 ```
 
-| 확인 | 합격 |
-|---|---|
-| `/api/v1/daily-question` | **daily-api 로그에** 찍힘 (core-api엔 없음) |
-| `/api/v1/companies` 등 | **core-api 로그에** 찍힘 |
-| `/actuator/health` | **404 또는 라우팅 안 됨** (노출되면 안 된다) |
+#### ✅ 반증 실험으로 판정한다 — "없으면 실패하나"를 본다
 
-> 🔑 이 레포가 반복해 배운 것이다 — **검사가 주장보다 헐거우면 통과가 의미를 잃는다.**
-> "200이 왔다"는 *"ALB가 붙었다"* 는 답할 수 있어도 *"라우팅이 의도대로다"* 는 답하지 못한다.
+```bash
+kubectl scale deploy/daily-api --replicas=0
+sleep 45
+curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB/api/v1/daily-question"   # → 503
+curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB/api/v1/companies"        # → 403
+kubectl scale deploy/daily-api --replicas=1     # 복원 → 다시 200
+```
+
+| | 관측 | 뜻 |
+|---|:--:|---|
+| `/api/v1/daily-question` | **503** | daily-api가 없으니 실패했다 = **그쪽으로 가고 있었다** |
+| `/api/v1/companies` | 403 | core-api는 살아 있다 = 두 경로가 실제로 갈렸다 |
+
+라우팅이 안 갈렸다면(둘 다 core-api로 갔다면) **daily-question도 200이 왔을 것**이다.
+
+> 🔑 **"무엇이 성공했나"로 판정할 수 없으면 "없으면 실패하나"로 판정한다.**
+> 존재로 구분되지 않는 것이 부재로는 구분된다. 이 레포가 반복해 만난
+> *"부재가 성공과 똑같이 생긴"* 실패의 **역방향 활용**이다.
+>
+> ⚠️ 이 실험은 **파괴적이지만 되돌릴 수 있다**(scale 1로 복원). 과금 중에 할 만한 이유는
+> 45초면 끝나고, 이것 말고는 판정 수단이 없기 때문이다. ALB 액세스 로그(S3)나 CloudWatch
+> `RequestCount`도 가능하지만 설정·지연 때문에 **더 비싸다**.
 
 ### 4-6. 🔴 teardown — ALB는 tofu가 모른다
 

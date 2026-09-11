@@ -3630,3 +3630,120 @@ core 480/576 · daily 512/640 · ai 320/448 · postgres 256/512 로 문서와 �
   예상 $0.21 대비 **1/3** — 90분을 잡았는데 31분에 끝났다.
   🔑 짧게 끝난 이유는 요령이 아니라 **준비**다: 결정(범위·노드 수 기준)을 전부 apply 전에 했고,
   절차를 미리 읽어뒀고, 문서 결함 ①을 **$0 구간에서** 잡았다. 09-06 의 반대 사례($0.4622 중 85% 가 유휴).
+
+---
+
+## 2026-09-11 — Stage 4 ALB Ingress (유료 세션)
+
+**세션 시작 13:40:14 KST** (과금 전 준비). 브랜치 `feat/eks-stage4-alb`.
+
+- `[결정]` **범위 = Stage 4 전송 검증만.** LBC 설치 → Ingress → 라우팅 확인 → teardown.
+  부하 테스트는 **넣지 않는다** — ALB LCU 가 1200 req/s 에서 ~$0.096/h(고정비의 4배)라
+  예산 모델이 깨진다. 노출은 **core-api + daily-api 2개**(ai-api 는 NetworkPolicy C-5 를 지켜 제외).
+- `[비용]` 예상 **~$0.11 / ~35분**. 노드 3대 $0.1865/h + ALB $0.0225 + IPv4 2개 $0.010 = **$0.219/h**.
+- `[메모]` 사전 점검: 도구 5종 · 자격증명 OK · **마커 없음(미가동 확인)** ·
+  SOP §2b ECR 검사 ✅ `14cb335e...`.
+- `[메모]` **plan = `32 to add, 0 to change, 0 to destroy`** (29 + IRSA 역할·정책·첨부 3개).
+  `desired_size = 3`.
+- `[해결]` 🔑 **09-09 에 고친 `db_mode` 검사가 실전에서 처음 쓰여 올바른 답을 냈다.**
+  ```
+  $ tofu show -no-color /tmp/s4.tfplan | grep -q 'aws_db_instance' && echo rds || echo in-cluster
+  in-cluster 모드 (RDS 없음)
+  ```
+  옛 검사(`show -json | grep -c`)는 같은 상황에서 **1** 을 내 rds 로 오판시켰다(#415 결함 ①).
+  **고친 검사가 실제로 일한 첫 사례**다.
+
+### Stage 4 검증 결과 (13:41:23 apply → 13:59 검증 완료)
+
+- `[해결]` **apply `32 added` · 8m25s.** 노드 3대 Ready. ESO·시크릿 3종·postgres·core-api·daily-api
+  전부 정상(비밀번호 동기화는 이번에도 무행동 = L-14 수정 이후 정상 상태).
+- `[해결]` **LBC helm 설치 19초** (13:53:45→13:54:04). `1/1 Running` · 재시작 0.
+  IRSA 주입 파드 안에서 확인: `AWS_ROLE_ARN=...role/devquest-eks-alb-controller`.
+  `IngressClass alb (ingress.k8s.aws/alb)` 가 차트에 의해 생성됨(`createIngressClassResource: true`).
+- `[해결]` 🔑 **`kubectl apply -f ingress.yaml` 후 ADDRESS 가 20초 만에 채워졌다.**
+  ```
+  devquest   alb   *   k8s-default-devquest-3675af8c03-775497815.ap-northeast-2.elb.amazonaws.com   80   20s
+  ```
+  **이게 `target-type: ip` 가 맞았다는 증거다** — 기본값 `instance` 였다면 Service 가 ClusterIP 라
+  ALB 가 안 생기고 이 칸이 **영원히 비었을 것**이다(에러는 describe 이벤트에만).
+- `[해결]` **ALB active 까지 2m30s** (13:54:21 apply → 13:56:51 active + 타겟 전부 healthy).
+- `[해결]` **타겟이 파드 IP 로 등록됐다** — `target-type: ip` 의 실물 확인:
+  ```
+  k8s-default-coreapi-21c4827022   10.0.3.131   8080   healthy
+  k8s-default-dailyapi-63566df5bb  10.0.12.186  8082   healthy
+  ```
+  `kubectl get pods -o custom-columns` 의 파드 IP 와 **정확히 일치**(노드 IP 가 아니다).
+  HealthCheckPath 도 `/health` 로 적용 확인.
+- `[메모]` 📌 **비자명: 타겟그룹의 `Port` 가 `1` 로 보인다.** 이건 `ip` 모드에서 **무의미한
+  자리표시자**다 — 타겟마다 포트를 개별로 갖기 때문이다(위 8080/8082). 타겟그룹 레벨 Port 를
+  보고 *"포트 설정이 틀렸다"* 고 오판하지 말 것. 봐야 하는 건 `Target.Port` 다.
+- `[해결]` **ALB 규칙 우선순위가 Ingress 배열 순서대로 매겨졌다** — 문서에 예상으로 적은 것의 실측:
+  ```
+  priority 1  /api/v1/daily-question  → k8s-default-dailyapi-...
+  priority 2  /api/v1                 → k8s-default-coreapi-...
+  default     (none)                  → 404
+  ```
+
+#### 🔴 응답 코드·본문으로는 라우팅을 판정할 수 없었다 — 반증 실험으로 확정
+
+| 경로 | 코드 | 판정 |
+|---|:--:|---|
+| `/api/v1/daily-question` | 200 | — (아래 참조) |
+| `/api/v1/companies` | 403 | core-api 도달 + 인증 요구 = 정상 |
+| `/actuator/health` | **404** | ✅ 라우팅 안 됨 |
+| `/actuator/health/readiness` | **404** | ✅ **인터넷 노출 차단 확인**(Blindspot B-2 해소) |
+| `/health` · `/` | 404 | ✅ 라우팅 안 됨 |
+
+`[막힘]` **응답 본문 비교가 실패했다.** core-api 직접 · daily-api 직접 · ALB 경유 **세 응답이 전부 동일**했다
+(둘이 같은 DB 의 같은 행을 읽으므로). 앱이 액세스 로그를 안 찍어 로그 대조도 불가.
+→ 내가 튜토리얼에 적어둔 경고(*"순서가 뒤집혀도 200 이 온다"*)가 **그대로 실현됐다.**
+
+`[해결]` **반증 실험으로 판정했다** — `daily-api` 를 replicas=0 으로 내리고 두 경로를 다시 호출:
+```
+/api/v1/daily-question  →  503     ← daily-api 로 가고 있다는 증거
+/api/v1/companies       →  403     ← core-api 는 살아 있음
+```
+라우팅이 안 갈렸다면(둘 다 core-api) **daily-question 도 200 이 왔을 것**이다 — core-api 에
+같은 엔드포인트가 있으니까. 복원 후 다시 200 확인.
+🔑 **"무엇이 성공했나"를 못 보면 "없으면 실패하나"를 봐라.** 존재로 판정 못 하는 것을 부재로 판정한다.
+
+- `[메모]` **LBC 가 evict 를 유발하지 않았다** — 노드 3대에 6·6·6 균등 배치, 비정상 파드 0,
+  Evicted 이벤트 0. `requests 96Mi / limits 192Mi` 명시가 유효했다(차트 기본 `resources: {}` 였다면
+  BestEffort 로 떠서 앱을 밀어냈을 것 — Blindspot C-1).
+  ⚠️ LBC 파드는 **distroless 라 셸이 없어** cgroup 실사용을 못 쟀다. 96Mi 가 적정한지는 **미확인**.
+
+### 종료 — teardown · 고아 검증 · 비용 결산
+
+- `[해결]` 🔑 **09-11 에 SOP §8 에 추가한 ALB 절차가 첫 실전에서 작동했다.**
+  ```
+  $ time kubectl delete ingress --all -A --timeout=180s
+  ingress.networking.k8s.io "devquest" deleted
+  ... 16.033 total          ← 🔑 즉시 반환하지 않았다 = finalizer 가 실제로 걸려 있다
+  $ kubectl get ingress -A                    → No resources found
+  $ aws elbv2 describe-load-balancers ... length → 0
+  ```
+  **16초가 finalizer 의 실물 증거다** — LBC 가 ALB 를 지우고 나서야 오브젝트가 사라졌다.
+  컨트롤러가 먼저 죽었으면 이 자리가 **영구 hang** 이었을 것이고, 그래서 타임아웃을 건 것이다.
+- `[해결]` **`32 destroyed`** (14:01:27 → 14:12:07, 10m40s).
+- `[해결]` **고아 0 전수**: tofu state 0 · EKS 0 · **ALB 0 · 타겟그룹 0** · NAT 0 · RDS 0 ·
+  Secrets Manager 0 · `Persistent` 태그 없는 available EBS 0.
+- `[메모]` ⚠️ **IAM 역할 1건이 남는다 — 고아가 아니다.** `devquest-eks-github-actions`(07-18 생성)는
+  **0-bootstrap 소유**(`state list` 로 확인)인 CI용 OIDC 역할이고 **$0** 이다.
+  `starts_with(RoleName,'devquest-eks')` 로 세면 항상 1이 나온다 — 이름 접두어가 같아서다.
+  🔑 **§9 고아 검사에 IAM 을 넣을 때는 레이어를 갈라야 한다.** 안 그러면 "매번 1건 잡히는 검사"가
+  되고, 그건 09-09 에 EBS 로 배운 실패(*매번 실패하는 검사는 눈으로 넘기게 된다*)의 재발이다.
+- `[해결]` **§9b 영속 인벤토리 = 원장과 일치**: `vol-0518b6d0dcd2b0d70 · 10GiB · 2a · available` 1개.
+- `[비용]` 명시적 `date` 스탬프 기준:
+  ```
+  과금 창      13:41:23 → 14:12:07 = 30분 44초 (0.5122 h)
+  컨트롤플레인 0.5122 h × $0.100          = $0.0512
+  노드 3대     0.5122 h × $0.0283 × 3     = $0.0435
+  ALB + IPv4   0.1228 h × $0.0325         = $0.0040   (ALB 수명 7분 22초)
+  Secrets Mgr                              = $0.0009
+  ──────────────────────────────────────────────────────
+  합계                                      $0.0996
+  ```
+  예상 $0.11 대비 **-9%**. 🔑 **ALB 가 전체의 4% 뿐이다** — 고정 단가($0.0325/h)는 세션 단가의
+  25% 인데, **ALB 를 마지막 7분만 켰기** 때문이다. 순서(앱 먼저 → ALB 나중 → ALB 먼저 삭제)가
+  비용을 정한다. ⚠️ 단 이건 **부하를 안 걸었을 때의 얘기**다 — LCU 는 여기 없다.
+  📌 산정↔실측 대조는 **다음 세션에서** 한다(Budgets 24h 지연, 09-09 F-8 교훈).
