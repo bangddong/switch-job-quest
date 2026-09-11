@@ -226,9 +226,9 @@
    R=ap-northeast-2
    tofu state list                                   # 비어야 함
    aws eks list-clusters --region $R                 # 비어야 함
-# 🔴 합격 기준 = **0건**. (Stage 4 이후로도 마찬가지 — ALB 는 세션 리소스다.
-#   영속 EBS 처럼 "남아 있는 게 정상"인 로드밸런서는 이 레포에 없다.)
-aws elbv2 describe-load-balancers --region $R --query 'length(LoadBalancers)' --output text
+   # 🔴 합격 기준 = **0건**. (Stage 4 이후로도 마찬가지 — ALB 는 세션 리소스다.
+   #   영속 EBS 처럼 "남아 있는 게 정상"인 로드밸런서는 이 레포에 없다.)
+   aws elbv2 describe-load-balancers --region $R --query 'length(LoadBalancers)' --output text
    aws ec2 describe-nat-gateways --region $R --filter Name=state,Values=available
 
    # ── EBS: "available" 전부가 고아는 아니다 (영속 볼륨 도입 이후) ──
