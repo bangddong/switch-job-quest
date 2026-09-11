@@ -51,6 +51,56 @@ warn_orphan_volumes() {
   done
 }
 
+# ── Stage 4: ALB 회수 ───────────────────────────────────────────────
+#
+# 🔴 **왜 필요한가 — 리퍼가 도는 상황이 곧 사람이 없는 상황이다.**
+# ALB 는 LBC 가 만들므로 **tofu state 밖**이고 `tofu destroy` 가 모른다. SOP §8 은
+# `kubectl delete ingress` 를 사람에게 시키는데, 리퍼가 발동한다는 건 정확히
+# **그 사람이 자리를 비웠다**는 뜻이다. 방어가 없으면 월 $16.43 + IP $7.30 이 조용히 나간다.
+#
+# 🔴 **destroy 보다 먼저 해야 한다.** LBC 는 ALB 용 SG 를 만들고 그 SG 를 참조하는
+# ingress rule 을 클러스터/노드 SG 에 추가한다. Ingress 를 남긴 채 destroy 하면
+# `DependencyViolation` 으로 SG 삭제가 실패하고 → 리퍼는 "실패, 다음 주기 재시도"를
+# **영원히 반복**한다. 위 warn_orphan_volumes 주석이 EBS 로 경계한 그 루프의 ALB 판이다.
+#
+# ⚠️ **타임아웃이 필수다.** ALB Ingress 에는 finalizer 가 붙는다. 컨트롤러 파드가 먼저
+# 죽었거나 evict 됐으면 delete 가 **영구 hang** 하고, 그러면 리퍼 자체가 멈춰
+# destroy 에 도달하지 못한다 — 안전장치를 고치려다 안전장치를 벽돌로 만드는 것이다.
+# 그래서 실패해도 **막지 않고 넘어간다**(성패 판정은 뒤의 warn_orphan_albs 가 한다).
+cleanup_k8s_loadbalancers() {
+  command -v kubectl >/dev/null 2>&1 || { log "   ℹ️ kubectl 없음 — Ingress 정리 생략(ALB 고아 가능)"; return 0; }
+
+  # 리퍼는 사람 셸과 다른 환경에서 돈다(launchd). kubeconfig 가 없거나 옛 클러스터를
+  # 가리킬 수 있으므로 갱신한다. 실패하면 클러스터가 이미 없다는 뜻이라 정리할 것도 없다.
+  aws eks update-kubeconfig --name "$1" --region "$REGION" >/dev/null 2>&1 || {
+    log "   ℹ️ kubeconfig 갱신 실패 — 클러스터 접근 불가로 보고 Ingress 정리 생략"; return 0; }
+
+  local n
+  n=$(kubectl get ingress -A --no-headers 2>/dev/null | grep -c . || true)
+  [ "${n:-0}" -gt 0 ] || { log "   ℹ️ Ingress 0건 — 정리할 ALB 없음"; return 0; }
+
+  log "   🧹 Ingress ${n}건 삭제 시도(ALB 회수) — 타임아웃 120s"
+  if kubectl delete ingress --all -A --timeout=120s >>"$LOG" 2>&1; then
+    log "   ✅ Ingress 삭제 완료"
+  else
+    log "   ⚠️ Ingress 삭제 실패/타임아웃 — finalizer 잔존 의심. destroy 는 계속한다"
+  fi
+}
+
+# destroy 후 ALB 가 남았는지 본다. warn_orphan_volumes 와 같은 성격 — **감지 전용**이다.
+# 리퍼는 ALB 를 직접 지울 수 없다(그건 LBC 의 일이고 클러스터는 이미 없다).
+warn_orphan_albs() {
+  local albs
+  albs=$(aws elbv2 describe-load-balancers --region "$REGION" \
+    --query 'LoadBalancers[].[LoadBalancerName,LoadBalancerArn]' --output text 2>/dev/null) || return 0
+  [ -n "$albs" ] || return 0
+  log "⚠️ 고아 ALB 감지 — 클러스터가 사라져 LBC 가 회수할 수 없다. **수동 삭제 필요**(월 ~$16.43):"
+  echo "$albs" | while IFS=$'\t' read -r name arn; do
+    [ -n "$name" ] || continue
+    log "     $name  →  aws elbv2 delete-load-balancer --region $REGION --load-balancer-arn $arn"
+  done
+}
+
 # 마커 없음 → 감시할 세션 없음. 조용히 종료.
 [ -f "$MARKER" ] || exit 0
 
@@ -115,11 +165,19 @@ if [ ! -d "$CLUSTER_DIR" ]; then
 fi
 
 cd "$CLUSTER_DIR" || { log "   ⛔ cd 실패 — 마커 유지."; exit 1; }
+
+# 🔴 destroy 보다 **먼저** — ALB 를 회수하고 SG DependencyViolation 을 피한다(위 함수 주석 참조).
+# 클러스터 이름은 생존 판정에서 이미 조회한 $CLUSTERS 의 첫 항목을 쓴다(보통 1개).
+cleanup_k8s_loadbalancers "$(echo "$CLUSTERS" | awk '{print $1}')"
+
 tofu init -input=false >> "$LOG" 2>&1
 if tofu destroy -auto-approve -no-color >> "$LOG" 2>&1; then
   # destroy 성공 = tofu가 소유한 것은 전부 회수됐다는 뜻이다.
   # 그래도 남아 있는 available 볼륨이 있다면 그건 정의상 **state 밖에서 만들어진 것**이다.
   warn_orphan_volumes
+  # ALB 도 같은 성격의 state 밖 리소스다. 위 cleanup 이 성공했으면 0건이어야 한다 —
+  # 여기서 뭔가 잡히면 cleanup 이 실패했다는 뜻이고, 그 사실을 로그에 남겨야 다음 사람이 안다.
+  warn_orphan_albs
   log "   ✅ tofu destroy 완료 — 과금 종료. 마커 청소."
   rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
 else

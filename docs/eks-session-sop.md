@@ -187,7 +187,23 @@
    kubectl delete secretstore --all -A
 
    # ② K8s가 만든 ALB·EBS 회수 (state 밖 고아 방지)
-   kubectl delete ingress --all -A
+   # 🔴 **삭제 명령을 친 것과 ALB 가 사라진 것은 다르다 (Stage 4 에서 추가).**
+   #   ALB Ingress 에는 finalizer 가 붙는다 — LBC 컨트롤러가 실제 ALB 를 지운 뒤에야
+   #   오브젝트가 사라진다. 컨트롤러 파드가 먼저 죽었거나 evict 됐으면 이 명령은
+   #   **영구 hang** 하고, 사람은 Ctrl-C 하고 다음 단계로 넘어간다 → **ALB 고아.**
+   #   → 타임아웃을 걸고, **완료를 별도로 확인**한다.
+   kubectl delete ingress --all -A --timeout=180s
+
+   # 완료 확인 ①: 오브젝트가 비었나
+   kubectl get ingress -A          # → "No resources found" 여야 한다
+
+   # 완료 확인 ②: 🔴 **AWS 에 직접 묻는다.** K8s 가 "지웠다"고 해도 실물이 남을 수 있다.
+   aws elbv2 describe-load-balancers --region ap-northeast-2 \
+     --query 'length(LoadBalancers)' --output text     # → 0 이어야 한다
+   #   0 이 아니면 **여기서 멈춘다.** destroy 로 넘어가면 두 가지가 겹친다:
+   #     ① ALB 가 고아로 남아 월 ~$16.43 + 퍼블릭 IP $7.30
+   #     ② LBC 가 만든 SG 를 참조하는 규칙 때문에 `DependencyViolation` 으로 destroy 실패
+   #   수동 삭제: aws elbv2 delete-load-balancer --region ap-northeast-2 --load-balancer-arn <ARN>
    #
    # 🔴 PVC는 **Stage에 따라 다르다.** 감각으로 옮기면 사고가 난다.
    #   Stage 3a (동적 PVC): `kubectl delete pvc --all -A` **필수.**
@@ -210,7 +226,9 @@
    R=ap-northeast-2
    tofu state list                                   # 비어야 함
    aws eks list-clusters --region $R                 # 비어야 함
-   aws elbv2 describe-load-balancers --region $R --query 'LoadBalancers[].LoadBalancerName'
+   # 🔴 합격 기준 = **0건**. (Stage 4 이후로도 마찬가지 — ALB 는 세션 리소스다.
+   #   영속 EBS 처럼 "남아 있는 게 정상"인 로드밸런서는 이 레포에 없다.)
+   aws elbv2 describe-load-balancers --region $R --query 'length(LoadBalancers)' --output text
    aws ec2 describe-nat-gateways --region $R --filter Name=state,Values=available
 
    # ── EBS: "available" 전부가 고아는 아니다 (영속 볼륨 도입 이후) ──
