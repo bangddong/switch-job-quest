@@ -55,6 +55,11 @@ output "postgres_master_password" {
     initdb 때의 옛 해시를 그대로 들고 있어 로그인이 깨진다(원장 L-14, 08-07 실측).
     상세는 `postgres-password.tf`.
   EOT
-  value     = random_password.postgres_master.result
-  sensitive = true
+  value       = random_password.postgres_master.result
+  sensitive   = true
+}
+
+output "backup_bucket" {
+  description = "DB 논리 백업 버킷 이름 (db-backup.sh / db-restore.sh 가 읽어간다)"
+  value       = aws_s3_bucket.db_backups.id
 }

@@ -138,6 +138,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | B-7 | in-cluster TLS가 자체서명 — 코드가 *"MITM을 막지 못한다. 실제 운영이라면 cert-manager"* 라고 명시. 인증서도 2-cluster 소유라 세션마다 재생성 | `postgres-tls.tf:28-60` |
 | B-8 | **백업 0건.** `pg_dump`·`pg_restore`·스냅샷 스케줄 레포 전체 0. D-001 기각 사유 ④가 정확히 *"자동 백업·PITR을 전부 자작"* | 전수 grep · `CONTEXT.md:650` |
 | B-9 | Neon 크리덴셜을 **읽을 수 없다** — Fly secrets가 write-only. `pg_dump` 선행 조건 미충족 | `eks-migration-log.md:365` |
+| | ⚠️ **09-12 재배치**: 항목 1의 대상을 in-cluster 로 정했으므로 **항목 1은 B-9 를 닫지 않는다.** Fly secrets 는 그대로 write-only 다. B-9 는 **전환 시점 항목**(B-6·B-11·B-16 과 같은 묶음)으로 옮긴다 — 실데이터 이전을 실제로 할 때 사용자가 Neon 콘솔에서 재발급해야 한다 | |
 | B-10 | 3서비스로 가면 **기동 순서 강제 필요**(core-api가 Flyway를 먼저 끝내야 daily-api가 뜬다). `k8s/base/`에 initContainer·Job·순서 제약 0건 | `daily-api/application-prod.yml:30-41` |
 | B-11 | 노드 2대가 **단일 AZ** 핀 = 가용성 아님. `replicas: 1` + `Recreate` = 배포마다 ~30초 다운타임. PDB 없음. 원장 **L-43·L-47** 미해결 | `nodes.tf:28` · `core-api.yaml:20,30,37` |
 | B-12 | **EKS CD가 0.** `ecr-push.yml`이 `workflow_dispatch`+`pull_request`만, 배포는 손작업 `sed \| kubectl apply`. 원장 **L-44**(PR 빌드 태그가 레포에 없는 커밋을 가리킴) | `ecr-push.yml:12-37` |
@@ -172,7 +173,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 
 | 순 | 할 것 | 닫는 항목 | 비용 |
 |:-:|---|---|---|
-| **1** | **백업·복구 리허설** — `pg_dump` → EBS 파괴 → 복구 | B-8, B-9 | ~$0.1 |
+| **1** | **백업·복구 리허설** — `pg_dump` → EBS 파괴 → 복구 (**in-cluster 대상**) | B-8 | ~$0.1 |
 | 2 | 시크릿 환경 분리 — JWT를 `0-bootstrap`으로(L-14 패턴), prod/학습 경계 | B-2, B-15 | $0 |
 | 3 | HTTPS 경로 — ACM + Cloudflare 검증 + `ssl-redirect` | B-3 | ~$0.1 |
 | 4 | 메타스페이스 누수 검증 (README 선행 조건) | B-5 | $0~0.1 |
@@ -197,3 +198,134 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | RDS로 | 월 +$18에 이미 Neon이 같은 일을 $0에 한다 |
 | 상시 스테이징 별도 운영 | 비용이 동일한 월 $140인데 **효용은 더 낮다**(사용자 트래픽이 없어 진짜 장애를 못 겪는다) |
 | EKS를 여기서 닫기 | 사용자가 *"꼭 해보고 싶다"* 고 명시. 구축 경험은 확보됐으나 **운영 경험**이 목적 |
+
+---
+
+# 항목 1 — 백업·복구 리허설 (착수 설계, 2026-09-12)
+
+> 상태 `🚧진행중` · 닫는 항목 `B-8` · 예상 비용 `~$0.1` · 대상 `in-cluster postgres`
+
+## 사용자 결정
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 백업 대상 | **in-cluster postgres** (prod Neon 아님) | B-9 미해결 + 학습 클러스터를 prod DB 에 연결 금지(상시 보안 제약) |
+| 백업 목적지 | **0-bootstrap 에 S3 버킷 신설** | 백업은 자기가 백업하는 대상보다 오래 살아야 한다. EBS 가 0-bootstrap 이므로 백업도 최소 그 층 — **D-004·L-14 와 같은 규칙의 세 번째 적용** |
+| 자동화 범위 | **수동 스크립트만** | CronJob·IRSA 는 상시 운영(항목 7) 전까지 실효가 없다. "세션 켜져 있을 때만 도는 CronJob"은 백업이 아니다 |
+| 파괴 방식 | **볼륨을 실제로 파괴** | PVC/PV 만 지우면 `Retain` 탓에 데이터가 남는다 |
+
+## 🔴 Blindspot Pass 가 뒤집은 것 3건 (2026-09-12, 착수 전)
+
+### ① 볼륨을 파괴해도 검사의 판정력이 0 이다 — **가장 중요**
+
+착수 직전에 나는 *"볼륨을 실제로 파괴해야 명제가 반증 가능해진다"* 고 단언했다. **틀렸다.**
+
+```
+PERSISTENT-RESOURCES.md:92   "스냅샷 백업은 **의도적으로 만들지 않는다**
+                              … 데이터가 Flyway 마이그레이션 12개로 전부 재생성 가능"
+application-prod.yml:31-35   migrate-on-startup: true
+V11__seed_tech_question_bank_202607.sql  → 26행 시드
+postgres-static.yaml:225     실측 주석 "68Mi 는 **26행짜리 거의 빈 DB** 의 값"
+```
+
+볼륨을 파괴·재생성한 뒤 **덤프를 복구하지 않아도** core-api 가 뜨면서 스키마와 26행이 전부
+돌아온다. 두 가설이 같은 결과를 예측한다:
+
+```
+가설 A  복구가 동작했다        → 예측: 26행 존재
+가설 B  Flyway 가 재시드했다   → 예측: 26행 존재     ← 같다
+```
+
+🔑 **이것은 #416 의 "응답 본문으로 라우팅을 판정할 수 없었다" 와 같은 병이고, 그 교훈을
+바로 다음 작업에서 재발시켰다.** 원인은 판정력을 **검사 절차**에서 찾고 **저장소의 성질**에서
+찾지 않은 것이다 — 백업 대상이 *마이그레이션으로 재생성 가능한 데이터*뿐이면 **어떤 파괴
+방식을 써도** 두 가설이 갈리지 않는다. 파괴의 강도는 이 문제를 풀지 못한다.
+
+**조치 — 센티넬 행.** 마이그레이션이 절대 만들 수 없는 행을 백업 **직전에** 심고, 그 행으로만
+판정한다. 그리고 **양방향**으로 본다:
+
+| 시점 | 확인 | 무엇을 증명하나 |
+|---|---|---|
+| 백업 직전 | 센티넬 **존재** | 덤프에 들어갈 것이 있다 |
+| 볼륨 재생성 후·복구 **전** | 센티넬 **부재** | 볼륨이 진짜로 비었다 (파괴가 실제로 일어났다) |
+| 복구 후 | 센티넬 **존재** | 데이터가 **덤프에서** 왔다 (Flyway 는 이 행을 만들 수 없다) |
+
+가운데 줄이 없으면 앞뒤만으로는 *"애초에 안 지워졌다"* 와 구별되지 않는다.
+
+### ② `tofu destroy -target` 은 실행조차 안 된다 — 그리고 빼면 안 된다
+
+`ebs-postgres.tf:67-69` 에 `lifecycle { prevent_destroy = true }`. plan 단계 에러라 apply 로
+넘어가지도 않는다. 그런데 이건 단순 장애물이 아니라 **0-bootstrap 전체의 오타 방지 latch** 다.
+지금 bare `tofu destroy` 를 막고 있는 것이:
+
+```
+① ebs-postgres.tf:68          ← 이번에 제거하고 싶어지는 것
+② postgres-password.tf:54     random_password.postgres_master 의 prevent_destroy
+③ backend-state.tf:14-21      버저닝 켜진 tfstate 버킷에 force_destroy 미설정 → BucketNotEmpty
+```
+
+게다가 제거 PR 이 머지되면 `infra-deploy.yml:10-12,36` 이 `paths: infra/aws-eks/**` 로
+**0-bootstrap 을 자동 apply** 한다(CI 는 tfvars 를 안 주입하므로 `postgres_persistent_volume_enabled`
+는 default `true`). 로컬 destroy 와 타이밍이 겹치면 **CI 가 볼륨을 되살린다.**
+
+**조치 — 경로를 바꾼다.** latch 를 건드리지 않는다:
+
+```
+tofu state rm aws_ebs_volume.postgres_data     # AWS 에 아무 일도 일어나지 않는다
+aws ec2 delete-volume --volume-id <id>          # 실제 파괴 (내 로컬 크리덴셜로)
+tofu apply                                      # state 에 없으므로 새로 만든다
+```
+
+부수 효과가 아니라 **더 정확한 시뮬레이션**이다 — 진짜 재해는 terraform 이 모르는 채로
+볼륨이 사라지는 것이다. `prevent_destroy` 도 CI 경쟁도 발생하지 않는다.
+
+> ⚠️ `ebs-postgres.tf:75-96` 의 **IAM 자물쇠는 CSI 드라이버에만** 걸린다(세 태그 부재로
+> `ec2:DeleteVolume` 조건 불충족). 내 로컬 크리덴셜에는 해당하지 않으므로 위 삭제는 통과한다.
+> 즉 *"의도적으로 지울 수 있고, 컨트롤러는 못 지운다"* — 설계대로다.
+
+### ③ 조용한 부분 복구 — `psql` 은 실패하면서 `exit 0` 을 낸다
+
+의심했던 시나리오(Flyway 체크섬 불일치로 기동 거부)는 **일어나지 않는다** — `FlywayConfig.kt`
+가 `migrate()` 앞에서 `repair()` 를 호출해 체크섬을 재정렬한다. 대신 실제로 터지는 것:
+
+- core-api 가 먼저 뜨면 Flyway 가 V1~V13 을 다 올린다 → 이후 복구가 `relation already exists`
+  / duplicate key 로 **부분 실패**
+- `psql` 은 기본 `ON_ERROR_STOP` 이 **꺼져 있어** 에러를 뱉으며 끝까지 돌고 **exit 0**
+- `application-prod.yml:9-10` `ddl-auto: validate` 는 **테이블 구조만** 본다 → 행이 반쯤
+  없어도 앱은 정상 기동
+
+**조치**: 복구 전 `core-api`·`daily-api` 를 `replicas=0` 으로 내린다 + `psql -v ON_ERROR_STOP=1`.
+
+## 🟡 절차에 반영할 것 (Blindspot 나머지)
+
+| # | 내용 | 반영 |
+|:-:|---|---|
+| B1-4 | **daily-api 도 같은 `core-api-db` Secret 을 본다**(`daily-api.yaml:64,70-71`). 그리고 마이그레이션이 **두 모듈에 쪼개져 있어**(core-api V1~V6·V8·V9 / db-core V7·V10~V13) 복구한 `flyway_schema_history` 를 들고 daily-api 에서 migrate 를 켜면 `repair()` 가 core-api 버전을 `DELETED` 로 마킹 → **core-api 영구 부팅 불가**(07-01 V8 사고 재현) | 복구 중 두 앱 모두 `replicas=0`. **"마이그레이션을 다시 돌려보자"는 유혹이 정확히 이 버튼** |
+| B1-5 | attach 된 볼륨은 `VolumeInUse` 로 삭제 실패. `aws_ebs_volume` 삭제가 detach 를 대신 해주지 않는다 | 순서 고정: `sts replicas=0` → detach 완료 → PVC 삭제(`pvc-protection`) → PV 삭제(`pv-protection`) → 그제서야 삭제 |
+| B1-6 | `volumeHandle`(`postgres-static.yaml:86`)·PVC `volumeName`(`:126`) 은 **둘 다 불변**이라 patch 로 새 ID 를 꽂을 수 없다 → PV/PVC 는 **지우고 새로 만드는 것 외에 선택지가 없다**. 따라서 `:78` 의 `claimRef:null` 패치는 이 경로에서 **필요 없고**, 오히려 그 길로 가면 **stale volumeHandle 로 없는 볼륨을 attach** 하려 든다 | 재사용 시도 금지, 항상 재생성 |
+| B1-7 | 볼륨이 없는 구간에 `tofu output -raw` 가 **null** → SOP 의 `sed \| kubectl apply` 파이프라인에 `pipefail` 이 없어 **빈 `volumeHandle:` 이 그대로 apply 된다** | 치환 전 `[ -z ]` 가드 (SOP §2b 가 같은 함정을 이미 한 번 잡았다) |
+| B1-8 | 리허설 중 **원장·SOP·배너가 전부 "고장난 것처럼" 보인다** — SOP §9b 합격 기준은 0 건이 아니라 *원장과 일치*, `eks-session-marker.sh:90` 은 볼륨 0 개일 때 *"스토리지는 전부 destroy 로 회수됩니다"* 라는 **적극적으로 틀린 안심 문구**를 낸다, `session-status.sh:185` 도 "영속 EBS 0개" | 재생성 완료를 **세션 종료 전 명시적 게이트**로 둔다 + 일지에 그 구간 기록 |
+| B1-10 | 새 `aws_s3_bucket` 은 `infra-ci.yml:26-32` tfsec 에서 **PR 이 막힌다** — public-access-block 계열 HIGH 4종 + logging + CMK | `backend-state.tf:9,22` 관례대로 **근거를 적은** `#tfsec:ignore:` + `public_access_block` 동반 |
+| B1-11 | 원장 규칙과 3중 충돌: **(a)** `PERSISTENT-RESOURCES.md:92` 의 *"스냅샷 백업은 의도적으로 만들지 않는다"* 를 **역전**하는 것이므로 `design-change-procedure.md` §4 대로 **원본 결정 블록에 재판정 표시** 필요 **(b)** 버저닝을 켜면 `expiration` 만으로는 증가 상한이 아니다 → `noncurrent_version_expiration` + `abort_incomplete_multipart_upload` 필수 **(c)** §확인 명령이 EBS·ECR 만 조회 → S3 줄을 안 넣으면 **신설 버킷이 원장 대조에서 영원히 안 보인다** | 셋 다 이 PR 에서 처리 |
+| B1-13 | 노트북 `pg_dump` 는 상위 서버를 덤프하지 않는다(`server version 17.x; pg_dump version 15.x — aborting`) → **파드 안에서** 실행. 단 **`-it` 금지** — TTY 가 붙으면 스트림이 텍스트 변환돼 `-Fc` 아카이브가 깨진다(`-i` 만). alpine 에 `aws` CLI 가 없으므로 업로드는 노트북 쪽 | 스크립트에 고정 |
+| B1-14 | TLS 는 접속 경로와 무관 — 파드 안 `pg_dump` 는 유닉스 소켓(`local all all trust`)이라 **비밀번호도 TLS 도 불필요**. `sslmode=require` 는 앱 JDBC 경로에만 해당 | 🔑 함의: **kubectl 접근권 = DB 무인증 superuser 접근권**이고, 이 절차가 그 경로를 표준으로 승격시킨다 |
+| B1-15 | 비밀번호는 유지된다 — `random_password.postgres_master` 는 0-bootstrap state 항목이고 볼륨과 무관. 새 볼륨은 **그 값으로 initdb** 된다(L-14 가 잡은 사고는 반대 방향) | ⚠️ **`pg_dumpall` 금지** — 롤의 SCRAM 해시가 덤프에 들어가 S3 로 나간다. `pg_dump` 단일 DB 로 한정 |
+| B1-16 | 리퍼는 이 작업을 안 건드린다(`eks-session-marker.sh:48` 이 2-cluster 하드코딩). 다만 **0-bootstrap 에서 `tofu apply` 를 칠 때마다 마커가 덮어써져 `applied_at` 이 리셋**되어 "~N분 과금 중"이 과소보고 | 🔴 **더 큰 발견: 영속 리소스를 destroy 하는 행위에는 어떤 가드도 없다.** 마커·리퍼·guard 가 전부 `apply` 만 본다. 이 리허설이 그 구멍을 **처음 쓰는 사례** → 원장 등재 |
+| B1-17 | 재생성을 `aws ec2 create-volume` 로 하면 `Persistent=true` 태그가 없어 **고아로 잡히는 동시에 state 밖이라 리퍼도 못 지운다**(무한 경고) | 반드시 `tofu apply` 로 복원 |
+| B1-19 | PV capacity 가 `postgres-static.yaml:70`·`:123` 두 곳에 `10Gi` 하드코딩 | 재생성 기회에 `postgres_volume_size_gb` 를 만지지 않는다 |
+| B1-20 | 버킷명에 **계정 ID 금지**(`providers.tf:13`, `outputs.tf:10-14` sensitive). 레포 관례는 리전 suffix(`devquest-eks-tfstate-seoul`) | `devquest-eks-backups-seoul` |
+
+## 절차 (최종)
+
+```
+[$0]  ① S3 백업 버킷 신설 (0-bootstrap) + 원장 등재 + 재판정 표시
+      ② db-backup.sh / db-restore.sh + 목 테스트
+      ③ 튜토리얼 절차 문서
+
+[유료] ④ apply → 센티넬 심기 → 백업 → S3 업로드
+      ⑤ 앱 replicas=0 → PVC/PV 삭제 → state rm → delete-volume
+      ⑥ tofu apply 로 볼륨 재생성 → PV/PVC 재작성 → postgres 기동
+      ⑦ 🔴 복구 **전** 센티넬 부재 확인  ← 판정력의 원천
+      ⑧ psql -v ON_ERROR_STOP=1 로 복구 → 센티넬 존재 확인 → 앱 기동
+      ⑨ 볼륨 재생성 완료를 원장과 대조(게이트) → teardown
+```
