@@ -190,7 +190,7 @@ code "$RESTORE" | grep -q "pg_restore .*--single-transaction.*--exit-on-error" \
 #    🔑 **APPS 선언문**에 있어야 한다. 주석에 daily-api 를 언급하는 것으로는 통과 못 한다.
 code "$RESTORE" | grep -qE '^APPS=.*daily-api' \
   && ok "⑤ APPS 선언에 daily-api 포함" \
-  || bad "⑤ APPS 선언에 daily-api 포함" "빼면 daily-api 의 repair() 가 core-api 버전을 DELETED 로 마킹 → 영구 부팅 불가"
+  || bad "⑤ APPS 선언에 daily-api 포함" "빼면 daily-api 커넥션이 남아 pg_restore --clean 과 충돌한다"
 
 # ── 아래 둘은 **목이 못 잡아서 유료 세션에서 터진 것**을 고정한 것이다 ──────────
 #    목은 `pg_restore -l` 호출의 **모양**을 검증했지 그 호출이 동작하는지는 검증하지 않았다.

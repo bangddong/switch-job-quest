@@ -14,12 +14,27 @@
 # ② **앱이 먼저 뜨면 Flyway 가 스키마를 올려버린다.** 그 뒤 복구는 `relation already exists`
 #    로 막힌다. → 복구 전 core-api·daily-api 를 **둘 다** replicas=0 으로 내린다.
 #
-# ③ 🔴 **daily-api 를 빼먹으면 최악의 사고가 난다.** daily-api 도 같은 `core-api-db` Secret
-#    을 본다. 그리고 마이그레이션이 **두 모듈에 쪼개져 있다**(core-api V1~V6·V8·V9 /
-#    db-core V7·V10~V13). 복구한 `flyway_schema_history` 를 들고 daily-api 에서 migrate 가
-#    돌면 `repair()` 가 core-api 버전을 `DELETED` 로 마킹 → **core-api 영구 부팅 불가**
-#    (2026-07-01 V8 사고와 동일한 형태). 리허설 중 "마이그레이션을 다시 돌려보자"는 유혹이
-#    정확히 이 버튼이다.
+# ③ **daily-api 를 내려야 하는 이유는 두 층이고, 성질이 다르다.**
+#
+#    ⓐ 🔴 **현재 위험 — 커넥션 간섭.** daily-api 는 같은 `core-api-db` Secret 을 보고
+#       DB 커넥션을 물고 있다(`daily-api.yaml:64,70-71`). `pg_restore --clean` 은 객체를
+#       DROP 하고 다시 만드는데, 열린 커넥션이 락을 잡거나 옛 스키마를 참조하면 복구가
+#       막히거나 앱이 깨진 상태를 본다. **이걸 막는 건 이 스크립트뿐이다.**
+#
+#    ⓑ ⚪ **잠재 위험 — repair() 의 DELETED 마킹.** 마이그레이션이 두 모듈에 쪼개져 있어
+#       (core-api V1~V6·V8·V9 / db-core V7·V10~V13), daily-api 가 `repair()` 를 돌면
+#       자기 클래스패스에 없는 core-api 소유 버전을 `DELETED` 로 마킹한다
+#       → **core-api 영구 부팅 불가**(2026-07-01 V8 사고와 같은 형태).
+#       🔑 **그러나 이건 지금 발화하지 않는다** — `FlywayConfig.kt` 의
+#          `@ConditionalOnProperty(matchIfMissing = false)` + daily-api 가 의도적으로
+#          `devquest.flyway.migrate-on-startup` 을 **켜지 않는 것**이 게이트다
+#          (`daily-api/application-prod.yml:30`). 07-01 사고 뒤 구조로 고친 결과다.
+#
+#    ⚠️ **ⓑ를 현재 위험처럼 적지 마라 (2026-09-13 퀴즈에서 이 과장을 잡았다).**
+#       Blindspot 보고서는 *"migrate-on-startup 을 켜면"* 이라고 조건을 달았는데 내가
+#       스크립트로 옮기면서 조건절을 떨어뜨렸다. 잠재를 현재로 적으면 ①게이트의 존재를
+#       모르게 되고(그래서 무심코 열 수 있고) ②독자가 "이미 막혀 있네"를 알아챈 순간
+#       **지금 진짜 필요한 이유 ⓐ까지 같이 무시한다.**
 #
 # ④ **판정력 0인 성공 판정.** 복구 후 "26행이 있다"는 Flyway 재시드로도 똑같이 성립한다.
 #    → 판정은 **센티넬 토큰으로만** 한다. 그리고 `--expect-absent` 로 복구 **전** 부재를
