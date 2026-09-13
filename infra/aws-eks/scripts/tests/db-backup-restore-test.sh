@@ -20,6 +20,16 @@
 #   반증C   --expect-absent 판정 무력화       → ⑫ 깨짐 ✅
 #   반증D   S3 크기 대조 제거                 → ⑩ 깨짐 ✅
 #
+# ── 유료 세션(2026-09-13) 실측 후 추가된 반증 ────────────────────────────
+#   반증⑥  pg_restore -l 에 /dev/stdin 재주입   → ⑥ 깨짐 ✅
+#   반증⑦  CASE WHEN to_regclass 재주입         → ⑦⑬⑮ 깨짐 ✅
+#   반증⑧  판정 쿼리 ON_ERROR_STOP 제거          → ⑧ 깨짐 ✅
+#   반증⑨  판정불가 분기 제거                    → ⑨ 깨짐 ✅
+#
+# ⚠️ **반증⑦은 첫 시도가 반증하지 못했다** — 정규식이 4칸 들여쓰기를 기대했는데 실제는 2칸이라
+#    주입 자체가 no-op 이었고, "안 깨짐 = 검사가 무력함"으로 읽힐 뻔했다.
+#    ***반증이 실패했을 때 의심할 곳은 검사만이 아니라 반증 자체다.*** (#416 에서 같은 형태)
+#
 # 🔴 **초판은 ④⑤가 무력했다.** 주석("--exit-on-error : psql 의 ON_ERROR_STOP 에 해당")에
 #    매칭돼서 실제 플래그를 지워도 통과했다. 반증을 돌리기 전까지 몰랐다.
 #    08-12 F-5 → #416 verify 마커 → 여기. **같은 병의 세 번째 재발이다.**
@@ -52,8 +62,8 @@ setup() {
   #    그 케이스는 한동안 **다른 이유로 죽어서 통과하고 있었다**(누수된 MOCK_PHASE).
   export MOCK_PHASE="${MOCK_PHASE-Running}"
   export MOCK_POD_EXISTS="${MOCK_POD_EXISTS-1}"
-  export MOCK_SENTINEL_BACKUP="${MOCK_SENTINEL_BACKUP-1}"
-  export MOCK_SENTINEL_RESTORE="${MOCK_SENTINEL_RESTORE-1}"
+  # 센티넬 상태는 **두 축**이다 — 테이블이 있는가(t/f)와 해당 토큰이 몇 행인가.\n  # 판정 쿼리를 두 문장으로 쪼갠 뒤(파스타임 해석 문제) 목도 같이 쪼개야 했다.\n  export MOCK_SENTINEL_TABLE="${MOCK_SENTINEL_TABLE-t}"
+  export MOCK_SENTINEL_COUNT="${MOCK_SENTINEL_COUNT-1}"
   export MOCK_DUMP_BYTES="${MOCK_DUMP_BYTES-2048}"
   export MOCK_RESTORE_RC="${MOCK_RESTORE_RC-0}"
   export MOCK_BUCKET="${MOCK_BUCKET-devquest-eks-backups-seoul}"
@@ -88,9 +98,9 @@ case "$args $sql" in
   *"pg_restore -l"*)            echo "; Archive"; echo "1; 2200 TABLE x"; exit 0 ;;
   *pg_restore*)                 cat >/dev/null 2>&1; exit "$MOCK_RESTORE_RC" ;;
   *"CREATE TABLE IF NOT EXISTS backup_sentinel"*) exit 0 ;;
-  *to_regclass*)                echo "$MOCK_SENTINEL_RESTORE"; exit 0 ;;
+  *"to_regclass"*"IS NOT NULL"*) echo "$MOCK_SENTINEL_TABLE"; exit 0 ;;
   *information_schema.tables*)  echo 14; exit 0 ;;
-  *"count(*) FROM backup_sentinel"*) echo "$MOCK_SENTINEL_BACKUP"; exit 0 ;;
+  *"count(*) FROM backup_sentinel"*) echo "$MOCK_SENTINEL_COUNT"; exit 0 ;;
 esac
 exit 0
 MOCK
@@ -127,7 +137,7 @@ MOCK
 #    실제로 ⑥(Pending)이 ⑪(정상)까지 흘러 정상 경로가 거짓 실패했다.
 teardown() {
   rm -rf "$SANDBOX"
-  unset MOCK_PHASE MOCK_POD_EXISTS MOCK_SENTINEL_BACKUP MOCK_SENTINEL_RESTORE \
+  unset MOCK_PHASE MOCK_POD_EXISTS MOCK_SENTINEL_TABLE MOCK_SENTINEL_COUNT \
         MOCK_DUMP_BYTES MOCK_RESTORE_RC MOCK_BUCKET MOCK_S3_SIZE_DELTA
 }
 
@@ -182,12 +192,44 @@ code "$RESTORE" | grep -qE '^APPS=.*daily-api' \
   && ok "⑤ APPS 선언에 daily-api 포함" \
   || bad "⑤ APPS 선언에 daily-api 포함" "빼면 daily-api 의 repair() 가 core-api 버전을 DELETED 로 마킹 → 영구 부팅 불가"
 
+# ── 아래 둘은 **목이 못 잡아서 유료 세션에서 터진 것**을 고정한 것이다 ──────────
+#    목은 `pg_restore -l` 호출의 **모양**을 검증했지 그 호출이 동작하는지는 검증하지 않았다.
+#    ***목이 검증하는 것은 형태이지 의미가 아니다.*** 정적 규칙으로 내려서 재발을 막는다.
+
+# ⑥ 무엇의 실패를 잡나: 덤프가 멀쩡한데 "아카이브가 깨졌다"고 보고하는 것 (2026-09-13 실측)
+#    `/dev/stdin` 을 **파일 이름으로** 주면 pg_restore 가 seek 하려 들고 파이프는 seek 이 안 된다
+#    → `did not find magic string in file header`. 파일명을 생략해야 스트리밍 모드로 읽는다.
+code "$BACKUP" | grep -q "pg_restore -l /dev/stdin" \
+  && bad "⑥ pg_restore -l 에 /dev/stdin 미전달" "파이프는 seek 이 안 된다 → 멀쩡한 덤프를 깨졌다고 보고" \
+  || ok "⑥ pg_restore -l 에 /dev/stdin 미전달"
+
+# ⑦ 무엇의 실패를 잡나: 한 문장 CASE 로 테이블 존재를 분기하려는 것 (2026-09-13 실측)
+#    PostgreSQL 은 실행 전에 문장 전체를 파싱·플랜하므로 **타지 않는 분기의 테이블 이름도**
+#    그 시점에 해석된다 → `relation "backup_sentinel" does not exist`.
+#    CASE 는 런타임 분기이지 파스타임 보호가 아니다. 존재 확인과 카운트는 **두 문장**이어야 한다.
+code "$RESTORE" | grep -q "CASE WHEN to_regclass" \
+  && bad "⑦ to_regclass 를 CASE 한 문장으로 쓰지 않음" "파스타임에 해석돼 ERROR — CASE 는 파스타임 보호가 아니다" \
+  || ok "⑦ to_regclass 를 CASE 한 문장으로 쓰지 않음"
+
+# ⑧ 무엇의 실패를 잡나: 판정 쿼리가 ERROR 를 뱉고도 exit 0 을 내는 것
+#    이 스크립트가 **복구 경로에 대해 경고하는 바로 그 함정**에 판정 경로에서 물렸다.
+code "$RESTORE" | grep -q "psql -v ON_ERROR_STOP=1 -tAq" \
+  && ok "⑧ 판정 쿼리에도 ON_ERROR_STOP" \
+  || bad "⑧ 판정 쿼리에도 ON_ERROR_STOP" "ERROR 를 뱉고도 exit 0 → 빈 값이 판정에 흘러든다"
+
+# ⑨ 무엇의 실패를 잡나: "센티넬이 없다"와 "확인할 수 없다"를 같은 분기로 다루는 것
+#    1차 실행이 `count=`(빈 문자열)를 받고 **"센티넬이 아직 있다"** 고 보고했다.
+#    멈춘 방향은 안전했지만 원인 표시가 틀렸다 — SOP §2b 의 "판정 불가 vs 재빌드 필요"와 같은 형태.
+code "$RESTORE" | grep -q '\[ -z "\$n" \]' \
+  && ok "⑨ 판정 불가를 별도 분기로 구분" \
+  || bad "⑨ 판정 불가를 별도 분기로 구분" "빈 값을 '센티넬 존재'로 보고하면 원인을 못 찾는다"
+
 echo
 echo "── db-backup.sh ──"
 # ⑥ 무엇의 실패를 잡나: 클러스터가 안 떠 있는데 백업이 '성공'한 것처럼 보이는 것
 MOCK_PHASE=Pending run_case "⑥ 파드가 Running 이 아니면 중단" nonzero bash "$BACKUP" --local-only
 # ⑦ 무엇의 실패를 잡나: 센티넬을 못 심었는데 덤프를 떠서, 복구 판정 기준이 사라지는 것
-MOCK_SENTINEL_BACKUP=0 run_case "⑦ 센티넬 삽입 실패 시 중단" nonzero bash "$BACKUP" --local-only
+MOCK_SENTINEL_COUNT=0 run_case "⑦ 센티넬 삽입 실패 시 중단" nonzero bash "$BACKUP" --local-only
 # ⑧ 무엇의 실패를 잡나: 빈/깨진 덤프를 백업으로 인정하는 것
 MOCK_DUMP_BYTES=0 run_case "⑧ 빈 덤프면 중단" nonzero bash "$BACKUP" --local-only
 # ⑨ 무엇의 실패를 잡나: tofu output 이 null 일 때 s3:// 로 시작하는 쓰레기 경로에 업로드
@@ -200,14 +242,14 @@ run_case "⑪ 정상 백업은 성공" 0 bash "$BACKUP"
 echo
 echo "── db-restore.sh --expect-absent (판정력의 원천) ──"
 # ⑫ 🔴 가장 중요한 케이스. 볼륨이 안 지워졌는데 통과시키면 리허설 전체가 무의미해진다.
-MOCK_SENTINEL_RESTORE=1 run_case "⑫ 센티넬이 남아 있으면 실패" nonzero bash "$RESTORE" --expect-absent tok-1
-MOCK_SENTINEL_RESTORE=0 run_case "⑬ 센티넬이 없으면 통과" 0 bash "$RESTORE" --expect-absent tok-1
+MOCK_SENTINEL_TABLE=t MOCK_SENTINEL_COUNT=1 run_case "⑫ 센티넬이 남아 있으면 실패" nonzero bash "$RESTORE" --expect-absent tok-1
+MOCK_SENTINEL_TABLE=f run_case "⑬ 센티넬이 없으면 통과 (테이블 자체가 없다)" 0 bash "$RESTORE" --expect-absent tok-1
 
 echo
 echo "── db-restore.sh 복구 ──"
 setup
 DUMPF="$SANDBOX/x.dump"; head -c 2048 /dev/zero > "$DUMPF"
-MOCK_SENTINEL_RESTORE=1 bash "$RESTORE" --dump "$DUMPF" --sentinel tok-1 >/dev/null 2>&1
+MOCK_SENTINEL_TABLE=t MOCK_SENTINEL_COUNT=1 bash "$RESTORE" --dump "$DUMPF" --sentinel tok-1 >/dev/null 2>&1
 tr_all="$(cat "$TRACE")"
 # ⑭ 무엇의 실패를 잡나: 앱이 뜬 채로 복구해 Flyway 와 경쟁하는 것 (순서를 줄번호로 본다)
 sc="$(grep -n "scale deploy core-api --replicas=0" <<< "$tr_all" | head -1 | cut -d: -f1)"
@@ -227,7 +269,7 @@ teardown
 MOCK_RESTORE_RC=1 run_case "⑯ pg_restore 실패 시 중단" nonzero bash -c \
   'd=$(mktemp); head -c 2048 /dev/zero > "$d"; exec bash "$0" --dump "$d" --sentinel tok-1' "$RESTORE"
 # ⑰ 무엇의 실패를 잡나: 복구는 됐는데 **다른 덤프**를 복구한 것 (센티넬 불일치)
-MOCK_SENTINEL_RESTORE=0 run_case "⑰ 복구 후 센티넬 없으면 실패" nonzero bash -c \
+MOCK_SENTINEL_TABLE=t MOCK_SENTINEL_COUNT=0 run_case "⑰ 복구 후 센티넬 없으면 실패" nonzero bash -c \
   'd=$(mktemp); head -c 2048 /dev/zero > "$d"; exec bash "$0" --dump "$d" --sentinel tok-1' "$RESTORE"
 # ⑱ 무엇의 실패를 잡나: 판정 기준 없이 복구해 성공 여부를 알 수 없게 되는 것
 run_case "⑱ --sentinel 없으면 거부" nonzero bash -c \

@@ -18,7 +18,9 @@
 |--------|--------|--------|----------|------------|
 | 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **노드 1대 $0.1299/h · 2대 $0.1582/h · 3대 $0.1865/h**<br>  (노드 1대 = t4g.small `$0.0208` + 공인 IPv4 `$0.005` + **루트 EBS 20GiB `$0.0025`** = `$0.0283/h`;<br>   + 컨트롤플레인 `$0.100` + Secrets Manager 3종 일할 `$0.0016`)<br>  ~~노드 1대 $0.128/h · 2대 $0.154/h · 3대 $0.180/h~~ — 🔴 **루트 EBS 누락이었다 (09-04 정정)**<br>▸ ~~$0.149/h (t4g.medium 상향 후)~~ — **medium 은 이 계정에서 launch 불가**(D-010)<br>▸ 🔴 **Stage C 재개 = 3대** (D-011) → 50분 세션 ≈ ~~$0.150~~ **$0.1554** | |
 | ECR `devquest/daily-api` (영속, 빈 레포) | 2026-08-30 | 없음 | **$0** (저장분만 $0.10/GB-월) | |
-| 🔴 **영속 EBS** `vol-0518b6d0dcd2b0d70` 10GiB gp3 | **2026-07-31** | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$2.557 소진 / $200 (1.28%)** — 2026-09-09 `aws budgets describe-budgets` **실측** |
+| 🔴 **영속 EBS** `vol-041e5a6705f7b4975` 10GiB gp3 | **2026-09-13** (재생성) | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$2.823 소진 / $200 (1.41%)** — 2026-09-13 `aws budgets describe-budgets` **실측** |
+| | | | | ⚠️ **볼륨 ID 가 바뀌었다** — 09-13 백업·복구 리허설에서 `vol-0518b6d0dcd2b0d70`(07-31~09-13)을 **의도적으로 파괴**하고 재생성했다. 시작일은 데이터 수명이 아니라 **이 볼륨의** 수명이다 |
+| **S3** `devquest-eks-backups-seoul` (DB 논리 백업) | **2026-09-13** | 없음 (영속) | **≈ $0.00/월** (덤프 KB 단위, lifecycle 30일) | 위 합계에 포함 |
 
 > 📌 **표에는 조회값만 넣는다** (08-12 확정 규칙, 아래 참조). 산정치는 표 밖인 여기서 대조한다.
 >
@@ -3761,3 +3763,225 @@ core 480/576 · daily 512/640 · ai 320/448 · postgres 256/512 로 문서와 �
   25% 인데, **ALB 를 마지막 7분만 켰기** 때문이다. 순서(앱 먼저 → ALB 나중 → ALB 먼저 삭제)가
   비용을 정한다. ⚠️ 단 이건 **부하를 안 걸었을 때의 얘기**다 — LCU 는 여기 없다.
   📌 산정↔실측 대조는 **다음 세션에서** 한다(Budgets 24h 지연, 09-09 F-8 교훈).
+
+---
+
+## 2026-09-13 — 선행 조건 1: 백업·복구 리허설 (유료 세션)
+
+> D-013 항목 1. 목적은 **데이터 보존이 아니라 복구 절차의 리허설**이다.
+> B-8(백업 0건)을 닫는다. B-9(Neon 크리덴셜)는 대상을 in-cluster 로 바꿨으므로 **안 닫힌다**.
+
+### 세션 전 ($0)
+
+- `[메모]` 사전 점검 통과 — tofu/kubectl/aws 존재, 자격증명 `user/bootstrap-admin`,
+  영속 볼륨 `vol-0518b6d0dcd2b0d70` 10GiB `ap-northeast-2a` **available**.
+- `[메모]` SOP §2b ECR 검사 **✅ OK** — core/daily/ai 세 레포 모두 같은 커밋
+  `14cb335e66670470e674f0eb76d62e84ee76e0e5`. `git show <sha>:OtlpMetricsConfig.kt` 에
+  `GRAFANA_API_KEY:}` 존재 확인.
+- `[비용]` **누적 소진 $2.823 / $200** (`aws budgets describe-budgets` 실측).
+  09-11 기록 **$2.672** 대비 **+$0.151**.
+  ⚠️ 이 차이를 *"이틀치 영속 리소스 비용"* 으로 읽으면 안 된다 — 영속분은 하루 ~$0.036
+  ($1.09/월)이므로 이틀치는 ~$0.07 이고, 나머지는 **09-11 세션($0.0996)의 지연 정산**이
+  섞인 것이다. Budgets 는 최대 24h 지연되므로 09-11 당일 조회값은 그 세션을 다 담지 못했다.
+  🔑 **이것이 09-09 F-8 에서 걸린 것과 같은 함정의 반대편이다.** 그때는 lag 된 두 값이
+  우연히 맞아떨어져 모델이 검증된 것처럼 보였다. 여기서는 lag 이 차이를 **부풀린다**.
+  어느 쪽이든 **당일 조회값으로 모델을 검증하지 않는다.**
+
+### 🔴 착수 전 Blindspot Pass 가 뒤집은 것 (상세는 D-013 §항목 1)
+
+| # | 내가 계획한 것 | 실제 |
+|:-:|---|---|
+| ① | *"볼륨을 실제로 파괴해야 명제가 반증 가능해진다"* | **틀렸다.** Flyway 가 26행을 재생성하므로 파괴 강도와 무관하게 두 가설이 같은 결과를 예측한다 → **센티넬 행**으로만 판정 |
+| ② | `tofu destroy -target=aws_ebs_volume.postgres_data` | `prevent_destroy` 가 **plan 단계**에서 세운다. 게다가 그걸 빼는 PR 이 머지되면 `infra-deploy.yml` 이 0-bootstrap 을 **자동 apply** → 로컬 destroy 와 경쟁 → **`state rm` + `aws ec2 delete-volume`** 으로 우회 |
+| ③ | (의심) Flyway 체크섬 불일치로 기동 거부 | 일어나지 않는다 — `FlywayConfig.kt` 가 `migrate()` 앞에 `repair()` 를 돈다. 실제 위험은 **`psql` 이 에러를 뱉으며 exit 0** 을 내는 조용한 부분 복구 |
+
+- `[해결]` $0 구간에서 스크립트 결함 4건을 잡았다. 전부 과금 중이었으면 분 단위로 돈이 나갔다.
+  - **`kubectl exec` 에 `--env` 플래그가 없다** (있는 것은 `-c/-f/--pod-running-timeout/-q`).
+    두 스크립트 모두 `unknown flag: --env` 로 즉사했을 것이다 → stdin 으로 SQL 전달.
+  - 회귀 스위트 정적 검사 ④⑤가 **주석에 매칭**돼 무력했다. `--exit-on-error` 를 지워도
+    아무 테스트도 안 깨졌다. **08-12 F-5 → #416 verify 마커에 이은 3번째 재발.**
+  - 케이스 ⑨가 **거짓 통과**였다. `VAR=x func` 할당이 함수 반환 뒤에도 남아 앞 케이스의
+    `MOCK_PHASE=Pending` 이 흘러들었고, 버킷과 무관한 이유로 죽으면서 통과했다.
+  - 목 `kubectl` 이 stdin 없는 호출에서 `cat` 으로 영구 블록 → 첫 실행이 2분 타임아웃 사망.
+  🔑 ***통과한 검사가 무엇 때문에 통과했는지는 반증해봐야 안다.*** 반증 9건 전수 기록.
+
+### ① S3 백업 버킷 신설 (0-bootstrap, ~$0)
+
+- `[막힘]` **apply 가 태깅에서 죽었다.** `Plan: 5 to add, 0 to change, 0 to destroy` 는
+  깨끗했는데 실행 중 실패:
+  ```
+  aws_s3_bucket.db_backups: Creating...
+  Error: setting S3 Bucket (devquest-eks-backups-seoul) tags: setting resource tags:
+    operation error S3: PutBucketTagging, StatusCode: 400,
+    api error InvalidTag: The TagValue you have provided is invalid
+    with aws_s3_bucket.db_backups, on s3-backups.tf line 27
+  ```
+- `[해결]` 원인은 **S3 태그 값 규칙이 EC2 보다 엄격한 것**이었다.
+  문제의 값: `Purpose = "in-cluster Postgres 논리 백업(pg_dump) — 선행 조건 1 리허설 및 이관 대비"`
+  S3 가 허용하는 것은 letters/numbers/spaces 와 `+ - = . _ : / @` 뿐 → **괄호와 em-dash 가 걸린다.**
+  🔑 **`ebs-postgres.tf` 에는 같은 형태(한글 + em-dash)가 들어가 있고 통과한다.**
+  같은 계정·같은 terraform·다른 서비스·**다른 규칙**이다. 태그를 ASCII 로 바꿔 해결.
+- `[메모]` **고아가 생기지 않았다** — 버킷 생성은 성공했고 태깅만 실패했는데, terraform 이
+  생성 직후 state 에 기록해 둔 덕에 `aws_s3_bucket.db_backups` 가 state 에 남아 있었다
+  (`tofu state list` 로 확인). 재실행이 태그만 갱신했다.
+  ⚠️ 이게 보장된 동작이라고 일반화하지 말 것 — 리소스에 따라 생성 후 실패가 state 밖
+  고아를 남긴다. **확인하고 넘어간 것이지 안전해서 넘어간 게 아니다.**
+- `[해결]` 배포 실물 검증 (원장 §확인 명령 그대로):
+  ```
+  lifecycle   expire-backups | Enabled | 30 | 30 | 1     ← expiration / noncurrent / abort
+  versioning  Enabled
+  public      True True True True
+  ```
+  🔑 **소스에 lifecycle 블록이 있는 것과 배포된 버킷에 규칙이 붙어 있는 것은 다른 사실**이라
+  AWS 에 직접 물었다. 셋 중 하나라도 `None` 이면 그 축에는 상한이 없다.
+
+### ② 백업 (과금 시작 02:47:35Z)
+
+- `[메모]` apply `32 added` **8m57s**. 노드 2대(#415 에서 4파드 수용 실증). RDS 없음(`db_mode` 기본).
+  ESO IRSA 배선 확인 — 파드 안 `AWS_ROLE_ARN=arn:aws:iam::<account>:role/devquest-eks-eso`.
+  ExternalSecret 3건 전부 `SecretSynced`.
+- `[해결]` **영속 볼륨이 데이터를 들고 돌아왔다** — static PV 재바인딩 후 `public` 테이블 **15개**.
+  그중 `stage3b_proof` 는 과거 세션에서 손으로 만든 것이라 **Flyway 산물이 아니다**(뒤의 실측에서
+  이 구분이 결정적으로 쓰인다).
+- `[막힘]` **백업 1차 실행이 검사에서 죽었다.**
+  ```
+  ① 센티넬 심음: sentinel-20260913T030126Z-1fff03a1f579eca9
+  🔴 덤프를 pg_restore 가 읽지 못한다 — 아카이브가 깨졌다
+  ```
+- `[해결]` **덤프는 멀쩡했다. 깨진 것은 검사다.** 진단:
+  ```
+  head -c 5 dump | od -c   →  P G D M P      (매직 정상, 46,479 bytes)
+  command -v pg_restore    →  없음            (노트북에 클라이언트 미설치)
+  파드 폴백 경로:
+    kubectl exec -i postgres-0 -- pg_restore -l /dev/stdin < dump
+    →  pg_restore: error: did not find magic string in file header
+  ```
+  원인: `/dev/stdin` 을 **파일 이름으로** 넘기면 pg_restore 가 그것을 열어 **seek** 하려 드는데
+  파이프는 seek 이 안 된다. **파일명을 생략하면 stdin 을 스트리밍 모드로 읽는다**:
+  ```
+  kubectl exec -i postgres-0 -- pg_restore -l < dump
+    →  ; Archive created at ...  TOC Entries: 121  Compression: gzip   (객체 117개)
+  ```
+  🔴 **에러 메시지가 정반대를 가리켰다** — *"아카이브가 깨졌다"* 고 했지만 아카이브는 멀쩡했고
+  **검사 도구를 잘못 호출한 것**이었다. 데이터가 멀쩡한데 백업이 실패했다고 믿는 쪽이
+  그 반대보다 덜 위험하다는 점에서 실패 방향은 안전했지만, **원인 표시는 틀렸다.**
+  ⚠️ 목 테스트가 이걸 못 잡았다 — 목은 `pg_restore -l` **호출의 모양**을 검증했지
+  그 호출이 동작하는지는 검증하지 않았다. **목이 검증하는 것은 형태이지 의미가 아니다.**
+- `[해결]` 2차 실행 성공. 덤프 46,507 bytes · 객체 117개 · S3 업로드 후 `head-object` 로
+  **원격 크기 대조까지 확인**(46,507 = 로컬). 센티넬 `sentinel-20260913T030216Z-9de9dff27d820c37`.
+
+### ③ 파괴 — 볼륨을 실제로 지운다
+
+- `[해결]` 순서와 실측 (Blindspot B1-5 가 지정한 순서 그대로):
+  ```
+  03:02:49Z  앱 3개 + postgres replicas=0 → 파드 종료
+  03:02:59Z  볼륨 state=available (detach 12초)
+  03:03:30Z  kubectl delete pvc/pv
+  03:03:31Z  완료 (1초)  ← finalizer 가 붙잡지 않았다
+             EBS 는 살아 있음: vol-0518b6d0dcd2b0d70  available
+  ```
+  🔑 **이 한 줄이 "PVC 만 지우는 리허설"이 무의미한 이유의 실물이다.** `Retain` 때문에
+  PV/PVC 가 1초 만에 사라져도 데이터는 그대로다. 여기서 복구했다면 무엇이 증명됐겠는가?
+- `[결정]` **`tofu destroy -target` 을 쓰지 않았다** — `prevent_destroy` 가 plan 단계에서 세우고,
+  그걸 빼는 PR 이 머지되면 `infra-deploy.yml` 이 0-bootstrap 을 자동 apply 해 로컬과 경쟁한다.
+  대신:
+  ```
+  tofu state list | grep ebs_volume  →  aws_ebs_volume.postgres_data[0]   ← 지목 확인 먼저
+  tofu state rm 'aws_ebs_volume.postgres_data[0]'   →  Removed. (남은 26건)
+  aws ec2 describe-volumes ...                       →  여전히 available  ← state rm 은 아무것도 안 지운다
+  aws ec2 delete-volume --volume-id vol-0518b6...    →  수락 (03:04:41Z, 비가역)
+  aws ec2 describe-volumes ...                       →  InvalidVolume.NotFound
+  Persistent=true 볼륨 전수                           →  0
+  ```
+  🔑 `state rm` 과 `delete-volume` 사이에 **조회를 끼운 것이 의도적이다** — "terraform 이 잊었다"와
+  "AWS 에서 사라졌다"는 다른 사건이고, 둘을 붙여 실행하면 어느 쪽이 무엇을 했는지 못 본다.
+
+### ④ 재생성 + 복구
+
+- `[해결]` `tofu apply` → `1 added`, **11초**. 새 볼륨 `vol-041e5a6705f7b4975`,
+  `available` · `2a` · `Encrypted=True` · 태그 `Persistent=true` 확인.
+  ⚠️ **`aws ec2 create-volume` 로 만들지 않았다** — 태그가 없으면 고아로 잡히는 동시에
+  state 밖이라 리퍼도 못 지운다(무한 경고).
+- `[해결]` PV/PVC 는 **patch 가 아니라 재생성**. `volumeHandle`·PVC `volumeName` 이 둘 다
+  불변 필드라 새 ID 를 꽂을 방법이 없다. postgres Ready 까지 **15초**.
+- `[막힘]` 🔴 **판정 단계가 죽었다 — 그리고 메시지가 틀렸다.**
+  ```
+  public 테이블: 0                                  ← DB 는 실제로 비었는데
+  🔴 센티넬이 아직 있다 (count=)                     ← 이렇게 말했다
+  ```
+  `count=` 는 빈 문자열이지 숫자가 아니다. 조회 자체가 실패했는데 스크립트가 그것을
+  *"센티넬 존재"* 로 보고했다. **멈춘 방향은 안전했지만(거짓 통과보다 낫다) 원인 표시가 틀렸다.**
+- `[해결]` stderr 를 살려 원인 확인:
+  ```
+  psql:<stdin>:1: ERROR:  relation "backup_sentinel" does not exist
+  LINE 1: ...tinel') IS NULL THEN 0 ELSE (SELECT count(*) FROM backup_sen...
+  rc=0
+  ```
+  🔴 **`CASE` 가 보호해주지 않는다.** 나는 *"`to_regclass` 가 NULL 을 주니 예외 없이 분기된다"* 고
+  주석에 적어뒀는데 틀렸다 — **PostgreSQL 은 실행 전에 문장 전체를 파싱·플랜**하므로 타지 않는
+  분기 안의 테이블 이름도 그 시점에 해석된다. **CASE 는 런타임 분기이지 파스타임 보호가 아니다.**
+  🔴 그리고 **`rc=0`** — psql 이 ERROR 를 뱉고도 0 을 냈다. **이 스크립트가 복구 경로에 대해
+  경고하는 바로 그 함정에, 판정 경로에서 물렸다.** 경고를 쓴 사람이 옆 함수에서 같은 것을 밟았다.
+  → 두 문장으로 분리 + `ON_ERROR_STOP=1` + **"없다"와 "확인 불가"를 분기로 구분**
+  (SOP §2b 의 *"판정 불가 vs 재빌드 필요"* 와 같은 형태).
+- `[해결]` ✅ **센티넬 부재 확인** — 여기서부터 복구 결과가 증거가 된다.
+- `[해결]` **S3 에서 받아** 복구(로컬 사본은 지웠다 — 로컬로 복구하면 *"S3 에 올라간 것이
+  쓸 수 있는가"* 를 검증하지 못한다). `pg_restore --single-transaction --exit-on-error` 5초.
+  센티넬 2개 전부 복귀(1차 실패 실행의 것 포함) · `tech_question_bank` 26행 · 테이블 16개.
+- `[해결]` **core-api 기동 = 진짜 종점**:
+  ```
+  Repair ... not necessary. No failed migration detected.
+  Successfully validated 13 migrations
+  Current version of schema "public": 13
+  Schema "public" is up to date. No migration necessary.
+  ```
+  🔑 **Flyway 가 복구된 이력을 보고 마이그레이션을 다시 돌리지 않았다.** 복구가 부분 실패였다면
+  여기서 migrate 를 시도했을 것이다. 앱 기동은 *"복구됐다"* 의 부수 확인이 아니라
+  **복구된 `flyway_schema_history` 가 정합적인가**를 묻는 별개의 검사다.
+
+### ⑤ 🔑 전제 실측 — 이 설계 전체가 서 있는 가정을 실제로 재봤다
+
+계획 전체가 *"Flyway 가 26행을 재생성하므로 판정력이 0"* 이라는 **문서에 적힌 주장** 위에 있었다
+(`PERSISTENT-RESOURCES.md:92`). 볼륨을 또 부수지 않고 **스키마만 비우면** 같은 가설을
+1/4 비용으로 검증할 수 있다 — 볼륨 역학을 빼고 Flyway 만 분리해서 보는 것이라 오히려 더 정확하다.
+
+```
+DROP SCHEMA public CASCADE; CREATE SCHEMA public;
+  → 비운 직후 테이블: 0
+core-api replicas=1 (복구 없이 Flyway 만)
+  → Flyway 후 테이블: 14
+  → tech_question_bank 행: 26
+  → backup_sentinel 존재: f
+```
+
+| 관측 | 무엇이 결정되나 |
+|---|---|
+| Flyway 단독으로 **26행 재생성** | *"복구 후 26행이 있다"* 는 검사의 **판정력이 0**임이 확정. 문서 주장 → **실측** |
+| `backup_sentinel` **부재(f)** | Flyway 는 센티넬을 **만들 수 없다** → 센티넬이 유효한 판별자임이 **실측** |
+
+🔑 **두 가설이 갈리는 지점을 실제로 만들어서 봤다.** #416 의 메타 교훈(*"검사의 판정력은 두 가설이
+다른 결과를 예측하는가에서 온다"*)을 이번엔 **주장이 아니라 실험으로** 확정했다.
+🔑 그리고 숫자가 맞아떨어진다: 원래 15 = Flyway 14 + `stage3b_proof`(수기) · 복구 후 16 = 15 + 센티넬.
+
+### ⑥ teardown + 정산
+
+- `[해결]` ESO → ingress(0건) → ALB 실물 0 확인 → PVC 는 **남긴 채** destroy(Stage 3b 규칙).
+  `Destroy complete! 32 destroyed` (03:10:16 → 03:19:45, **9m29s**).
+- `[해결]` **고아 0 전수**: tofu state 0 · EKS 0 · ELB 0 · NAT 0 · EC2 running 0 · 스냅샷 0 ·
+  RDS 0 · `Persistent` 태그 없는 available EBS 0. CSI 삭제 조건 태그 3종 **전부 공백**.
+- `[해결]` **§9b 영속 인벤토리 = 원장과 일치**: EBS `vol-041e5a6705f7b4975` 10GiB 2a available **1개**,
+  S3 `devquest-eks-backups-seoul` + `devquest-eks-tfstate-seoul` **2개**.
+  ⚠️ **볼륨 ID 가 바뀌었다** — 이 파일 상단 비용표의 값도 함께 갱신했다.
+- `[비용]` 명시적 `date` 스탬프 기준:
+  ```
+  과금 창      02:47:35 → 03:19:45 = 32분 10초 (0.5361 h)
+  컨트롤플레인 0.5361 h × $0.100          = $0.0536
+  노드 2대     0.5361 h × $0.0283 × 2     = $0.0303
+  Secrets Mgr                              = $0.0009
+  S3 백업      46KB                        = $0.0000  (반올림)
+  ──────────────────────────────────────────────────────
+  합계                                      $0.0848
+  ```
+  🔑 **#416($0.0996 / 30m44s)보다 길면서 싸다** — 노드 3대→2대(−$0.0152/세션)에 ALB 가 없다.
+  **세션 길이보다 노드 수가 비용을 더 움직인다.**
+  ⚠️ 산정↔실측 대조는 **다음 세션 시작 시**(Budgets 24h 지연). 09-11 분도 아직 미대조다.

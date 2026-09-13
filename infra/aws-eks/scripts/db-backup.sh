@@ -124,7 +124,11 @@ kubectl -n "$NS" exec -i "$POD" -- sh -c \
 objects="$(pg_restore -l "$DUMP" 2>/dev/null | grep -cv '^;' || true)"
 if [ -z "$objects" ] || [ "$objects" -eq 0 ]; then
   # 노트북에 pg_restore 가 없을 수 있다 — 그때는 파드로 되돌려 검사한다.
-  objects="$(kubectl -n "$NS" exec -i "$POD" -- pg_restore -l /dev/stdin < "$DUMP" 2>/dev/null | grep -cv '^;' || true)"
+# 🔴 **파일명을 주지 않는다.** `/dev/stdin` 을 *파일 이름으로* 넘기면 pg_restore 가 그것을
+#    열어 seek 하려 드는데 파이프는 seek 이 안 된다 → `did not find magic string in file
+#    header` (2026-09-13 실측). 파일명을 생략하면 stdin 을 **스트리밍 모드**로 읽는다.
+#    ⚠️ 덤프는 멀쩡한데 검사가 깨져서 나는 에러라 메시지가 정반대를 가리킨다.
+objects="$(kubectl -n "$NS" exec -i "$POD" -- pg_restore -l < "$DUMP" 2>/dev/null | grep -cv '^;' || true)"
 fi
 [ "${objects:-0}" -gt 0 ] || die "덤프를 pg_restore 가 읽지 못한다 — 아카이브가 깨졌다"
 

@@ -65,15 +65,37 @@ kubectl -n "$NS" get pod "$POD" >/dev/null 2>&1 || die "파드 $NS/$POD 를 찾�
 kubectl -n "$NS" exec "$POD" -- sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null \
   || die "postgres 가 접속을 받을 준비가 안 됐다"
 
-# 센티넬 개수를 센다. 테이블 자체가 없으면 0 을 반환한다(에러가 아니라 0).
-#   to_regclass() 는 없는 테이블에 NULL 을 주므로 예외 없이 분기할 수 있다.
 # 🔴 `kubectl exec` 에 `--env` 플래그는 **없다**. 토큰은 stdin 으로 흘려보낸다.
-#    to_regclass() 는 없는 테이블에 NULL 을 주므로, 테이블 자체가 없어도 에러가 아니라 0 이 나온다
-#    — "테이블이 없다"와 "행이 없다"를 같은 분기로 다룰 수 있다.
+#
+# 🔴 **한 문장으로 분기할 수 없다 (2026-09-13 실측).** 처음엔 이렇게 썼다:
+#      SELECT CASE WHEN to_regclass('public.backup_sentinel') IS NULL THEN 0
+#                  ELSE (SELECT count(*) FROM backup_sentinel WHERE ...) END;
+#    *"to_regclass 가 NULL 을 주니 예외 없이 분기된다"* 고 생각했는데 **틀렸다.**
+#    PostgreSQL 은 실행 전에 **문장 전체를 파싱·플랜**하므로, 타지 않는 분기 안의
+#    테이블 이름도 그 시점에 해석된다:
+#      ERROR: relation "backup_sentinel" does not exist
+#    CASE 는 런타임 분기이지 파스타임 보호가 아니다. → **두 문장으로 나눈다.**
+#
+# 🔴 그리고 그때 psql 은 **ERROR 를 뱉고도 exit 0** 을 냈다 — 이 스크립트가 복구 경로에
+#    대해 경고하는 바로 그 함정이다. 판정 경로에도 `ON_ERROR_STOP=1` 을 건다.
+#
+# 반환: 정수, 또는 조회 자체가 실패하면 **빈 문자열**. 호출자가 둘을 구분해야 한다 —
+#      "센티넬이 없다"와 "확인할 수 없다"는 다른 사실이고, 섞으면 SOP §2b 가 경고하는
+#      *"가장 위험한 방향으로 조용히 통과하는 검사"* 가 된다.
+psql_q() {
+  kubectl -n "$NS" exec -i "$POD" -- sh -c \
+    'psql -v ON_ERROR_STOP=1 -tAq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' 2>/dev/null | tr -d '[:space:]'
+}
+
 sentinel_count() {
-  printf "SELECT CASE WHEN to_regclass('public.backup_sentinel') IS NULL THEN 0 ELSE (SELECT count(*) FROM backup_sentinel WHERE token = '%s') END;\n" "$1" \
-    | kubectl -n "$NS" exec -i "$POD" -- sh -c \
-        'psql -tAq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' 2>/dev/null | tr -d '[:space:]'
+  local exists
+  exists="$(printf "SELECT to_regclass('public.backup_sentinel') IS NOT NULL;\n" | psql_q)"
+  case "$exists" in
+    f) echo 0; return 0 ;;                 # 테이블 자체가 없다 = 센티넬 0개
+    t) ;;                                  # 있다 → 아래에서 센다
+    *) echo ""; return 0 ;;                # 판정 불가 (접속 실패 등)
+  esac
+  printf "SELECT count(*) FROM backup_sentinel WHERE token = '%s';\n" "$1" | psql_q
 }
 
 # ── 모드 A: 복구 전 부재 확인 ────────────────────────────────────────────
@@ -83,6 +105,11 @@ sentinel_count() {
 if [ "$MODE" = "expect-absent" ]; then
   [ -n "$SENTINEL" ] || die "--expect-absent 에는 토큰이 필요하다"
   n="$(sentinel_count "$SENTINEL")"
+  if [ -z "$n" ]; then
+    die "🟡 판정 불가 — 센티넬 조회 자체가 실패했다. 센티넬이 없다는 뜻이 **아니다.**
+       postgres 접속·DB 이름을 확인하고 다시 실행할 것. (멈추는 것이 맞다 — 이 확인을
+       건너뛰면 이후 복구 결과가 무엇을 증명하는지 말할 수 없게 된다.)"
+  fi
   if [ "$n" != "0" ]; then
     die "센티넬이 **아직 있다** (count=$n). 볼륨이 실제로 파괴되지 않았거나 다른 볼륨을 보고 있다.
        이 상태로 복구를 진행하면 그 뒤 무슨 결과가 나오든 복구의 증거가 되지 못한다."

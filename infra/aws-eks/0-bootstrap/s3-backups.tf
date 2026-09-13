@@ -32,8 +32,15 @@ resource "aws_s3_bucket" "db_backups" {
   # (`backend-state.tf` 의 tfstate 버킷과 같은 구조). 정말 지우려면 원장의 제거 절차를 따른다.
 
   tags = {
-    Name    = "devquest-eks-db-backups"
-    Purpose = "in-cluster Postgres 논리 백업(pg_dump) — 선행 조건 1 리허설 및 이관 대비"
+    Name = "devquest-eks-db-backups"
+    # 🔴 **S3 태그 값 규칙은 EC2 보다 엄격하다** (2026-09-13 실측, apply 가 여기서 죽었다):
+    #      api error InvalidTag: The TagValue you have provided is invalid
+    #    EBS 볼륨(`ebs-postgres.tf`)에는 같은 형태 — 한글 + em-dash — 가 들어가 있고 통과한다.
+    #    S3 가 허용하는 것은 letters/numbers/spaces 와 `+ - = . _ : / @` 뿐이라
+    #    **괄호와 em-dash 가 걸린다.** 같은 계정, 같은 terraform, 다른 서비스, 다른 규칙이다.
+    #    → 태그 값은 ASCII 로 쓴다. 설명은 이 주석이 담당한다(태그는 검색·과금 배분용이지
+    #      문서가 아니다).
+    Purpose = "pg_dump logical backups for in-cluster Postgres"
 
     # 🔑 EBS 와 같은 축. 이 버킷은 세션과 함께 사라지지 않는 것이 **정상**이다.
     #    (S3 는 SOP §9 고아 검사 대상이 아니지만, 원장 §확인 명령에는 넣는다 — 안 넣으면
