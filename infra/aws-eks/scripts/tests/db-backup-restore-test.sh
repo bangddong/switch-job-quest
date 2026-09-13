@@ -62,7 +62,9 @@ setup() {
   #    그 케이스는 한동안 **다른 이유로 죽어서 통과하고 있었다**(누수된 MOCK_PHASE).
   export MOCK_PHASE="${MOCK_PHASE-Running}"
   export MOCK_POD_EXISTS="${MOCK_POD_EXISTS-1}"
-  # 센티넬 상태는 **두 축**이다 — 테이블이 있는가(t/f)와 해당 토큰이 몇 행인가.\n  # 판정 쿼리를 두 문장으로 쪼갠 뒤(파스타임 해석 문제) 목도 같이 쪼개야 했다.\n  export MOCK_SENTINEL_TABLE="${MOCK_SENTINEL_TABLE-t}"
+  # 센티넬 상태는 **두 축**이다 — 테이블이 있는가(t/f)와 해당 토큰이 몇 행인가.
+  # 판정 쿼리를 두 문장으로 쪼갠 뒤(파스타임 해석 문제) 목도 같이 쪼개야 했다.
+  export MOCK_SENTINEL_TABLE="${MOCK_SENTINEL_TABLE-t}"
   export MOCK_SENTINEL_COUNT="${MOCK_SENTINEL_COUNT-1}"
   export MOCK_DUMP_BYTES="${MOCK_DUMP_BYTES-2048}"
   export MOCK_RESTORE_RC="${MOCK_RESTORE_RC-0}"
@@ -77,7 +79,10 @@ args="$*"
 case "$args" in
   *"get pod"*"jsonpath"*)  echo "$MOCK_PHASE"; exit 0 ;;
   *"get pod"*)             [ "$MOCK_POD_EXISTS" = "1" ] && exit 0 || exit 1 ;;
-  *"get deploy"*"jsonpath"*) echo 1; exit 0 ;;
+  *"get deploy"*"jsonpath"*)
+    # 특정 앱의 replicas 조회만 실패시킨다 (QA F-1 재현용)
+    case "$args" in *"$MOCK_FAIL_REPLICAS_OF"*) [ -n "$MOCK_FAIL_REPLICAS_OF" ] && exit 1 ;; esac
+    echo 1; exit 0 ;;
   *"get deploy"*)          exit 0 ;;
   *"scale deploy"*)        exit 0 ;;
   *wait*)                  exit 0 ;;
@@ -151,7 +156,8 @@ run_case() { # name expected_rc script args...
   if [ "$want" = "nonzero" ]; then
     [ "$rc" -ne 0 ] && ok "$name" || bad "$name" "종료코드 0 (실패해야 했다)"
   else
-    [ "$rc" -eq "$want" ] && ok "$name" || bad "$name" "종료코드 $rc (기대 $want)  출력: ${out##*$'\n'}"
+    [ "$rc" -eq "$want" ] && ok "$name" || bad "$name" "종료코드 $rc (기대 $want)  출력: ${out##*$'
+'}"
   fi
   teardown
 }
@@ -271,6 +277,37 @@ MOCK_RESTORE_RC=1 run_case "⑯ pg_restore 실패 시 중단" nonzero bash -c \
 # ⑰ 무엇의 실패를 잡나: 복구는 됐는데 **다른 덤프**를 복구한 것 (센티넬 불일치)
 MOCK_SENTINEL_TABLE=t MOCK_SENTINEL_COUNT=0 run_case "⑰ 복구 후 센티넬 없으면 실패" nonzero bash -c \
   'd=$(mktemp); head -c 2048 /dev/zero > "$d"; exec bash "$0" --dump "$d" --sentinel tok-1' "$RESTORE"
+echo
+echo "── 실패 경로 (QA F-1·F-2 재현 — 22건이 전부 '순조로운 흐름'만 봤다) ──"
+
+# ⑲ 무엇의 실패를 잡나: 🔴 **복구·판정이 성공한 뒤 앱이 내려간 채 남는 것.**
+#    초판은 성공 경로 끝에서만 복원해서, die() 로 끝나면 서비스가 죽은 채였다.
+setup
+DUMPF="$SANDBOX/x.dump"; head -c 2048 /dev/zero > "$DUMPF"
+MOCK_RESTORE_RC=1 bash "$RESTORE" --dump "$DUMPF" --sentinel tok-1 >/dev/null 2>&1
+tr_all="$(cat "$TRACE")"
+if grep -q "scale deploy core-api --replicas=1" <<< "$tr_all"; then
+  ok "⑲ pg_restore 실패해도 앱을 되돌린다"
+else
+  bad "⑲ pg_restore 실패해도 앱을 되돌린다" "die 경로에서 서비스가 죽은 채 남는다"
+fi
+teardown
+
+# ⑳ 무엇의 실패를 잡나: 🔴 **조용한 사망.** `set -e` 하에서 bare 커맨드치환 대입이 실패하면
+#    스크립트가 **아무 말 없이** 죽는다. trap 이 상태는 되돌리므로 비대칭은 안 생기지만,
+#    사람은 **왜 멈췄는지 알 수 없다.**
+#    🔑 그래서 이 케이스는 *상태*가 아니라 **진단**을 검사한다 — 상태를 검사하면 trap 만으로
+#       충족돼 ⑲의 중복이 된다(첫 반증에서 실제로 그랬다: 반증했는데 안 깨졌다).
+setup
+DUMPF="$SANDBOX/x.dump"; head -c 2048 /dev/zero > "$DUMPF"
+out20="$(MOCK_FAIL_REPLICAS_OF=daily-api bash "$RESTORE" --dump "$DUMPF" --sentinel tok-1 2>&1 </dev/null)"
+if grep -q "replicas 를 읽지 못했다" <<< "$out20"; then
+  ok "⑳ replicas 조회 실패를 진단과 함께 멈춘다"
+else
+  bad "⑳ replicas 조회 실패를 진단과 함께 멈춘다" "무출력 종료 = 왜 멈췄는지 알 수 없다: ${out20:-（무출력）}"
+fi
+teardown
+
 # ⑱ 무엇의 실패를 잡나: 판정 기준 없이 복구해 성공 여부를 알 수 없게 되는 것
 run_case "⑱ --sentinel 없으면 거부" nonzero bash -c \
   'd=$(mktemp); head -c 2048 /dev/zero > "$d"; exec bash "$0" --dump "$d"' "$RESTORE"

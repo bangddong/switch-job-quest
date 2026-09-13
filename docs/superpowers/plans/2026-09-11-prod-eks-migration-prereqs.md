@@ -203,7 +203,11 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 
 # 항목 1 — 백업·복구 리허설 (착수 설계, 2026-09-12)
 
-> 상태 `🚧진행중` · 닫는 항목 `B-8` · 예상 비용 `~$0.1` · 대상 `in-cluster postgres`
+> 상태 `✅완료 (2026-09-13)` · 닫는 항목 `B-8` · **실비용 `$0.0848`** (32m10s, 고아 0) · 대상 `in-cluster postgres`
+>
+> 결과: 볼륨을 실제 파괴한 뒤 S3 덤프만으로 복구 성공. 판정은 센티넬로만 했고,
+> `DROP SCHEMA` 실험으로 **Flyway 단독 재생성(26행)** 과 **센티넬 부재** 를 함께 실측해
+> *"26행이 있다"* 가 판정 기준이 될 수 없음을 확정했다. 상세는 `docs/eks-migration-log.md` 09-13.
 
 ## 사용자 결정
 

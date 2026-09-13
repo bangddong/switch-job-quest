@@ -151,15 +151,40 @@ fi
 [ -s "$DUMP" ] || die "덤프 파일이 없거나 비어 있다: $DUMP"
 
 # ── ① 앱 정지 — ②③ 방지 ────────────────────────────────────────────────
+#
+# 🔴 **복원을 `trap ... EXIT` 으로 건다 (2026-09-13 QA F-1·F-2).**
+#    초판은 성공 경로 끝에서만 복원했다. 그래서 두 방향으로 샜다:
+#      ⓐ `die()` 로 끝나는 모든 경로(pg_restore 실패·센티넬 불일치)에서 **앱이 내려간 채 남는다.**
+#         에러 메시지는 *"DB 는 복구 시도 전 상태"* 라고만 안내해 앱이 죽어 있다는 사실을 숨긴다.
+#      ⓑ `set -e` 하에서 **최상위 bare 커맨드치환 대입**이 실패하면 진단 없이 즉시 종료한다.
+#         하필 그 자리가 scale-down 루프 안이라 **core-api 만 내려간 비대칭 상태**가 되거나,
+#         복구·판정이 **이미 성공한 뒤** 보조 쿼리 하나가 실패해 **성공한 복구가 죽은 서비스로
+#         남는다.** (QA 가 같은 구조로 직접 재현)
+#    → EXIT trap 이면 성공·실패·조용한 사망 셋 다 같은 자리로 모인다.
 scaled=""
+restore_apps() {
+  local entry app n_prev
+  for entry in $scaled; do
+    app="${entry%%=*}"; n_prev="${entry##*=}"
+    kubectl -n "$NS" scale deploy "$app" --replicas="$n_prev" >/dev/null 2>&1 \
+      || echo "🔴 $app 복원 실패 — 수동 확인: kubectl scale deploy $app --replicas=$n_prev" >&2
+  done
+  [ -n "$scaled" ] && echo "  ④ 앱 복원:$scaled"
+  scaled=""
+}
+trap restore_apps EXIT
+
 for app in $APPS; do
   if kubectl -n "$NS" get deploy "$app" >/dev/null 2>&1; then
-    prev="$(kubectl -n "$NS" get deploy "$app" -o jsonpath='{.spec.replicas}')"
+    # 🔴 bare 대입으로 두지 않는다 — 실패하면 set -e 가 여기서 조용히 죽는다(위 ⓑ).
+    prev="$(kubectl -n "$NS" get deploy "$app" -o jsonpath='{.spec.replicas}' 2>/dev/null)" || prev=""
+    [ -n "$prev" ] || die "$app 의 현재 replicas 를 읽지 못했다 — 복원할 값을 모르는 채로
+       내리면 복구 후 원상태를 알 수 없다. 클러스터 접속을 확인하고 다시 실행할 것."
     scaled="$scaled $app=$prev"
     kubectl -n "$NS" scale deploy "$app" --replicas=0 >/dev/null
   fi
 done
-[ -n "$scaled" ] && say "① 앱 정지:$scaled (복구 후 되돌린다)"
+[ -n "$scaled" ] && say "① 앱 정지:$scaled (어떻게 끝나든 trap 이 되돌린다)"
 
 # 파드가 실제로 사라질 때까지 기다린다. scale 은 즉시 반환하지만 커넥션은 남아 있고,
 # 남은 커넥션은 복구 도중 Flyway 를 돌리거나 락을 잡는다.
@@ -187,17 +212,16 @@ n="$(sentinel_count "$SENTINEL")"
 say "③ 센티넬 확인: $SENTINEL"
 
 # 보조 지표 — **판정 기준이 아니다.** Flyway 로도 같은 값이 나오므로 참고만 한다.
+# ⚠️ **판정 기준이 아니므로 실패해도 죽지 않는다.** 여기서 죽으면 이미 성공한 복구가
+#    참고용 숫자 하나 때문에 무효처럼 보인다(QA F-1).
 rows="$(printf "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';\n" \
   | kubectl -n "$NS" exec -i "$POD" -- sh -c \
-      'psql -tAq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' | tr -d '[:space:]')"
+      'psql -v ON_ERROR_STOP=1 -tAq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' 2>/dev/null \
+  | tr -d '[:space:]')" || rows="?"
+[ -n "$rows" ] || rows="?"
 say "   (참고) public 스키마 테이블 ${rows}개 — 판정 기준 아님"
 
-# ── ④ 앱 복원 ───────────────────────────────────────────────────────────
-for entry in $scaled; do
-  app="${entry%%=*}"; n_prev="${entry##*=}"
-  kubectl -n "$NS" scale deploy "$app" --replicas="$n_prev" >/dev/null
-done
-[ -n "$scaled" ] && say "④ 앱 복원:$scaled"
+# ── ④ 앱 복원은 trap 이 한다 (성공·실패·조용한 사망 모두 같은 자리) ──────────
 
 echo
 echo "✅ 복구 완료 — 판정 근거는 센티넬 $SENTINEL"
