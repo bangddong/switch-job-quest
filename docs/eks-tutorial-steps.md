@@ -2234,3 +2234,256 @@ aws elbv2 describe-load-balancers --region ap-northeast-2 \
 | **5** | metrics-server·HPA, Karpenter, ArgoCD | 오토스케일, GitOps |
 
 > `infra/aws-eks/README.md`가 **"선택"** 으로 표시해 둔 단계다. EKS 이관 완료의 필수 조건이 아니다.
+
+---
+
+# 운영 편 1 — 백업·복구 리허설 (Stage 와 별개, 상시 운영 준비)
+
+> 2026-09-13 실행·검증 완료. 과금 **32분 10초 ≈ $0.0848**, 고아 0.
+> Stage 0~4 가 *"세우는 법"* 이라면 여기부터는 *"관리형이 조용히 해주던 일을 직접 하는 법"* 이다.
+
+## 왜 이게 Stage 5 보다 먼저인가
+
+Neon·RDS 같은 관리형을 쓰면 백업은 **체크박스 하나**다. in-cluster StatefulSet 으로 옮기는
+순간 그 체크박스가 사라지고, 사라졌다는 사실 자체가 **안 보인다** — 평상시에는 아무 차이가
+없기 때문이다. 차이가 드러나는 유일한 순간이 데이터를 잃은 순간이고, 그때는 늦다.
+
+## 🔴 이 실습의 진짜 어려움은 백업이 아니라 **판정**이다
+
+`pg_dump` 를 뜨고 `pg_restore` 로 넣는 것은 명령 두 줄이다. 어려운 것은 이것이다:
+
+> **복구가 됐다는 것을 무엇으로 아는가?**
+
+순진한 답은 *"복구 후 데이터가 있으면 된다"* 인데, 이 학습장에서는 **틀린 답이다.**
+
+```
+가설 A  복구가 동작했다            → 예측: tech_question_bank 26행
+가설 B  Flyway 가 재시드했다        → 예측: tech_question_bank 26행     ← 같다
+```
+
+`application-prod.yml` 의 `migrate-on-startup: true` 가 앱 기동 때 마이그레이션을 돌리고,
+`V11__seed_tech_question_bank_202607.sql` 이 26행을 심는다. **두 가설이 같은 결과를
+예측하므로 이 검사의 판정력은 0이다.** 볼륨을 아무리 세게 파괴해도 달라지지 않는다 —
+판정력은 **검사 절차가 아니라 저장소의 성질**에서 오기 때문이다.
+
+**실측으로 확인한 것** (2026-09-13):
+
+```bash
+# 스키마를 통째로 비우고 앱만 띄운다 — 복구는 하지 않는다
+printf "DROP SCHEMA public CASCADE; CREATE SCHEMA public;\n" \
+  | kubectl exec -i postgres-0 -- sh -c 'psql -v ON_ERROR_STOP=1 -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -'
+kubectl scale deploy core-api --replicas=1
+```
+```
+Flyway 후 테이블      : 14
+tech_question_bank 행 : 26      ← 복구 안 했는데 돌아왔다
+backup_sentinel 존재  : f       ← 이건 못 만든다
+```
+
+→ **해법: 센티넬 행.** 마이그레이션이 절대 만들 수 없는 행을 백업 직전에 심고, 그 행으로만
+판정한다. 그리고 **양방향으로** 본다:
+
+| 시점 | 확인 | 없으면 무엇과 구별이 안 되나 |
+|---|---|---|
+| 백업 직전 | 센티넬 **존재** | 덤프가 비어 있어도 모른다 |
+| 볼륨 재생성 후·복구 **전** | 센티넬 **부재** | 🔴 *"애초에 안 지워졌다"* 와 구별 불가 |
+| 복구 후 | 센티넬 **존재** | — |
+
+**가운데 줄이 이 실습의 전부다.** 앞뒤만 확인하면 아무것도 증명하지 못한다.
+
+<!-- verify: infra/aws-eks/scripts/db-backup.sh ~ INSERT INTO backup_sentinel -->
+<!-- verify: infra/aws-eks/scripts/db-restore.sh ~ --expect-absent\) -->
+
+## 사전 조건
+
+- Stage 3b 까지 완료 (영속 EBS + static PV)
+- `0-bootstrap` 에 백업 버킷 (`s3-backups.tf`) — 아래 §1
+- 로컬에 `aws` CLI. **`pg_dump`·`pg_restore` 는 로컬에 없어도 된다** (파드 안에서 돈다)
+
+## 1. 백업 버킷 (0-bootstrap, 월 ~$0)
+
+```bash
+cd infra/aws-eks/0-bootstrap
+tofu apply     # aws_s3_bucket.db_backups 외 4개
+```
+
+**왜 0-bootstrap 인가** — 백업은 자기가 백업하는 대상보다 오래 살아야 한다. 데이터 볼륨이
+이 레이어에 있으므로 백업도 최소 이 레이어다. 2-cluster 에 두면 세션마다 destroy 와 함께
+사라지고, 같은 EBS 에 두면 애초에 백업이 아니다.
+
+🔴 **버저닝을 켜면 `expiration` 만으로는 증가 상한이 아니다.** 세 규칙이 다 있어야 한다:
+
+| 규칙 | 없으면 |
+|---|---|
+| `expiration` | 현행 객체가 영원히 남는다 |
+| `noncurrent_version_expiration` | 덮어쓰기로 밀려난 버전이 영원히 남는다 |
+| `abort_incomplete_multipart_upload` | **`aws s3 ls` 에 안 보이는데 과금되는** 조각이 남는다 |
+
+배포 실물 확인 — **소스에 lifecycle 블록이 있는 것과 버킷에 규칙이 붙어 있는 것은 다른 사실이다**:
+```bash
+aws s3api get-bucket-lifecycle-configuration --bucket devquest-eks-backups-seoul \
+  --query 'Rules[].[ID,Status,Expiration.Days,NoncurrentVersionExpiration.NoncurrentDays,AbortIncompleteMultipartUpload.DaysAfterInitiation]' --output table
+# 기대: expire-backups | Enabled | 30 | 30 | 1.  하나라도 None 이면 그 축에는 상한이 없다.
+```
+
+<!-- verify: infra/aws-eks/0-bootstrap/s3-backups.tf ~ noncurrent_version_expiration[[:space:]]*\{ -->
+<!-- verify: infra/aws-eks/0-bootstrap/s3-backups.tf ~ abort_incomplete_multipart_upload[[:space:]]*\{ -->
+
+> ⚠️ **S3 태그 값 규칙은 EC2 보다 엄격하다.** 한글·em-dash·괄호가 든 `Purpose` 태그로
+> apply 가 죽었다: `api error InvalidTag: The TagValue you have provided is invalid`.
+> EBS 볼륨에는 같은 형태가 들어가 있고 통과한다. **같은 계정·같은 terraform·다른 서비스·다른 규칙.**
+> → S3 태그 값은 ASCII 로. 설명은 코드 주석이 담당한다.
+
+## 2. 백업
+
+```bash
+infra/aws-eks/scripts/db-backup.sh
+```
+
+출력의 마지막 줄 **센티넬 토큰을 보관한다** — 복구 판정의 유일한 기준이다.
+
+**스크립트가 하는 non-obvious 한 일들** (직접 명령을 칠 거라면 전부 필요하다):
+
+| 선택 | 이유 |
+|---|---|
+| `pg_dump` 를 **파드 안에서** | pg_dump 는 자기보다 상위 버전 서버를 덤프하지 않는다: `server version: 17.x; pg_dump version: 15.x — aborting` |
+| `kubectl exec` 에 **`-t` 금지** | TTY 가 붙으면 스트림이 텍스트 변환되어 `-Fc` 아카이브가 **조용히** 깨진다 |
+| `pg_dumpall` **금지** | 롤의 SCRAM 해시가 덤프에 실려 S3 로 나간다 |
+| `aws s3 cp` 는 **노트북에서** | alpine 이미지에 AWS CLI 가 없다. 파드에 넣으면 IRSA 가 필요해진다 |
+| 업로드 후 `head-object` 로 **크기 대조** | 잘린 업로드를 성공으로 보고하지 않는다 |
+
+🔴 **덤프 검증에서 밟은 함정** — `pg_restore -l` 에 파일명을 주지 마라:
+```bash
+kubectl exec -i postgres-0 -- pg_restore -l /dev/stdin < dump   # ❌
+#   → pg_restore: error: did not find magic string in file header
+#     /dev/stdin 을 *파일 이름*으로 주면 열어서 seek 하려 드는데 파이프는 seek 이 안 된다.
+kubectl exec -i postgres-0 -- pg_restore -l < dump              # ✅ 스트리밍 모드
+```
+⚠️ **에러 메시지가 정반대를 가리킨다** — 덤프는 멀쩡하고 검사가 깨진 것이다.
+
+## 3. 파괴 — 순서가 전부다
+
+```bash
+VOL=$(cd infra/aws-eks/0-bootstrap && tofu output -raw postgres_data_volume_id)
+
+kubectl scale deploy core-api daily-api ai-api --replicas=0
+kubectl scale sts postgres --replicas=0
+kubectl wait --for=delete pod/postgres-0 --timeout=120s
+
+# detach 를 기다린다 — attach 된 볼륨은 VolumeInUse 로 삭제 실패한다.
+# aws_ebs_volume 삭제는 detach 를 대신 해주지 않는다. (실측 12초)
+aws ec2 describe-volumes --region ap-northeast-2 --volume-ids "$VOL" \
+  --query 'Volumes[0].State' --output text     # → available 이 될 때까지
+
+kubectl delete pvc postgres-data --timeout=120s
+kubectl delete pv  postgres-data --timeout=120s
+```
+
+여기서 멈추고 확인한다:
+```bash
+aws ec2 describe-volumes --region ap-northeast-2 --volume-ids "$VOL" --query 'Volumes[0].State' --output text
+# → available.  **EBS 는 아직 살아 있다.**
+```
+🔑 **이 한 줄이 "PVC 만 지우는 리허설"이 무의미한 이유의 실물이다.** `Retain` 때문에 PV/PVC 가
+1초 만에 사라져도 데이터는 그대로다. 여기서 복구하면 무엇이 증명되겠는가?
+
+### 🔴 `tofu destroy -target` 을 쓰지 않는다
+
+```bash
+tofu destroy -target=aws_ebs_volume.postgres_data      # ❌ plan 단계에서 거부됨
+```
+`ebs-postgres.tf` 의 `lifecycle { prevent_destroy = true }` 가 막는다. **그리고 이걸 빼면 안 된다** —
+0-bootstrap 전체의 오타 방지 latch 이고, 제거 PR 이 머지되면 `infra-deploy.yml` 이
+0-bootstrap 을 **자동 apply** 해서 로컬 destroy 와 경쟁한다.
+
+```bash
+cd infra/aws-eks/0-bootstrap
+tofu state list | grep ebs_volume                    # ① 지목 확인 먼저
+tofu state rm 'aws_ebs_volume.postgres_data[0]'      # ② AWS 에 아무 일도 안 일어난다
+aws ec2 describe-volumes --region ap-northeast-2 --volume-ids "$VOL" \
+  --query 'Volumes[0].State' --output text           # ③ 여전히 available ← 확인하고 넘어간다
+aws ec2 delete-volume --region ap-northeast-2 --volume-id "$VOL"   # ④ 비가역
+aws ec2 describe-volumes --region ap-northeast-2 --volume-ids "$VOL"  # → InvalidVolume.NotFound
+```
+
+②와 ④ 사이에 ③을 끼운 것이 의도적이다 — *"terraform 이 잊었다"* 와 *"AWS 에서 사라졌다"* 는
+다른 사건이고, 붙여 실행하면 어느 쪽이 무엇을 했는지 못 본다.
+
+> ⚠️ **이 구간에 `session-status.sh`·원장 대조·SOP §9b 가 전부 "영속 EBS 0개"라고 거짓을 말한다.**
+> 재생성 완료를 **세션 종료 전 명시적 게이트**로 둘 것. (원장 L-50)
+
+## 4. 재생성 + 복구
+
+```bash
+cd infra/aws-eks/0-bootstrap && tofu apply      # 1 added, 실측 11초. 새 볼륨 ID 가 나온다
+```
+🔴 **`aws ec2 create-volume` 로 만들지 마라** — `Persistent=true` 태그가 없으면 고아 검사에
+잡히는 **동시에** tofu state 밖이라 리퍼도 못 지운다(영원히 경고만 나온다).
+
+```bash
+cd ../2-cluster
+VOL=$(cd ../0-bootstrap && tofu output -raw postgres_data_volume_id)
+AZ=$(cd ../0-bootstrap && tofu output -raw persistent_az)
+[ -n "$VOL" ] && [ -n "$AZ" ] || { echo "🔴 빈 값 — 중단"; exit 1; }   # ← 이 가드를 빼지 마라
+sed -e "s|EBS_VOLUME_ID_PLACEHOLDER|$VOL|" -e "s|PERSISTENT_AZ_PLACEHOLDER|$AZ|" \
+  ../../../k8s/base/postgres-static.yaml | kubectl apply -f -
+kubectl scale sts postgres --replicas=1
+kubectl wait --for=condition=ready pod/postgres-0 --timeout=300s     # 실측 15초
+```
+
+> **PV/PVC 는 patch 가 아니라 재생성이다.** `csi.volumeHandle` 과 PVC 의 `volumeName` 은
+> **둘 다 불변 필드**라 새 볼륨 ID 를 꽂을 방법이 없다. 그래서 `claimRef` 를 비워 Released PV 를
+> 재활용하는 흔한 레시피는 **여기서 오히려 위험하다** — stale volumeHandle 로 없는 볼륨을
+> attach 하려 든다.
+>
+> 빈 값 가드가 필요한 이유: 볼륨이 없는 구간에 `tofu output -raw` 는 **null 을 주고 종료코드는
+> 0** 이다. 파이프라인에 `pipefail` 이 없으면 `volumeHandle:` 이 빈 채로 apply 된다.
+
+### 🔴 복구 **전에** 부재를 확인한다 — 이 단계가 판정력의 전부
+
+```bash
+infra/aws-eks/scripts/db-restore.sh --expect-absent <센티넬토큰>
+# → ✅ 센티넬 부재 확인 — 볼륨이 비었다. 이제 복구 결과가 증거가 된다.
+```
+
+### 복구
+
+```bash
+infra/aws-eks/scripts/db-restore.sh --s3 <덤프파일명> --sentinel <센티넬토큰>
+```
+**로컬 사본이 아니라 S3 에서 받아 복구한다** — 로컬로 하면 *"S3 에 올라간 것이 쓸 수 있는가"* 를
+검증하지 못한다.
+
+| 스크립트가 강제하는 것 | 없으면 |
+|---|---|
+| 복구 전 `core-api`·`daily-api` **둘 다** `replicas=0` | Flyway 가 먼저 스키마를 올려 복구가 `already exists` 로 막힌다 |
+| **daily-api 를 빼먹지 않는 것** | 🔴 daily-api 의 `repair()` 가 core-api 소유 버전을 `DELETED` 로 마킹 → **core-api 영구 부팅 불가**(마이그레이션이 두 모듈에 쪼개져 있다) |
+| `pg_restore --single-transaction --exit-on-error` | `psql` 은 에러를 뱉으며 끝까지 돌고 **exit 0** 을 낸다. 그리고 `ddl-auto: validate` 는 **구조만** 보므로 행이 반쯤 없어도 앱은 정상 기동한다 |
+
+## 5. 진짜 종점 — 앱이 뜨는가
+
+```bash
+kubectl scale deploy core-api daily-api --replicas=1
+kubectl logs deploy/core-api --tail=200 | grep -i flyway
+```
+```
+Repair ... not necessary. No failed migration detected.
+Successfully validated 13 migrations
+Current version of schema "public": 13
+Schema "public" is up to date. No migration necessary.
+```
+🔑 **Flyway 가 복구된 이력을 보고 마이그레이션을 다시 돌리지 않았다.** 복구가 부분 실패였다면
+여기서 migrate 를 시도한다. 앱 기동은 복구의 부수 확인이 아니라 **복구된 `flyway_schema_history`
+가 정합적인가**를 묻는 별개의 검사다.
+
+<!-- verify: infra/aws-eks/scripts/db-restore.sh ~ --single-transaction --exit-on-error -->
+<!-- verify: infra/aws-eks/scripts/db-restore.sh ~ APPS=.*daily-api -->
+
+## 아직 안 한 것 (정직하게)
+
+| 안 한 것 | 왜 | 언제 |
+|---|---|---|
+| **자동 백업** (CronJob + IRSA) | 지금은 세션형이라 *"클러스터가 켜져 있을 때만 도는 CronJob"* 은 백업이 아니다 | 상시 운영 전환 시 |
+| **PITR** | 논리 백업은 시점 복구가 안 된다. WAL 아카이빙이 필요하다 | prod 이관 시 |
+| **복구 시간 목표(RTO) 측정** | 이번 DB 는 46KB 다. 의미 있는 숫자가 아니다 | 실데이터 이후 |
+| prod(Neon) 데이터 대상 | 크리덴셜이 Fly secrets 에 write-only (D-013 B-9) | 이관 시점 |
