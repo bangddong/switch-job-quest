@@ -56,7 +56,17 @@ setup() {
   BIN="$SANDBOX/bin"; mkdir -p "$BIN"
   TRACE="$SANDBOX/trace"; : > "$TRACE"
 
+  # 🔴 **여기서도 unset 한다 — teardown 만으로는 부족하다 (QA F-10).**
+  #    `teardown()` 의 unset 은 정의상 **첫 `setup()` 보다 뒤에 온다.** 지금 케이스 ⑨가
+  #    통과하는 이유는 그 앞에 ⑥⑦⑧이 먼저 run_case→teardown 사이클을 돌기 때문이지
+  #    구조가 보장해서가 아니다 — **스위트 순서가 바뀌거나 앞에 케이스가 추가되면 재발한다.**
+  #    (QA 가 ⑨ 상당을 최초 케이스로 단독 실행해 실제로 뚫었다.)
+  #    🔑 이 세션에서 같은 클래스(순서 의존적 env 누수)가 이미 한 번 실제 결함을 냈다 —
+  #       누수된 `MOCK_PHASE` 때문에 ⑨가 **버킷과 무관한 이유로 통과**하고 있었다.
+  unset BACKUP_BUCKET MOCK_FAIL_REPLICAS_OF
+
   # 시나리오 기본값.
+
   # 🔴 `:-` 가 아니라 `-` 다. `:-` 는 **빈 문자열도 미설정으로 취급**해서
   #    `MOCK_BUCKET=""` 시나리오(= tofu output 이 null 인 경우)를 표현할 수 없었다.
   #    그 케이스는 한동안 **다른 이유로 죽어서 통과하고 있었다**(누수된 MOCK_PHASE).
