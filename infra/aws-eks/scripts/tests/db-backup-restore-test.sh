@@ -142,6 +142,11 @@ MOCK
 #    실제로 ⑥(Pending)이 ⑪(정상)까지 흘러 정상 경로가 거짓 실패했다.
 teardown() {
   rm -rf "$SANDBOX"
+  # 🔴 MOCK_* 만 지우면 부족하다 — 스크립트가 **실제로 읽는** BACKUP_BUCKET 이 로컬 셸에
+  #    export 돼 있으면 케이스 ⑨(버킷 빈 값)가 조용히 우회된다 (QA F-7).
+  #    ⚠️ 이 줄은 **두 번 no-op 이 됐다** — 치환 앵커의 들여쓰기가 4칸이었는데 실제는 2칸이라
+  #       F-7 "수정"이 파일에 닿은 적이 없고, 그런데도 재검토에서 fixed 판정을 받았다(F-9).
+  unset BACKUP_BUCKET MOCK_FAIL_REPLICAS_OF
   unset MOCK_PHASE MOCK_POD_EXISTS MOCK_SENTINEL_TABLE MOCK_SENTINEL_COUNT \
         MOCK_DUMP_BYTES MOCK_RESTORE_RC MOCK_BUCKET MOCK_S3_SIZE_DELTA
 }
