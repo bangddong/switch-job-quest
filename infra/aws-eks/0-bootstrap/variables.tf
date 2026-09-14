@@ -62,7 +62,7 @@ variable "credit_total_usd" {
 }
 
 variable "budget_alert_step_usd" {
-  type = number
+  type        = number
   description = <<-EOT
     알림 간격 (USD). 10이면 $10·$20·…·$200 = 20단계.
     줄이면 단계가 늘고, 예산 1개당 알림 10개 상한 때문에 예산 개수가 자동으로 는다
@@ -71,7 +71,7 @@ variable "budget_alert_step_usd" {
        Pricing API 실측(2026-07-31) — BudgetsUsage(Budget Notifications) = $0.00,
        상위 과금 구간 자체가 없다. 유료인 것은 Budget *Actions*(자동 조치형)뿐이며 우리는 안 쓴다.
   EOT
-  default = 10
+  default     = 10
 
   validation {
     condition     = var.budget_alert_step_usd > 0
@@ -191,5 +191,35 @@ variable "postgres_volume_size_gb" {
   validation {
     condition     = var.postgres_volume_size_gb >= 1 && var.postgres_volume_size_gb <= 100
     error_message = "postgres_volume_size_gb must be 1..100 (학습장 상한 — 실수로 큰 볼륨을 만들어 영구 과금되는 것을 막는다)."
+  }
+}
+
+# ── DB 백업 버킷 (선행 조건 1) ──────────────────────────────
+#
+# ⚠️ 이름에 **계정 ID 를 넣지 않는다.** 전역 유일성을 위해 계정 ID 를 붙이는 것이 흔한 관용인데,
+#    `providers.tf:13` 의 *"계정 ID 등은 하드코딩하지 않고 동적 참조 (public repo 유출 방지)"*
+#    와 정면 충돌한다. 레포 관례는 `devquest-eks-tfstate-seoul` 처럼 **리전 suffix** 다.
+variable "backup_bucket_name" {
+  type        = string
+  description = "DB 논리 백업(pg_dump) 저장 S3 버킷 이름 (전역 유일해야 함 — 충돌 시 변경)"
+  default     = "devquest-eks-backups-seoul"
+}
+
+variable "backup_retention_days" {
+  description = <<-EOT
+    백업 보존 일수. 현행 버전·noncurrent 버전에 **같은 값**이 적용된다(s3-backups.tf).
+
+    30일인 이유: 크레딧 만료(2027-01-15)까지 세션이 드문드문 열리므로 "직전 세션의 백업"만
+    살아 있으면 리허설 목적에는 충분하다. 길게 잡으면 상한이 느슨해지고, 짧게 잡으면
+    한 달 쉬었다 돌아왔을 때 복구할 것이 없다.
+
+    ⚠️ prod 이관 후에는 이 값이 **RPO 와 직결**된다 — 그때 재판단한다.
+  EOT
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.backup_retention_days >= 1 && var.backup_retention_days <= 365
+    error_message = "backup_retention_days must be 1..365 (상한 없는 보존은 상한 없는 과금이다)."
   }
 }

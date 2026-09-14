@@ -40,7 +40,14 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 
 ## 현재 영속 리소스
 
-**합계 ≈ $1.09/월** (ECR $0.17 + EBS $0.91). 6개월 ≈ $6.5 = 크레딧의 3.3%
+**합계 ≈ $1.08/월** (ECR $0.17 + EBS $0.91 + S3 백업 ~$0.00). 6개월 ≈ $6.5 = 크레딧의 3.2%
+
+> ⚠️ **$1.09 → $1.08 정정 (2026-09-13, QA F-6).** 항목 합은 계속 $1.08 이었는데 합계만
+> $1.09 로 적혀 있었다. 이 PR 에서 S3 행을 추가하면서도 **재검산하지 않아** 그대로 넘어갈 뻔했다.
+> 🔑 **표에 행을 더할 때 합계를 다시 더하지 않으면, 그 합계는 행이 하나 적던 시절의 값이다.**
+
+> ℹ️ S3 백업 버킷은 덤프가 KB 단위라 반올림하면 $0 다. **그래도 표에 넣는다** — 금액이 아니라
+> *존재*가 등재 기준이고, 상한 없는 영속 리소스는 조용히 자라는 것이 기본값이기 때문이다.
 
 | 리소스 | 레이어 | 왜 영속인가 | 증가 상한 | 월 비용 | 시작 | 재검토 |
 |---|---|---|---|---|---|---|
@@ -50,6 +57,7 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **ECR** `devquest/ai-api` | 0-bootstrap | 위와 동일 (Phase 2 대비) | 🔒 lifecycle 10개 (현재 0개) | $0 | 2026-07-27 | 2027-01-15 |
 | **ECR** `devquest/daily-api` | 0-bootstrap | 위와 동일. Stage C 3서비스 배포 대상 | 🔒 lifecycle 10개 (현재 0개) | $0 | 2026-08-29 | 2027-01-15 |
 | **IAM** OIDC 프로바이더 · GitHub Actions 역할 | 0-bootstrap | CI가 AWS에 붙는 통로 | 고정 | $0 | 2026-07 | — |
+| **S3** `devquest-eks-backups-seoul` | 0-bootstrap | **백업은 자기가 백업하는 대상보다 오래 살아야 한다.** 데이터 볼륨이 이 레이어에 있으므로 백업도 이 레이어(D-004·L-14 규칙의 3번째 적용) | 🔒 **lifecycle 30일 × 3종** — `expiration` + `noncurrent_version_expiration` + `abort_incomplete_multipart_upload`. ⚠️ 버저닝이 켜져 있어 **앞의 하나만으로는 상한이 아니다** | ~$0 (덤프 KB 단위) | 2026-09-12 | 2027-01-15 |
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
 | **Cost Anomaly** `devquest-eks-service-monitor` | 0-bootstrap | 이상 지출 감지(DAILY, $5) | 계정당 DIMENSIONAL 1개 | $0 | 2026-07-29 | — |
 
@@ -89,7 +97,22 @@ tofu apply -var postgres_persistent_volume_enabled=false
 # 3. 원장의 "제거됨" 표로 행을 옮기고 근거·날짜 기록
 ```
 
-**복구 절차** (데이터를 잃었을 때) — 스냅샷 백업은 **의도적으로 만들지 않는다**
+**복구 절차** (데이터를 잃었을 때) — ~~스냅샷 백업은 **의도적으로 만들지 않는다**~~
+
+> 🔄 **재판정 (2026-09-12, D-013 선행 조건 1).** 이 판단을 **부분 유지**한다:
+> **스냅샷은 여전히 안 만든다**(EBS 스냅샷 $0.05/GB-Mo). 대신 **논리 백업(`pg_dump`)을
+> S3 에 둔다**(`0-bootstrap/s3-backups.tf`, 월 ~$0).
+>
+> 뒤집은 이유는 *비용 판단이 틀려서*가 아니라 **목적이 바뀌었기 때문**이다.
+> 아래 근거(*"Flyway 로 전부 재생성 가능"*)는 **학습장 전제에서 지금도 참이다.**
+> 그러나 prod 이관을 목표로 삼은 이상 필요한 것은 *데이터 보존*이 아니라
+> **복구 절차를 실제로 해본 경험**이고, 그건 백업이 없으면 시작할 수 없다.
+>
+> 🔴 **그리고 바로 그 근거가 검사의 판정력을 0으로 만든다** — Flyway 가 같은 데이터를
+> 재생성하므로 *"복구 후 26행이 있다"* 는 복구 성공의 증거가 되지 못한다. 그래서
+> 리허설은 **마이그레이션이 만들 수 없는 센티넬 행**으로만 판정한다(`db-backup.sh` ⑦).
+>
+> ⚠️ prod 이관 후에는 이 절의 전제 자체가 사라진다 — 사용자 데이터는 재생성되지 않는다.
 
 데이터가 Flyway 마이그레이션 12개로 **전부 재생성 가능**하므로 스냅샷($0.05/GB-Mo)의 값이 낮다.
 잃었을 때는:
@@ -98,6 +121,10 @@ tofu apply -var postgres_persistent_volume_enabled=false
 # ① 볼륨 재생성 (0-bootstrap apply — 새 volume id가 나온다)
 # ② PV/PVC 재적용: postgres-static.yaml을 새 volume id로 sed 후 kubectl apply
 # ③ postgres 기동 → Flyway가 스키마를 자동 재구축 (시드 불필요)
+#
+# ④ (2026-09-12 추가) 논리 백업이 있으면 그쪽이 우선이다 — Flyway 재구축은
+#    **마이그레이션 이후에 생긴 데이터를 되살리지 못한다.**
+infra/aws-eks/scripts/db-restore.sh --s3 <덤프파일> --sentinel <토큰>
 ```
 
 ⚠️ 실패 6종 ⑥(기존 볼륨을 **포맷**해버림)이 유일한 비가역 사고다. 트리거는 PV의 `csi.fsType`을
@@ -123,6 +150,17 @@ aws ec2 describe-volumes --region $R --filters Name=tag:Persistent,Values=true \
   --query 'Volumes[].[VolumeId,Size,AvailabilityZone,State]' --output table
 
 aws ecr describe-repositories --region $R --query 'repositories[].repositoryName' --output text
+
+# 🔴 S3 는 SOP §9 고아 검사 대상이 **아니다**(세션과 함께 사라지는 물건이 아니므로).
+#    그래서 여기 안 적으면 신설 버킷은 원장 대조에서 **영원히 안 보인다.**
+aws s3api list-buckets --query "Buckets[?starts_with(Name, 'devquest-eks-')].Name" --output text
+
+# 백업 버킷의 증가 상한이 **실제로 붙어 있는지** AWS 에 직접 묻는다.
+# (소스에 lifecycle 블록이 있는 것과 배포된 버킷에 규칙이 붙어 있는 것은 다른 사실이다.)
+aws s3api get-bucket-lifecycle-configuration --bucket devquest-eks-backups-seoul \
+  --query 'Rules[].[ID,Status,Expiration.Days,NoncurrentVersionExpiration.NoncurrentDays,AbortIncompleteMultipartUpload.DaysAfterInitiation]' \
+  --output table
+# 합격 기준: 규칙 1개, Enabled, 30 / 30 / 1. 하나라도 None 이면 그 축에는 상한이 없다.
 
 # ── ② 고아 검사 — 합격 기준: 0건 ──
 # Persistent 태그가 정확히 "true"가 **아닌** available 볼륨 = 진짜 고아.
