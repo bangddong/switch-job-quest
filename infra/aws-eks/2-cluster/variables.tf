@@ -274,3 +274,28 @@ variable "github_client_secret_placeholder" {
 #    관측을 끄고 싶으면 **값을 주지 않는 것**이 유일한 올바른 방법이다.
 # 🔴 실제 URL·instance id·API 키도 물론 넣지 말 것 — 이 레포는 퍼블릭이라 기본값이 그대로 공개된다.
 #    (근거·전제는 secrets.tf ⑨의 주석 참조)
+
+variable "environment" {
+  description = <<-EOT
+    이 클러스터가 어떤 환경인가. **JWT 서명 키와 앱 시크릿의 경계를 가르는 축**이다.
+
+    이 값이 두 곳에 들어간다:
+      ① 앱 시크릿 이름 `<cluster_name>/<environment>/app` (`secrets.tf`)
+      ② 0-bootstrap이 만든 환경별 JWT 키 중 어느 것을 읽을지 (`jwt_secrets[...]`)
+
+    🔴 ①이 ESO IRSA 정책의 `resources`에 그대로 들어가므로(`irsa-eso.tf`),
+       `learning`으로 선 클러스터는 **prod 시크릿을 읽을 권한 자체가 없다.**
+       경계를 주석이 아니라 IAM이 지키게 하는 것이 이 변수의 목적이다.
+
+    🔴 0-bootstrap의 `jwt_environments`에 없는 값을 넣으면 apply가
+       "key not found"로 **실패한다** — 조용히 빈 키로 서명하는 것보다 낫다.
+  EOT
+  type        = string
+  default     = "learning"
+
+  validation {
+    # 0-bootstrap `jwt_environments`와 같은 규칙 (시크릿 이름 세그먼트로 들어간다).
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{0,19}$", var.environment))
+    error_message = "환경 이름은 소문자·숫자·하이픈 1~20자여야 하고 소문자/숫자로 시작해야 합니다."
+  }
+}

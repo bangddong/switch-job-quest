@@ -132,6 +132,38 @@ infra/aws-eks/scripts/db-restore.sh --s3 <덤프파일> --sentinel <토큰>
 
 ---
 
+## 비용은 $0 인데 영속인 것 — **state 안의 값**
+
+이 원장은 *"돈이 나가는데 안 보이는 것"* 을 잡으려고 만들었다(§왜 이 파일이 필요한가).
+그런데 같은 **비가시성**을 가지면서 손실 모드가 돈이 아닌 자산이 이미 존재한다.
+
+| 자산 | 레이어 | 잃으면 | 월 비용 | `aws` CLI 로 보이나 |
+|---|---|---|---|---|
+| `random_password.postgres_master` | 0-bootstrap | 영속 EBS 안의 DB에 **접속 불가** (해시는 볼륨에 구워져 있다 — L-14) | $0 | ❌ |
+| `random_password.jwt_secret["learning"]` | 0-bootstrap | 학습 클러스터 토큰 전부 무효 | $0 | ❌ |
+| `random_password.jwt_secret["prod"]` | 0-bootstrap | **전 사용자 강제 로그아웃** (30일 만료라 재로그인 파도가 30일간) | $0 | ❌ |
+
+🔴 **§확인 명령으로는 이것들을 검증할 수 없다.** AWS 리소스가 아니라 tfstate 항목이라
+`aws ec2 describe-*`·`aws s3api list-*` 어디에도 안 나온다. 유일한 조회 경로는:
+
+```bash
+tofu -chdir=infra/aws-eks/0-bootstrap state list | grep random_password
+# 기대: random_password.jwt_secret["learning"]
+#       random_password.jwt_secret["prod"]
+#       random_password.postgres_master
+#       (3줄. 값은 출력하지 말 것 — 콘솔·로그에 남는다)
+```
+
+무엇이 막나: 셋 다 `lifecycle { prevent_destroy = true }`. 뚫리는 방식도 EBS와 같다 —
+**lifecycle 블록을 지우면 뚫린다**(위 ② 항목과 동일 등급). 추가로 tfstate 버킷 자체가
+소실되면 셋 다 함께 사라지므로, 실질 상한선은 `devquest-eks-tfstate-seoul` 의 내구성이다.
+
+> ⚠️ 원장 **L-50**(*영속 리소스를 **파괴**하는 쪽에는 가드가 없다 — 마커·리퍼·`guard-local-layers`가
+> 전부 `tofu apply` 만 본다*)이 여기에도 그대로 걸린다. 이 표는 그 구멍을 메우지 않고
+> **보이게만** 한다.
+
+---
+
 ## 제거됨
 
 | 리소스 | 제거일 | 근거 |

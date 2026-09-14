@@ -185,7 +185,7 @@ flowchart TB
       rds[("RDS PostgreSQL 17.10<br/>db.t4g.micro · gp3 20GB")]
       sgrds["SG ingress 5432<br/>클러스터 SG 참조 · egress 없음"]
       smdb["SM devquest-eks/db-connection<br/>host · dbname"]
-      smapp["SM devquest-eks/app<br/>JWT · OAuth · Grafana"]
+      smapp["SM devquest-eks/learning/app<br/>JWT · OAuth"]
       smrds["SM rds!db-uuid<br/>username · password<br/>AWS 소유 · 자동 로테이션"]
     end
 
@@ -342,7 +342,7 @@ sequenceDiagram
 flowchart LR
   r["rds!db-uuid<br/>소유자 AWS<br/>username · password<br/>자동 로테이션"]
   d["devquest-eks/db-connection<br/>소유자 우리<br/>host · dbname"]
-  a["devquest-eks/app<br/>소유자 우리<br/>JWT · OAuth · Grafana"]
+  a["devquest-eks/learning/app<br/>소유자 우리<br/>JWT · OAuth"]
   esdb["ExternalSecret<br/>core-api-db"]
   esapp["ExternalSecret<br/>core-api-app"]
   sdb["Secret core-api-db<br/>4키"]
@@ -377,7 +377,7 @@ flowchart LR
           <span class="mono">jdbc:postgresql://${DB_HOST}/${DB_NAME}</span> 형태라 RDS의
           <span class="mono">.address</span>를 쓴다. <span class="mono">.endpoint</span>는
           <span class="mono">host:5432</span>라 URL이 깨진다.</li>
-        <li><strong>학습 클러스터에 prod 크리덴셜을 넣지 않는다</strong> — GitHub OAuth·Grafana는 자리표시.
+        <li><strong>학습 클러스터에 prod 크리덴셜을 넣지 않는다</strong> — GitHub OAuth는 자리표시이고, Grafana 3종은 아예 넣지 않는다(자리표시가 <em>비어있지 않다</em>는 이유만으로 관측 경로가 켜진 사고 이후 삭제).
           실 크리덴셜을 넣으면 학습 클러스터가 진짜 사용자에게 유효한 토큰을 발급할 수 있게 된다.</li>
       </ul>
     </div>

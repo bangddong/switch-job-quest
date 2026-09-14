@@ -51,6 +51,18 @@ application.yml:50  JWT_EXPIRATION_MS:2592000000 (30일)
 > 🔑 D-004·L-14가 확립한 규칙 — *"볼륨과 수명이 같아야 하는 것은 볼륨과 같은 레이어에 둔다"* —
 > 의 적용 대상이 하나 더 있었다. **토큰은 사용자 세션과 수명이 같다.**
 
+🔴 **재판정 (2026-09-14, 항목 2 Blindspot Pass)** — 위 두 문단은 **두 군데가 틀렸다.**
+
+1. *"클러스터를 한 번 부술 때마다 전 사용자 강제 로그아웃"* → **지금은 안 일어난다.**
+   실사용자 토큰은 Fly 의 `JWT_SECRET` 으로 서명되고 Fly secrets 는 write-only 라 읽어올 수
+   없다(B-9 와 같은 근거). **전환 당일 로그아웃은 어느 레이어에 두든 확정**이고, 이 항목이
+   막는 것은 *전환 **이후** teardown 마다*뿐이다. → 전환 시점 항목에 사전 공지 절차 추가할 것.
+2. *"규칙의 적용 대상이 하나 더"* → 맞지만 **그대로 복사하면 안 된다.** 앞선 세 번과 달리
+   JWT 는 **두 환경**에 걸치므로, 키 하나를 영속 레이어에 두면 수명은 맞추고 환경을 섞어
+   **학습 클러스터가 prod 유효 토큰을 발급**할 수 있게 된다.
+
+상세와 채택한 설계는 이 문서 하단 **「항목 2 — 시크릿 환경 분리 (착수 설계)」** 참조.
+
 ### B-3. 도메인·TLS 전제가 틀렸다
 
 | 내 가정 | 실제 |
@@ -144,7 +156,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | B-12 | **EKS CD가 0.** `ecr-push.yml`이 `workflow_dispatch`+`pull_request`만, 배포는 손작업 `sed \| kubectl apply`. 원장 **L-44**(PR 빌드 태그가 레포에 없는 커밋을 가리킴) | `ecr-push.yml:12-37` |
 | B-13 | Fly를 살려두면 **롤백 타깃이 계속 움직인다**(main push마다 재배포 + 동결된 Neon). 끄면 롤백 가치가 준다. 원장 **L-36** | `be-cd.yml:5-7,40` |
 | B-14 | `prod-smoke-daily.yml` **3중 고장**: Vercel을 때려 Fly/EKS 구분 불가 · 실패 안내가 `fly status` 하드코딩 · 05:23 KST라 클러스터 상시 가동 전제 | `prod-smoke-daily.yml:20,45,54` |
-| B-15 | Grafana: `secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다. `SecurityConfig.kt:41`의 `fdaa::/16`(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | `secrets.tf:144-166` |
+| B-15 | Grafana: `secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다. `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | `secrets.tf:144-166` |
 | B-16 | **Fly `suspend`의 "$0"이 미검증** — `min_machines_running=1`이면 최소 1대는 계속 running일 수 있다. `CONTEXT.md:520`은 이걸 **"(비용)" 항목으로 분류**해뒀다. `grep suspend *.md` → 0건 | ⚪ 실측 필요 |
 | B-17 | $140에서 빠진 것: **ALB LCU**(prod는 정의상 실트래픽 상시 — `ingress.yaml:9-11`이 최악 고정비의 4배 경고) · NAT +$32 · KMS $1+ · CloudWatch. 그리고 **이상탐지 DAILY $5 임계가 $4.6/일 상주로 무력화** | `budget.tf` · `cost-anomaly.tf:55,71` |
 | B-18 | 상시 전환은 **학습 전제 위에 세운 통제 전체를 무근거로 만든다**: SOP 전체 · `assert-eks-quiz.sh` · tfsec 예외 4건(전부 *"세션마다 폐기되는 학습 자산"* 근거) · 원장 L-49 | 다수 |
@@ -174,7 +186,8 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | 순 | 할 것 | 닫는 항목 | 비용 |
 |:-:|---|---|---|
 | **1** | **백업·복구 리허설** — `pg_dump` → EBS 파괴 → 복구 (**in-cluster 대상**) | B-8 | ~$0.1 |
-| 2 | 시크릿 환경 분리 — JWT를 `0-bootstrap`으로(L-14 패턴), prod/학습 경계 | B-2, B-15 | $0 |
+| 2a | 시크릿 **환경 축** 도입 — JWT 키를 환경별로 `0-bootstrap`에, 시크릿 이름·IAM으로 경계 강제 **✅2026-09-14** | B-2 | $0 |
+| 2b | Grafana `instance-id` 환경변수화 + `fdaa::/16` 절 삭제 — **`fly secrets set` 선행 필수** | B-15 | $0 |
 | 3 | HTTPS 경로 — ACM + Cloudflare 검증 + `ssl-redirect` | B-3 | ~$0.1 |
 | 4 | 메타스페이스 누수 검증 (README 선행 조건) | B-5 | $0~0.1 |
 | 5 | 실 AI·메일·채점 경로 검증 (스텁 해제) | B-4 | ~$0.2 |
@@ -333,3 +346,147 @@ tofu apply                                      # state 에 없으므로 새로 
       ⑧ psql -v ON_ERROR_STOP=1 로 복구 → 센티넬 존재 확인 → 앱 기동
       ⑨ 볼륨 재생성 완료를 원장과 대조(게이트) → teardown
 ```
+
+---
+
+# 항목 2 — 시크릿 환경 분리 (착수 설계)
+
+| | |
+|---|---|
+| 상태 | **2a ✅ 코드 완료 (2026-09-14)** · 2b 미착수 |
+| 비용 | **$0** — 클러스터 불필요. 생성되는 것은 `random_password` 2개(= tfstate 항목, AWS 리소스 아님) |
+| 닫는 항목 | **B-2** (2a). ~~B-15~~ → **2b 로 분리**, 아래 참조 |
+
+## 🔴 Blindspot Pass 가 뒤집은 것 (2026-09-14, 착수 전)
+
+### ① 이 계획을 글자 그대로 실행하면 **경계가 없어진다** — 가장 중요
+
+계획 원문은 *"JWT를 `0-bootstrap`으로(L-14 패턴)"* 였다. 그대로 하면 키가 **하나**다.
+
+D-004·L-14 규칙(*수명이 같아야 하는 것은 같은 레이어에*)의 앞선 세 번은 전부
+**학습 전용 단일 환경**이었다 — ①postgres 비밀번호 ②영속 EBS ③백업 S3. 그래서 규칙을
+그대로 적용해도 아무것도 섞이지 않았다.
+
+**JWT 키는 처음으로 두 환경에 걸친다.** 수명만 맞추고 환경을 섞으면:
+
+```
+학습 클러스터가 영속 키로 서명  →  prod 도 같은 0-bootstrap 출력을 읽음
+→ 학습 클러스터(또는 kubectl 보유자)가 prod 유효 토큰을 발급할 수 있다
+```
+
+`2-cluster/secrets.tf` 가 **스스로 금지해둔 상태**다 — *"학습 클러스터에 prod 크리덴셜을
+넣으면 그 클러스터가 실서비스 사용자에게 유효한 토큰을 발급할 수 있게 된다."*
+OAuth 로는 지키고 JWT 로는 뚫리는 경계는 경계가 아니다.
+
+확도: 메커니즘 🔴(코드 확인 — `0-bootstrap/variables.tf` 에 환경 축 부재, ESO `key` 하드코딩)
+· 영향 크기 🟡(전환 후 토폴로지 미결정. 단 **연습용 재구축**만으로도 발화한다)
+
+→ **채택: 환경 축 도입** (사용자 결정). 키 2개 + 시크릿 이름 2개 + ESO key 파라미터화.
+
+### ② B-2 의 피해 서술이 두 시점을 섞어놨다
+
+B-2 본문은 *"클러스터를 한 번 부술 때마다 전 사용자 강제 로그아웃"* 이라고 썼다.
+**지금은 그런 일이 일어나지 않는다** — 실사용자 토큰은 **Fly 의** `JWT_SECRET` 으로
+서명되고(`be/fly.toml` `[env]` 에 없음 = `fly secrets`), Fly secrets 는 **write-only**
+(B-9 와 같은 근거). 즉 현재 prod 키를 읽어서 AWS 로 옮길 수 없다.
+
+🔑 **전환 당일 전 사용자 로그아웃은 어느 레이어에 두든 확정이다.**
+이 항목이 사는 것은 *"전환 **이후** teardown 마다 로그아웃"* 뿐.
+
+→ 전환 시점 항목(B-6·B-11·B-16 묶음)에 **"JWT 재발급 = 전원 로그아웃, 사전 공지"** 추가할 것.
+   `JWT_EXPIRATION_MS` 30일이라 재로그인 파도가 30일간 이어진다.
+
+### ③ OAuth 경계는 이미 닫혀 있다 — 할 일 0
+
+4중으로 확인됐다: 자리표시가 변수 default 리터럴 · 2-cluster 는 CI apply 매트릭스에 없음
+(+ `infra-ci.yml` 이 기계적 차단) · CI 주입 `TF_VAR_*` 는 예산 이메일 하나 · `*.tfvars` 가
+세 레이어 전부 gitignore. → 계획서의 "prod/학습 경계" 문구가 **이미 성립된 것을 다시 하려는
+것처럼** 읽혔다. 실제 미비 지점은 **JWT 한 곳**이었다.
+
+## 🟡 확인된 사실 (설계를 단순하게 만든 것)
+
+| | 내용 |
+|---|---|
+| **값만 옮긴다, 시크릿은 안 옮긴다** | postgres 도 그랬다: `random_password`(0-bootstrap) → `outputs.tf` → `2-cluster/remote-state.tf` → 소비. `aws_secretsmanager_secret` 리소스는 2-cluster 소유로 남는다 → **ARN·IAM·$0.40/월 전부 변화 없음** |
+| **`tofu state mv` 불필요** | 2-cluster state 항목 **0개** 실측(클러스터 미가동). `random_password.jwt_secret` 은 state 에 존재하지 않으므로 코드에서 지우면 끝 |
+| **CI 영향** | `infra-deploy.yml` 매트릭스가 `[0-bootstrap, 1-network]` → 머지 시 자동 apply. 실측 plan **`2 to add, 0 to change, 0 to destroy`**, 비용 $0 |
+| **치환 관례가 이미 있다** | `externalsecret-db.yaml` 의 `RDS_MASTER_SECRET_PLACEHOLDER` + `sed \| kubectl apply -f -`. 새 도구(kustomize·envsubst) 도입 없이 재사용 |
+| **출력도 이미 있다** | `2-cluster/outputs.tf` 의 `app_secret_name` — sed 소스를 새로 만들 필요 없음 |
+| **`random` provider 제거** | 2-cluster 의 유일한 사용처가 JWT 였다. 안 지우면 `versions.tf` 주석이 거짓으로 남는다 |
+
+## ⚠️ 적용 순서 함정 (U-7)
+
+`2-cluster` 는 새 출력 `jwt_secrets` 를 참조하는데, 그 출력은 **0-bootstrap 이 apply 된 뒤에만**
+존재한다. 머지 전에 2-cluster 를 로컬 apply 하면 `output not found` 로 실패한다.
+`remote-state.tf` 가 이미 경고하는 것과 같은 함정이고, 순서는 그대로다 — **머지 → CI 가
+0-bootstrap apply → 그 다음 2-cluster 로컬 apply.**
+
+## 경계를 무엇이 강제하는가
+
+문서가 아니라 **IAM** 이다.
+
+```
+시크릿 이름   <cluster_name>/<environment>/app        (2-cluster/secrets.tf)
+ESO 정책      resources = [... aws_secretsmanager_secret.app.arn ...]   (irsa-eso.tf)
+→ environment=learning 으로 선 클러스터의 ESO 역할에는
+  prod 시크릿 ARN 에 대한 권한이 **아예 없다**. 매니페스트를 손으로 고쳐도 못 읽는다.
+```
+
+### ⚠️ 경계는 **절반만** 세워졌다 (QA F-2, 2026-09-14)
+
+위 문장은 **두 배포가 공존할 수 있을 때에만 참이다. 지금은 아니다.**
+
+```
+2-cluster/backend.tf      key          = "2-cluster/terraform.tfstate"  ← 환경 없음
+2-cluster/variables.tf    cluster_name = "devquest-eks" (default)       ← 환경 없음
+2-cluster/irsa-eso.tf     name         = "${var.cluster_name}-eso"      ← 두 환경 동일
+```
+
+셋 다 단일값이라 learning·prod 2-cluster 를 **동시에 세울 수 없다**(state·클러스터명·IAM
+역할명 충돌). 지금 `environment` 가 하는 일은 **한 배포의 라벨을 가르는 것**이다.
+
+| 세워진 것 (2a) | 남은 것 (prod 전환 선행 조건) |
+|---|---|
+| 키가 환경별로 분리 (`0-bootstrap`) | `backend.tf` state key 를 환경별로 (`2-cluster/<env>/terraform.tfstate`) |
+| 시크릿 이름·IAM 스코프가 올바른 모양 | `cluster_name` 을 환경별로 (서브넷 태그가 여기 묶여 있어 1-network 도 영향) |
+| 소비 측이 자기 환경만 인덱싱 | IAM 역할명 충돌 해소 (`${cluster_name}-eso`) |
+
+🔑 **이걸 등재하는 이유**: 2a 의 주석·커밋 메시지가 처음엔 조건절 없이 *"IAM 이 경계를 지킨다"*
+라고 단정했다. **참인 문장을 그 유효 범위 밖에 쓴 것**이고, #417 퀴즈 Q4 가 잡은 것과 같은 병이다
+(*"조건절을 떨어뜨리면 경고가 거짓말이 된다"*). 정정해서 코드 주석에 반영했다.
+
+## 항목 2b — B-15 (분리, 미착수)
+
+**분리 사유**: `fly secrets set` 이 **머지보다 먼저** 실행돼야 하는데(`be-cd.yml` 이 main
+push 마다 자동 배포), 2a 에 섞으면 인프라 전용 PR 이 prod 배포를 트리거한다.
+
+| 대상 | 변경 | 위험 |
+|---|---|---|
+| `application-prod.yml:19` `instance-id: "1680166"` | `${GRAFANA_OTLP_INSTANCE_ID:}` | 🔴 **Fly prod 도 같은 `prod` 프로파일**(`fly.toml:12`). 값이 비면 `GrafanaOtlpCredentialsCondition` 이 false → 빈 미등록 + WARN 1줄. `enabled: true` 는 남아 **설정은 켜졌다는데 레지스트리가 없는** 상태. `/health` 스모크로 **안 잡힌다** |
+| `SecurityConfig.kt:43` `hasIpAddress('fdaa::/16')` | **절 삭제** (`127.0.0.1`·`::1` 만) | 🟡 EKS CIDR 로 "교체"하면 소스가 ALB 라 `/actuator/**` 가 **인터넷에 열린다**(Ingress 는 HTTP 80 평문). 삭제만이 확대가 아님을 증명할 수 있다. Fly 는 `[metrics]` 블록이 없어 안 깨진다 |
+| `OtlpMetricsConfigTest` | 보강 필요 | 🔴 3개 테스트가 `instance-id=1680166` 을 **프로퍼티로 직접 주입** → yml 을 비워도 전부 GREEN. **안전망이 변경 지점을 안 덮는다** |
+
+🔴 **2b 착수 전 필수 (사용자 실행)**: `fly secrets set GRAFANA_OTLP_INSTANCE_ID=<값>`
+→ 확인 후 PR 생성. 순서를 뒤집으면 prod 메트릭이 조용히 꺼진다.
+
+⚪ **별건**: `instance-id "1680166"` 은 이미 **퍼블릭 레포 히스토리에 평문**이다. 환경변수로
+빼도 히스토리에는 남는다 → "제거"가 아니라 *"이게 정말 비밀인가"* 를 먼저 판정해야 한다.
+instance ID 는 회전 불가한 계정 식별자일 가능성이 높고, 그렇다면 진짜 비밀은
+`GRAFANA_API_KEY` 쪽이며 그건 이미 레포에 없다. 판정 후 CONTEXT 의 해당 항목을 갱신할 것.
+
+## 절차 (2a — 전부 $0)
+
+```
+① 0-bootstrap/jwt-secret.tf 신설 — for_each 로 환경별 키 + prevent_destroy
+② 0-bootstrap variables(jwt_environments) / outputs(jwt_secrets, sensitive)
+③ 2-cluster variables(environment) — 검증 정규식은 시크릿 이름 세그먼트 규칙
+④ 2-cluster secrets.tf — 이름에 환경, JWT_SECRET 을 remote state 로, random_password 삭제
+⑤ 2-cluster versions.tf — random provider 제거
+⑥ k8s/eso/externalsecret-app.yaml — APP_SECRET_NAME_PLACEHOLDER
+⑦ 튜토리얼 2-3 절 + 원장(state 안의 값) + 이 문서
+⑧ tofu validate ×2 + 0-bootstrap plan 으로 "2 to add / 0 to destroy" 실측
+```
+
+> 🔴 **실검증은 다음 유료 세션에서** — 2-cluster 는 apply 없이 검증할 수 없다.
+> 그때 확인할 것: `app_secret_name` = `devquest-eks/learning/app` · ESO 동기화 성공 ·
+> 파드가 `JWT_SECRET` 을 받는가 · **teardown 후 재apply 에서 키가 그대로인가**(이 항목의 목적).

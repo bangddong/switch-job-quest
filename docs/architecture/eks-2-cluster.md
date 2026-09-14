@@ -63,7 +63,7 @@ flowchart TB
       subgraph sm["Secrets Manager"]
         direction LR
         smdb["devquest-eks/db-connection<br/>host · dbname"]
-        smapp["devquest-eks/app<br/>JWT · OAuth · Grafana"]
+        smapp["devquest-eks/learning/app<br/>JWT · OAuth"]
         smrds["rds!db-uuid<br/>username · password<br/>(AWS 소유·로테이션)"]
       end
     end
@@ -134,7 +134,7 @@ sequenceDiagram
   STS-->>P: 임시 자격증명 (assumed-role/devquest-eks-eso/세션)
 
   Note over P,SM: ③ 여기부터는 "인가"의 영역
-  P->>SM: GetSecretValue(devquest-eks/app)
+  P->>SM: GetSecretValue(devquest-eks/learning/app)
   SM-->>P: 시크릿 JSON (권한 정책이 이 ARN을 허용할 때만)
 
   P->>K: K8s Secret 생성·동기화 (creationPolicy: Owner)
@@ -168,7 +168,7 @@ flowchart LR
   subgraph aws["AWS Secrets Manager"]
     r["rds!db-uuid<br/>👤 소유자: AWS<br/>username · password<br/>(자동 로테이션)"]
     d["devquest-eks/db-connection<br/>👤 소유자: 우리(tofu)<br/>host · dbname"]
-    a["devquest-eks/app<br/>👤 소유자: 우리(tofu)<br/>JWT · OAuth · Grafana"]
+    a["devquest-eks/learning/app<br/>👤 소유자: 우리(tofu)<br/>JWT · OAuth"]
   end
 
   esdb["ExternalSecret<br/>core-api-db"]
@@ -279,7 +279,7 @@ graph TB
     end
     subgraph sm["Secrets Manager"]
       smdb["devquest-eks/db-connection<br/>host·dbname·<b>username·password</b><br/>👤 전부 tofu 소유"]
-      smapp["devquest-eks/app<br/>JWT · OAuth · Grafana"]
+      smapp["devquest-eks/learning/app<br/>JWT · OAuth"]
       smtls["devquest-eks/postgres-tls<br/>server.crt · server.key"]
     end
     ebscsi["IRSA: devquest-eks-ebs-csi<br/>AmazonEBSCSIDriverPolicy<br/>(태그 조건으로 경계)"]

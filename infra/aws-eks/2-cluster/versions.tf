@@ -9,11 +9,9 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
-    # JWT_SECRET을 세션마다 새로 생성하는 데 사용 (secrets.tf ⑨).
-    # 생성값은 tfstate에 남지만, 학습 전용 크리덴셜이고 state는 S3에서 암호화된다.
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
-    }
+    # ℹ️ `random` provider는 **제거됐다.** JWT_SECRET을 여기서 생성하던 유일한
+    #    사용처가 0-bootstrap으로 옮겨갔기 때문이다(`0-bootstrap/jwt-secret.tf`).
+    #    안 쓰는 provider를 남기면 "여기서 무언가를 생성한다"는 잘못된 신호가 되고,
+    #    이 레포가 반복적으로 겪은 *서술과 코드의 불일치*가 하나 더 생긴다.
   }
 }
