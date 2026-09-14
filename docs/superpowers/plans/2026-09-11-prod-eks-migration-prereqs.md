@@ -156,7 +156,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | B-12 | **EKS CD가 0.** `ecr-push.yml`이 `workflow_dispatch`+`pull_request`만, 배포는 손작업 `sed \| kubectl apply`. 원장 **L-44**(PR 빌드 태그가 레포에 없는 커밋을 가리킴) | `ecr-push.yml:12-37` |
 | B-13 | Fly를 살려두면 **롤백 타깃이 계속 움직인다**(main push마다 재배포 + 동결된 Neon). 끄면 롤백 가치가 준다. 원장 **L-36** | `be-cd.yml:5-7,40` |
 | B-14 | `prod-smoke-daily.yml` **3중 고장**: Vercel을 때려 Fly/EKS 구분 불가 · 실패 안내가 `fly status` 하드코딩 · 05:23 KST라 클러스터 상시 가동 전제 | `prod-smoke-daily.yml:20,45,54` |
-| B-15 | 🔴 **재판정 (2026-09-14) — 대부분 해소.** ~~`secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다.~~ → **섞이지 않는다.** 학습 클러스터에 `GRAFANA_API_KEY` 가 없어 `GrafanaOtlpCredentialsCondition` 이 false 이고, 이는 **#355(08-03)에서 자리표시 3종을 삭제하며 이미 끝난 사고**다. 이 행은 그것을 09-11 에 **현재형으로 다시 적은 것**이다. `instance-id` 도 Basic auth 의 username 이라 시크릿이 아니다(상세: 하단 「항목 2b — 재판정」). `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | `secrets.tf:144-166` |
+| B-15 | 🔴 **재판정 (2026-09-14) — 대부분 해소.** ~~`secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다.~~ → **섞이지 않는다.** 학습 클러스터에 `GRAFANA_API_KEY` 가 없어 `GrafanaOtlpCredentialsCondition` 이 false 이고, 이는 **#355(08-03)에서 자리표시 3종을 삭제하며 이미 끝난 사고**다. 이 행은 그것을 09-11 에 **현재형으로 다시 적은 것**이다. `instance-id` 도 Basic auth 의 username 이라 시크릿이 아니다(상세: 하단 「항목 2b — 재판정」). `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | ~~`secrets.tf:144-166`~~ → 남은 실행 항목은 `be/core/core-api/.../SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절뿐이고, **항목 3 에서 처리한다** |
 | B-16 | **Fly `suspend`의 "$0"이 미검증** — `min_machines_running=1`이면 최소 1대는 계속 running일 수 있다. `CONTEXT.md:520`은 이걸 **"(비용)" 항목으로 분류**해뒀다. `grep suspend *.md` → 0건 | ⚪ 실측 필요 |
 | B-17 | $140에서 빠진 것: **ALB LCU**(prod는 정의상 실트래픽 상시 — `ingress.yaml:9-11`이 최악 고정비의 4배 경고) · NAT +$32 · KMS $1+ · CloudWatch. 그리고 **이상탐지 DAILY $5 임계가 $4.6/일 상주로 무력화** | `budget.tf` · `cost-anomaly.tf:55,71` |
 | B-18 | 상시 전환은 **학습 전제 위에 세운 통제 전체를 무근거로 만든다**: SOP 전체 · `assert-eks-quiz.sh` · tfsec 예외 4건(전부 *"세션마다 폐기되는 학습 자산"* 근거) · 원장 L-49 | 다수 |
@@ -480,8 +480,13 @@ Base64.getEncoder().encodeToString("$instanceId:$apiKey".toByteArray())
 | 조합 방식 | `username:password` 의 앞자리 | 위 코드 |
 
 ⚠️ **잔여 위험은 인정한다**: 키가 언젠가 유출되면 ID 를 이미 알고 있어 악용이 즉시 가능하다.
-다만 ID 는 스택 URL 에서 얻을 수 있는 **회전 불가한 계정 식별자**이고, 이 레포는 히스토리
-재작성을 금지하므로 **어차피 제거할 수 없다.** 진짜 통제점은 `GRAFANA_API_KEY` 이고 레포 밖에 있다.
+⚪ **미확인 (코드로 검증 불가)**: ID 가 스택 URL 에서 얻어지는지, 회전이 가능한지는 **Grafana Cloud 제품
+동작**이라 이 레포에서 확인할 수 없다. 처음엔 *"회전 불가한 계정 식별자"* 라고 단정했으나 근거가 없다
+(QA F-2 가 강등을 요구했고 맞다). 확인하려면 Grafana Cloud 콘솔에서 봐야 한다.
+🔑 **다만 이 세부가 어느 쪽이든 핵심 판정은 안 흔들린다** — username 은 password 없이 쓸 수 없고,
+이 레포는 히스토리 재작성을 금지하므로 값 자체는 **어차피 제거할 수 없다.** 진짜 통제점은
+`GRAFANA_API_KEY` 이고 그건 레포 밖에 있다. 🔴 회전이 **가능**한 것으로 밝혀지면 그때 한 번 돌리면 된다 —
+그건 이 판정을 뒤집는 게 아니라 값싼 추가 조치다.
 
 ### 판정 ② *"학습/prod 메트릭이 섞인다"* 는 **이미 해소된 사고의 현재형 재기술**
 
