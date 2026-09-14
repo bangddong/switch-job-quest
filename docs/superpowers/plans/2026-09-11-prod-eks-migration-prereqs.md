@@ -437,9 +437,9 @@ ESO 정책      resources = [... aws_secretsmanager_secret.app.arn ...]   (irsa-
 위 문장은 **두 배포가 공존할 수 있을 때에만 참이다. 지금은 아니다.**
 
 ```
-2-cluster/backend.tf:4    key = "2-cluster/terraform.tfstate"   ← 환경 없음
-2-cluster/variables.tf    cluster_name default "devquest-eks"   ← 환경 없음
-2-cluster/irsa-eso.tf:71  name = "${var.cluster_name}-eso"      ← 두 환경이 같은 역할명
+2-cluster/backend.tf      key          = "2-cluster/terraform.tfstate"  ← 환경 없음
+2-cluster/variables.tf    cluster_name = "devquest-eks" (default)       ← 환경 없음
+2-cluster/irsa-eso.tf     name         = "${var.cluster_name}-eso"      ← 두 환경 동일
 ```
 
 셋 다 단일값이라 learning·prod 2-cluster 를 **동시에 세울 수 없다**(state·클러스터명·IAM

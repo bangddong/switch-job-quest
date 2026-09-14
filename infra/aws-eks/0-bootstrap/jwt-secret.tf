@@ -50,9 +50,11 @@
 # ⚠️ **단, 이 문장은 두 배포가 공존할 수 있을 때에만 성립한다 — 지금은 아니다.**
 #    (2026-09-14 QA F-2. 조건절을 빠뜨린 채 "IAM 이 경계를 지킨다"고 단정했던 것을 정정한다.)
 #
-#      2-cluster/backend.tf:4   key = "2-cluster/terraform.tfstate"   ← 환경 없음
-#      2-cluster/variables.tf   cluster_name default "devquest-eks"   ← 환경 없음
-#      2-cluster/irsa-eso.tf:71 name = "${var.cluster_name}-eso"      ← 두 환경이 같은 역할명
+#      2-cluster/backend.tf     key          = "2-cluster/terraform.tfstate"  ← 환경 없음
+#      2-cluster/variables.tf   cluster_name = "devquest-eks" (default)       ← 환경 없음
+#      2-cluster/irsa-eso.tf    name         = "${var.cluster_name}-eso"      ← 두 환경 동일
+#
+#    (줄번호를 안 적는다 — 이 세션에만 인용 줄번호가 세 번 어긋났다. 선언문으로 찾아라.)
 #
 #    셋 다 단일값이라 learning 과 prod 2-cluster 를 **동시에 세울 수 없다**(state·클러스터명·
 #    IAM 역할명이 충돌한다). 지금 `environment` 가 하는 일은 **한 배포의 라벨을 가르는 것**이고,
