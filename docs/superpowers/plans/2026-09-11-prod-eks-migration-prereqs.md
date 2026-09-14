@@ -432,6 +432,29 @@ ESO 정책      resources = [... aws_secretsmanager_secret.app.arn ...]   (irsa-
   prod 시크릿 ARN 에 대한 권한이 **아예 없다**. 매니페스트를 손으로 고쳐도 못 읽는다.
 ```
 
+### ⚠️ 경계는 **절반만** 세워졌다 (QA F-2, 2026-09-14)
+
+위 문장은 **두 배포가 공존할 수 있을 때에만 참이다. 지금은 아니다.**
+
+```
+2-cluster/backend.tf:4    key = "2-cluster/terraform.tfstate"   ← 환경 없음
+2-cluster/variables.tf    cluster_name default "devquest-eks"   ← 환경 없음
+2-cluster/irsa-eso.tf:71  name = "${var.cluster_name}-eso"      ← 두 환경이 같은 역할명
+```
+
+셋 다 단일값이라 learning·prod 2-cluster 를 **동시에 세울 수 없다**(state·클러스터명·IAM
+역할명 충돌). 지금 `environment` 가 하는 일은 **한 배포의 라벨을 가르는 것**이다.
+
+| 세워진 것 (2a) | 남은 것 (prod 전환 선행 조건) |
+|---|---|
+| 키가 환경별로 분리 (`0-bootstrap`) | `backend.tf` state key 를 환경별로 (`2-cluster/<env>/terraform.tfstate`) |
+| 시크릿 이름·IAM 스코프가 올바른 모양 | `cluster_name` 을 환경별로 (서브넷 태그가 여기 묶여 있어 1-network 도 영향) |
+| 소비 측이 자기 환경만 인덱싱 | IAM 역할명 충돌 해소 (`${cluster_name}-eso`) |
+
+🔑 **이걸 등재하는 이유**: 2a 의 주석·커밋 메시지가 처음엔 조건절 없이 *"IAM 이 경계를 지킨다"*
+라고 단정했다. **참인 문장을 그 유효 범위 밖에 쓴 것**이고, #417 퀴즈 Q4 가 잡은 것과 같은 병이다
+(*"조건절을 떨어뜨리면 경고가 거짓말이 된다"*). 정정해서 코드 주석에 반영했다.
+
 ## 항목 2b — B-15 (분리, 미착수)
 
 **분리 사유**: `fly secrets set` 이 **머지보다 먼저** 실행돼야 하는데(`be-cd.yml` 이 main

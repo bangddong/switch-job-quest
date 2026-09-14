@@ -377,7 +377,7 @@ flowchart LR
           <span class="mono">jdbc:postgresql://${DB_HOST}/${DB_NAME}</span> 형태라 RDS의
           <span class="mono">.address</span>를 쓴다. <span class="mono">.endpoint</span>는
           <span class="mono">host:5432</span>라 URL이 깨진다.</li>
-        <li><strong>학습 클러스터에 prod 크리덴셜을 넣지 않는다</strong> — GitHub OAuth·Grafana는 자리표시.
+        <li><strong>학습 클러스터에 prod 크리덴셜을 넣지 않는다</strong> — GitHub OAuth는 자리표시이고, Grafana 3종은 아예 넣지 않는다(자리표시가 <em>비어있지 않다</em>는 이유만으로 관측 경로가 켜진 사고 이후 삭제).
           실 크리덴셜을 넣으면 학습 클러스터가 진짜 사용자에게 유효한 토큰을 발급할 수 있게 된다.</li>
       </ul>
     </div>

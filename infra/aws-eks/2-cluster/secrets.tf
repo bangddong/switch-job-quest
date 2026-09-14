@@ -127,6 +127,11 @@ resource "aws_secretsmanager_secret_version" "db_connection_incluster" {
 #   환경이 들어가고 `irsa-eso.tf`의 정책이 이 리소스의 ARN만 허용하므로,
 #   learning으로 선 클러스터의 ESO 역할에는 prod 시크릿 권한 자체가 없다.
 #
+#   ⚠️ **이 문장은 두 배포가 공존할 수 있을 때 성립한다 — 아직 아니다** (QA F-2).
+#      `backend.tf`의 state key와 `cluster_name`이 환경별로 안 갈려 있어 지금은
+#      learning·prod 2-cluster를 동시에 못 세운다. 상세와 남은 일은
+#      `0-bootstrap/jwt-secret.tf`의 「경계를 무엇이 강제하는가」 절.
+#
 # GitHub OAuth 2개는 **자리표시 값**이다. Stage 2의 목표는 "앱이 완전히 부팅되는가"
 # (=/health 200)이지 로그인 e2e가 아니다. 이 값들은 빈 생성만 통과시키면 된다.
 # 실제 로그인 검증이 필요해지면 학습 전용 OAuth App을 새로 발급해 주입한다.

@@ -45,8 +45,23 @@
 # 시크릿 **이름**에 환경이 들어가고(`<cluster>/<environment>/app`),
 # ESO 의 IRSA 정책 `resources` 가 `aws_secretsmanager_secret.app.arn` 을 참조한다
 # (`2-cluster/irsa-eso.tf`). 즉 `environment=learning` 으로 선 클러스터의 ESO 역할은
-# **prod 시크릿 ARN 에 대한 권한 자체가 없다.** 매니페스트를 손으로 고쳐도 못 읽는다.
-# 경계는 주석이 아니라 IAM 이 지킨다.
+# **prod 시크릿 ARN 에 대한 권한 자체가 없다.**
+#
+# ⚠️ **단, 이 문장은 두 배포가 공존할 수 있을 때에만 성립한다 — 지금은 아니다.**
+#    (2026-09-14 QA F-2. 조건절을 빠뜨린 채 "IAM 이 경계를 지킨다"고 단정했던 것을 정정한다.)
+#
+#      2-cluster/backend.tf:4   key = "2-cluster/terraform.tfstate"   ← 환경 없음
+#      2-cluster/variables.tf   cluster_name default "devquest-eks"   ← 환경 없음
+#      2-cluster/irsa-eso.tf:71 name = "${var.cluster_name}-eso"      ← 두 환경이 같은 역할명
+#
+#    셋 다 단일값이라 learning 과 prod 2-cluster 를 **동시에 세울 수 없다**(state·클러스터명·
+#    IAM 역할명이 충돌한다). 지금 `environment` 가 하는 일은 **한 배포의 라벨을 가르는 것**이고,
+#    그 덕에 ⓐ 키가 환경별로 분리돼 있고 ⓑ 시크릿 이름·IAM 스코프가 이미 올바른 모양이다.
+#    남은 것은 **배포 격리**뿐이고, 그건 prod 전환 작업의 선행 조건이다
+#    (계획서 「항목 2 — 경계를 무엇이 강제하는가」에 등재).
+#
+# 요약: 경계의 **절반**이 세워졌다. 세워진 절반은 IAM 이 지키고, 나머지 절반(배포 격리)은
+#       아직 코드에 없다. "IAM 이 지킨다"를 조건 없이 쓰면 그 자체가 거짓말이 된다.
 #
 # ── 기각한 대안 ─────────────────────────────────────────────────────
 # ⓐ 키 하나 + "학습에선 쓰지 말 것" 주석
