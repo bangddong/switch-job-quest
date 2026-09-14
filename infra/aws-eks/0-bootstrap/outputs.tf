@@ -63,3 +63,20 @@ output "backup_bucket" {
   description = "DB 논리 백업 버킷 이름 (db-backup.sh / db-restore.sh 가 읽어간다)"
   value       = aws_s3_bucket.db_backups.id
 }
+
+output "jwt_secrets" {
+  description = <<-EOT
+    환경별 JWT 서명 키 (map: 환경명 → 키).
+
+    🔴 **토큰 수명 = 사용자 세션 수명이므로 여기(0-bootstrap)에서 만든다.**
+    2-cluster에 두면 세션마다 destroy되어 재생성되는데, 이미 발급된 토큰은
+    옛 키로 서명돼 있어 전부 무효가 된다 = 전 사용자 강제 로그아웃
+    (D-004·L-14 규칙의 네 번째 적용). 상세는 `jwt-secret.tf`.
+
+    🔴 **환경별로 나뉘어 있는 것이 핵심이다.** 키 하나를 공유하면 학습 클러스터가
+    prod 유효 토큰을 발급할 수 있게 된다. 소비 측은 반드시 자기 환경 키만
+    인덱싱해야 한다: `...outputs.jwt_secrets[var.environment]`.
+  EOT
+  value       = { for env, pw in random_password.jwt_secret : env => pw.result }
+  sensitive   = true
+}

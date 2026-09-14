@@ -113,23 +113,35 @@ resource "aws_secretsmanager_secret_version" "db_connection_incluster" {
 #   실서비스 사용자에게 유효한 토큰을 발급할 수 있게 된다. 학습장에 프로덕션
 #   신원 발급 권한을 주는 셈이라 금지.
 #
-# JWT_SECRET은 tofu가 매 세션 새로 생성한다(random_password). 학습 클러스터의
-# 토큰은 그 세션 안에서만 유효하면 충분하다.
+# ~~JWT_SECRET은 tofu가 매 세션 새로 생성한다(random_password). 학습 클러스터의
+# 토큰은 그 세션 안에서만 유효하면 충분하다.~~
+#   🔴 **이 서술은 학습 전용인 동안만 참이었다.** 상시 운영으로 가면 destroy 때마다
+#   키가 바뀌어 **전 사용자가 강제 로그아웃**된다(JWT_EXPIRATION_MS = 30일).
+#   L-14(postgres 비밀번호)와 같은 형태 — 그때는 데이터가 살아남았는데 자격증명만
+#   안 붙었고, 여기서는 사용자가 살아남았는데 토큰만 안 붙는다.
+#   → 키는 **0-bootstrap이 환경별로** 만든다(`0-bootstrap/jwt-secret.tf`).
+#
+#   🔴 그리고 **환경별로 나뉜 것이 이 이동의 핵심이다.** 키 하나를 영속 레이어에 두고
+#   공유하면 학습 클러스터가 prod 유효 토큰을 발급할 수 있게 되어, 바로 위 문단이
+#   OAuth에 대해 금지한 것을 JWT로 뚫는다. 경계는 IAM이 지킨다 — 시크릿 이름에
+#   환경이 들어가고 `irsa-eso.tf`의 정책이 이 리소스의 ARN만 허용하므로,
+#   learning으로 선 클러스터의 ESO 역할에는 prod 시크릿 권한 자체가 없다.
+#
 # GitHub OAuth 2개는 **자리표시 값**이다. Stage 2의 목표는 "앱이 완전히 부팅되는가"
 # (=/health 200)이지 로그인 e2e가 아니다. 이 값들은 빈 생성만 통과시키면 된다.
 # 실제 로그인 검증이 필요해지면 학습 전용 OAuth App을 새로 발급해 주입한다.
-resource "random_password" "jwt_secret" {
-  length  = 64
-  special = false # base64/HMAC 키로 쓰이므로 특수문자 불필요, 셸 이스케이프 사고도 예방
-}
 
 # tfsec AVD-AWS-0098(LOW): 고객관리형 KMS 키(CMK) 대신 기본 aws/secretsmanager 키를 쓴다.
 # 근거: CMK는 키당 $1/월 고정비인데, 이 시크릿들은 세션마다 만들고 부수는 학습용이고
 #   담긴 값도 학습 전용(생성된 JWT 키 + OAuth 자리표시)이다. 보호 대상 가치 < 상시 비용.
 #tfsec:ignore:AVD-AWS-0098
 resource "aws_secretsmanager_secret" "app" {
-  name        = "${var.cluster_name}/app"
-  description = "core-api 앱 시크릿 (JWT·GitHub OAuth). 학습 전용 값 — prod 값 아님."
+  # 🔴 이름에 **환경**이 들어간다. 이것이 학습↔prod 경계의 실체다 —
+  #    `irsa-eso.tf`의 ESO 정책이 이 ARN만 허용하므로, 이름이 갈리는 순간
+  #    권한도 갈린다. 소비 측(`k8s/eso/externalsecret-app.yaml`)은 이 이름을
+  #    하드코딩하지 않고 `app_secret_name` 출력을 sed로 치환해 받는다.
+  name        = "${var.cluster_name}/${var.environment}/app"
+  description = "core-api 앱 시크릿 (JWT·GitHub OAuth) — 환경: ${var.environment}"
 
   recovery_window_in_days = 0 # 위와 동일 근거
 }
@@ -137,7 +149,9 @@ resource "aws_secretsmanager_secret" "app" {
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
   secret_string = jsonencode({
-    JWT_SECRET           = random_password.jwt_secret.result
+    # 🔴 반드시 **자기 환경 키만** 인덱싱한다. 맵 전체를 넘기거나 다른 환경 키를
+    #    읽으면 위에서 세운 경계가 무의미해진다.
+    JWT_SECRET           = data.terraform_remote_state.bootstrap.outputs.jwt_secrets[var.environment]
     GITHUB_CLIENT_ID     = var.github_client_id_placeholder
     GITHUB_CLIENT_SECRET = var.github_client_secret_placeholder
 

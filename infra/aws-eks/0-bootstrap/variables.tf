@@ -223,3 +223,29 @@ variable "backup_retention_days" {
     error_message = "backup_retention_days must be 1..365 (상한 없는 보존은 상한 없는 과금이다)."
   }
 }
+
+variable "jwt_environments" {
+  description = <<-EOT
+    JWT 서명 키를 만들 환경 목록. 환경마다 **독립된 키**가 생성된다.
+
+    🔴 환경을 **제거하면** 그 키가 파괴되고 해당 환경의 전 사용자가 강제 로그아웃된다.
+       `jwt-secret.tf`의 `prevent_destroy`가 이를 막는다(의도적인 래치).
+    ℹ️ 추가는 안전하다 — `random_password`는 state 항목일 뿐이라 비용이 0이고,
+       2-cluster는 `[var.environment]` 하나만 읽으므로 나머지는 주입되지 않는다.
+  EOT
+  type        = set(string)
+  default     = ["learning", "prod"]
+
+  validation {
+    # 시크릿 이름 `<cluster>/<environment>/app`의 경로 세그먼트로 들어간다.
+    # Secrets Manager 이름 허용 문자는 영숫자와 `/_+=.@-`이고, 여기서 `/`를 쓰면
+    # 세그먼트가 하나 더 늘어 IAM 와일드카드 스코프가 어긋난다 → 슬래시를 막는다.
+    condition     = alltrue([for e in var.jwt_environments : can(regex("^[a-z0-9][a-z0-9-]{0,19}$", e))])
+    error_message = "환경 이름은 소문자·숫자·하이픈 1~20자여야 하고 소문자/숫자로 시작해야 합니다."
+  }
+
+  validation {
+    condition     = length(var.jwt_environments) > 0
+    error_message = "환경이 최소 하나는 있어야 합니다."
+  }
+}

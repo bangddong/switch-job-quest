@@ -811,7 +811,13 @@ DB 접속에 필요한 값 4개가 **서로 다른 시크릿에 나뉘어 있다
 > **왜 갈라져 있나**: AWS가 만드는 마스터 시크릿에는 **접속 좌표(host/dbname)가 안 들어간다.**
 > 크리덴셜만 있다. 그래서 좌표는 따로 만들어야 하고, ExternalSecret이 둘을 **합성**한다.
 
-앱 시크릿은 별도로 하나 더 있다(`devquest-eks/app`: JWT + GitHub OAuth + Grafana).
+앱 시크릿은 별도로 하나 더 있다 — `devquest-eks/<환경>/app` (JWT + GitHub OAuth).
+이름에 **환경**이 들어가는 이유는 §2-3 참조: JWT 서명 키가 영속 레이어에 있어서,
+환경을 안 가르면 학습 클러스터가 prod 유효 토큰을 발급할 수 있게 된다.
+
+> ⚠️ 종전 서술은 `devquest-eks/app`에 **Grafana 3종도 들어있다**고 적었는데, 그 3종은
+> 이미 삭제됐다(자리표시가 *비어있지 않다*는 이유만으로 관측 경로를 켜버린 사고 이후).
+> 지금 담기는 키는 **3개** — `JWT_SECRET`·`GITHUB_CLIENT_ID`·`GITHUB_CLIENT_SECRET`.
 
 > **왜 소유자별로 쪼갰나**: 자동 로테이션되는 값(AWS 소유)과 수동 값(우리 소유)을 한 덩어리에
 > 섞으면, Stage 3에서 DB만 in-cluster로 갈아끼울 때 앱 시크릿까지 건드려야 한다.
@@ -915,12 +921,35 @@ v1beta1  served=false storage=false
 
 ```bash
 kubectl apply -f k8s/eso/secretstore.yaml
-kubectl apply -f k8s/eso/externalsecret-app.yaml
+
+# 앱 시크릿 이름에는 **환경**이 들어간다(`<cluster>/<environment>/app`).
+# 매니페스트에 박아두면 prod용을 따로 만들어야 하므로 출력에서 받아 치환한다.
+NAME=$(tofu -chdir=infra/aws-eks/2-cluster output -raw app_secret_name)
+sed "s|APP_SECRET_NAME_PLACEHOLDER|$NAME|" k8s/eso/externalsecret-app.yaml | kubectl apply -f -
 
 # db용은 RDS가 만든 마스터 시크릿 ARN을 치환해야 한다(이름을 AWS가 정하므로 코드에 못 박는다)
 ARN=$(tofu -chdir=infra/aws-eks/2-cluster output -raw db_master_secret_arn)
 sed "s|RDS_MASTER_SECRET_PLACEHOLDER|$ARN|" k8s/eso/externalsecret-db.yaml | kubectl apply -f -
 ```
+
+> **왜 앱 시크릿에 환경이 들어가나** — JWT 서명 키는 `0-bootstrap`이 만든다. 클러스터를
+> 부술 때마다 키가 바뀌면 발급해둔 토큰이 전부 무효가 되기 때문이다(= 전 사용자 강제
+> 로그아웃). 그런데 영속 레이어에 키를 **하나만** 두면 학습 클러스터와 prod가 같은 키로
+> 서명하게 되어, 학습장이 실서비스 유효 토큰을 찍을 수 있다. 그래서 키를 환경별로 나누고,
+> 시크릿 **이름**에 환경을 넣어 **ESO의 IRSA 정책이 다른 환경을 못 읽게** 한다.
+> 경계를 지키는 건 주석이 아니라 IAM이다.
+>
+> ```bash
+> # 확인: 이름에 환경이 들어갔는가
+> tofu -chdir=infra/aws-eks/2-cluster output -raw app_secret_name
+> # 기대: devquest-eks/learning/app
+> ```
+
+<!-- verify: infra/aws-eks/0-bootstrap/jwt-secret.tf ~ ^resource "random_password" "jwt_secret" -->
+<!-- verify: infra/aws-eks/0-bootstrap/jwt-secret.tf ~ ^  for_each = var.jwt_environments -->
+<!-- verify: infra/aws-eks/2-cluster/secrets.tf ~ ^  name        = "\$\{var.cluster_name\}/\$\{var.environment\}/app" -->
+<!-- verify: infra/aws-eks/2-cluster/secrets.tf ~ ^    JWT_SECRET           = data.terraform_remote_state -->
+<!-- verify: k8s/eso/externalsecret-app.yaml ~ ^        key: APP_SECRET_NAME_PLACEHOLDER -->
 
 > 🔴 **`db_mode=in-cluster`(Stage 3a~)라면 위 db 블록 대신 이걸 쓴다.** 두 파일은 **같은 이름의
 > K8s Secret(`core-api-db`)을 만들므로 배타적으로 하나만** apply한다.
