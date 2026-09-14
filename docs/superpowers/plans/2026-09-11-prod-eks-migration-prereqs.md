@@ -156,7 +156,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | B-12 | **EKS CD가 0.** `ecr-push.yml`이 `workflow_dispatch`+`pull_request`만, 배포는 손작업 `sed \| kubectl apply`. 원장 **L-44**(PR 빌드 태그가 레포에 없는 커밋을 가리킴) | `ecr-push.yml:12-37` |
 | B-13 | Fly를 살려두면 **롤백 타깃이 계속 움직인다**(main push마다 재배포 + 동결된 Neon). 끄면 롤백 가치가 준다. 원장 **L-36** | `be-cd.yml:5-7,40` |
 | B-14 | `prod-smoke-daily.yml` **3중 고장**: Vercel을 때려 Fly/EKS 구분 불가 · 실패 안내가 `fly status` 하드코딩 · 05:23 KST라 클러스터 상시 가동 전제 | `prod-smoke-daily.yml:20,45,54` |
-| B-15 | Grafana: `secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다. `SecurityConfig.kt:41`의 `fdaa::/16`(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | `secrets.tf:144-166` |
+| B-15 | Grafana: `secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다. `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | `secrets.tf:144-166` |
 | B-16 | **Fly `suspend`의 "$0"이 미검증** — `min_machines_running=1`이면 최소 1대는 계속 running일 수 있다. `CONTEXT.md:520`은 이걸 **"(비용)" 항목으로 분류**해뒀다. `grep suspend *.md` → 0건 | ⚪ 실측 필요 |
 | B-17 | $140에서 빠진 것: **ALB LCU**(prod는 정의상 실트래픽 상시 — `ingress.yaml:9-11`이 최악 고정비의 4배 경고) · NAT +$32 · KMS $1+ · CloudWatch. 그리고 **이상탐지 DAILY $5 임계가 $4.6/일 상주로 무력화** | `budget.tf` · `cost-anomaly.tf:55,71` |
 | B-18 | 상시 전환은 **학습 전제 위에 세운 통제 전체를 무근거로 만든다**: SOP 전체 · `assert-eks-quiz.sh` · tfsec 예외 4건(전부 *"세션마다 폐기되는 학습 자산"* 근거) · 원장 L-49 | 다수 |
