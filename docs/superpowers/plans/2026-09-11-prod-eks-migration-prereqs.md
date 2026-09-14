@@ -156,7 +156,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | B-12 | **EKS CD가 0.** `ecr-push.yml`이 `workflow_dispatch`+`pull_request`만, 배포는 손작업 `sed \| kubectl apply`. 원장 **L-44**(PR 빌드 태그가 레포에 없는 커밋을 가리킴) | `ecr-push.yml:12-37` |
 | B-13 | Fly를 살려두면 **롤백 타깃이 계속 움직인다**(main push마다 재배포 + 동결된 Neon). 끄면 롤백 가치가 준다. 원장 **L-36** | `be-cd.yml:5-7,40` |
 | B-14 | `prod-smoke-daily.yml` **3중 고장**: Vercel을 때려 Fly/EKS 구분 불가 · 실패 안내가 `fly status` 하드코딩 · 05:23 KST라 클러스터 상시 가동 전제 | `prod-smoke-daily.yml:20,45,54` |
-| B-15 | Grafana: `secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다. `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | `secrets.tf:144-166` |
+| B-15 | 🔴 **재판정 (2026-09-14) — 대부분 해소.** ~~`secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다.~~ → **섞이지 않는다.** 학습 클러스터에 `GRAFANA_API_KEY` 가 없어 `GrafanaOtlpCredentialsCondition` 이 false 이고, 이는 **#355(08-03)에서 자리표시 3종을 삭제하며 이미 끝난 사고**다. 이 행은 그것을 09-11 에 **현재형으로 다시 적은 것**이다. `instance-id` 도 Basic auth 의 username 이라 시크릿이 아니다(상세: 하단 「항목 2b — 재판정」). `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | `secrets.tf:144-166` |
 | B-16 | **Fly `suspend`의 "$0"이 미검증** — `min_machines_running=1`이면 최소 1대는 계속 running일 수 있다. `CONTEXT.md:520`은 이걸 **"(비용)" 항목으로 분류**해뒀다. `grep suspend *.md` → 0건 | ⚪ 실측 필요 |
 | B-17 | $140에서 빠진 것: **ALB LCU**(prod는 정의상 실트래픽 상시 — `ingress.yaml:9-11`이 최악 고정비의 4배 경고) · NAT +$32 · KMS $1+ · CloudWatch. 그리고 **이상탐지 DAILY $5 임계가 $4.6/일 상주로 무력화** | `budget.tf` · `cost-anomaly.tf:55,71` |
 | B-18 | 상시 전환은 **학습 전제 위에 세운 통제 전체를 무근거로 만든다**: SOP 전체 · `assert-eks-quiz.sh` · tfsec 예외 4건(전부 *"세션마다 폐기되는 학습 자산"* 근거) · 원장 L-49 | 다수 |
@@ -187,8 +187,8 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 |:-:|---|---|---|
 | **1** | **백업·복구 리허설** — `pg_dump` → EBS 파괴 → 복구 (**in-cluster 대상**) | B-8 | ~$0.1 |
 | 2a | 시크릿 **환경 축** 도입 — JWT 키를 환경별로 `0-bootstrap`에, 시크릿 이름·IAM으로 경계 강제 **✅2026-09-14** | B-2 | $0 |
-| 2b | Grafana `instance-id` 환경변수화 + `fdaa::/16` 절 삭제 — **`fly secrets set` 선행 필수** | B-15 | $0 |
-| 3 | HTTPS 경로 — ACM + Cloudflare 검증 + `ssl-redirect` | B-3 | ~$0.1 |
+| ~~2b~~ | 🔴 **재판정으로 해소 (2026-09-14)** — `instance-id` 는 Basic auth 의 username 이라 시크릿이 아니고, 메트릭 혼입은 **#355(08-03)에서 이미 끝난 사고**였다. 남은 `fdaa::/16` 절 삭제는 **항목 3 으로 이관** | B-15 ✅ | $0 |
+| 3 | HTTPS 경로 — ACM + Cloudflare 검증 + `ssl-redirect` **+ `SecurityConfig` 의 `fdaa::/16` 절 삭제**(2b 에서 이관 — 같은 `/actuator/**` 노출 표면) | B-3, B-15 | ~$0.1 |
 | 4 | 메타스페이스 누수 검증 (README 선행 조건) | B-5 | $0~0.1 |
 | 5 | 실 AI·메일·채점 경로 검증 (스텁 해제) | B-4 | ~$0.2 |
 | 6 | EKS CD 파이프라인 | B-12, B-13 | $0~0.1 |
@@ -455,24 +455,75 @@ ESO 정책      resources = [... aws_secretsmanager_secret.app.arn ...]   (irsa-
 라고 단정했다. **참인 문장을 그 유효 범위 밖에 쓴 것**이고, #417 퀴즈 Q4 가 잡은 것과 같은 병이다
 (*"조건절을 떨어뜨리면 경고가 거짓말이 된다"*). 정정해서 코드 주석에 반영했다.
 
-## 항목 2b — B-15 (분리, 미착수)
+## 항목 2b — B-15 🔴 **재판정 (2026-09-14): 항목이 해소된다**
 
-**분리 사유**: `fly secrets set` 이 **머지보다 먼저** 실행돼야 하는데(`be-cd.yml` 이 main
-push 마다 자동 배포), 2a 에 섞으면 인프라 전용 PR 이 prod 배포를 트리거한다.
+위 ⚪별건이 요구한 판정(*"이게 정말 비밀인가"*)을 실제로 했다. **답은 "아니다"** 이고,
+그 결과 2b 는 할 일이 하나만 남아 **항목 3 으로 이관**된다.
 
-| 대상 | 변경 | 위험 |
+### 판정 ① `instance-id` 는 시크릿이 아니다 — Basic auth 의 **username**
+
+```kotlin
+// be/support/monitoring/.../OtlpMetricsConfig.kt
+Base64.getEncoder().encodeToString("$instanceId:$apiKey".toByteArray())
+"Authorization" to "Basic $encoded"
+```
+
+`instanceId` 가 아이디, **`GRAFANA_API_KEY` 가 비밀번호**다. 아이디만으로는 아무것도 못 한다.
+
+근거 4중 (전부 코드로 확인):
+
+| | 확인 | 명령 |
 |---|---|---|
-| `application-prod.yml:19` `instance-id: "1680166"` | `${GRAFANA_OTLP_INSTANCE_ID:}` | 🔴 **Fly prod 도 같은 `prod` 프로파일**(`fly.toml:12`). 값이 비면 `GrafanaOtlpCredentialsCondition` 이 false → 빈 미등록 + WARN 1줄. `enabled: true` 는 남아 **설정은 켜졌다는데 레지스트리가 없는** 상태. `/health` 스모크로 **안 잡힌다** |
-| `SecurityConfig.kt:43` `hasIpAddress('fdaa::/16')` | **절 삭제** (`127.0.0.1`·`::1` 만) | 🟡 EKS CIDR 로 "교체"하면 소스가 ALB 라 `/actuator/**` 가 **인터넷에 열린다**(Ingress 는 HTTP 80 평문). 삭제만이 확대가 아님을 증명할 수 있다. Fly 는 `[metrics]` 블록이 없어 안 깨진다 |
-| `OtlpMetricsConfigTest` | 보강 필요 | 🔴 3개 테스트가 `instance-id=1680166` 을 **프로퍼티로 직접 주입** → yml 을 비워도 전부 GREEN. **안전망이 변경 지점을 안 덮는다** |
+| 값이 레포에 있나 | **실제 키 0건.** 리터럴 대입은 2건인데 둘 다 비시크릿 — `OtlpMetricsConfigTest.kt` 의 `"GRAFANA_API_KEY="`(빈 값, blank 케이스 테스트)와 `secrets.tf` 의 **주석** `# GRAFANA_API_KEY = "learning-placeholder-not-a-real-api-key"`(삭제된 자리표시 기록) | `git grep -n "GRAFANA_API_KEY *= *[\"']" -- ':!*.md'` **기대: 2건** (문서를 빼지 않으면 이 표 자신이 잡혀 3건이 된다) |
+| 학습 클러스터가 받나 | GRAFANA 언급이 전부 *"왜 안 넣는가"* 주석 | `grep -n GRAFANA infra/aws-eks/2-cluster/secrets.tf` |
+| K8s 매니페스트 | 주입 **0건** (README 설명문만) | `grep -rn GRAFANA k8s/` |
+| 조합 방식 | `username:password` 의 앞자리 | 위 코드 |
 
-🔴 **2b 착수 전 필수 (사용자 실행)**: `fly secrets set GRAFANA_OTLP_INSTANCE_ID=<값>`
-→ 확인 후 PR 생성. 순서를 뒤집으면 prod 메트릭이 조용히 꺼진다.
+⚠️ **잔여 위험은 인정한다**: 키가 언젠가 유출되면 ID 를 이미 알고 있어 악용이 즉시 가능하다.
+다만 ID 는 스택 URL 에서 얻을 수 있는 **회전 불가한 계정 식별자**이고, 이 레포는 히스토리
+재작성을 금지하므로 **어차피 제거할 수 없다.** 진짜 통제점은 `GRAFANA_API_KEY` 이고 레포 밖에 있다.
 
-⚪ **별건**: `instance-id "1680166"` 은 이미 **퍼블릭 레포 히스토리에 평문**이다. 환경변수로
-빼도 히스토리에는 남는다 → "제거"가 아니라 *"이게 정말 비밀인가"* 를 먼저 판정해야 한다.
-instance ID 는 회전 불가한 계정 식별자일 가능성이 높고, 그렇다면 진짜 비밀은
-`GRAFANA_API_KEY` 쪽이며 그건 이미 레포에 없다. 판정 후 CONTEXT 의 해당 항목을 갱신할 것.
+### 판정 ② *"학습/prod 메트릭이 섞인다"* 는 **이미 해소된 사고의 현재형 재기술**
+
+```
+GrafanaOtlpCredentialsCondition:  apiKey.isNullOrBlank() → return false
+학습 클러스터의 apiKey:            없음 (#355, 2026-08-03 에 자리표시 3종 삭제)
+→ 학습 클러스터는 OtlpMeterRegistry 를 아예 만들지 않는다
+```
+
+혼입은 **08-03 에 끝난 사고**다. B-15 는 09-11 에 그것을 **살아있는 문제로** 다시 적었다.
+🔑 이번엔 조건절이 빠진 게 아니라 **해소 사실이 빠졌다** — 원장 **L-53** 의 변종이다.
+
+⚠️ **그리고 같은 실수를 내가 한 번 더 했다.** `.claude/CONTEXT.md` 의 해당 항목은 **처음부터
+정확했다** (*"시크릿은 아니고 스택 식별자다. 키가 없으면 push 자체가 안 돌아 당장의 위험은
+무해화됐다(#355)"*). 그런데 그것을 읽고 사용자에게 *"퍼블릭 레포 평문 커밋, 미해결로 등재됨"*
+이라고 요약했다 — **하위 불릿의 한정을 떨어뜨렸다.** L-53 이 한 세션에 세 번 났고,
+세 번 다 *읽은 것을 옮기는 단계*에서 났다.
+
+### 남는 일 하나 → **항목 3 으로 이관**
+
+| 대상 | 변경 | 왜 항목 3 인가 |
+|---|---|---|
+| `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절 | **삭제** (`127.0.0.1`·`::1` 만 남긴다) | `/actuator/**` 노출 범위 이야기이고, 항목 3(HTTPS·ALB·`ssl-redirect`)이 **정확히 같은 표면**을 다룬다. 따로 하면 같은 파일을 두 번 연다 |
+
+🔴 **EKS CIDR 로 "교체"하지 마라.** `hasIpAddress` 는 원격 주소를 보는데 Ingress 경유 소스는
+**ALB** 다 → ALB 서브넷을 허용하면 `/actuator/**` 가 **인터넷 전체에 열린다**(Ingress 는 HTTP 80 평문).
+파드 CIDR 을 허용하면 반대로 아무것도 안 열린다. **절 삭제만이 "확대가 아님"을 증명할 수 있는 변경.**
+Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크레이프 경로가 없으므로 안 깨진다.
+
+### 없어진 일
+
+| 원래 | 판정 후 |
+|---|---|
+| `instance-id` 환경변수화 | ❌ **불필요** — 시크릿이 아니고 혼입도 해소됨. 바꾸면 위험만 생긴다(아래) |
+| 🔴 `fly secrets set` 선행 (사용자 실행) | ❌ **불필요.** `fly` 를 쓸 수 있는 환경인지와 무관해졌다 |
+| `OtlpMetricsConfigTest` 보강 | ❌ **불필요** — yml 을 안 건드리므로 그 회귀 자체가 없다 |
+
+🔑 **환경변수화를 안 하는 쪽이 더 안전하다**: `application-prod.yml` 을 `${GRAFANA_OTLP_INSTANCE_ID:}`
+로 바꾸면 Fly prod 도 **같은 `prod` 프로파일**을 읽으므로(`fly.toml`), 값 주입을 놓치는 순간
+`GrafanaOtlpCredentialsCondition` 이 false 가 되어 **`enabled: true` 는 남은 채 레지스트리만 없는**
+상태가 된다. 앱은 정상 기동하므로 `/health` 스모크로 **안 잡힌다.**
+얻는 것 없이 조용한 실패 경로만 하나 늘린다.
 
 ## 절차 (2a — 전부 $0)
 
