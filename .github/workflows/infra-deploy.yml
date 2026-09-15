@@ -50,21 +50,60 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
+      # 🔴 계정 ID 마스킹 — **이 레포는 퍼블릭이고 Actions 로그·요약도 퍼블릭이다.**
+      #
+      # 왜 필요한가 (2026-09-15 실측으로 확인, 그전엔 새는 줄 몰랐다):
+      #   ACM 인증서를 만들자 apply 로그에 이 줄이 찍혔다 —
+      #     aws_acm_certificate.learning: Creation complete after 7s [id=arn:aws:acm:...:<계정ID>:...]
+      #   **`output` 에 `sensitive = true` 를 걸어도 막히지 않는다.** sensitive 는 `Outputs:`
+      #   블록만 가리는데, 저 줄은 출력이 아니라 **provider 가 찍는 리소스 id** 다.
+      #   ARN 을 갖는 리소스는 전부 같은 경로로 샌다.
+      #
+      # `::add-mask::` 는 그 시점 이후의 **로그**에서 값을 `***` 로 바꾼다.
+      # ⚠️ **Step Summary 는 마스킹되지 않는다** — 아래 sed 로 따로 지운다.
+      - name: 계정 ID 마스킹
+        shell: bash
+        run: |
+          ACCT="$(aws sts get-caller-identity --query Account --output text)"
+          echo "::add-mask::$ACCT"
+          # 🔴 **여기서 크게 실패해야 한다.** 빈 값이면 아래 `sed`/치환이 아무것도 안 바꾸고
+          #    **조용히 통과**한다(fail-open) — 계정 ID 가 그대로 로그에 찍힌다.
+          #    이 레포가 반복해서 데인 형태다: *부재가 성공과 똑같이 생긴 실패*.
+          #    (로컬 반증으로 확인: AWS_ACCOUNT_ID="" 이면 치환 0건, 종료코드 0)
+          if [[ ! "$ACCT" =~ ^[0-9]{12}$ ]]; then
+            echo "::error::계정 ID 조회 실패 — 마스킹 없이 진행할 수 없다 (길이/형식 불일치)"
+            exit 1
+          fi
+          echo "AWS_ACCOUNT_ID=$ACCT" >> "$GITHUB_ENV"
+
       - name: tofu init
         run: tofu init -input=false
 
+      # 🔴 `shell: bash` 가 필수다 — 이걸 안 쓰면 기본 셸이 `bash -e`(pipefail **없음**)라
+      #    파이프의 **마지막** 명령(tee/sed) 종료코드만 본다. 즉 **plan 이 실패해도 초록**이다.
+      #    `shell: bash` 는 `bash --noprofile --norc -eo pipefail` 이라 pipefail 이 켜진다.
+      #    (기존 `| tee` 도 같은 구멍을 갖고 있었다 — 2026-09-15 마스킹 작업 중 발견)
       - name: tofu plan (PR)
         if: github.event_name == 'pull_request'
+        shell: bash
         env:
           TF_VAR_budget_notification_email: ${{ secrets.BUDGET_EMAIL }}
         run: |
           echo '### tofu plan — `${{ matrix.layer }}`' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tofu plan -input=false -no-color 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          # Step Summary 는 `::add-mask::` 가 적용되지 않으므로 여기서 직접 지운다.
+          tofu plan -input=false -no-color 2>&1 \
+            | sed "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: tofu apply (merge to main)
         if: github.event_name == 'push'
+        shell: bash
         env:
           TF_VAR_budget_notification_email: ${{ secrets.BUDGET_EMAIL }}
-        run: tofu apply -auto-approve -input=false -no-color
+        # sed 는 보조 방어다 — 로그는 `::add-mask::` 가 이미 가린다.
+        # 둘 다 두는 이유: 마스킹 스텝이 실패하면 apply 가 맨몸으로 찍힌다.
+        run: |
+          tofu apply -auto-approve -input=false -no-color 2>&1 \
+            | sed "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"
