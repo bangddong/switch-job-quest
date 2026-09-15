@@ -4266,3 +4266,19 @@ core-api replicas=1 (복구 없이 Flyway 만)
 - `[메모]` ⚖️ **이 작업은 `.github/` 라 하네스 동결 규칙 대상이다.** 제품 작업이 막힌 증거는 없고,
   **사용자가 명시 지시**해서 진행했다. 원장 **L-54** 가 등재해둔 바로 그 구조적 공백
   (*규칙의 해제 조건이 하나뿐이라 소유자가 지시로 넘을 수 없다*)의 **두 번째 사례**다.
+- `[해결]` 🔑 **실물 검증 — 러너에서 동작을 확인했다.** `ecr-push.yml` 을 고쳤으므로 PR 의
+  `Build & Push (core-api)` 가 **실제로 마스킹 경로를 탔다**(run `34932913470`, 성공).
+  ```
+  ACCT=$(aws sts get-caller-identity --query Account --output text)
+  gh run view <run> --log | grep -c "$ACCT"     → 0     ← 계정 ID 평문 0건
+  gh run view <run> --log | grep -c '\*\*\*'     → 26
+  gh run view <run> --log | grep -o "[^ ]*dkr\.ecr\.[^ ]*" | sort -u
+    → ***.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<sha>
+  ```
+  `docker push`·ECR 로그인·이미지 태그 전부 `***` 로 나갔다. **12자리 검증 가드와
+  `set -euo pipefail` 인라인도 실패 없이 통과**했다(스텝 성공).
+- `[메모]` ⚪ **F-2 는 이 실행으로도 갈리지 않았다.** *"Step Summary 가 `::add-mask::` 대상인가"* 를
+  가르려면 요약에 `***`(add-mask) 이 찍히는지 `<account>`(내 치환) 가 찍히는지 봐야 하는데,
+  **내 치환이 먼저 돌아 증거를 지운다** — 둘 다 적용돼도 결과가 같다.
+  🔑 ***방어를 두 겹으로 깔면 어느 겹이 일하는지 알 수 없게 된다.*** 여기서는 그 대가를 받아들인다
+  (한 겹을 빼서 가르려면 **일부러 한 번 유출시켜야** 한다).
