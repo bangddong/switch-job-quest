@@ -79,21 +79,32 @@ jobs:
       - name: tofu init
         run: tofu init -input=false
 
-      # 🔴 `shell: bash` 가 필수다 — 이걸 안 쓰면 기본 셸이 `bash -e`(pipefail **없음**)라
-      #    파이프의 **마지막** 명령(tee/sed) 종료코드만 본다. 즉 **plan 이 실패해도 초록**이다.
-      #    `shell: bash` 는 `bash --noprofile --norc -eo pipefail` 이라 pipefail 이 켜진다.
-      #    (기존 `| tee` 도 같은 구멍을 갖고 있었다 — 2026-09-15 마스킹 작업 중 발견)
+      # 🔴 파이프를 쓰는 스텝에는 **`set -euo pipefail` 을 인라인으로 박는다.**
+      #    파이프의 마지막 명령(`tee`/`sed`) 종료코드만 보면 **plan 이 실패해도 초록**이 된다.
+      #    ⚠️ 처음엔 *"기본 셸이 `bash -e` 라 pipefail 이 없고 `shell: bash` 가 켜준다"* 는
+      #       근거를 달았는데, 그건 **로컬 bash 플래그 비교로 증명되지 않는다**(QA F-3) —
+      #       GH 러너가 셸 미지정 시 실제로 어떤 플래그로 부르는지는 별개 사실이다.
+      #       그래서 **런타임 기본값에 기대지 않고 스크립트가 직접 켠다.**
+      #       (이 레포에 이미 같은 관용구가 있다 — `ecr-push.yml` 의 `set -euo pipefail`)
+      #
+      # 🔴 `sed -u` 의 `-u` 를 빼지 마라 — **없으면 로그가 실시간으로 안 흐른다.**
+      #    sed 는 파이프 출력일 때 full buffering 이라 apply 가 끝나야(또는 버퍼가 차야)
+      #    한꺼번에 쏟아진다. 과금 중 진행 상황을 못 보는 것은 실제 비용이다.
+      #    실측(3줄·1초 간격): `sed` → 전부 28.3s 도착 / `sed -u` → 28.3·29.3·30.3s (QA F-1)
       - name: tofu plan (PR)
         if: github.event_name == 'pull_request'
         shell: bash
         env:
           TF_VAR_budget_notification_email: ${{ secrets.BUDGET_EMAIL }}
         run: |
+          set -euo pipefail
           echo '### tofu plan — `${{ matrix.layer }}`' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          # Step Summary 는 `::add-mask::` 가 적용되지 않으므로 여기서 직접 지운다.
+          # ⚪ **미확인 전제**: Step Summary 는 `::add-mask::` 대상이 아니라고 보고 여기서 직접 지운다.
+          #    GH 런타임 동작이라 레포에서 검증할 수 없었다(QA F-2 도 확인 실패).
+          #    틀렸더라도 방향이 안전한 쪽(과잉 마스킹)이라 그대로 둔다.
           tofu plan -input=false -no-color 2>&1 \
-            | sed "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g" \
+            | sed -u "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g" \
             | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
@@ -105,5 +116,6 @@ jobs:
         # sed 는 보조 방어다 — 로그는 `::add-mask::` 가 이미 가린다.
         # 둘 다 두는 이유: 마스킹 스텝이 실패하면 apply 가 맨몸으로 찍힌다.
         run: |
+          set -euo pipefail
           tofu apply -auto-approve -input=false -no-color 2>&1 \
-            | sed "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"
+            | sed -u "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"

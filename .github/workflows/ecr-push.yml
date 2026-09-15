@@ -113,8 +113,10 @@ jobs:
       - name: 배포용 이미지 주소 출력
         shell: bash
         run: |
-          # ⚠️ Step Summary 는 `::add-mask::` 가 적용되지 않는다 — 여기서 직접 지운다.
-          #    파이프가 아니라 bash 파라미터 확장이라 pipefail 이슈가 없다.
+          set -euo pipefail
+          # ⚪ **미확인 전제**: Step Summary 는 `::add-mask::` 대상이 아니라고 보고 직접 지운다.
+          #    GH 런타임 동작이라 레포에서 검증할 수 없었다(QA F-2). 틀렸더라도 과잉 마스킹이라 무해.
+          #    파이프가 아니라 bash 파라미터 확장이라 sed 버퍼링(F-1) 이슈는 없다.
           {
             echo "### 푸시 완료 :ship:"
             echo ""
