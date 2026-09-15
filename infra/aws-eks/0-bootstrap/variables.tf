@@ -249,3 +249,34 @@ variable "jwt_environments" {
     error_message = "환경이 최소 하나는 있어야 합니다."
   }
 }
+
+# ── HTTPS 경로 (선행 조건 3) ────────────────────────────────────
+#
+# 🔴 **prod 도메인(`api.quest.dhbang.co.kr`)을 여기 넣지 마라.**
+#   그 이름은 지금 Fly prod 가 서빙 중이고(`fe/vercel.json` 의 rewrite 목적지),
+#   학습 ALB 로 돌리는 순간 실서비스가 학습 클러스터를 보게 된다.
+#   전환은 선행 조건 7건이 끝난 뒤 별도 계획으로 한다.
+variable "learning_domain_name" {
+  type        = string
+  description = <<-EOT
+    학습 클러스터 ALB 에 붙일 HTTPS 호스트명. ACM 인증서의 domain_name 이 된다.
+
+    ⚠️ 이 값을 바꾸면 인증서가 **replacement** 된다(ACM 의 domain_name 은 force-new).
+       새 인증서는 다시 `PENDING_VALIDATION` 이므로 **Cloudflare CNAME 도 다시** 넣어야 한다.
+    ℹ️ 존(`dhbang.co.kr`)은 Cloudflare 가 관리한다 — Route53 이 아니다. IaC 로 검증할 수 없고
+       사람이 넣는다(`.claude/TASKS.md` TASK-10).
+  EOT
+  default     = "eks.quest.dhbang.co.kr"
+
+  validation {
+    # 최소 방어: 공백·프로토콜·경로가 섞여 들어오면 apply 가 아니라 여기서 막는다.
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.learning_domain_name))
+    error_message = "learning_domain_name 은 소문자 FQDN 이어야 합니다 (스킴·경로·대문자·공백 불가)."
+  }
+
+  validation {
+    # 🔴 오타 한 번이 prod 를 학습 ALB 로 돌린다. 이름으로 막는다.
+    condition     = var.learning_domain_name != "api.quest.dhbang.co.kr"
+    error_message = "api.quest.dhbang.co.kr 은 Fly prod 가 서빙 중입니다 — 학습 인증서에 쓸 수 없습니다."
+  }
+}

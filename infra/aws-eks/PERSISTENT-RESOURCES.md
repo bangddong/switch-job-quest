@@ -40,7 +40,9 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 
 ## 현재 영속 리소스
 
-**합계 ≈ $1.08/월** (ECR $0.17 + EBS $0.91 + S3 백업 ~$0.00). 6개월 ≈ $6.5 = 크레딧의 3.2%
+**합계 ≈ $1.08/월** (ECR $0.17 + EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00**). 6개월 ≈ $6.5 = 크레딧의 3.2%
+>
+> ℹ️ **2026-09-15 ACM 행 추가 시 재검산함 — 값은 그대로다**($0 항목이라). QA F-6 규칙(*"행을 더할 때 합계를 다시 더하지 않으면 그 합계는 행이 하나 적던 시절의 값"*)에 따라 **변화 없음도 명시**한다. 재검산하지 않은 것과 재검산해서 같은 것은 다른 사실이다.
 
 > ⚠️ **$1.09 → $1.08 정정 (2026-09-13, QA F-6).** 항목 합은 계속 $1.08 이었는데 합계만
 > $1.09 로 적혀 있었다. 이 PR 에서 S3 행을 추가하면서도 **재검산하지 않아** 그대로 넘어갈 뻔했다.
@@ -60,6 +62,13 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **S3** `devquest-eks-backups-seoul` | 0-bootstrap | **백업은 자기가 백업하는 대상보다 오래 살아야 한다.** 데이터 볼륨이 이 레이어에 있으므로 백업도 이 레이어(D-004·L-14 규칙의 3번째 적용) | 🔒 **lifecycle 30일 × 3종** — `expiration` + `noncurrent_version_expiration` + `abort_incomplete_multipart_upload`. ⚠️ 버저닝이 켜져 있어 **앞의 하나만으로는 상한이 아니다** | ~$0 (덤프 KB 단위) | 2026-09-12 | 2027-01-15 |
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
 | **Cost Anomaly** `devquest-eks-service-monitor` | 0-bootstrap | 이상 지출 감지(DAILY, $5) | 계정당 DIMENSIONAL 1개 | $0 | 2026-07-29 | — |
+| **ACM** 인증서 `eks.quest.dhbang.co.kr` | 0-bootstrap | 검증이 **Cloudflare 수동 CNAME** 이라 세션마다 재발급하면 사람이 매번 DNS 를 넣어야 한다. 수명이 클러스터가 아니라 **도메인**에 묶인다(D-004·L-14 5번째 적용 — **레이어만**, 래치는 아님) | 🔒 **리소스 1개 · `for_each` 없음.** 환경 축을 복사하면 prod 인증서가 검증 불가로 `VALIDATION_TIMED_OUT` 된다(`acm.tf` 「차이 ②」) | **$0** ※ | 2026-09-15 | 2027-01-15 |
+
+> ※ **퍼블릭 ACM 인증서는 발급·갱신·보관 전부 무료다**(유료인 것은 ACM Private CA 뿐).
+> **그래도 등재한다** — 원장은 금액이 아니라 *존재*를 기준으로 삼는다(S3 백업 버킷 행과 같은 근거).
+> ⚠️ **`prevent_destroy` 를 붙이지 않은 유일한 영속 항목이다.** ACM 은 `domain_name`·SAN 변경이
+> replacement 를 강제해서, 래치를 걸면 전환 때 **매 머지마다 CI 가 빨개진다**. 잃는 것도
+> *사용자의 Cloudflare 작업 2분*뿐이다(재발급 $0). 근거 전문은 `acm.tf` 「차이 ①」.
 
 > ※ **알림 전용 예산은 무료다.** Pricing API 실측(2026-07-31): `BudgetsUsage` = $0.00,
 > 상위 과금 구간 자체가 없다. 유료인 것은 Budget **Actions**(자동 조치형)뿐이고 우리는 안 쓴다.
@@ -186,6 +195,16 @@ aws ecr describe-repositories --region $R --query 'repositories[].repositoryName
 # 🔴 S3 는 SOP §9 고아 검사 대상이 **아니다**(세션과 함께 사라지는 물건이 아니므로).
 #    그래서 여기 안 적으면 신설 버킷은 원장 대조에서 **영원히 안 보인다.**
 aws s3api list-buckets --query "Buckets[?starts_with(Name, 'devquest-eks-')].Name" --output text
+
+# 🔴 ACM 도 SOP §9 고아 검사 대상이 **아니다** — S3 와 완전히 같은 구멍이다.
+#    §9 는 EBS·ALB·스냅샷만 본다(`grep -n "ACM\|인증서" docs/eks-session-sop.md` → 0건).
+#    여기 안 적으면 이 인증서는 만든 순간부터 **어떤 검사에도 안 잡힌다.**
+aws acm list-certificates --region $R \
+  --query 'CertificateSummaryList[].[DomainName,Status]' --output table
+# 합격 기준: 1건 · eks.quest.dhbang.co.kr · ISSUED
+#   PENDING_VALIDATION  = Cloudflare CNAME 미입력 (.claude/TASKS.md TASK-10)
+#   VALIDATION_TIMED_OUT= 72시간 초과. 되살릴 수 없다 → taint 후 재생성
+#   2건 이상            = prod 전환 잔재이거나 for_each 를 복사한 것. acm.tf 「차이 ②」 참조
 
 # 백업 버킷의 증가 상한이 **실제로 붙어 있는지** AWS 에 직접 묻는다.
 # (소스에 lifecycle 블록이 있는 것과 배포된 버킷에 규칙이 붙어 있는 것은 다른 사실이다.)

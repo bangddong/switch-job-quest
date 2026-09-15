@@ -80,3 +80,34 @@ output "jwt_secrets" {
   value       = { for env, pw in random_password.jwt_secret : env => pw.result }
   sensitive   = true
 }
+
+# ── 선행 조건 3: HTTPS ────────────────────────────────────────────
+#
+# 🔴 **두 출력의 sensitive 판정이 다르다. 의도적이다.**
+#   ARN 에는 계정 ID 가 들어간다(`arn:aws:acm:<region>:<account>:certificate/...`)
+#   → `account_id` 출력과 같은 기준으로 sensitive.
+#   검증 레코드는 **공개 DNS 레코드**이고 계정 ID 가 없다 → non-sensitive 여야 한다.
+#   사람이 CI 로그에서 읽어 Cloudflare 에 넣어야 하므로, 여기를 sensitive 로 하면
+#   `(sensitive value)` 만 남아 **절차가 성립하지 않는다**.
+
+output "acm_certificate_arn" {
+  description = "학습 ALB Ingress 의 certificate-arn annotation 에 들어갈 값 (계정 ID 포함 — 민감)"
+  value       = aws_acm_certificate.learning.arn
+  sensitive   = true
+}
+
+output "acm_domain_validation" {
+  description = <<-EOT
+    Cloudflare 에 넣을 검증 CNAME (name → value). 절차는 `.claude/TASKS.md` TASK-10.
+    ⚠️ Cloudflare 에서 **DNS only(회색 구름)** 로 둘 것 — Proxied 면 검증이 통과해도
+       브라우저가 ACM 이 아닌 Cloudflare 엣지 인증서를 보게 된다.
+  EOT
+  value = {
+    for o in aws_acm_certificate.learning.domain_validation_options :
+    o.domain_name => {
+      name  = o.resource_record_name
+      value = o.resource_record_value
+      type  = o.resource_record_type
+    }
+  }
+}

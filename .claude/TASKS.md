@@ -54,6 +54,76 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
   ```
 - 상세: `docs/eks-session-sop.md` §안전장치.
 
+### TASK-10: ACM 인증서 DNS 검증 — Cloudflare 수동 작업 (사용자, 2026-09-15)
+
+> 🔴 **우회 경로가 없다.** 존(`dhbang.co.kr`)이 Cloudflare 라 OpenTofu 로 레코드를 만들 수 없고,
+> `aws_acm_certificate_validation` 은 CI 를 멈추므로 코드에 넣지 않았다(`acm.tf` 참조).
+> **PR 머지 → CI 가 인증서 발급(`PENDING_VALIDATION`) → 사람이 CNAME 입력 → 자동 검증** 순서다.
+
+> ⏰ **72시간 제한.** 그 안에 CNAME 이 안 들어가면 `VALIDATION_TIMED_OUT` 이 되고 **되살릴 수 없다**
+> (taint 후 재생성 필요). 머지했으면 그날 안에 끝내는 것이 안전하다.
+
+**1. 검증 레코드 확인** — 둘 중 편한 쪽
+
+```bash
+# (a) GitHub Actions 로그: 머지 후 infra-deploy 워크플로의 apply 스텝 Outputs
+#     acm_domain_validation 은 non-sensitive 라 값이 그대로 보인다.
+
+# (b) 로컬
+tofu -chdir=infra/aws-eks/0-bootstrap output -json acm_domain_validation | python3 -m json.tool
+```
+
+기대 출력(값은 매번 다르다):
+
+```json
+{
+  "eks.quest.dhbang.co.kr": {
+    "name":  "_a1b2c3....eks.quest.dhbang.co.kr.",
+    "type":  "CNAME",
+    "value": "_x9y8z7....acm-validations.aws."
+  }
+}
+```
+
+**2. Cloudflare 대시보드 → `dhbang.co.kr` → DNS → Add record**
+
+| 필드 | 값 |
+|---|---|
+| Type | `CNAME` |
+| Name | 위 `name` 에서 **`.dhbang.co.kr.` 접미사를 뺀 부분** (Cloudflare 가 존을 자동으로 붙인다) |
+| Target | 위 `value` **그대로** (끝 점 포함 여부는 Cloudflare 가 알아서 처리) |
+| Proxy status | 🔴 **DNS only (회색 구름)** — 아래 경고 |
+| TTL | Auto |
+
+> 🔴 **Proxy status 를 반드시 끄십시오. 기본값이 Proxied(주황 구름)입니다.**
+> 이 레포는 같은 사고를 이미 겪었습니다 — `CONTEXT.archive.md` (2026-04-08):
+> *"Cloudflare: `api.quest.dhbang.co.kr` DNS Proxied → DNS only (SSL 핸드셰이크 실패 해결)"*.
+> Proxied 로 두면 ① 브라우저가 ACM 이 아닌 Cloudflare 엣지 인증서를 보게 되어 **학습 목표가
+> 조용히 무산되고** ② 존 SSL 모드가 Flexible 이면 **리다이렉트 루프**가 납니다.
+
+**3. 검증 완료 확인** (수 분 ~ 30분)
+
+```bash
+aws acm list-certificates --region ap-northeast-2 \
+  --query "CertificateSummaryList[?DomainName=='eks.quest.dhbang.co.kr'].[DomainName,Status]" \
+  --output table
+```
+
+합격 기준: `ISSUED`. `PENDING_VALIDATION` 이면 아직 전파 중이다. DNS 전파 자체 확인:
+
+```bash
+dig +short CNAME _a1b2c3....eks.quest.dhbang.co.kr   # 1번에서 얻은 name
+# 기대: _x9y8z7....acm-validations.aws.
+```
+
+**4. 완료 보고** — `ISSUED` 를 확인하면 알려주십시오. 다음 유료 세션에서
+Ingress annotation 3개(`certificate-arn`·HTTPS listen-ports·`ssl-redirect`)를 붙입니다.
+
+> ℹ️ **서비스 호스트용 CNAME(`eks.quest.dhbang.co.kr` → ALB)은 아직 만들지 마십시오.**
+> ALB 는 유료 세션에서 생기고 DNS 이름을 그때 알 수 있습니다. 지금 필요한 것은
+> **검증용 `_`로 시작하는 레코드 하나**뿐입니다.
+
+
 ## 완료된 항목
 
 ### TASK-8: timezone 배포 후 실측 → **불필요해져 종결 (2026-07-28)**

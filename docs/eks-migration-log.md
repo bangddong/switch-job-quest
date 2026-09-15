@@ -4122,3 +4122,68 @@ core-api replicas=1 (복구 없이 Flyway 만)
   **커밋 통계를 세션 유무로 옮겨 적었다.** 두 지표는 같은 것을 재지 않는다 — 유료 세션은
   커밋을 거의 안 남기고(일지 append 뿐) 하네스 작업은 커밋만 남긴다. **원장 L-53 의 새 표본.**
 - `[비용]` 크레딧 **$2.92 / $200 (1.46%)** 소진. 만료 2027-01-15. 페이스 문제없음.
+
+### Blindspot Pass 가 착수 설계를 뒤집었다 (17건 중 4건이 설계 변경)
+
+네 항목 연속으로 Blindspot 이 전제를 뒤집었다(#416 3건 · #417 3건 · #418 3건 · 이번 4건).
+
+- `[막힘]` **U-3 — 한 PR 이 자동 파이프라인 둘을 동시에 발사한다.**
+  ```
+  be-cd.yml        on: push main, paths:['be/**']            → flyctl deploy   (prod!)
+  infra-deploy.yml on: push main, paths:['infra/aws-eks/**'] → tofu apply -auto-approve
+  ```
+  계획서가 `SecurityConfig.kt` 와 ACM 을 묶은 근거는 *"같은 `/actuator/**` 노출 표면"* 인데,
+  EKS 쪽 그 표면은 코드가 아니라 `k8s/base/ingress.yaml` 라우팅이 소유한다(*"📌 노출하지 않는 것:
+  `/actuator/**`"*). **근거 자체가 성립하지 않는다.** → PR 을 둘로 쪼갠다.
+- `[결정]` **U-6 — ACM 에 `prevent_destroy` 를 붙이지 않는다.** 기존 래치 3종은 강제 재생성
+  트리거가 없는데 ACM 은 `domain_name`·SAN 변경이 **replacement 를 강제**한다. 붙이면 prod 전환 때
+  `Instance cannot be destroyed` 로 **매 머지가 빨개지고**, 풀려면 lifecycle 제거 PR 이 선행돼야 한다.
+  🔑 ***D-004 는 「레이어 선택」을 정당화하지 「래치」를 정당화하지 않는다.*** 앞선 네 번에서 두 결정이
+  늘 같이 와서 한 덩어리로 보였을 뿐이다. 퍼블릭 인증서는 재발급 $0 이라 보호 대상의 성격도 다르다.
+  ⚠️ 부수: `create_before_destroy` 와 `prevent_destroy` 를 같이 쓰면 후자가 이겨 **조용히 모순**이다.
+- `[결정]` **U-7 — `for_each` 환경 축을 복사하지 않는다.** 2a 가 두 환경을 미리 만든 근거는
+  *"`random_password` 는 AWS 리소스가 아니라 state 항목이라 $0"* 인데 **ACM 은 실제 리소스다.**
+  복사하면 `prod` 엔트리가 `api.` 인증서를 만들지만 prod DNS 를 안 건드리기로 했으므로 검증 불가
+  → **72시간 뒤 `VALIDATION_TIMED_OUT` 인증서가 영속 레이어에 박힌다.**
+  🔑 **2a 의 형태는 "$0 state 항목"이라는 전제 위에 서 있었다** — 형태만 보고 복사하면 전제가 안 따라온다.
+- `[막힘]` **U-10 — Cloudflare 신규 CNAME 은 기본 Proxied 이고, 이 레포는 04-08 에 같은 사고를 겪었다.**
+  `.claude/CONTEXT.archive.md`: *"Cloudflare: `api.quest.dhbang.co.kr` DNS Proxied → DNS only
+  (SSL 핸드셰이크 실패 해결)"*. Proxied 면 브라우저가 **ACM 이 아니라 Cloudflare 엣지 인증서**를 본다
+  → 학습 서브도메인을 고른 근거(*"브라우저 실물 HTTPS"*)가 **조용히 무산된다**.
+  Flexible 모드면 리다이렉트 루프까지. → `TASKS.md` TASK-10 에 **DNS only** 를 못 박았다.
+- `[해결]` **U-1 판정 — `fdaa::/16` 삭제는 안전하다.** Blindspot 은 *"fly-proxy 가 6PN 으로 붙으면
+  저 절이 닫는 게 아니라 `/actuator/prometheus` 를 인터넷에 열고 있는 것"* 이라는 반대 가설을 냈다.
+  **$0 curl 로 갈렸다**:
+  ```
+  https://api.quest.dhbang.co.kr/actuator/prometheus  403
+                                /actuator/env         403
+                                /actuator/health      200   ← permitAll, 의도대로
+                                /health               200
+  ```
+  인터넷 요청이 세 절 중 어디에도 안 걸린다 = **취약점 가설 반증.** 소비처도 전수 0건
+  (`fly.toml` 체크는 `/health` 하나, `[metrics]` 섹션 없음, OTLP 는 아웃바운드 push,
+  Fly 앱 1개라 6PN 호출 없음, 운영자 조회는 `fly ssh` + `localhost`).
+  → 삭제는 **무엇도 닫지 않고 무엇도 열지 않는다.**
+- `[막힘]` **U-2 — 이 삭제를 지키는 회귀 테스트의 판정력이 0이다.** `HealthReadinessTest.kt` 의
+  `remoteAddr("203.0.113.5")` 는 세 절 어디에도 안 걸려 **삭제 전후 모두 403** 이고,
+  **세 절을 전부 지워도 초록**이다. #416 의 *"두 가설이 다른 결과를 예측하는가"* 형태 재발.
+  → PR A 에서 반증 케이스(`fdaa:...` → 삭제 전 200 / 후 403)를 함께 넣는다.
+- `[막힘]` **U-16 — ACM 은 어떤 검사에도 안 잡힌다.** SOP §9 고아 검사는 EBS·ALB·스냅샷만 보고
+  (`grep "ACM\|인증서" docs/eks-session-sop.md` → 0건), `PERSISTENT-RESOURCES.md` 에도 없었다.
+  원장이 S3 에 대해 **똑같은 구멍을 이미 경고**해뒀다(*"여기 안 적으면 신설 버킷은 원장 대조에서
+  영원히 안 보인다"*). → 표 등재 + §확인 명령에 `aws acm list-certificates` 추가.
+- `[메모]` ⚠️ **U-17 — 내가 어제 적은 근거가 약하다.** *"ALB 는 세션마다 재생성되므로 DNS 이름이
+  바뀐다"* 를 호스트명 결정의 비용 근거로 썼는데, 레포에 기록된 ALB 이름은 **하나뿐**이다
+  (`grep -rn "elb.amazonaws.com" docs/` → `k8s-default-devquest-3675af8c03-775497815...` 1건).
+  **n=1 예측이지 실측이 아니다.** 다음 유료 세션에 이름을 기록하면 30초에 n=2 가 된다.
+- `[메모]` 🔴 **U-4 — 별건이지만 지금 새고 있다.** `0-bootstrap/outputs.tf` 의 `ecr_repository_urls`
+  가 `sensitive` 없이 `<account>.dkr.ecr...` 를 내보내고, `infra-deploy.yml` 이 `-no-color` apply 로
+  Outputs 를 **공개 Actions 로그에 찍는다.** 같은 파일의 `account_id` 는 `sensitive = true` 다.
+  이번 PR 범위 밖 — 별도 판단 대기.
+- `[메모]` **U-11 — 이번 세션 문제는 아니지만 이번 검증으로는 절대 안 잡히는 것.**
+  `grep -rn "CORS" k8s/ infra/` → **0건**이라 EKS 에서는 `application.yml` 의
+  `${CORS_ALLOWED_ORIGINS:http://localhost:5173}` **기본값이 그대로 산다.** 브라우저로 직접 치면
+  same-origin 이라 CORS 가 적용되지 않아 **조용히 통과**한다. prod 전환 전에 별도로 다뤄야 한다.
+- `[결정]` **불일치 없음 6건**: U-9(IAM — CI 는 `AdministratorAccess`, LBC 정책에 `acm:ListCertificates`·
+  `acm:DescribeCertificate` 이미 존재) · U-12(OAuth redirect 는 FE origin 파생, 쿠키 미사용,
+  `vercel.json` 은 하드코딩 목적지) · U-5·U-13·U-14·U-15 는 절차·주석 주의사항으로 반영.
