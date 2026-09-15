@@ -4200,3 +4200,85 @@ core-api replicas=1 (복구 없이 Flyway 만)
 - `[결정]` **불일치 없음 6건**: U-9(IAM — CI 는 `AdministratorAccess`, LBC 정책에 `acm:ListCertificates`·
   `acm:DescribeCertificate` 이미 존재) · U-12(OAuth redirect 는 FE origin 파생, 쿠키 미사용,
   `vercel.json` 은 하드코딩 목적지) · U-5·U-13·U-14·U-15 는 절차·주석 주의사항으로 반영.
+
+### [막힘] 계정 ID 가 공개 Actions 로그로 새고 있었다 — `sensitive` 로는 못 막는다
+
+- `[막힘]` #422 머지 후 apply 로그에서 **실물로 확인**했다:
+  ```
+  aws_acm_certificate.learning: Creation complete after 7s [id=arn:aws:acm:ap-northeast-2:<계정ID>:certificate/...]
+  ```
+  🔴 **`output` 에 `sensitive = true` 를 걸었는데도 나왔다.** 내 판정(*ARN 엔 계정 ID 가 있으니 민감*)은
+  **틀리지 않았지만 충분하지 않았다** — `sensitive` 는 `Outputs:` 블록만 가리는데, 저 줄은 출력이 아니라
+  **provider 가 찍는 리소스 `id`** 다. ***ARN 을 갖는 모든 리소스가 같은 경로로 샌다.***
+- `[막힘]` **처음 새는 것도 아니었다.** Blindspot U-4 가 이미 지적했다 —
+  `0-bootstrap/outputs.tf` 의 `ecr_repository_urls` 가 `sensitive` 없이
+  `<계정ID>.dkr.ecr...` 를 내보내고 `infra-deploy.yml` 이 Outputs 를 찍는다. **매 머지마다** 나갔다.
+- `[해결]` 유출 경로를 **전수로 찾았다** (`grep -rln "configure-aws-credentials" .github/workflows/` → 2건):
+
+  | 워크플로 | 경로 | 공개 여부 |
+  |---|---|---|
+  | `infra-deploy.yml` | apply 로그의 리소스 `id` · `Outputs:` 블록 | 로그 |
+  | `infra-deploy.yml` | `tofu plan ... \| tee -a "$GITHUB_STEP_SUMMARY"` | **Step Summary** |
+  | `ecr-push.yml` | `$IMAGE_URI` 를 Step Summary 에 출력 | **Step Summary** |
+
+  🔴 **`::add-mask::` 만으로는 부족하다 — Step Summary 는 마스킹 대상이 아니다.**
+  로그는 `add-mask`, 요약은 `sed`/파라미터 확장으로 **각각** 지운다.
+- `[해결]` **fail-open 을 반증으로 잡았다.** `sed "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"` 는
+  변수가 비면 **아무것도 안 바꾸고 종료코드 0** 이다(로컬 실측). 이 레포가 반복해서 데인
+  *"부재가 성공과 똑같이 생긴 실패"* 라 마스킹 스텝에서 **12자리 숫자 형식 검사 후 `exit 1`** 하게 했다.
+  반증 6종(`""`·`123`·14자리·영문·끝자리 문자·정상) 전부 의도대로 판정.
+- `[해결]` 🔑 **부수 수확 — `tofu plan ... | tee` 가 실패를 삼킬 수 있었다.** 파이프는 **마지막**
+  명령(`tee`)의 종료코드만 내므로 pipefail 이 없으면 plan 실패가 초록으로 지나간다:
+  ```
+  bash --noprofile --norc -eo pipefail -c 'false | sed "s/x/y/"'  → exit 1
+  bash -e                              -c 'false | sed "s/x/y/"'  → exit 0   ← 삼킨다
+  ```
+  → 파이프 스텝에 **`set -euo pipefail` 을 인라인으로** 박아 해소했다.
+  ⚠️ **처음엔 *"GH 기본 셸이 `bash -e` 라 pipefail 이 없다"* 를 근거로 썼는데 취소한다**(QA F-3).
+  위 비교는 **로컬 bash 플래그 비교일 뿐** GH 러너가 셸 미지정 시 어떻게 부르는지는 증명하지 않는다.
+  🔑 ***런타임 기본값에 기대는 대신 스크립트가 직접 켜면 이 불확실성이 사라진다*** —
+  그리고 이 레포엔 이미 그 관용구가 있었다(`ecr-push.yml` 의 `set -euo pipefail`).
+  **마스킹을 붙이려고 파이프를 추가하는 과정에서 발견했다.**
+- `[막힘]` 🔴 **그 마스킹용 파이프가 새 회귀를 만들었다 (QA F-1).** `sed` 는 파이프 출력일 때
+  **full buffering** 이라 apply 가 끝나야 로그가 한꺼번에 쏟아진다. **과금 중에 진행 상황을 못 보는
+  것은 실제 비용이다.** 실측(3줄·1초 간격):
+  ```
+  sed      28.3  28.3  28.3   ← 한꺼번에
+  sed -u   28.3  29.3  30.3   ← 매초
+  ```
+  → `sed -u` 로 해소. 🔑 ***안전장치를 끼워 넣을 때 관측 가능성을 깨뜨리지 않았는지 보라.***
+  기존 `tee` 는 line-buffered 라 문제가 없었는데, 내가 그 앞에 `sed` 를 끼우면서 깨졌다.
+- `[메모]` ⚠️ **내 반증 하네스가 먼저 틀렸다.** zsh 에서 테스트했는데 `:c` 가 먹혀
+  *"sed 가 문자를 먹는다"* 로 보였다. **재현 확인**(QA 가 zsh 실행 불가로 검증 못 했다고 해서 직접 쟀다):
+  ```
+  zsh  -f -c 'FAKE=999988887777; echo "arn:x:$FAKE:certificate/abc"'  → arn:x:999988887777ertificate/abc
+  bash    -c 'FAKE=999988887777; echo "arn:x:$FAKE:certificate/abc"'  → arn:x:999988887777:certificate/abc
+  ```
+  **#417 의 *"반증 하네스의 `ROOT` 가 `/` 가 되어 두 arm 모두 통과"* 와 같은 층위** —
+  🔑 ***검사 대상보다 검사 도구가 먼저 틀릴 수 있다. 러너와 같은 셸로 재라.***
+- `[결정]` **과거 로그는 지우지 않는다.** 포크·아카이브는 회수 불가라 삭제의 실효가 낮다.
+  계정 ID 는 자격증명이 아니라 **대상 특정 공격의 입력값**이므로, 앞으로 안 새게 하는 것이
+  실질적인 조치다.
+  ⚠️ **처음엔 *"이미 6주간 공개됐다"* 고 적었는데 근거가 없다**(QA F-4). 레포가 현재 PUBLIC 인 것과
+  생성일(2026-03-19)은 확인되지만 **비공개→공개 전환 시점 기록을 레포에서 찾지 못했다**
+  (`CONTEXT.md`·`CONTEXT.archive.md`·이 일지 grep 전부 0건). **기간을 특정하지 않는다** —
+  결정(지우지 않는다)은 기간에 의존하지 않는다.
+- `[메모]` ⚖️ **이 작업은 `.github/` 라 하네스 동결 규칙 대상이다.** 제품 작업이 막힌 증거는 없고,
+  **사용자가 명시 지시**해서 진행했다. 원장 **L-54** 가 등재해둔 바로 그 구조적 공백
+  (*규칙의 해제 조건이 하나뿐이라 소유자가 지시로 넘을 수 없다*)의 **두 번째 사례**다.
+- `[해결]` 🔑 **실물 검증 — 러너에서 동작을 확인했다.** `ecr-push.yml` 을 고쳤으므로 PR 의
+  `Build & Push (core-api)` 가 **실제로 마스킹 경로를 탔다**(run `34932913470`, 성공).
+  ```
+  ACCT=$(aws sts get-caller-identity --query Account --output text)
+  gh run view <run> --log | grep -c "$ACCT"     → 0     ← 계정 ID 평문 0건
+  gh run view <run> --log | grep -c '\*\*\*'     → 26
+  gh run view <run> --log | grep -o "[^ ]*dkr\.ecr\.[^ ]*" | sort -u
+    → ***.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<sha>
+  ```
+  `docker push`·ECR 로그인·이미지 태그 전부 `***` 로 나갔다. **12자리 검증 가드와
+  `set -euo pipefail` 인라인도 실패 없이 통과**했다(스텝 성공).
+- `[메모]` ⚪ **F-2 는 이 실행으로도 갈리지 않았다.** *"Step Summary 가 `::add-mask::` 대상인가"* 를
+  가르려면 요약에 `***`(add-mask) 이 찍히는지 `<account>`(내 치환) 가 찍히는지 봐야 하는데,
+  **내 치환이 먼저 돌아 증거를 지운다** — 둘 다 적용돼도 결과가 같다.
+  🔑 ***방어를 두 겹으로 깔면 어느 겹이 일하는지 알 수 없게 된다.*** 여기서는 그 대가를 받아들인다
+  (한 겹을 빼서 가르려면 **일부러 한 번 유출시켜야** 한다).
