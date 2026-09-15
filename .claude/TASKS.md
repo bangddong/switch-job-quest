@@ -63,6 +63,17 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 > ⏰ **72시간 제한.** 그 안에 CNAME 이 안 들어가면 `VALIDATION_TIMED_OUT` 이 되고 **되살릴 수 없다**
 > (taint 후 재생성 필요). 머지했으면 그날 안에 끝내는 것이 안전하다.
 
+**0. 사전 확인 — 이 이름이 이미 쓰이고 있지 않은가** (QA F-4)
+
+```bash
+dig +short eks.quest.dhbang.co.kr
+# 기대: 빈 출력. 무언가 나오면 이미 쓰이는 이름이므로 알려주십시오
+#       (인증서 도메인을 바꾸려면 learning_domain_name 변경 → 인증서 replacement)
+```
+
+> 레포 안에서는 충돌 0건을 확인했습니다(`grep -rn "eks.quest.dhbang.co.kr"`). 다만 **DNS 는
+> 레포 밖에 있고**, QA 가 `dig` 를 실행할 수 없어(도구 허용목록 밖) 라이브 확인이 안 됐습니다.
+
 **1. 검증 레코드 확인** — 둘 중 편한 쪽
 
 ```bash

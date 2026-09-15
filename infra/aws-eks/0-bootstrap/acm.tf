@@ -87,10 +87,16 @@ resource "aws_acm_certificate" "learning" {
     create_before_destroy = true
   }
 
+  # ⚠️ **`Persistent = "true"` 태그를 붙이지 않는다** (QA F-1, 2026-09-15).
+  #    처음엔 EBS 관례를 따라 붙이고 *"같은 의도"* 라고 주석을 달았는데 **거짓 신호였다.**
+  #    EBS 의 그 태그는 **실제 필터 축**이다 — `PERSISTENT-RESOURCES.md` 의 고아 검사가
+  #    `--filters Name=tag:Persistent,Values=true` 로 읽는다. ACM 쪽 확인 명령은
+  #    `aws acm list-certificates` 로 **전부 나열**할 뿐 태그를 보지 않는다.
+  #    읽는 코드가 없는 태그는 *"보호되고 있다"* 는 인상만 준다 → CLAUDE.md 빨간 깃발
+  #    **L-24**(*"지금은 배선 못 하지만 코드는 남겨두자 → 지워라"*)에 해당한다.
+  #    배선(SOP §9 에 ACM 검사 추가)은 하네스 작업이라 동결 규칙에 걸려 하지 않는다.
   tags = {
     Name        = "devquest-eks-learning"
     Environment = "learning"
-    # 세션과 함께 사라지지 않는다는 표시. EBS 의 Persistent 태그와 같은 의도다.
-    Persistent = "true"
   }
 }

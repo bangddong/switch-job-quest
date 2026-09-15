@@ -188,7 +188,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | **1** | **백업·복구 리허설** — `pg_dump` → EBS 파괴 → 복구 (**in-cluster 대상**) | B-8 | ~$0.1 |
 | 2a | 시크릿 **환경 축** 도입 — JWT 키를 환경별로 `0-bootstrap`에, 시크릿 이름·IAM으로 경계 강제 **✅2026-09-14** | B-2 | $0 |
 | ~~2b~~ | 🔴 **재판정으로 해소 (2026-09-14)** — `instance-id` 는 Basic auth 의 username 이라 시크릿이 아니고, 메트릭 혼입은 **#355(08-03)에서 이미 끝난 사고**였다. 남은 `fdaa::/16` 절 삭제는 **항목 3 으로 이관** | B-15 ✅ | $0 |
-| 3 | HTTPS 경로 — ACM + Cloudflare 검증 + `ssl-redirect` **+ `SecurityConfig` 의 `fdaa::/16` 절 삭제**(2b 에서 이관 — 같은 `/actuator/**` 노출 표면) | B-3, B-15 | ~$0.1 |
+| 3 | 🔴 **쪼갰다 (2026-09-15, Blindspot U-3)** — ~~한 유료 세션(~$0.1)~~. **$0 선행분**: ⓐ ACM 발급 **✅** ⓑ Cloudflare 수동 검증(사용자, TASK-10) ⓒ `SecurityConfig` 의 `fdaa::/16` 절 삭제. **유료분**: Ingress annotation 3개 + 실 HTTPS + 2a 실검증. ⚠️ ~~*"같은 `/actuator/**` 노출 표면"* 이라 묶는다~~ → **근거가 성립하지 않는다**: EKS 쪽 그 표면은 코드가 아니라 `ingress.yaml` 라우팅이 소유한다(*"📌 노출하지 않는 것: `/actuator/**`"*). 게다가 `be/**` 와 `infra/aws-eks/**` 는 **서로 다른 자동 파이프라인**(`be-cd`→Fly prod, `infra-deploy`→`tofu apply`)을 발사하므로 한 PR 에 담으면 안 된다. 상세: 「항목 3 — 착수 설계」 | B-3, B-15 | **$0 + ~$0.1** |
 | 4 | 메타스페이스 누수 검증 (README 선행 조건) | B-5 | $0~0.1 |
 | 5 | 실 AI·메일·채점 경로 검증 (스텁 해제) | B-4 | ~$0.2 |
 | 6 | EKS CD 파이프라인 | B-12, B-13 | $0~0.1 |
@@ -546,3 +546,51 @@ Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크�
 > 🔴 **실검증은 다음 유료 세션에서** — 2-cluster 는 apply 없이 검증할 수 없다.
 > 그때 확인할 것: `app_secret_name` = `devquest-eks/learning/app` · ESO 동기화 성공 ·
 > 파드가 `JWT_SECRET` 을 받는가 · **teardown 후 재apply 에서 키가 그대로인가**(이 항목의 목적).
+
+
+---
+
+## 항목 3 — 착수 설계 (2026-09-15)
+
+### 분할
+
+| | 내용 | 파이프라인 | 비용 | 상태 |
+|---|---|---|---|---|
+| ⓐ | ACM 퍼블릭 인증서 (`0-bootstrap/acm.tf`) | `infra-deploy` → `tofu apply` | $0 | ✅ |
+| ⓑ | Cloudflare 수동 CNAME 검증 | — (사람) | $0 | `.claude/TASKS.md` TASK-10 |
+| ⓒ | `SecurityConfig` 의 `hasIpAddress('fdaa::/16')` 절 삭제 | `be-cd` → **Fly prod 배포** | $0 | 미착수 (PR A) |
+| ⓓ | Ingress annotation 3개 + 실 HTTPS + 2a 실검증 | 로컬 apply | ~$0.1 | 미착수 (유료) |
+
+> 🔴 **ⓐ 와 ⓒ 를 한 PR 에 담지 않는다** — 자동 파이프라인 둘이 같은 머지에서 발사되고
+> 롤백 경로가 서로 다르다. ⓒ 는 머지 즉시 **prod 에 배포**된다.
+
+### 확정된 설계 (근거 전문은 `infra/aws-eks/0-bootstrap/acm.tf` 헤더)
+
+| 결정 | 선택 | 한 줄 근거 |
+|---|---|---|
+| 레이어 | `0-bootstrap` | 검증이 수동이라 수명이 클러스터가 아니라 **도메인**에 묶인다 (D-004 5번째 적용 — **레이어만**) |
+| `prevent_destroy` | **안 붙임** | SAN 변경이 replacement 강제 → 전환 때 매 머지 CI 실패. 재발급 $0 |
+| `for_each` 환경 축 | **안 씀** | 2a 의 전제(`random_password` = $0 state 항목)가 실제 리소스인 ACM 에 전이되지 않는다 |
+| `aws_acm_certificate_validation` | **안 씀** | `infra-deploy.yml` auto-apply 를 블로킹해 CI 정지 |
+| 호스트명 | `eks.quest.dhbang.co.kr` | prod `api.` 는 Fly 가 서빙 중 |
+
+### 🔴 ⓓ(유료 세션)로 이월된 작업 — Blindspot 이 찾았지만 이번에 안 한 것
+
+> 이 절이 이 항목들의 **유일한 목적지**다. 원장(`review-ledger.md`)은 **QA 지적 전용**이라
+> Blindspot 산출물을 받지 않고, 일지(`eks-migration-log.md`)는 시간순 기록이라 **검색되지 않는다.**
+> 실제로 아래 **U-8 은 이번 세션에 한 번 유실됐다**(일지에 U-1~U-17 중 U-8 만 빠져 있었다).
+
+| ID | 할 일 | 왜 지금 못 하나 |
+|---|---|---|
+| **U-8** | cert ARN 을 ALB 까지 보내는 **4단계 경로**: ①`0-bootstrap` output(✅ `acm_certificate_arn`, sensitive) ②**`2-cluster` 중계 output**(세션 작업 디렉토리가 2-cluster다 — `postgres_data_volume_id`·`persistent_az` 와 같은 형태) ③`ingress.yaml` 에 `CERT_ARN_PLACEHOLDER` ④apply 절차 문서화 | ARN 이 아직 없다(인증서 미검증). ⚠️ **ARN 에 계정 ID 가 있어 커밋 불가** → placeholder 는 선택이 아니라 **강제**다(`k8s/README.md`: *"퍼블릭 레포에 리소스 ID를 박아두지 않는다"*). ⚠️ ①이 `sensitive` 이므로 ②도 `sensitive` 로 표시하지 않으면 `tofu plan` 이 에러난다 |
+| **U-14** | `kubectl apply -f k8s/base/ingress.yaml` 이 **문서 3곳**에 평문으로 박혀 있다 — `docs/eks-tutorial-steps.md`, `docs/eks-quizzes/stage-eks-9-alb.md`. placeholder 도입이 이것들을 깬다(유효하지 않은 ARN 으로 **조용히 실패**: LBC 에러는 `describe ingress` Events 에만 남는다) → sed 형태로 전부 갱신 | ③이 없으면 고칠 대상이 없다 |
+| **U-13** | `ingress.yaml` 의 평문 경고를 **첫 문장만** 갱신한다. 두 번째 문장(*"학습 클러스터의 OAuth 자격증명이 자리표시인 것과 같은 이유로 실제 인증을 쓰지 않는다"*)은 **TLS 와 무관**하고 `2-cluster/secrets.tf` 가 강제하는 **살아 있는 제약**이다 — 통째로 지우면 제약이 사라진다 | HTTPS 가 실제로 붙은 뒤에 고쳐야 말이 맞는다 |
+| **U-15** | tfsec 이 ACM 리소스에 무엇을 요구하는지 **레포에 선례 0건**. 걸리면 관례상 `#tfsec:ignore:<id>` + **판단 근거 주석**이 필수 | apply 전엔 알 수 없다. ⓐ 머지 시 CI 가 답한다 |
+| **U-17** | **ALB DNS 이름을 기록해 n=1 → n=2** 로 만든다. *"세션마다 바뀐다"* 는 호스트명 결정의 비용 근거였는데 **예측이지 실측이 아니다** | ALB 가 없다. 30초·$0 |
+| **U-11** | EKS 에서 `CORS_ALLOWED_ORIGINS` **기본값 `http://localhost:5173` 이 그대로 산다**(`grep -rn "CORS" k8s/ infra/` → 0건). 브라우저로 직접 치면 same-origin 이라 **조용히 통과**해 이번 검증으로는 절대 안 잡힌다. `allowCredentials = true` 와 함께 prod 로 따라간다 | 항목 3 범위 밖 — **prod 전환 계획에서** 다룬다 |
+
+### 범위 밖 — 별건
+
+| ID | 내용 |
+|---|---|
+| **U-4** | `0-bootstrap/outputs.tf` 의 `ecr_repository_urls` 가 `sensitive` 없이 `<account>.dkr.ecr...` 를 내보내고, `infra-deploy.yml` 이 `-no-color` apply 로 Outputs 를 **공개 Actions 로그에 찍는다.** 같은 파일 `account_id` 는 `sensitive = true`. **지금 새고 있다** — 별도 판단 대기 |

@@ -4174,8 +4174,19 @@ core-api replicas=1 (복구 없이 Flyway 만)
   영원히 안 보인다"*). → 표 등재 + §확인 명령에 `aws acm list-certificates` 추가.
 - `[메모]` ⚠️ **U-17 — 내가 어제 적은 근거가 약하다.** *"ALB 는 세션마다 재생성되므로 DNS 이름이
   바뀐다"* 를 호스트명 결정의 비용 근거로 썼는데, 레포에 기록된 ALB 이름은 **하나뿐**이다
-  (`grep -rn "elb.amazonaws.com" docs/` → `k8s-default-devquest-3675af8c03-775497815...` 1건).
-  **n=1 예측이지 실측이 아니다.** 다음 유료 세션에 이름을 기록하면 30초에 n=2 가 된다.
+  ```
+  grep -rho "k8s-[a-z0-9-]*\.ap-northeast-2\.elb\.amazonaws\.com" docs/ | sort -u
+  → k8s-default-devquest-3675af8c03-775497815.ap-northeast-2.elb.amazonaws.com   ← 실제
+    k8s-xxx.ap-northeast-2.elb.amazonaws.com                                     ← 예시용 자리표시
+  ```
+  즉 **고유한 실제 ALB 이름은 1개**다. **n=1 예측이지 실측이 아니다.**
+  다음 유료 세션에 이름을 기록하면 30초에 n=2 가 된다.
+
+  ⚠️ **처음엔 `grep -rn "elb.amazonaws.com" docs/` → "1건" 이라고 적었는데 틀렸다** (QA F-3).
+  그 명령은 **5줄**을 낸다 — 같은 이름이 3곳에 반복되고, 자리표시가 하나 있고,
+  **이 일지 항목 자신이 한 줄을 차지한다.** 문서에 적은 검증 명령이 자기를 세는 것은
+  같은 세션 CE 대조에서 이미 한 번 겪었다(그때는 `-- ':!*.md'` 로 범위를 좁혔다).
+  🔑 **세는 대상을 "매칭 줄"이 아니라 "고유 값"으로 바꿔야 주장과 명령이 같은 것을 센다.**
 - `[메모]` 🔴 **U-4 — 별건이지만 지금 새고 있다.** `0-bootstrap/outputs.tf` 의 `ecr_repository_urls`
   가 `sensitive` 없이 `<account>.dkr.ecr...` 를 내보내고, `infra-deploy.yml` 이 `-no-color` apply 로
   Outputs 를 **공개 Actions 로그에 찍는다.** 같은 파일의 `account_id` 는 `sensitive = true` 다.
