@@ -38,9 +38,10 @@ class SecurityConfig(
                 ).permitAll()
                 it.requestMatchers("/api/v1/tech-interview/**").permitAll()
                 it.requestMatchers("/api/v1/daily-question/**").permitAll()
+                // Fly 6PN(fdaa::/16) 절은 소비처 0건 + prod 403 실측으로 확인 후 삭제(2026-09-15).
                 it.requestMatchers("/actuator/**").access(
                     WebExpressionAuthorizationManager(
-                        "hasIpAddress('127.0.0.1') or hasIpAddress('::1') or hasIpAddress('fdaa::/16')"
+                        "hasIpAddress('127.0.0.1') or hasIpAddress('::1')"
                     )
                 )
                 it.anyRequest().authenticated()

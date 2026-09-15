@@ -124,8 +124,14 @@ class ActuatorReadinessSecurityMatcherTest {
     }
 
     @Test
-    fun `actuator prometheus는 여전히 IP 제한이 걸려 임의 IP에서 거부된다 - 회귀 가드`() {
+    fun `actuator prometheus는 여전히 IP 제한이 걸려 임의 IP에서 거부된다 - 회귀 가드 (fdaa 대역은 검증 못함, 아래 테스트 참고)`() {
         mockMvc.perform(get("/actuator/prometheus").with(remoteAddr("203.0.113.5")))
+            .andExpect(status().isForbidden)
+    }
+
+    @Test
+    fun `actuator prometheus는 Fly 6PN 사설망 대역(fdaa)에서도 거부된다 - hasIpAddress 절 삭제 회귀 가드`() {
+        mockMvc.perform(get("/actuator/prometheus").with(remoteAddr("fdaa:0:1::3")))
             .andExpect(status().isForbidden)
     }
 }
