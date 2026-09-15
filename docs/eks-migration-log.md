@@ -4282,3 +4282,50 @@ core-api replicas=1 (복구 없이 Flyway 만)
   **내 치환이 먼저 돌아 증거를 지운다** — 둘 다 적용돼도 결과가 같다.
   🔑 ***방어를 두 겹으로 깔면 어느 겹이 일하는지 알 수 없게 된다.*** 여기서는 그 대가를 받아들인다
   (한 겹을 빼서 가르려면 **일부러 한 번 유출시켜야** 한다).
+
+### [해결] `/actuator/**` 의 Fly 6PN(`fdaa::/16`) 절 삭제 — 판정력을 실행으로 확정
+
+EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없는 허용 절**이 보안 설정에 남는다.
+
+- `[해결]` **소비처 전수 0건** — Fly 헬스체크는 `/health`(permitAll) · `be/fly.toml` 에 `[metrics]` 없음 ·
+  OTLP 는 아웃바운드 push · Fly 앱 1개 + `transport: inprocess` · 운영자는 `fly ssh` + `localhost`.
+  **prod 실측**으로도 반증했다: 인터넷 → `/actuator/prometheus` **403**, `/actuator/env` **403**.
+  → 삭제는 **무엇도 닫지 않고 무엇도 열지 않는다**(증명 가능하게 비확대).
+- `[결정]` ⚠️ **EKS CIDR 로 교체하지 않는다.** Ingress 의 소스는 ALB 라서 교체하면 `/actuator/**` 가
+  **인터넷에 열린다.** 삭제만 안전하다.
+- `[막힘]` 🔴 **기존 회귀 가드의 판정력이 0이었다** (Blindspot U-2). `remoteAddr("203.0.113.5")` 는
+  세 절 어디에도 안 걸려 **삭제 전후 모두 403** 이고 **세 절을 전부 지워도 초록**이었다.
+  `grep -rn "fdaa" be/` → `SecurityConfig.kt` 1건뿐, fdaa 를 단언하는 테스트가 **없었다.**
+- `[해결]` **TDD 의 RED 가 전제를 증명했다.** `remoteAddr("fdaa:0:1::3")` → 403 테스트를 먼저 쓰자
+  **수정 전 코드에서 실패**했다:
+  ```
+  ActuatorReadinessSecurityMatcherTest > ...Fly 6PN 사설망 대역(fdaa)에서도 거부된다... FAILED
+  3 tests completed, 1 failed
+  ```
+  = **구 코드가 `fdaa` 를 실제로 허용했다는 증거.** 실패하지 않았다면 삭제의 의미가 달랐다.
+- `[막힘]` **고친 스위트가 반대 방향으로 또 판정력 0이었다** (QA F-1). 전부 *"거부돼야 할 것이
+  거부되는가"* 만 봐서, **남은 두 절까지 지워도 전부 통과**한다. → positive 테스트 2개 추가.
+  positive 는 그냥 통과하므로 평범한 RED 가 없다 → **뮤테이션으로 증명**했다
+  (`denyAll` 로 임시 변경 → 새 테스트 2개만 FAILED → 원상복구).
+- `[해결]` 🔑 **`denyAll` 뮤테이션은 증명이 약하다** — *"뭐라도 허용해야 통과한다"* 만 보이고
+  *"각 절이 각자 필요하다"* 는 못 보인다. QA 는 *"boolean OR + 비중첩이라 논리적으로 보장된다"* 고 했지만,
+  이 트랙의 교훈은 ***논리적 보장 ≠ 실행 증거*** 다(#416). **매처를 직접 돌려 확정했다**
+  (프로덕션 코드를 건드리지 않고):
+  ```
+  CP=$(find ~/.gradle/caches -name "spring-security-web-*.jar" -o -name "spring-core-*.jar" \
+       -o -name "jakarta.servlet-api-*.jar" -o -name "spring-jcl-*.jar" | grep -v sources | sort -u | tr '\n' ':')
+  jshell --class-path "$CP"
+    new IpAddressMatcher("<절>").matches("<요청 IP>")
+
+                  127.0.0.1    ::1    fdaa:0:1::3
+    127.0.0.1 절    true      false      false
+    ::1 절          false     true       false
+    fdaa::/16 절      -        false      true
+  ```
+  세 절이 **상호 비중첩**이고 각 테스트 IP 가 **정확히 한 절에만** 걸린다
+  → 절 하나를 빼면 **그 절의 테스트만** 실패한다 = 두 positive 테스트가 **서로 다른 절을 지킨다.**
+  🔑 ***"논리적으로 그럴 수밖에 없다" 를 30초짜리 실행으로 바꿀 수 있으면 바꾼다.***
+- `[메모]` 최종 스위트는 **양방향**이다 — 거부 2(`203.0.113.5` · `fdaa:0:1::3`) + 허용 2(`127.0.0.1` · `::1`).
+  ⚠️ 뮤테이션 원상복구는 **오케스트레이터가 독립 검증**했다(`git status` 비어 있음 · 프로덕션 diff
+  `1 file, +2 −1` · `grep denyAll` 0건). **뮤테이션이 남은 채 머지되면 prod 접근 제어가 깨진다** —
+  이 브랜치는 머지 시 `be-cd` 가 Fly 에 자동 배포한다.
