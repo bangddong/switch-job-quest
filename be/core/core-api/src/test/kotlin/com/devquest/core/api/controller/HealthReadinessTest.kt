@@ -134,6 +134,23 @@ class ActuatorReadinessSecurityMatcherTest {
         mockMvc.perform(get("/actuator/prometheus").with(remoteAddr("fdaa:0:1::3")))
             .andExpect(status().isForbidden)
     }
+
+    /**
+     * QA 지적 F-1 — 위 두 테스트는 전부 "거부돼야 하는 요청이 거부되는가"만 본다. access(...)
+     * 식 자체가 통째로 교체(예: denyAll)돼도 이 스위트가 그대로 통과할 수 있어, 남은 허용 절
+     * (127.0.0.1, ::1)이 실제로 통과시키는지를 확인하는 positive 테스트를 추가한다.
+     */
+    @Test
+    fun `actuator prometheus는 127 0 0 1에서는 허용된다 - 남은 hasIpAddress 절의 판정력 검증`() {
+        mockMvc.perform(get("/actuator/prometheus").with(remoteAddr("127.0.0.1")))
+            .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `actuator prometheus는 IPv6 loopback에서는 허용된다 - 남은 hasIpAddress 절의 판정력 검증`() {
+        mockMvc.perform(get("/actuator/prometheus").with(remoteAddr("::1")))
+            .andExpect(status().isOk)
+    }
 }
 
 /**
