@@ -4374,3 +4374,66 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   Infra Deploy / 1-network     No changes. Your infrastructure matches the configuration.
   ```
   0-bootstrap 이 `No changes` 라는 것은 **ACM 인증서가 state 에 있고 코드와 일치한다**는 뜻이기도 하다.
+
+---
+
+## 2026-09-16 — 선행 조건 3 ⓓ 착수: HTTPS Ingress ($0 구간)
+
+브랜치 `stage/eks-11-https-ingress`. **이 절은 전부 과금 전이다.**
+
+- `[메모]` SOP §시작 사전 점검 전부 통과. 고아 0(ALB·EKS·NAT), 영속 EBS 1개 10GiB
+  `ap-northeast-2a` = 원장 일치. 9월 누적 비용 약 $0.
+
+- `[막힘]` **SOP §2b 가 🔴 재빌드 필요를 냈다 — 오탐이 아니라 정책 케이스였다.**
+  ```
+  ECR latest 태그   28fefcc3a9c1366a0332bff3807acb3aba8a2174
+  git cat-file -t   fatal: could not get object info
+  ```
+  `ecr-push.yml` 이 `be/**` PR 에서도 빌드하는데 `pull_request` 의 `github.sha` 는 **머지 커밋**이라
+  히스토리에 없다(L-44). 마지막 `be/**` 변경은 #424 이므로 이미지 **내용은 맞지만 추적 불가**.
+
+- `[해결]` main 에서 `ECR Push` workflow_dispatch → `4c0d4006e400d90cf215ec0c40c691391da1e822`
+  (= main HEAD, #425 머지 커밋). SOP §2b **재검사 통과**. daily-api 는 `14cb335e`(main 커밋)라 재빌드 불필요.
+
+- `[해결]` 🔴 **`tofu output -raw` 가 sensitive 출력을 뚫는다 — 레포 선례 0건이라 $0 에 미리 실측.**
+  ```
+  $ tofu output -raw acm_certificate_arn
+  arn:aws:acm:ap-northeast-2:<account>:certificate/dd424ed1-…      종료코드 0
+  ```
+  이걸 과금 구간에서 처음 만났으면 4단계 ARN 경로 전체가 그 자리에서 막혔다.
+
+- `[결정]` **Blindspot Pass 19건. 착수 전에 계획을 3곳 바꿨다.** 상세는 계획서
+  `docs/superpowers/plans/2026-09-11-prod-eks-migration-prereqs.md` 「Blindspot Pass 가 ⓓ 착수 전에 뒤집은 것」.
+  요지:
+  1. **DNS 레코드가 없다.** 원안대로면 apply 직후 Cloudflare 수동 작업을 기다려야 했고, 그건
+     09-06 에 $0.39 를 태운 그 실패다. → `--resolve` 우회가 성립(`ingress.yaml` 에 `host:` 0건 +
+     인증서 리스너 고정 부착). TLS 검증은 그대로 수행되므로 *"진짜 HTTPS"* 판정이 유지된다.
+  2. **`ssl-redirect` 가 09-11 의 노출-차단 증거를 무효화한다.** *"`/actuator/health/readiness` 404"* 는
+     HTTP 실측이었다 → 전부 301 이 된다. `--resolve` 는 선택이 아니라 재현 필수 경로.
+  3. **가드를 `-z` 로 짜려던 게 틀렸다.** 레포가 실제로 밟은 실패는 빈 값이 아니라
+     `Warning: No outputs found` 가 **종료코드 0** 으로 변수에 담긴 것(08-12). → `case` 형태 검사.
+
+- `[결정]` **항목 2a 검증 4종이 전부 동어반복이어서 재설계했다.** `environment` 기본값이
+  `learning` 이고 tfvars 0건이라 *"`app_secret_name` 이 learning 인가"* 는 기본값의 동어반복이고,
+  *"teardown 후 키 유지"* 는 키가 `0-bootstrap` 의 `random_password` 라 2-cluster state 밖이므로
+  destroy+재apply 13분(≈$0.045)의 반증력이 **0** 이다. 항목 1의 센티넬 문제와 같은 병.
+  → **키 지문 비교 + `simulate-principal-policy`** 로 교체. 지문은 과금 전에 기록했다:
+  ```
+  learning  sha256:99559e943576  (len=64)
+  prod      sha256:e0a6dca3c137  (len=64)
+  ```
+  값 자체는 어디에도 남기지 않는다.
+
+- `[해결]` **U-15 해소 — 유료 세션 불필요.** #422 CI 실측: `Infra CI / tfsec` pass +
+  변경 파일에 `acm.tf` 포함 + `tfsec:ignore` **0건** → tfsec 은 ACM 에 아무것도 요구하지 않는다.
+
+- `[막힘]` **U-14 가 두 군데 틀렸다.** *"문서 3곳"* → 실제 **2곳**. 그리고 그중
+  `docs/eks-quizzes/stage-eks-9-alb.md` 는 HEAD 를 고정한 **트랜스크립트**라 고치면
+  *"그때 치지 않은 명령"* 이 실측 기록에 남는다 → **튜토리얼 1곳만** 갱신.
+
+- `[막힘]` **`assert-eks-quiz.sh` 오탐.** 계획서를 수정하는 python 스크립트의 **본문 텍스트**에
+  PR 생성 명령 문자열이 들어 있어 훅이 차단했다. 파일을 쓰는 명령이지 PR 을 만드는 명령이 아니다.
+  → 문구를 바꿔 우회. 원장 등재(하네스 동결 규칙상 수정은 하지 않는다).
+
+- `[비용]` **ⓓ 의 추가 비용은 $0 이다.** ALB 요금은 *로드밸런서-시간* + LCU 이지 **리스너 개수가
+  아니고**, 퍼블릭 ACM 인증서도 $0. 즉 세션 단가는 Stage 4 와 동일한 $0.1624/h.

@@ -558,8 +558,8 @@ Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크�
 |---|---|---|---|---|
 | ⓐ | ACM 퍼블릭 인증서 (`0-bootstrap/acm.tf`) | `infra-deploy` → `tofu apply` | $0 | ✅ |
 | ⓑ | Cloudflare 수동 CNAME 검증 | — (사람) | $0 | `.claude/TASKS.md` TASK-10 |
-| ⓒ | `SecurityConfig` 의 `hasIpAddress('fdaa::/16')` 절 삭제 | `be-cd` → **Fly prod 배포** | $0 | 미착수 (PR A) |
-| ⓓ | Ingress annotation 3개 + 실 HTTPS + 2a 실검증 | 로컬 apply | ~$0.1 | 미착수 (유료) |
+| ⓒ | `SecurityConfig` 의 `hasIpAddress('fdaa::/16')` 절 삭제 | `be-cd` → **Fly prod 배포** | $0 | ✅ #424 (prod 반영 확인) |
+| ⓓ | Ingress annotation 3개 + 실 HTTPS + 2a 실검증 | 로컬 apply | ~$0.1 | 🔄 `stage/eks-11-https-ingress` 진행 중 |
 
 > 🔴 **ⓐ 와 ⓒ 를 한 PR 에 담지 않는다** — 자동 파이프라인 둘이 같은 머지에서 발사되고
 > 롤백 경로가 서로 다르다. ⓒ 는 머지 즉시 **prod 에 배포**된다.
@@ -582,12 +582,86 @@ Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크�
 
 | ID | 할 일 | 왜 지금 못 하나 |
 |---|---|---|
-| **U-8** | cert ARN 을 ALB 까지 보내는 **4단계 경로**: ①`0-bootstrap` output(✅ `acm_certificate_arn`, sensitive) ②**`2-cluster` 중계 output**(세션 작업 디렉토리가 2-cluster다 — `postgres_data_volume_id`·`persistent_az` 와 같은 형태) ③`ingress.yaml` 에 `CERT_ARN_PLACEHOLDER` ④apply 절차 문서화 | ARN 이 아직 없다(인증서 미검증). ⚠️ **ARN 에 계정 ID 가 있어 커밋 불가** → placeholder 는 선택이 아니라 **강제**다(`k8s/README.md`: *"퍼블릭 레포에 리소스 ID를 박아두지 않는다"*). ⚠️ ①이 `sensitive` 이므로 ②도 `sensitive` 로 표시하지 않으면 `tofu plan` 이 에러난다 |
-| **U-14** | `kubectl apply -f k8s/base/ingress.yaml` 이 **문서 3곳**에 평문으로 박혀 있다 — `docs/eks-tutorial-steps.md`, `docs/eks-quizzes/stage-eks-9-alb.md`. placeholder 도입이 이것들을 깬다(유효하지 않은 ARN 으로 **조용히 실패**: LBC 에러는 `describe ingress` Events 에만 남는다) → sed 형태로 전부 갱신 | ③이 없으면 고칠 대상이 없다 |
-| **U-13** | `ingress.yaml` 의 평문 경고를 **첫 문장만** 갱신한다. 두 번째 문장(*"학습 클러스터의 OAuth 자격증명이 자리표시인 것과 같은 이유로 실제 인증을 쓰지 않는다"*)은 **TLS 와 무관**하고 `2-cluster/secrets.tf` 가 강제하는 **살아 있는 제약**이다 — 통째로 지우면 제약이 사라진다 | HTTPS 가 실제로 붙은 뒤에 고쳐야 말이 맞는다 |
-| **U-15** | tfsec 이 ACM 리소스에 무엇을 요구하는지 **레포에 선례 0건**. 걸리면 관례상 `#tfsec:ignore:<id>` + **판단 근거 주석**이 필수 | apply 전엔 알 수 없다. ⓐ 머지 시 CI 가 답한다 |
-| **U-17** | **ALB DNS 이름을 기록해 n=1 → n=2** 로 만든다. *"세션마다 바뀐다"* 는 호스트명 결정의 비용 근거였는데 **예측이지 실측이 아니다** | ALB 가 없다. 30초·$0 |
-| **U-11** | EKS 에서 `CORS_ALLOWED_ORIGINS` **기본값 `http://localhost:5173` 이 그대로 산다**(`grep -rn "CORS" k8s/ infra/` → 0건). 브라우저로 직접 치면 same-origin 이라 **조용히 통과**해 이번 검증으로는 절대 안 잡힌다. `allowCredentials = true` 와 함께 prod 로 따라간다 | 항목 3 범위 밖 — **prod 전환 계획에서** 다룬다 |
+| **U-8** | ✅ **해소 (2026-09-16, `stage/eks-11-https-ingress`).** 4단계 경로 완성: ①`0-bootstrap` output `acm_certificate_arn`(sensitive) ②**`2-cluster` 중계 output** 신설(sensitive) ③`ingress.yaml` 의 `CERT_ARN_PLACEHOLDER` ④튜토리얼 §4-4 주입 절차 | — |
+| **U-13** | ✅ **해소.** `ingress.yaml` ④ 절의 **첫 문장만** 갱신(*"평문이니 로그인·토큰 태우지 마라"* → TLS 붙음). **둘째 문장은 보존** — 학습 클러스터 OAuth 자리표시는 `2-cluster/secrets.tf` 가 강제하는 **살아 있는 제약**이고 TLS 가 그 이유를 해소하지 않는다 | — |
+| **U-14** | 🔴 **계획이 두 군데 틀렸다.** ⓐ *"문서 3곳"* → **2곳**(`docs/eks-tutorial-steps.md:2045`, `docs/eks-quizzes/stage-eks-9-alb.md:15`). 제3 후보인 튜토리얼 1896 은 ASCII 흐름도 안 **개념 표기**라 대상 아님. ⓑ 🔴 **퀴즈 파일은 고치면 안 된다** — `stage-eks-9-alb.md` 는 *"브랜치 `stage/eks-9-alb` · HEAD `0f3fcef` · 재료: 이 세션 실측"* 으로 고정된 **트랜스크립트**이고 `:15-19` 는 당시 실제 출력이다. sed 형태로 "갱신"하면 **그때 치지 않은 명령이 실측 기록에 남는다** → **튜토리얼 1곳만 갱신**(✅ 완료) | — |
+| **U-15** | ✅ **해소 — 유료 세션 불필요.** #422 CI 실측: `Infra CI / tfsec` **pass**, 변경 파일에 `acm.tf` 포함, `tfsec:ignore` **0건**. **tfsec 은 ACM 리소스에 아무것도 요구하지 않는다** | — |
+| **U-17** | ALB DNS 이름을 기록해 n=1 → n=2. *"세션마다 바뀐다"* 는 호스트명 결정의 비용 근거였는데 **예측이지 실측이 아니다** | ⓓ 세션 중. 30초·$0 |
+| **U-11** | EKS 에서 `CORS_ALLOWED_ORIGINS` 기본값 `http://localhost:5173` 이 그대로 산다. `--resolve` 검증도 브라우저가 아니라 curl 이라 **여전히 안 잡힌다** | 항목 3 범위 밖 — **prod 전환 계획에서** |
+
+### 🔴 Blindspot Pass 가 ⓓ 착수 전에 뒤집은 것 (2026-09-16)
+
+#### ① DNS 레코드가 없다 — 원안대로면 과금 구간에서 사람을 기다렸다
+
+`eks.quest.dhbang.co.kr` → ALB 의 A/CNAME 이 없고 **만들 코드도 없다**(Route53 리소스 0건,
+존은 Cloudflare 수동). ALB DNS 이름은 세션마다 바뀐다. 원안은 apply 직후 사람의 Cloudflare
+작업을 요구했고, 그건 **SOP 과금 구간 최상단 규칙과 정면 충돌**이다(09-06, $0.39 손실).
+
+**→ `--resolve` 우회가 성립한다.** 두 조건이 맞아 있다: ⓐ`ingress.yaml` 의 `rules:` 에
+**`host:` 가 0건**이라 ALB 규칙에 Host 조건이 없다 ⓑ인증서는 리스너 고정 부착이라 SNI 무관.
+`--resolve` 는 DNS 만 건너뛰고 **TLS 검증은 정상 수행**된다. 절차는 튜토리얼 §4-4.
+⚠️ 나중에 `host:` 를 추가하면 이 우회가 죽는다.
+
+#### ② `ssl-redirect` 가 09-11 의 노출-차단 증거를 무효화한다
+
+`README.md:143` 의 *"`/actuator/health/readiness` **404** = 인터넷 노출 차단"* 과 튜토리얼
+응답코드 표는 **HTTP 로 찍은 값**이다. `ssl-redirect` 가 붙으면 전부 301 이 되어 증거가 사라진다.
+→ ①의 `--resolve` 는 **선택적 우회가 아니라 기존 증거를 재현하는 필수 경로**다.
+⚠️ `curl -L` 금지 — Location 이 `https://<ALB DNS>/` 라 CN/SAN 불일치, 거기서 `-k` 를 붙이면
+"실제 HTTPS 성립" 판정이 무의미해진다.
+
+#### ③ 가드를 `-z` 로 짜려던 것이 틀렸다
+
+원안의 근거(*"SOP §2b·B1-7 이 이미 두 번 잡았다"*)는 **둘 다 오인용**이었다. 레포가 실제로
+밟은 실패는 빈 값이 아니라 **`Warning: No outputs found` 가 종료코드 0 으로 변수에 담긴 것**
+(ESO, 08-12 실측). `-z` 는 통과시킨다. → **`case … arn:aws:acm:*:certificate/*` 형태 검사.**
+튜토리얼 자신이 *"비었나(`-z`)보다 그 모양이 맞나가 강하다"* 라고 적어놨고, Stage 4 의
+`$ROLE`·`$VPC` 검사가 같은 형태다. ⚠️ 가드가 있는 곳은 **레포 전체에서 1곳**, 무가드 9곳 —
+*"관례"* 라고 믿고 복사하면 무가드 쪽을 복사한다.
+
+#### ④ 항목 2a 검증 4종이 전부 동어반복이었다 — 재설계
+
+| 원안 | 판정 |
+|---|---|
+| `app_secret_name == devquest-eks/learning/app` | `environment` 기본값이 `learning` 이고 2-cluster 에 tfvars **0건** → **기본값의 동어반복** |
+| ESO 동기화 / 파드가 `JWT_SECRET` 받는가 | 값이 맞는지를 안 본다 |
+| teardown 후 재apply 에서 키 유지 | 키는 `0-bootstrap` 의 `random_password` 라 **2-cluster state 에 없다.** destroy+재apply 13분(≈$0.045)의 반증력 **0** |
+| (경계 검증) prod 시크릿 읽어 `AccessDenied` | **prod 시크릿이 존재하지 않는다** → `ResourceNotFound` 가 나고 *"권한 없음"* 과 *"그런 게 없음"* 이 **같은 결과**. 항목 1의 센티넬 문제 재발 |
+
+**재설계 — 두 가설이 다른 결과를 예측하게:**
+
+```
+① [$0·완료 2026-09-16]  0-bootstrap 키 지문을 먼저 기록 (값은 어디에도 안 남긴다)
+      learning  sha256:99559e943576  (len=64)
+      prod      sha256:e0a6dca3c137  (len=64)
+② [유료]  파드 안 JWT_SECRET 의 sha256 이 ①의 learning 과 일치하는가
+      → 0-bootstrap → Secrets Manager → ESO → K8s Secret → 파드 env 4단계를 한 번에 판정
+      → prod 지문과 일치하면 경계 붕괴 = 즉시 중단
+③ [$0·10초]  aws iam simulate-principal-policy (ESO 역할)
+      learning ARN  → allowed
+      prod 형태 ARN → implicitDeny        ← 다른 결과를 예측한다 = 경계 실재 증명
+      근거: irsa-eso.tf:93-101 의 resources 가 와일드카드 없는 정확한 ARN 목록
+④ teardown 왕복 — 삭제
+```
+
+#### ⑤ 기각된 가설 4건 (착수 전에 확인해 작업을 줄였다)
+
+| 가설 | 실제 |
+|---|---|
+| 헬스체크가 HTTPS 에 영향받는다 | **아니다.** 타겟그룹 헬스체크는 리스너와 독립, `backend-protocol` 기본 HTTP 유지 |
+| LBC IAM 에 ACM 권한 추가 필요 | **이미 있다**(`iam-policy-alb-controller.json`). 게다가 파일 sha256 이 `irsa-alb.tf:66` 에 박혀 있어 *"혹시 몰라 추가"* 하면 그 주석이 거짓이 된다 |
+| `verify:` 마커가 placeholder 로 깨진다 | **안 깨진다.** 마커는 `target-type: ip`·`healthcheck-path` 를 지킨다(둘 다 보존 확인) |
+| teardown·리퍼가 HTTPS 를 다르게 다룬다 | **아니다.** 단 09-11 의 *"delete ingress 16초"* 는 리스너 1개 값이라 기준선이 틀어진다 |
+
+#### ⑥ 세션 중/후 챙길 것
+
+| | |
+|---|---|
+| **리스너 인덱스** | 튜토리얼이 `Listeners[0]` 하드코딩이었다 → 443 포트 필터로 수정(✅). HTTP 쪽을 잡으면 rules 가 전부 redirect 라 우선순위 표가 안 나온다 |
+| **ARN 유출 경로** | `sensitive` 는 `Outputs:` 블록만 가린다. **2-cluster 는 로컬 apply 라 CI 의 `::add-mask::`·`sed -u` 가 없다.** 일지(`eks-migration-log.md`)는 **커밋되는 퍼블릭 문서** → 터미널 출력을 붙여넣을 때 사람이 `<account>` 로 가려야 한다 |
+| **ACM `InUseBy`** | 세션 중 ALB ARN 이 들어가는 **새 상태**가 생긴다. SOP §9(0건)도 §9b(원장 일치)도 이 필드를 안 본다. `RenewalEligibility` 가 `INELIGIBLE` → `ELIGIBLE` 로 뒤집히는지 **세션 중/후 두 번** 찍는다($0) |
+| **`infra-deploy` 머지 타이밍** | `paths: infra/aws-eks/**` 라 2-cluster output 추가만으로도 트리거되어 0-bootstrap 을 auto-apply 한다. **ALB 가 cert 를 쥔 동안 머지하면** ACM replacement 시도 → `ResourceInUseException`. **머지를 과금 창과 겹치지 않는다** |
+| **퀴즈** | 브랜치가 `stage/eks-11-https-ingress` 라 훅이 PR 생성을 차단한다. `docs/eks-quizzes/stage-eks-11-https-ingress.md` + 통과 마커 필요 — 계획서에 없던 항목 |
 
 ### 범위 밖 — 별건
 
