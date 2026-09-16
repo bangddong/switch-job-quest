@@ -4329,3 +4329,31 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ⚠️ 뮤테이션 원상복구는 **오케스트레이터가 독립 검증**했다(`git status` 비어 있음 · 프로덕션 diff
   `1 file, +2 −1` · `grep denyAll` 0건). **뮤테이션이 남은 채 머지되면 prod 접근 제어가 깨진다** —
   이 브랜치는 머지 시 `be-cd` 가 Fly 에 자동 배포한다.
+
+## 2026-09-16 — 선행 조건 3 의 $0 구간 완료 (ACM `ISSUED`)
+
+- `[해결]` **Cloudflare 검증 CNAME 입력 → 약 3분만에 `ISSUED`.**
+  ```
+  dig +short CNAME _<hash>.eks.quest.dhbang.co.kr
+    → _<hash>.wzccmgtwzk.acm-validations.aws.      ← 타깃이 그대로 보이면 DNS only(프록시면 CF IP 가 나온다)
+  aws acm list-certificates --region ap-northeast-2 \
+    --query "CertificateSummaryList[?DomainName=='eks.quest.dhbang.co.kr'].[DomainName,Status]"
+    → eks.quest.dhbang.co.kr  ISSUED
+  ```
+  `ValidationStatus: SUCCESS` · 발급 2026-09-16 10:00:36 KST · 만료 2027-04-02 · 비용 **$0**.
+  72시간 마감(09-18 13:12)까지 **51시간 여유**였다.
+- `[메모]` 🔴 **`RenewalEligibility: INELIGIBLE` · `InUseBy: []`** — 예상 못 한 값이다.
+  **ACM 자동 갱신은 인증서가 AWS 리소스에 연결돼 있을 때만 동작한다.** 아직 ALB 에 안 붙어서
+  갱신 대상이 아니고, Ingress 에 붙는 순간 `ELIGIBLE` 로 바뀐다.
+  이 트랙에선 무해하다(만료 2027-04-02 > 크레딧 만료 2027-01-15). 다만
+  ***상시 운영으로 가면 "안 쓰는 인증서는 갱신되지 않는다" 가 함정이 된다*** — 선행 조건 7에서 재검토.
+  🔑 **관리형이 조용히 해주는 일에는 조건이 붙어 있다** — Stage 3b 의 *"관리형이 공짜로 주던 것에
+  TLS 가 있었다"* 와 같은 형태다. 이번엔 *공짜로 주던 것*이 아니라 ***조건부로 주던 것***이다.
+- `[비용]` 🔑 **항목 3 을 쪼갠 판단이 숫자로 확인됐다.** 계획서는 ⓐ~ⓓ 를 *"한 유료 세션"* 으로 묶었는데,
+  ⓑ(Cloudflare 수동 검증)가 **사용자 손을 타고 09-15 → 09-16 으로 넘어갔다.**
+  컨트롤플레인을 켜둔 채였다면 **약 19시간 과금 = $0.1/h × 19 ≈ $1.9** 였고,
+  이는 이 트랙 **누적 소진 $2.94 의 65%** 다. 실제 지출은 **$0**.
+  ***사람 손이 들어가는 단계는 과금 창 밖으로 뺀다*** — #416 의 *"ALB 를 마지막 7분만 켜서 전체의 4%"* 와
+  같은 레버이고, 이번엔 **켜지 않는 것**으로 당겼다.
+- `[메모]` 항목 3 진행: ⓐ ACM 코드 ✅(#422) · ⓑ 검증 ✅(09-16) · ⓒ `fdaa` 삭제 ✅(#424, prod 반영 확인)
+  → **남은 것은 ⓓ 유료 세션뿐**(Ingress annotation 3개 + 실 HTTPS + 2a 실검증, ~$0.1).

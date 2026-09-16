@@ -62,10 +62,16 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **S3** `devquest-eks-backups-seoul` | 0-bootstrap | **백업은 자기가 백업하는 대상보다 오래 살아야 한다.** 데이터 볼륨이 이 레이어에 있으므로 백업도 이 레이어(D-004·L-14 규칙의 3번째 적용) | 🔒 **lifecycle 30일 × 3종** — `expiration` + `noncurrent_version_expiration` + `abort_incomplete_multipart_upload`. ⚠️ 버저닝이 켜져 있어 **앞의 하나만으로는 상한이 아니다** | ~$0 (덤프 KB 단위) | 2026-09-12 | 2027-01-15 |
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
 | **Cost Anomaly** `devquest-eks-service-monitor` | 0-bootstrap | 이상 지출 감지(DAILY, $5) | 계정당 DIMENSIONAL 1개 | $0 | 2026-07-29 | — |
-| **ACM** 인증서 `eks.quest.dhbang.co.kr` | 0-bootstrap | 검증이 **Cloudflare 수동 CNAME** 이라 세션마다 재발급하면 사람이 매번 DNS 를 넣어야 한다. 수명이 클러스터가 아니라 **도메인**에 묶인다(D-004·L-14 5번째 적용 — **레이어만**, 래치는 아님) | 🔒 **리소스 1개 · `for_each` 없음.** 환경 축을 복사하면 prod 인증서가 검증 불가로 `VALIDATION_TIMED_OUT` 된다(`acm.tf` 「차이 ②」) | **$0** ※ | 2026-09-15 | 2027-01-15 |
+| **ACM** 인증서 `eks.quest.dhbang.co.kr` | 0-bootstrap | 검증이 **Cloudflare 수동 CNAME** 이라 세션마다 재발급하면 사람이 매번 DNS 를 넣어야 한다. 수명이 클러스터가 아니라 **도메인**에 묶인다(D-004·L-14 5번째 적용 — **레이어만**, 래치는 아님) | 🔒 **리소스 1개 · `for_each` 없음.** 환경 축을 복사하면 prod 인증서가 검증 불가로 `VALIDATION_TIMED_OUT` 된다(`acm.tf` 「차이 ②」) | **$0** ※ | 2026-09-15 | **2027-04-02 만료** |
 
 > ※ **퍼블릭 ACM 인증서는 발급·갱신·보관 전부 무료다**(유료인 것은 ACM Private CA 뿐).
 > **그래도 등재한다** — 원장은 금액이 아니라 *존재*를 기준으로 삼는다(S3 백업 버킷 행과 같은 근거).
+> ✅ **2026-09-16 `ISSUED`** (Cloudflare CNAME 입력 후 약 3분). `ValidationStatus: SUCCESS`.
+> 🔴 **`RenewalEligibility: INELIGIBLE` · `InUseBy: []`** — ACM 자동 갱신은 인증서가 **AWS 리소스에
+> 연결돼 있을 때만** 동작한다. 아직 ALB 에 안 붙어 갱신 대상이 아니다. **Ingress 에 붙는 순간
+> `ELIGIBLE` 로 바뀐다.** 만료(2027-04-02)가 크레딧 만료(2027-01-15)보다 뒤라 이 트랙에선 무해하지만,
+> ***상시 운영으로 가면 "안 쓰는 인증서는 갱신되지 않는다"가 함정이 된다*** — 선행 조건 7에서 재검토.
+>
 > ⚠️ **`prevent_destroy` 를 붙이지 않은 유일한 영속 항목이다.** ACM 은 `domain_name`·SAN 변경이
 > replacement 를 강제해서, 래치를 걸면 전환 때 **매 머지마다 CI 가 빨개진다**. 잃는 것도
 > *사용자의 Cloudflare 작업 2분*뿐이다(재발급 $0). 근거 전문은 `acm.tf` 「차이 ①」.
