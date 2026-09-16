@@ -4357,3 +4357,20 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   같은 레버이고, 이번엔 **켜지 않는 것**으로 당겼다.
 - `[메모]` 항목 3 진행: ⓐ ACM 코드 ✅(#422) · ⓑ 검증 ✅(09-16) · ⓒ `fdaa` 삭제 ✅(#424, prod 반영 확인)
   → **남은 것은 ⓓ 유료 세션뿐**(Ingress annotation 3개 + 실 HTTPS + 2a 실검증, ~$0.1).
+- `[해결]` 🔑 **#423(계정 ID 마스킹)의 마지막 증거 — 주 유출 경로에서 확인됐다.** 이 PR 이
+  `infra/aws-eks/**` 를 건드려 **#423 머지 후 첫 `infra-deploy` 실행**이 일어났다. 애초에 유출을
+  발견한 바로 그 워크플로다:
+  ```
+  gh run view <run> --log | grep -c "$(aws sts get-caller-identity --query Account --output text)"  → 0
+  gh run view <run> --log | grep -c '\*\*\*'                                                        → 30
+  ```
+  ⚠️ **#423 머지 당시엔 이걸 확인할 수 없었다** — `.github/` 만 바뀌어 경로 필터상 `infra-deploy` 가
+  안 돌았고, 그래서 그때 검증은 `ecr-push` 쪽으로만 했다. **주 경로 검증이 하루 뒤 우연히 딸려왔다.**
+  🔑 ***경로 필터로 트리거되는 워크플로는 그 경로를 건드리는 변경이 올 때까지 검증되지 않는다*** —
+  고친 직후가 아니라 **다음에 그 길을 지날 때** 증거가 나온다.
+- `[해결]` 이 PR 의 plan 은 **no-op** 임을 확인했다(`.md` 만 변경):
+  ```
+  Infra Deploy / 0-bootstrap   No changes. Your infrastructure matches the configuration.
+  Infra Deploy / 1-network     No changes. Your infrastructure matches the configuration.
+  ```
+  0-bootstrap 이 `No changes` 라는 것은 **ACM 인증서가 state 에 있고 코드와 일치한다**는 뜻이기도 하다.
