@@ -4374,3 +4374,184 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   Infra Deploy / 1-network     No changes. Your infrastructure matches the configuration.
   ```
   0-bootstrap 이 `No changes` 라는 것은 **ACM 인증서가 state 에 있고 코드와 일치한다**는 뜻이기도 하다.
+
+---
+
+## 2026-09-16 — 선행 조건 3 ⓓ 착수: HTTPS Ingress ($0 구간)
+
+브랜치 `stage/eks-11-https-ingress`. **이 절은 전부 과금 전이다.**
+
+- `[메모]` SOP §시작 사전 점검 전부 통과. 고아 0(ALB·EKS·NAT), 영속 EBS 1개 10GiB
+  `ap-northeast-2a` = 원장 일치. 9월 누적 비용 약 $0.
+
+- `[막힘]` **SOP §2b 가 🔴 재빌드 필요를 냈다 — 오탐이 아니라 정책 케이스였다.**
+  ```
+  ECR latest 태그   28fefcc3a9c1366a0332bff3807acb3aba8a2174
+  git cat-file -t   fatal: could not get object info
+  ```
+  `ecr-push.yml` 이 `be/**` PR 에서도 빌드하는데 `pull_request` 의 `github.sha` 는 **머지 커밋**이라
+  히스토리에 없다(L-44). 마지막 `be/**` 변경은 #424 이므로 이미지 **내용은 맞지만 추적 불가**.
+
+- `[해결]` main 에서 `ECR Push` workflow_dispatch → `4c0d4006e400d90cf215ec0c40c691391da1e822`
+  (= main HEAD, #425 머지 커밋). SOP §2b **재검사 통과**. daily-api 는 `14cb335e`(main 커밋)라 재빌드 불필요.
+
+- `[해결]` 🔴 **`tofu output -raw` 가 sensitive 출력을 뚫는다 — 레포 선례 0건이라 $0 에 미리 실측.**
+  ```
+  $ tofu output -raw acm_certificate_arn
+  arn:aws:acm:ap-northeast-2:<account>:certificate/dd424ed1-…      종료코드 0
+  ```
+  이걸 과금 구간에서 처음 만났으면 4단계 ARN 경로 전체가 그 자리에서 막혔다.
+
+- `[결정]` **Blindspot Pass 19건. 착수 전에 계획을 3곳 바꿨다.** 상세는 계획서
+  `docs/superpowers/plans/2026-09-11-prod-eks-migration-prereqs.md` 「Blindspot Pass 가 ⓓ 착수 전에 뒤집은 것」.
+  요지:
+  1. **DNS 레코드가 없다.** 원안대로면 apply 직후 Cloudflare 수동 작업을 기다려야 했고, 그건
+     09-06 에 $0.39 를 태운 그 실패다. → `--resolve` 우회가 성립(`ingress.yaml` 에 `host:` 0건 +
+     인증서 리스너 고정 부착). TLS 검증은 그대로 수행되므로 *"진짜 HTTPS"* 판정이 유지된다.
+  2. **`ssl-redirect` 가 09-11 의 노출-차단 증거를 무효화한다.** *"`/actuator/health/readiness` 404"* 는
+     HTTP 실측이었다 → 전부 301 이 된다. `--resolve` 는 선택이 아니라 재현 필수 경로.
+  3. **가드를 `-z` 로 짜려던 게 틀렸다.** 레포가 실제로 밟은 실패는 빈 값이 아니라
+     `Warning: No outputs found` 가 **종료코드 0** 으로 변수에 담긴 것(08-12). → `case` 형태 검사.
+
+- `[결정]` **항목 2a 검증 4종이 전부 동어반복이어서 재설계했다.** `environment` 기본값이
+  `learning` 이고 tfvars 0건이라 *"`app_secret_name` 이 learning 인가"* 는 기본값의 동어반복이고,
+  *"teardown 후 키 유지"* 는 키가 `0-bootstrap` 의 `random_password` 라 2-cluster state 밖이므로
+  destroy+재apply 13분(≈$0.045)의 반증력이 **0** 이다. 항목 1의 센티넬 문제와 같은 병.
+  → **키 지문 비교 + `simulate-principal-policy`** 로 교체. 지문은 과금 전에 기록했다:
+  ```
+  learning  sha256:99559e943576  (len=64)
+  prod      sha256:e0a6dca3c137  (len=64)
+  ```
+  값 자체는 어디에도 남기지 않는다.
+
+- `[해결]` **U-15 해소 — 유료 세션 불필요.** #422 CI 실측: `Infra CI / tfsec` pass +
+  변경 파일에 `acm.tf` 포함 + `tfsec:ignore` **0건** → tfsec 은 ACM 에 아무것도 요구하지 않는다.
+
+- `[막힘]` **U-14 가 두 군데 틀렸다.** *"문서 3곳"* → 실제 **2곳**. 그리고 그중
+  `docs/eks-quizzes/stage-eks-9-alb.md` 는 HEAD 를 고정한 **트랜스크립트**라 고치면
+  *"그때 치지 않은 명령"* 이 실측 기록에 남는다 → **튜토리얼 1곳만** 갱신.
+
+- `[막힘]` **`assert-eks-quiz.sh` 오탐.** 계획서를 수정하는 python 스크립트의 **본문 텍스트**에
+  PR 생성 명령 문자열이 들어 있어 훅이 차단했다. 파일을 쓰는 명령이지 PR 을 만드는 명령이 아니다.
+  → 문구를 바꿔 우회. 원장 등재(하네스 동결 규칙상 수정은 하지 않는다).
+
+- `[비용]` **ⓓ 의 추가 비용은 $0 이다.** ALB 요금은 *로드밸런서-시간* + LCU 이지 **리스너 개수가
+  아니고**, 퍼블릭 ACM 인증서도 $0. 즉 세션 단가는 Stage 4 와 동일한 $0.1624/h.
+
+### 🔴 과금 세션 시작 — 2026-09-16 15:41:05 KST
+
+사용자 승인 완료. 예상 왕복 40~50분 · 예상 비용 ~$0.13 (단가 $0.1624/h).
+
+### 🔴 세션 결산 — 목표 6/6 달성, 비용 21~24배 초과
+
+> ⚠️ **이 절은 teardown 이후 사후 일괄 기록이다** — CLAUDE.md 의 *"이벤트 발생 즉시 append"*
+> 규칙과 어긋난다(QA F-2). 숨기지 않고 적어둔다.
+> **이유**: 세션이 **의도한 지점에서 끝나지 않았다.** destroy 가 배경에서 멈춰 다음 날 09:20 에야
+> 끝났고, 그 사이 append 를 할 턴 자체가 없었다. 위쪽 $0 구간 엔트리는 규칙대로 즉시 기록됐다.
+> 🔑 **함의**: *"즉시 append"* 규칙은 **세션이 정상 종료한다**는 전제 위에 있다. 이번처럼
+> 중간에 끊기면 규칙이 지켜질 수 없고, 그래서 **사후 기록이 사실인지 검증할 근거가 필요해진다** —
+> 이 절의 숫자를 전부 `describe-instances`·`describe-certificate` 같은 **AWS 조회 결과**로
+> 잡은 것이 그 대비다(내 기억이 아니라 AWS 의 답).
+
+- `[비용]` 🔴🔴 **예상 $0.13 → 실제 $2.77~3.14.** 트랙 누적($2.94)을 한 세션이 거의 두 배로 만들었다.
+  Cost Explorer 는 지연으로 아직 $0 이라 **EC2 인스턴스 수명**을 권위 있는 근거로 썼다:
+  ```
+  i-0c54bea8  2026-09-16T07:07:59Z → 2026-09-17T00:12:55Z   17.08h
+  i-09dffc2e  2026-09-16T08:10:50Z → 2026-09-17T00:16:57Z   16.10h
+  i-0062dcc5  2026-09-16T08:10:50Z → 2026-09-17T00:12:55Z   16.03h
+  합계 49.22 인스턴스-시간 · 컨트롤플레인 17.34h
+  노드 $1.02~1.39 + 컨트롤플레인 $1.73 + ALB ~$0.01
+  ```
+- `[막힘]` 🔴 **공백 두 개가 비용의 전부다.**
+  | 구간 | 길이 | 손실 | 원인 |
+  |---|---|---|---|
+  | 16:09 → 17:10 | 1h | ~$0.12 | 노드 용량 진단에 머물렀다 |
+  | **17:22 → 09:12** | **15.8h** | **~$2.5** | **destroy 를 배경으로 보내고 완료를 확인하지 않았다** |
+
+  `tofu destroy` 가 로컬 도구의 600초 타임아웃에 걸려 배경 프로세스로 전환됐고 밤새 중단됐다.
+  🔑 **이 SOP 는 §8② 에서 ALB 에 대해 정확히 그 구분을 해뒀다** — *"삭제 명령을 친 것과
+  ALB 가 사라진 것은 다르다"*. **그런데 destroy 자체에는 안 해뒀다.** 그 구멍이다.
+  → SOP **§8b destroy 완료 게이트** 신설: `describe-instances`·`list-clusters` 가 **0 인 것을
+  눈으로 본 뒤** 세션을 닫는다. tofu 출력이 아니라 **AWS 의 답**으로 판정한다.
+- `[막힘]` **리퍼는 이 경우를 구조적으로 못 막는다.** launchd 는 머신이 자면 안 돌고(§안전장치에
+  이미 적힌 한계), 하트비트 2h stale 도 기다린다. ***장시간 destroy 를 배경에 두는 것은
+  dead man's switch 를 우회하는 행위다.***
+- `[막힘]` 🔴 **`tofu apply` 가 세션 마커를 만들지 않았다 — dead man's switch 가 꺼진 채 과금이 시작됐다.**
+  apply 직후 `.claude/eks-session/` 에 `active` 가 없었다. 정규식은 그 명령에 **매칭됨을 실측**했으므로
+  규칙 문제가 아니다. 유일한 차이는 **배경 실행**이었다는 것. 수동으로 마커를 만들어 무장했다.
+  이건 훅이 자기 주석에 *"미탐 = dead man's switch 가 조용히 꺼진다. 실패 방향이 나쁘다"* 로
+  적어둔 바로 그 실패다. 확도 🟡(정황) — 과금 중 진단을 중단했다.
+
+- `[해결]` ✅ **실제 HTTPS 성립.** `--resolve` 로 DNS 없이, `-k` 없이 통과:
+  ```
+  * SSL connection using TLSv1.2 / ECDHE-RSA-AES128-GCM-SHA256
+  * ALPN: server accepted h2
+  *  subject: CN=eks.quest.dhbang.co.kr
+  *  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M04
+  *  expire date: Apr  1 23:59:59 2027 GMT
+  ```
+  응답코드는 **ALB IP 2개(`54.116.68.107`·`54.116.193.193`) 모두 동일** — 200/403/**404**/404/404.
+  `/actuator/health/readiness` **404** 로 *"인터넷 노출 차단"* 판정이 HTTPS 열로 이어졌다.
+- `[해결]` ✅ **`ssl-redirect` 동작.** HTTP → `301 Location https://eks.quest.dhbang.co.kr:443/…`,
+  80 리스너 규칙은 `default → redirect` 하나뿐. 443 리스너는 `1:/api/v1/daily-question` `2:/api/v1`.
+  🔴 `Listeners[0]` 로 잡으면 80 쪽이 걸려 우선순위 표가 안 나온다 — 착수 전 수정이 맞았다.
+- `[해결]` ✅ **항목 2a 체인 전체 확정.** 파드 안 `JWT_SECRET` 지문이 `0-bootstrap` 의 learning 키와 일치:
+  ```
+  파드 env      sha256:99559e943576
+  기대(learning) sha256:99559e943576      ← 일치
+  prod          sha256:e0a6dca3c137      ← 다름 (경계 유지)
+  ```
+  0-bootstrap → Secrets Manager → ESO → K8s Secret → 파드 env **4단계를 한 번에** 판정했다.
+  값 자체는 어디에도 남기지 않았다.
+- `[해결]` ✅ **경계가 IAM 층에 실재한다 — 변인 통제된 반증 실험.**
+  ```
+  learning(실제 ARN)        → allowed
+  prod(suffix·리전·계정 동일, 이름만 교체) → implicitDeny
+  ```
+  🔑 **첫 시도는 판정력이 0 이었다** — 가짜 suffix `-AbCdEf` 를 쓰니 **둘 다 implicitDeny** 가 나왔다.
+  IAM 정책의 `resources` 가 정확한 ARN 목록이라 suffix 불일치만으로 거부된 것이다.
+  실제 suffix 를 쓰고 **이름만** 바꿔야 두 가설이 갈린다.
+- `[해결]` ✅ **ACM `RenewalEligibility: INELIGIBLE` → `ELIGIBLE`** (`InUseBy: 1`). 09-16 에 예고한 전이 확인.
+  *"안 쓰는 인증서는 갱신되지 않는다"* 의 반대 면도 실측됐다.
+- `[메모]` **U-17 — n=2 확보. *"세션마다 바뀐다"* 는 절반만 맞다.**
+  ```
+  09-16  k8s-default-devquest-3675af8c03-1059226667.ap-northeast-2.elb.amazonaws.com
+  09-11  k8s-default-devquest-3675af8c03-775497815....
+         └────────── 동일 ──────────┘ └─ 다름 ─┘
+  ```
+  앞부분(`k8s-default-<ns>-<ingress>-<해시>`)은 **안정적**이고 뒷자리만 바뀐다.
+  호스트명 결정의 비용 근거는 유지되지만(전체 이름이 바뀌므로 DNS 레코드는 못 고정) 서술은 정확해야 한다.
+- `[메모]` 🔴 **착수 전 예측 하나가 틀렸다 — `curl -L` 은 붙여도 된다.**
+  문서에 *"Location 이 `https://<ALB DNS>/` 라 CN/SAN 불일치"* 라고 **🔴 경고로** 적었는데,
+  LBC 의 `ssl-redirect` 는 **Host 헤더를 보존**한다. `-L` 로 따라가도 403 정상.
+  🔑 이 경고는 Blindspot 의 **⚪ 추측**이었고 문서로 옮기며 **🔴 로 격상**됐다.
+  ***확도 표시를 함께 옮기지 않으면 추측이 한 번의 복사로 사실이 된다.***
+- `[해결]` **QA F-4 반증 — `-var node_desired_size=3` 은 이 스테이지에도 필요했다.**
+  QA 가 *"그 플래그는 3서비스 전용이고 이번엔 불필요"* 라고 지적했으나 산술이 반대다.
+  이번 세션 워크로드는 2앱이지만 **ESO 3파드 + LBC** 가 함께 얹힌다:
+  ```
+  메모리  postgres 256 + core-api 480 + daily-api 512 + LBC 96 = 1344Mi
+          1노드 여유  비관 959Mi / 낙관 1245Mi        → 어느 쪽이든 Pending
+          ⚠️ 처음엔 core-api 를 512Mi 로 적었다(QA F-6). 실제는 **480Mi** —
+             2026-09-08 부하 실측으로 재산정된 값이다(`core-api.yaml:88`,
+             W_peak 408Mi × 1.15). 32Mi 오차이고 결론은 불변이지만,
+             **내가 매니페스트를 안 열고 기억으로 썼다**는 것이 문제다.
+  ℹ️ ESO 3파드는 helm 기본값이라 requests 가 없다(BestEffort) → **메모리 계산에서 제외,
+     파드 슬롯 계산에만 포함**했다. 스케줄링에 미치는 영향이 서로 다르기 때문이다.
+  파드    시스템 5 + ESO 3 + LBC 1 + 앱 3 = 12개
+          1노드 max-pods 11 (실측)                    → Pending
+  ```
+  **두 축 모두 1노드로는 불가능하다.** 따라서 플래그 누락을 지연 원인으로 지목한 것은 맞다.
+  ⚠️ 단 내가 직접 관측한 것은 아니다 — 배포 **전에** 스케일했으므로 1노드 실패를 보지는 못했다.
+  근거는 `variables.tf` 의 레포 자체 산술 + 실측 allocatable·max-pods 다(확도 🔴 산술 / ⚪ 미관측).
+
+- `[메모]` **내가 만든 지연 3건**: ①`tofu apply | tail -45` 파이프로 출력 버퍼링(#423 의 `sed` 재발)
+  ②`-var node_desired_size=3` 누락 → 1노드로 apply 후 스케일 왕복(기본값 1은 **비용 보호 장치**인데
+  절차에서 빠뜨렸다) ③`grep -c '([0-9]+)/\1'` 백레퍼런스가 ugrep 에서 미지원 → 대기 루프 4분 헛돎.
+- `[메모]` **오정정 1건**: 리퍼 설치 경로를 *"SOP 서술이 낡았다"* 고 고쳤는데 **원래가 맞았다**.
+  설치기·plist 는 `infra/aws-eks/reaper/`, **본체만** `.claude/scripts/eks-reaper.sh` 다.
+  이 SOP 가 이미 적어둔 교훈을 그대로 밟았다 — *"근거를 확인하지 않은 정정은 원래 서술보다 나쁘다."*
+- `[메모]` **teardown 실측**: ESO/SecretStore 즉시 · `delete ingress` **27초**(#416 의 16초 대비 —
+  리스너 2개 영향으로 보인다, 확도 🟡) · ALB AWS 조회 0 확인 · `destroy 31 destroyed`.
+  **고아 전수 0** (tofu state·EKS·ALB·NAT·EC2 running·RDS·비영속 EBS·시크릿) ·
+  영속 EBS `vol-041e5a6705f7b4975` 10GiB `ap-northeast-2a` = 원장 일치.

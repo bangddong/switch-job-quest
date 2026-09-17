@@ -117,3 +117,25 @@ output "region" {
   description = "LBC helm install 의 `--set region=<이 값>`. vpcId 와 같은 이유로 명시한다."
   value       = var.region
 }
+
+# ── 선행 조건 3 ⓓ: ALB 에 붙일 ACM 인증서 ─────────────────────────
+#
+# 값은 0-bootstrap 이 소유한다(`acm.tf`). 여기서는 **중계만** 한다 —
+# postgres_data_volume_id·persistent_az 와 같은 형태이고, 같은 이유다:
+# 세션 작업 디렉토리가 2-cluster 라 사람이 레이어를 오가지 않게 하려는 것.
+#
+# 🔴 **`sensitive = true` 를 빼지 마라 — 단, 이게 유출을 막아준다고 믿지도 마라.**
+#   붙이는 이유: ARN 에 계정 ID 가 있고(`arn:aws:acm:<region>:<account>:certificate/…`),
+#   0-bootstrap 의 원본 출력이 sensitive 다. 인수 없는 `tofu output` 이 통째로 찍는 것을 막는다.
+#   ⚠️ **막지 못하는 것**: #423 이 확정했듯 sensitive 는 `Outputs:` 블록만 가린다.
+#   그리고 **2-cluster 는 CI 가 아니라 로컬 apply 라** `::add-mask::` 도 `sed -u` 치환도 없다.
+#   → **터미널 출력을 일지·PR 에 붙여넣을 때 사람이 `<account>` 로 가려야 한다.**
+#     `docs/eks-migration-log.md` 는 커밋되는 퍼블릭 문서다.
+#
+# ℹ️ `tofu output -raw` 는 sensitive 여도 값을 낸다(2026-09-16 실측, 종료코드 0).
+#    레포 선례가 0건이라 과금 구간 전에 $0 로 미리 확인했다.
+output "acm_certificate_arn" {
+  description = "학습 ALB Ingress 의 certificate-arn annotation 에 주입할 ACM ARN (0-bootstrap 소유값의 중계)"
+  value       = data.terraform_remote_state.bootstrap.outputs.acm_certificate_arn
+  sensitive   = true
+}

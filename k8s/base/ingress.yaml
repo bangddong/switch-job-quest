@@ -10,6 +10,10 @@
 #    최악 ~12 LCU × $0.008 = **$0.096/h** — ALB 고정비의 4배다.
 #    → **부하 테스트와 Stage 4 를 같은 세션에 넣지 마라.** 예산 모델이 깨진다.
 #
+#    ℹ️ **HTTPS 리스너를 더해도 비용은 안 는다** — ALB 요금은 *로드밸런서-시간* + LCU 이지
+#       리스너 개수가 아니다. 인증서도 퍼블릭 ACM 이라 $0. 즉 ⓓ 의 추가 비용은 **$0** 이고,
+#       세션 비용은 Stage 4 와 동일하다.
+#
 # 🔴 **teardown 에서 이 파일을 반드시 먼저 지운다.** ALB 는 tofu state 밖이라
 #    `tofu destroy` 가 모른다. 남기면 **월 $16.43 + IP $7.30 이 조용히 나간다.**
 #    (SOP §8 · `eks-reaper.sh` 참조 — 리퍼도 이제 이걸 지운다)
@@ -52,12 +56,41 @@ metadata:
     alb.ingress.kubernetes.io/healthcheck-path: /health
     alb.ingress.kubernetes.io/success-codes: "200"
 
-    # ── ④ HTTP 만 연다 ────────────────────────────────────────────
-    # HTTPS 는 ACM 인증서 + 도메인이 필요하고, 이 클러스터는 세션마다 사라진다.
-    # Stage 4 의 학습 목표는 **IngressClass·target-type·컨트롤러 동작**이지 TLS 종료가 아니다.
-    # ⚠️ 그래서 이 Ingress 로는 **로그인·토큰을 태우지 마라.** 평문이다.
-    #    학습 클러스터의 OAuth 자격증명이 자리표시인 것과 같은 이유로 실제 인증을 쓰지 않는다.
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    # ── ④ HTTPS 종료 — 선행 조건 3 ⓓ (2026-09-16) ─────────────────
+    #
+    # 🔑 **비대칭이 이 절의 요점이다**: 인증서는 `0-bootstrap` 이 소유해 **세션을 넘어 산다**.
+    #    클러스터·ALB 는 세션마다 사라진다. 검증이 Cloudflare 수동이라 수명이 클러스터가 아니라
+    #    **도메인**에 묶이기 때문이다(D-004 5번째 적용 — 상세는 `0-bootstrap/acm.tf` 헤더).
+    #    그래서 여기서는 **만들지 않고 참조만** 한다.
+    #
+    # 🔴 **세 줄은 원자적이다. 하나씩 나눠 apply 하지 마라.**
+    #    `listen-ports` 에 HTTPS 없이 `ssl-redirect` 만 들어가면 리스너 없는 포트로 보내거나
+    #    LBC 가 Events 에만 에러를 남긴다 — 어느 쪽이든 **조용한 실패**다.
+    #
+    # 🔴 **CERT_ARN_PLACEHOLDER 는 선택이 아니라 강제다.** ARN 에 AWS 계정 ID 가 들어 있고
+    #    (`arn:aws:acm:<region>:<account>:certificate/…`) 이 레포는 **퍼블릭**이다
+    #    (`k8s/README.md`: *"퍼블릭 레포에 리소스 ID를 박아두지 않는다"*).
+    #    주입은 레포 관례인 sed 치환 — 절차는 `docs/eks-tutorial-steps.md` §4-4.
+    #
+    #    ⚠️ **같은 sed 관례인데 실패 가시성이 정반대다.** `externalsecret-app.yaml` 의
+    #    치환 누락은 `SecretSyncError` 로 **시끄럽게** 죽는다. 여기는 아니다 —
+    #    잘못된 ARN 은 `kubectl describe ingress devquest` 의 **Events 에만** 남고
+    #    `kubectl apply` 는 성공한다. ②가 경고하는 것과 **같은 형태의 실패**다.
+    #    → 그래서 치환 전 **형태 검사**가 절차에 들어 있다(`-z` 로는 부족하다:
+    #      `tofu output` 은 실패해도 `Warning: No outputs found` 를 **종료코드 0** 으로 낸다).
+    #
+    # ⚠️ **평문이 아니게 됐지만 실제 인증은 여전히 쓰지 않는다.** 앞 문장(*"평문이니 로그인·토큰을
+    #    태우지 마라"*)은 이제 성립하지 않는다 — TLS 가 붙었다. 하지만 **뒷 문장은 살아 있다**:
+    #    학습 클러스터의 OAuth 자격증명은 자리표시이고, 그건 `2-cluster/secrets.tf` 가
+    #    **강제하는 제약**이다(*"학습 클러스터에 prod 크리덴셜을 넣으면 그 클러스터가 실서비스
+    #    사용자에게 유효한 토큰을 발급할 수 있게 된다"*). TLS 는 그 이유를 해소하지 않는다.
+    alb.ingress.kubernetes.io/certificate-arn: CERT_ARN_PLACEHOLDER
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS": 443}]'
+    # HTTP 로 온 요청을 443 으로 301 리다이렉트한다.
+    # 🔴 **부수 효과: 09-11 에 HTTP 로 찍은 응답코드 표가 전부 301 이 된다.**
+    #    `infra/aws-eks/README.md` 의 *"`/actuator/health/readiness` 404 = 인터넷 노출 차단"*
+    #    증거도 마찬가지다 → 재현하려면 **HTTPS 로 다시 찍어야 한다**(튜토리얼 §4-4 참조).
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
 
     # ── ⑤ 태그 — 고아가 됐을 때 정체를 알 수 있게 ──────────────────
     # LBC 는 자동으로 `elbv2.k8s.aws/cluster` 태그를 붙이지만, 우리 인벤토리 규약

@@ -129,7 +129,23 @@
 > ⚠️ **불가피하게 물어야 하면 질문과 동시에 destroy 를 건다.** 질문을 남겨두고 클러스터를
 > 살려두는 조합이 가장 비싸다.
 
-5. `tofu apply` ← **과금 시작.** (`eks-session-marker.sh` 훅이 자동으로 세션 마커 생성 → 리퍼 감시 개시)
+5. `tofu apply` ← **과금 시작.** (`eks-session-marker.sh` 훅이 세션 마커 생성 → 리퍼 감시 개시)
+
+   🔴 **`apply` 도 `destroy` 도 배경 프로세스로 보내지 마라 (2026-09-16 추가).**
+   | | |
+   |---|---|
+   | `apply` 를 배경으로 돌리면 | **마커가 안 생겼다** — dead man's switch 가 꺼진 채 과금이 시작된다(원장 L-58). 정규식은 매칭되는데 마커가 없었다 |
+   | `destroy` 를 배경으로 돌리면 | 프로세스가 중단되면 **아무도 모른다.** 09-16 에 15.8시간이 샜다(§8b) |
+
+   → **둘 다 전경에서 끝까지 붙어 있는다.** 실측 왕복은 apply ~9분 · destroy 4~8분이다.
+   도구 타임아웃에 걸렸다면 *"곧 끝난다"* 가 아니라 **경로가 막혔다는 신호**로 읽고,
+   배경에 맡기지 말고 다시 전경에서 붙어 **AWS 에 직접 물어** 상태를 확정한다.
+
+   ⚠️ **마커가 생겼는지 육안 확인한다** — 이게 유일한 확인 지점이다:
+   ```bash
+   cat .claude/eks-session/active     # repo_root / cluster_dir / applied_at 이 보여야 한다
+   ```
+   없으면 손으로 만든다(형식은 `eks-session-marker.sh` 참조). **마커 없이 세션을 진행하지 마라.**
 6. `aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2` → `kubectl get nodes` 검증.
 6b. 🔴 **in-cluster 모드라면 — postgres 파드가 Ready된 직후 비밀번호를 동기화한다.**
    ```bash
@@ -143,6 +159,14 @@
    ```
    FATAL:  password authentication failed for user "devquest"
    ```
+   🔴 **관측을 근거로 생략하지 마라 (2026-09-16 추가 — 실제로 생략했다).**
+   *"`core-api` 가 `1/1 Running` 이니 DB 인증이 통했다"* 는 추론은 **맞았지만**, 그게 맞는 것은
+   **#374(readiness 가 DB 를 실제로 검증) 이후뿐**이다. 그 전에는 DB 가 깨진 채로도 `1/1 Running`
+   이었다(원장 L-15 가 지적한 내용). 즉 **판단이 맞아도 맞는 이유가 시점 의존적이다.**
+   🔑 그리고 아래 *"왜 매번 하는가"* 의 논지는 **"필요하니 해라" 가 아니라 "조건부로 만들면
+   잊힌다"** 다 — 관측으로 조건을 만드는 것 자체가 이 단계의 설계를 훼손한다.
+   ***멱등하고 2초인 절차를 건너뛰어 아끼는 것은 2초고, 잃는 것은 "항상 한다"는 성질이다.***
+
    **왜 매번 하는가 (한 번이 아니라)**: 같은 값으로 다시 걸면 무의미하므로 **멱등**이고,
    2초면 끝난다. "한 번만 하면 되는 수동 절차"는 반드시 잊힌다 — 그리고 잊힌 걸
    **과금 중에** 알게 된다(08-07에 7분을 태웠다). 표준 절차로 두면 이 실패 종류가 사라진다.
@@ -220,6 +244,39 @@
    # ③ 인프라
    cd infra/aws-eks/2-cluster && tofu destroy
    ```
+
+8b. 🔴🔴 **destroy 완료 게이트 — "쳤다"와 "끝났다"는 다르다 (2026-09-16, $2.8 손실로 추가).**
+
+   **`tofu destroy` 를 실행한 것으로 세션을 끝내지 마라.** 이 SOP 는 §8 ②에서 ALB 에 대해
+   정확히 그 구분을 해뒀다(*"삭제 명령을 친 것과 ALB 가 사라진 것은 다르다"*) — 그런데
+   **destroy 자체에는 안 해뒀다.** 09-16 에 그 구멍으로 **15.8시간**이 샜다.
+
+   ```bash
+   R=ap-northeast-2
+   aws ec2 describe-instances --region $R \
+     --filters Name=instance-state-name,Values=running,pending \
+     --query 'length(Reservations[].Instances[])' --output text    # → 0
+   aws eks list-clusters --region $R --query 'length(clusters)' --output text   # → 0
+   ```
+   🔴 **이 두 숫자가 0 인 것을 눈으로 본 뒤에 세션을 닫는다.** `tofu destroy` 의 출력이 아니라
+   **AWS 의 답**으로 판정한다. state 는 destroy 가 성공했다고 믿을 수 있지만 AWS 는 못 속인다.
+
+   > **09-16 사고 경위**: `tofu destroy` 가 로컬 도구의 600초 타임아웃에 걸려 **배경 프로세스로
+   > 전환**됐고, 그 프로세스가 밤새 중단됐다. 노드는 **다음 날 09:12 에야** 종료됐다.
+   > ```
+   > i-0c54bea8  2026-09-16T07:07:59Z → 2026-09-17T00:12:55Z   17.08h
+   > i-09dffc2e  2026-09-16T08:10:50Z → 2026-09-17T00:16:57Z   16.10h
+   > i-0062dcc5  2026-09-16T08:10:50Z → 2026-09-17T00:12:55Z   16.03h
+   > 컨트롤플레인 17.34h → 예상 $0.13 대비 실제 $2.77~3.14 (21~24배)
+   > ```
+   > 🔑 **리퍼는 이 경우를 못 막는다** — launchd 는 머신이 자면 안 돌고(§안전장치 한계),
+   > 게다가 하트비트 2h stale 을 기다린다. **장시간 destroy 를 배경에 두는 것은
+   > dead man's switch 를 우회하는 행위다.**
+   >
+   > ⚠️ **destroy 를 절대 배경으로 보내지 마라.** 실측 왕복은 4~8분이고 타임아웃이 걸리면
+   > 그건 *"곧 끝난다"* 가 아니라 **경로가 막혔다는 신호**다. 타임아웃이 났으면 배경에 맡기지 말고
+   > **다시 전경에서 붙어** 위 두 숫자가 0 이 되는 것을 확인한다.
+
    > ESO 자체(Helm 릴리스)는 클러스터와 함께 사라지므로 별도 삭제 불필요.
 9. **고아 전수 검증** = 0:
    ```bash
@@ -307,6 +364,9 @@ tofu state를 그대로 쓰므로(로컬 실행) 다음에 상태가 깨끗하�
     $6.48 → $10 미도달). 하루 단위 급증을 잡는 것은 **Cost Anomaly Detection(DAILY, $5)** 이다.
     ~~"$35 예산 알람이 backstop"~~ 이라는 종전 서술은 임계 체계와 어긋났다(코드에 $35는 없었다).
 - **설치** (새 머신/클론 시 1회): `bash infra/aws-eks/reaper/install-reaper.sh`
+  > 📌 **조각이 두 디렉토리에 나뉘어 있다** (2026-09-16 에 헷갈려 오정정을 냈다):
+  > · 설치기·plist 템플릿 → `infra/aws-eks/reaper/`   · **리퍼 본체 → `.claude/scripts/eks-reaper.sh`**
+  > 드라이런은 본체를 직접 부른다: `EKS_REAPER_DRYRUN=1 bash .claude/scripts/eks-reaper.sh`
 - **설정**: `EKS_REAPER_TTL`(기본 7200초=2h), `EKS_REAPER_DRYRUN=1`(테스트), `EKS_REGION`.
 - **리퍼가 뭔가 했나 확인**: `.claude/eks-session/reaper.log` (`DEAD MAN'S SWITCH 발동` 있으면 자동 destroy된 것).
 - **제거**: `launchctl bootout gui/$(id -u)/com.devquest.eks-reaper ; rm ~/Library/LaunchAgents/com.devquest.eks-reaper.plist`

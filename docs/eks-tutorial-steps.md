@@ -2041,8 +2041,54 @@ AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/to
 
 ### 4-4. Ingress 적용 — 💰 여기서 ALB 과금이 시작된다
 
+Ingress 는 **HTTPS 종료**까지 한다(선행 조건 3 ⓓ). 인증서 ARN 은 `0-bootstrap` 이 소유하고
+**계정 ID 를 포함**하므로 매니페스트에 박을 수 없다 — 레포 관례대로 sed 로 주입한다
+(`postgres-static.yaml` 의 `EBS_VOLUME_ID_PLACEHOLDER`, `core-api.yaml` 의 `IMAGE_PLACEHOLDER` 와 같은 형태).
+
 ```bash
-kubectl apply -f k8s/base/ingress.yaml
+cd infra/aws-eks/2-cluster
+CERT=$(tofu output -raw acm_certificate_arn)
+cd -
+```
+
+🔴 **형태 검사를 반드시 먼저 한다. `[ -z ]` 로는 부족하다.**
+
+```bash
+case "$CERT" in
+  arn:aws:acm:ap-northeast-2:*:certificate/*) echo "✅ cert ARN OK" ;;
+  *) echo "🔴 ACM ARN 이 아니다 — 여기서 멈출 것: $CERT" ;;
+esac
+```
+
+> **왜 `-z` 가 아니라 형태 검사인가.** 이 레포가 실제로 밟은 실패는 *빈 값*이 아니었다 —
+> `tofu output` 이 **`Warning: No outputs found` 를 종료코드 0 으로** 내며 그 문자열이
+> 변수에 담겼다(ESO, 2026-08-12 실측 — 아래 §"출력이 없을 때" 참조). `-z` 는 이걸 통과시킨다.
+> Stage 4 의 `$ROLE`·`$VPC` 검사가 같은 이유로 `case` 를 쓴다.
+>
+> 🔴 **그리고 여기는 틀려도 조용하다.** 잘못된 ARN 을 주입해도 `kubectl apply` 는 **성공**하고,
+> LBC 에러는 `kubectl describe ingress devquest` 의 **Events 에만** 남는다.
+> `externalsecret-app.yaml` 의 치환 누락이 `SecretSyncError` 로 시끄럽게 죽는 것과 **정반대**다.
+> 관례를 복사할 때 이 차이를 함께 옮기지 않으면 조용한 실패가 된다.
+
+```bash
+sed "s|CERT_ARN_PLACEHOLDER|$CERT|" k8s/base/ingress.yaml | kubectl apply -f -
+```
+
+⚠️ **위 형태 검사가 유일한 방어선이다 — 그리고 `pipefail` 을 붙여도 달라지지 않는다.**
+`pipefail` 은 *파이프의 어느 명령이 실패했을 때* 그걸 전파하는 장치인데, **여기서는 아무것도
+실패하지 않는다**: `sed` 는 치환 대상이 없어도 exit 0 이고, `$CERT` 가 빈 문자열이면
+**빈 값으로 치환하고도** exit 0 이다. 즉 이건 종료코드로 잡히는 실패가 아니라
+**출력이 조용히 틀리는** 실패다. 그래서 막으려면 파이프 앞에서 **값의 모양**을 봐야 한다.
+
+주입이 실제로 됐는지 확인(값은 **가려서** 본다 — 이 문서는 퍼블릭이다):
+
+```bash
+kubectl get ingress devquest \
+  -o jsonpath='{.metadata.annotations.alb\.ingress\.kubernetes\.io/certificate-arn}' \
+  | sed 's/[0-9]\{12\}/<account>/'
+```
+```
+arn:aws:acm:ap-northeast-2:<account>:certificate/dd424ed1-…
 ```
 
 <!-- verify: k8s/base/ingress.yaml ~ io/target-type:[[:space:]]*ip -->
@@ -2150,7 +2196,10 @@ ALB 규칙이 Ingress 배열 순서대로 매겨졌는지도 확인한다:
 
 ```bash
 LB=$(aws elbv2 describe-load-balancers --region ap-northeast-2 --query 'LoadBalancers[0].LoadBalancerArn' --output text)
-LSN=$(aws elbv2 describe-listeners --region ap-northeast-2 --load-balancer-arn "$LB" --query 'Listeners[0].ListenerArn' --output text)
+# 🔴 `Listeners[0]` 로 잡지 마라 — 리스너가 HTTP·HTTPS 둘이라 순서 보장이 없다.
+#    HTTP 쪽을 잡으면 rules 가 전부 ssl-redirect 라 아래 우선순위 표가 안 나온다.
+LSN=$(aws elbv2 describe-listeners --region ap-northeast-2 --load-balancer-arn "$LB" \
+        --query 'Listeners[?Port==`443`].ListenerArn' --output text)
 aws elbv2 describe-rules --region ap-northeast-2 --listener-arn "$LSN" \
   --query 'Rules[].[Priority,Conditions[0].Values[0]]' --output text
 ```
@@ -2160,21 +2209,98 @@ aws elbv2 describe-rules --region ap-northeast-2 --listener-arn "$LSN" \
 default  None                        ← 404
 ```
 
-#### 응답 코드
+#### 응답 코드 — 🔴 **HTTPS 로 찍어야 한다**
+
+`ssl-redirect` 때문에 **HTTP 로 찍으면 전부 301** 이다. 아래 표(*"404 = 노출 안 됨"*)를
+재현하려면 HTTPS 로 가야 한다.
+
+**그런데 DNS 레코드가 없다.** 인증서 검증용 CNAME 은 Cloudflare 에 넣었지만
+`eks.quest.dhbang.co.kr` → ALB 레코드는 없고, ALB DNS 이름은 **세션마다 바뀐다**.
+매 세션 사람이 Cloudflare 를 만지는 것은 과금 구간에 사람을 기다리는 것이라 금지다(SOP).
+
+→ **`--resolve` 로 DNS 를 우회한다. 인증서 검증은 그대로 진행된다.**
 
 ```bash
 ALB=$(kubectl get ingress devquest -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-for p in /api/v1/daily-question /api/v1/companies /actuator/health/readiness /health /; do
-  printf "%-32s %s\n" "$p" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://$ALB$p")"
+HOST=eks.quest.dhbang.co.kr
+dig +short "$ALB"          # ALB 는 2 AZ = IP 2개
+```
+
+```bash
+# 🔑 IP 두 개를 모두 친다 — 하나만 치면 n=1 이다
+for IP in $(dig +short "$ALB"); do
+  echo "── $IP"
+  for p in /api/v1/daily-question /api/v1/companies /actuator/health/readiness /health /; do
+    printf "  %-32s %s\n" "$p" \
+      "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+          --resolve "$HOST:443:$IP" "https://$HOST$p")"
+  done
 done
 ```
 
-| 경로 | 실측 | 뜻 |
-|---|:--:|---|
-| `/api/v1/daily-question` | 200 | — **아래 참조. 이걸로는 아무것도 증명 못 한다** |
-| `/api/v1/companies` | 403 | core-api 도달 + 인증 요구 = 정상 |
-| `/actuator/health/readiness` | **404** | ✅ **인터넷에 노출되지 않았다** |
-| `/health` · `/` | 404 | ✅ 라우팅 안 됨 |
+> **왜 이게 성립하나 (두 조건이 맞아떨어진다)**
+> 1. `ingress.yaml` 의 `rules:` 에 **`host:` 필드가 없다** → ALB 규칙에 Host 조건이 안 붙어
+>    어떤 Host 헤더로도 라우팅된다.
+> 2. 인증서는 **리스너에 고정 부착**이라 SNI 와 무관하게 같은 cert 를 낸다.
+>
+> `--resolve` 는 DNS 만 건너뛸 뿐 **TLS 검증은 정상 수행**된다 — 즉 `-k` 없이 통과하면
+> 체인·CN/SAN 이 실제로 맞다는 뜻이고, 그게 *"진짜 HTTPS"* 의 증거다.
+>
+> ℹ️ **`-L` 은 붙여도 된다 (2026-09-16 실측 — 착수 전 예상이 틀렸다).**
+> 착수 전에 이 자리에 *"`-L` 금지 — Location 이 `https://<ALB DNS>/` 라 CN/SAN 불일치"* 라고
+> 적어뒀는데 **틀렸다.** LBC 의 `ssl-redirect` 는 **Host 헤더를 보존**한다:
+> ```
+> 코드 301  Location https://eks.quest.dhbang.co.kr:443/api/v1/companies
+> curl -L → 403  최종 https://eks.quest.dhbang.co.kr:443/api/v1/companies   ← 정상
+> ```
+> (두 포트에 `--resolve` 를 다 줘야 한다: `--resolve $HOST:80:$IP --resolve $HOST:443:$IP`)
+>
+> 🔑 **왜 틀렸는지가 교훈이다.** 이 경고는 Blindspot 의 **⚪ 추측**이었는데 문서로 옮길 때
+> **🔴 로 격상**됐다. 확도 표시를 함께 옮기지 않으면 추측이 한 번의 복사로 사실이 된다.
+>
+> ⚠️ 나중에 `ingress.yaml` 에 `host:` 를 추가하면 조건 1이 깨져 이 절차가 죽는다.
+
+HTTP → HTTPS 리다이렉트 자체는 따로 확인한다:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' --max-time 10 \
+  --resolve "$HOST:80:$(dig +short "$ALB" | head -1)" "http://$HOST/api/v1/companies"
+```
+
+##### 실측 표 (2026-09-16, ALB IP 2개 모두)
+
+| 경로 | HTTPS | HTTP | 뜻 |
+|---|:--:|:--:|---|
+| `/api/v1/daily-question` | 200 | 301 | — **아래 참조. 이걸로는 아무것도 증명 못 한다** |
+| `/api/v1/companies` | 403 | 301 | core-api 도달 + 인증 요구 = 정상 |
+| `/actuator/health/readiness` | **404** | 301 | ✅ **인터넷에 노출되지 않았다** |
+| `/health` · `/` | 404 | 301 | ✅ 라우팅 안 됨 |
+
+**`54.116.68.107` 과 `54.116.193.193` 이 모든 경로에서 동일했다** — AZ 한쪽만 찍는
+n=1 판정이 아니다.
+
+TLS 실측:
+```
+* SSL connection using TLSv1.2 / ECDHE-RSA-AES128-GCM-SHA256
+* ALPN: server accepted h2
+*  subject: CN=eks.quest.dhbang.co.kr
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M04
+*  expire date: Apr  1 23:59:59 2027 GMT
+```
+🔑 **`-k` 없이 통과했다는 것이 판정의 핵심이다** — 체인·CN 이 실제로 맞다는 뜻이고,
+`--resolve` 는 DNS 만 건너뛰므로 *"DNS 레코드 없이 진짜 HTTPS"* 가 성립한다.
+
+443 리스너 규칙이 Ingress 배열 순서대로 매겨진 것도 확인했다:
+```
+1        /api/v1/daily-question
+2        /api/v1
+default  None
+```
+대조로 80 리스너는 **`default → redirect` 하나뿐**이다. 🔴 `Listeners[0]` 로 잡으면
+이쪽이 걸려 위 우선순위 표가 안 나온다 — 그래서 443 포트로 필터한다.
+
+> 📌 09-11 Stage 4 의 HTTP 실측(200/403/**404**/404)은 `ssl-redirect` 도입으로
+> **더 이상 재현되지 않는다.** 같은 판정을 HTTPS 열이 이어받았다.
 
 #### 🔴 여기서 막혔다 — 200이 어느 파드에서 왔는지 알 수 없다
 
