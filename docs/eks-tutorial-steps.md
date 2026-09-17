@@ -2243,9 +2243,17 @@ done
 > `--resolve` 는 DNS 만 건너뛸 뿐 **TLS 검증은 정상 수행**된다 — 즉 `-k` 없이 통과하면
 > 체인·CN/SAN 이 실제로 맞다는 뜻이고, 그게 *"진짜 HTTPS"* 의 증거다.
 >
-> 🔴 **`-L` 을 붙이지 마라.** 301 의 `Location` 은 `https://<ALB DNS>/…` 인데 인증서는
-> `eks.quest.dhbang.co.kr` 전용이라 **CN/SAN 불일치**로 실패한다. 거기서 `-k` 를 붙이는 순간
-> 검증이 무의미해진다 — 리다이렉트는 **응답 코드 301 로만** 확인한다(아래).
+> ℹ️ **`-L` 은 붙여도 된다 (2026-09-16 실측 — 착수 전 예상이 틀렸다).**
+> 착수 전에 이 자리에 *"`-L` 금지 — Location 이 `https://<ALB DNS>/` 라 CN/SAN 불일치"* 라고
+> 적어뒀는데 **틀렸다.** LBC 의 `ssl-redirect` 는 **Host 헤더를 보존**한다:
+> ```
+> 코드 301  Location https://eks.quest.dhbang.co.kr:443/api/v1/companies
+> curl -L → 403  최종 https://eks.quest.dhbang.co.kr:443/api/v1/companies   ← 정상
+> ```
+> (두 포트에 `--resolve` 를 다 줘야 한다: `--resolve $HOST:80:$IP --resolve $HOST:443:$IP`)
+>
+> 🔑 **왜 틀렸는지가 교훈이다.** 이 경고는 Blindspot 의 **⚪ 추측**이었는데 문서로 옮길 때
+> **🔴 로 격상**됐다. 확도 표시를 함께 옮기지 않으면 추측이 한 번의 복사로 사실이 된다.
 >
 > ⚠️ 나중에 `ingress.yaml` 에 `host:` 를 추가하면 조건 1이 깨져 이 절차가 죽는다.
 
@@ -2256,24 +2264,40 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' --max-time 10 \
   --resolve "$HOST:80:$(dig +short "$ALB" | head -1)" "http://$HOST/api/v1/companies"
 ```
 
-##### 실측 표
+##### 실측 표 (2026-09-16, ALB IP 2개 모두)
 
-🔴 **아직 안 찍었다 — 아래는 예상이고, ⓓ 세션에서 실측으로 채운다.**
-
-| 경로 | HTTPS (예상) | HTTP (예상) | 판정 근거 |
+| 경로 | HTTPS | HTTP | 뜻 |
 |---|:--:|:--:|---|
 | `/api/v1/daily-question` | 200 | 301 | — **아래 참조. 이걸로는 아무것도 증명 못 한다** |
 | `/api/v1/companies` | 403 | 301 | core-api 도달 + 인증 요구 = 정상 |
 | `/actuator/health/readiness` | **404** | 301 | ✅ **인터넷에 노출되지 않았다** |
 | `/health` · `/` | 404 | 301 | ✅ 라우팅 안 됨 |
 
-> ⚠️ **이 표를 실측이라고 읽지 마라.** HTTPS 열은 09-11 의 **HTTP** 실측(200/403/404/404)을
-> 그대로 옮긴 것이고 — 즉 *"리스너만 바뀌고 라우팅·인증은 그대로일 것"* 이라는 **가설**이다.
-> HTTP 열의 301 도 `ssl-redirect` 동작에 대한 예상이지 관측이 아니다.
-> **둘 다 ⓓ 세션에서 찍어 이 표를 교체한다.** 어긋나면 어긋난 대로 적는다.
->
-> 📌 09-11 Stage 4 의 HTTP 실측표는 `ssl-redirect` 도입으로 **더 이상 재현되지 않는다.**
-> 같은 판정(*"404 = 인터넷 노출 차단"*)을 HTTPS 열이 이어받아야 한다.
+**`54.116.68.107` 과 `54.116.193.193` 이 모든 경로에서 동일했다** — AZ 한쪽만 찍는
+n=1 판정이 아니다.
+
+TLS 실측:
+```
+* SSL connection using TLSv1.2 / ECDHE-RSA-AES128-GCM-SHA256
+* ALPN: server accepted h2
+*  subject: CN=eks.quest.dhbang.co.kr
+*  issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M04
+*  expire date: Apr  1 23:59:59 2027 GMT
+```
+🔑 **`-k` 없이 통과했다는 것이 판정의 핵심이다** — 체인·CN 이 실제로 맞다는 뜻이고,
+`--resolve` 는 DNS 만 건너뛰므로 *"DNS 레코드 없이 진짜 HTTPS"* 가 성립한다.
+
+443 리스너 규칙이 Ingress 배열 순서대로 매겨진 것도 확인했다:
+```
+1        /api/v1/daily-question
+2        /api/v1
+default  None
+```
+대조로 80 리스너는 **`default → redirect` 하나뿐**이다. 🔴 `Listeners[0]` 로 잡으면
+이쪽이 걸려 위 우선순위 표가 안 나온다 — 그래서 443 포트로 필터한다.
+
+> 📌 09-11 Stage 4 의 HTTP 실측(200/403/**404**/404)은 `ssl-redirect` 도입으로
+> **더 이상 재현되지 않는다.** 같은 판정을 HTTPS 열이 이어받았다.
 
 #### 🔴 여기서 막혔다 — 200이 어느 파드에서 왔는지 알 수 없다
 

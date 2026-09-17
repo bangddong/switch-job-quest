@@ -559,7 +559,7 @@ Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크�
 | ⓐ | ACM 퍼블릭 인증서 (`0-bootstrap/acm.tf`) | `infra-deploy` → `tofu apply` | $0 | ✅ |
 | ⓑ | Cloudflare 수동 CNAME 검증 | — (사람) | $0 | `.claude/TASKS.md` TASK-10 |
 | ⓒ | `SecurityConfig` 의 `hasIpAddress('fdaa::/16')` 절 삭제 | `be-cd` → **Fly prod 배포** | $0 | ✅ #424 (prod 반영 확인) |
-| ⓓ | Ingress annotation 3개 + 실 HTTPS + 2a 실검증 | 로컬 apply | ~$0.1 | 🔄 `stage/eks-11-https-ingress` 진행 중 |
+| ⓓ | Ingress annotation 3개 + 실 HTTPS + 2a 실검증 | 로컬 apply | ~~$0.1~~ → **실제 $2.77~3.14** | ✅ 완료 (2026-09-16). 목표 6/6, **비용 21~24배 초과** — 일지 참조 |
 
 > 🔴 **ⓐ 와 ⓒ 를 한 PR 에 담지 않는다** — 자동 파이프라인 둘이 같은 머지에서 발사되고
 > 롤백 경로가 서로 다르다. ⓒ 는 머지 즉시 **prod 에 배포**된다.
@@ -586,7 +586,7 @@ Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크�
 | **U-13** | ✅ **해소.** `ingress.yaml` ④ 절의 **첫 문장만** 갱신(*"평문이니 로그인·토큰 태우지 마라"* → TLS 붙음). **둘째 문장은 보존** — 학습 클러스터 OAuth 자리표시는 `2-cluster/secrets.tf` 가 강제하는 **살아 있는 제약**이고 TLS 가 그 이유를 해소하지 않는다 | — |
 | **U-14** | 🔴 **계획이 두 군데 틀렸다.** ⓐ *"문서 3곳"* → **2곳**(`docs/eks-tutorial-steps.md:2045`, `docs/eks-quizzes/stage-eks-9-alb.md:15`). 제3 후보인 튜토리얼 1896 은 ASCII 흐름도 안 **개념 표기**라 대상 아님. ⓑ 🔴 **퀴즈 파일은 고치면 안 된다** — `stage-eks-9-alb.md` 는 *"브랜치 `stage/eks-9-alb` · HEAD `0f3fcef` · 재료: 이 세션 실측"* 으로 고정된 **트랜스크립트**이고 `:15-19` 는 당시 실제 출력이다. sed 형태로 "갱신"하면 **그때 치지 않은 명령이 실측 기록에 남는다** → **튜토리얼 1곳만 갱신**(✅ 완료) | — |
 | **U-15** | ✅ **해소 — 유료 세션 불필요.** #422 CI 실측: `Infra CI / tfsec` **pass**, 변경 파일에 `acm.tf` 포함, `tfsec:ignore` **0건**. **tfsec 은 ACM 리소스에 아무것도 요구하지 않는다** | — |
-| **U-17** | ALB DNS 이름을 기록해 n=1 → n=2. *"세션마다 바뀐다"* 는 호스트명 결정의 비용 근거였는데 **예측이지 실측이 아니다** | ⓓ 세션 중. 30초·$0 |
+| **U-17** | ✅ **해소 — 그리고 서술이 절반 틀렸다.** `09-16: k8s-default-devquest-3675af8c03-1059226667` vs `09-11: …-3675af8c03-775497815…` → **앞부분(`k8s-default-<ns>-<ingress>-<해시>`)은 안정적**이고 뒷자리만 바뀐다. 전체 이름이 바뀌므로 **DNS 레코드 고정 불가**라는 결론은 유지되지만, *"세션마다 바뀐다"* 는 부정확하다 | — |
 | **U-11** | EKS 에서 `CORS_ALLOWED_ORIGINS` 기본값 `http://localhost:5173` 이 그대로 산다. `--resolve` 검증도 브라우저가 아니라 curl 이라 **여전히 안 잡힌다** | 항목 3 범위 밖 — **prod 전환 계획에서** |
 
 ### 🔴 Blindspot Pass 가 ⓓ 착수 전에 뒤집은 것 (2026-09-16)
@@ -607,8 +607,10 @@ Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크�
 `README.md:143` 의 *"`/actuator/health/readiness` **404** = 인터넷 노출 차단"* 과 튜토리얼
 응답코드 표는 **HTTP 로 찍은 값**이다. `ssl-redirect` 가 붙으면 전부 301 이 되어 증거가 사라진다.
 → ①의 `--resolve` 는 **선택적 우회가 아니라 기존 증거를 재현하는 필수 경로**다.
-⚠️ `curl -L` 금지 — Location 이 `https://<ALB DNS>/` 라 CN/SAN 불일치, 거기서 `-k` 를 붙이면
-"실제 HTTPS 성립" 판정이 무의미해진다.
+🔴 **`curl -L` 금지는 틀린 경고였다 (09-16 실측).** LBC 의 `ssl-redirect` 는 **Host 헤더를 보존**해
+`Location: https://eks.quest.dhbang.co.kr:443/…` 를 낸다 — `-L` 로 따라가도 403 정상.
+🔑 이 경고는 Blindspot 의 **⚪ 추측**이었는데 문서로 옮기며 **🔴 로 격상**됐다.
+***확도 표시를 함께 옮기지 않으면 추측이 한 번의 복사로 사실이 된다.***
 
 #### ③ 가드를 `-z` 로 짜려던 것이 틀렸다
 
