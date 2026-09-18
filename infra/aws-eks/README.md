@@ -252,3 +252,147 @@ tofu state list                         # ③ 비었는지 확인
 | 작업 일지 (결정·실패·비용) | `docs/eks-migration-log.md` |
 | K8s 학습 로드맵 (전체 10단계) | wiki `tech/k8s/_roadmap.md` |
 | 현재 작업 상태·미해결 이슈 | `.claude/CONTEXT.md` |
+
+## 결정 기록 (📌 D-)
+
+> **2026-09-18 이관.** 원래 `.claude/CONTEXT.md` 에 있었으나 그 파일이 1017줄로 80줄 규칙을
+> 12.7배 위반해 주제별로 재배치했다(원장 L-10).
+>
+> 🔴 **왜 새 `docs/` 문서가 아니라 여기인가**: `check-design-integrity.sh` 의 `DOCS` 는 **고정 목록**이고
+> 이 README 는 거기 들어 있다. 새 파일로 옮겼으면 결정 블록이 무결성 검사 **밖**으로 나갔을 것이다 —
+> 그 스크립트가 스스로 적어둔 사각지대(*"결정이 사는 곳이 감시 밖이면 무결성 검사의 의미가 없다"*)를
+> 재생산할 뻔했다.
+>
+> 📖 비용 상수·전략·Free Plan 은 `docs/eks-cost-model.md` 로 갔다(📌 없는 참조 자료라 안전).
+
+#### 상시 운영은 기각 — 자기 선례와 충돌
+> 📌 **D-002** · 상태 `✅유효` · 영향 `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `infra/aws-eks/2-cluster`, `infra/aws-eks/README.md`, Stage 0~5 전체
+
+> ⚠️ **이 결정이 뒤집히면 destroy-after-use 규율 전체가 무너진다.** 리퍼(dead man's switch)·SOP의
+> 세션 왕복 절차·`2-cluster`를 CI 매트릭스에서 빼둔 `guard-local-layers`가 전부 이 결정의 파생물이다.
+> **재채택 유혹이 실재하는 결정**이다 — "잠깐만 켜두면 편한데"가 곧 월 $122~174다.
+> 크레딧 잔액이 남아 보일 때 특히 흔들린다. 뒤집으려면 아래 표의 숫자를 **다시 실측**하고
+> `design-change-procedure.md` 전 단계를 밟을 것.
+| | Fargate (이미 명시적 기각) | EKS 상시 |
+|---|---|---|
+| 월 비용 | $35 | **$122~174** |
+| $200 크레딧 수명 | 5.7개월 | **5~7주** |
+
+README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3.5~5배 비싸고 4배 빨리 끝난다.**
+
+#### ✅ 확정 전략: destroy-after-use로 6개월 풀 사용 (크레딧 만료 6개월)
+**제약은 돈이 아니라 시간이다.** 버퍼(스팟 최고가 + 잡비 10%) 적용 시간당 단가:
+
+| 모드 | 시간당 | 용도 |
+|------|-------|------|
+| t4g.small ×1, ALB 없음 | **$0.13** | 인프라 학습(NetworkPolicy·RBAC·Helm·ArgoCD) — nginx 파드로 충분 |
+| t4g.medium ×1, ALB 없음 | $0.16 | 실앱 배포 |
+| **t4g.medium ×2 + ALB (풀 3서비스)** | **$0.25** | Phase 3 토폴로지 |
+
+**주 25시간 × 26주(650h) 기준**: 인프라 학습 위주 $110 · 항상 풀 토폴로지 $163.
+→ **6개월 내내 헤비하게 써도 크레딧이 남는다.** 다 태우려면 주 38시간 필요(비현실적).
+- **삽질 비용**: 클러스터 완전 재생성 ≈ **$0.07** / 4시간 세션 $0.64 / 8시간 삽질 $1.28.
+  **실패는 사실상 공짜** — 아낄 것은 크레딧이 아니라 "켜놓고 딴짓하는 시간".
+- **절감 레버**: ①ALB는 필요할 때만(전체의 25%) ②인프라 학습은 t4g.small ③세션을 **길게 가끔**
+  (생성 10~15분+삭제 10분 = 회당 25분 오버헤드 상각) ④**kind 부활 불필요** — 돈이 제약이 아니므로 07-16 폐기 결정 유지
+- **잔액 활용**: 남는 크레딧으로 **막판 기간 한정 상시 데모**(3~6주)를 사서 구직·면접 시즌에 맞춤.
+  끝나면 destroy → 영구 비용 0, prod는 Fly 복귀.
+
+#### 영속 레이어 — 싸다, 반드시 분리할 것
+> 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
+
+> ✅ **07-31 진행**: 3a 완료(#349), **3b 구현 완료**. `🔄부분무효`였던 이유(=동적 PVC를 배제한 서술)는
+> "배제가 아니라 순서"로 정리돼 해소됐다. 두 Stage 모두 코드에 살아 있다(`postgres.yaml` ↔ `postgres-static.yaml`).
+> **3b에서 새로 확정된 것 2가지**(원 결정에 없던 것):
+> ① **EBS는 `0-bootstrap`에 둔다** — `2-cluster/variables.tf`가 "이 레이어로 올라온다"고 적어뒀으나
+>    그러면 **리퍼가 6개월 데이터를 자동 삭제**한다(dead man's switch는 2-cluster를 destroy한다).
+>    `prevent_destroy`로 막으면 리퍼의 destroy가 통째로 실패해 안전장치가 벽돌이 된다.
+> ② **노드그룹을 영속 볼륨과 같은 AZ로 고정** — 원 결정에 AZ 얘기가 없었는데, EBS는 AZ 리소스라
+>    이게 없으면 **50% 확률로 파드 영구 Pending**이다(3a는 `WaitForFirstConsumer`가 가려주고 있었다).
+
+> 🔄 **07-30 재판정 — "동적 PVC 아님"이라는 배제가 무효화됐다.** 이 블록은 static PV를 택하면서
+> **동적 프로비저닝을 명시적으로 배제**했는데, 같은 CONTEXT의 Stage 3 서술과 `README:128`은
+> *"StorageClass·동적 EBS 프로비저닝"*을 학습 목표로 적고 있었다 — **정면 충돌이 방치돼 있었다.**
+> (Stage 3 착수 전 절차 2단계 조회에서 발견. 이 블록엔 메타 줄이 없어 그동안 아무도 못 잡았다.)
+>
+> **확정: 배제가 아니라 순서다.** Stage 3을 둘로 쪼갠다.
+> | | 무엇 | 데이터 수명 | 왜 이 순서인가 |
+> |---|---|---|---|
+> | **3a** | StorageClass + `volumeClaimTemplates` (동적) | 세션 휘발 | "PVC가 EBS를 만든다"를 **눈으로 본 뒤**에야 `volumeHandle`이 무슨 뜻인지 이해된다 |
+> | **3b** | terraform 소유 EBS + static PV | 6개월 영속 | 3a→3b 전환 과정에서 **실패 ④claimRef 잔존**을 공짜로 만난다 |
+>
+> 아래 "static PV가 어려운 쪽이라 학습가치가 높다"는 판단은 **유지**된다 — 다만 그게
+> "쉬운 쪽을 건너뛸 이유"는 아니었다. 큰 태스크는 쪼갠다(Phase 1 회고).
+> ⚠️ **3a 동안에는 `kubectl delete pvc --all -A`가 destroy 전 필수**(SOP §8). 3b에서 EBS가
+> terraform 소유로 넘어가면 그때 이 규율이 볼륨엔 적용되지 않는다 — 두 Stage의 teardown이 다르다.
+
+**월 약 $2.3 / 6개월 $14 (크레딧의 7%)**: ECR 5GB $0.50 + EBS 20GB $1.82 + S3/DynamoDB ≈$0.
+- **🔴 ECR 구멍**: `README:101,148`은 ECR을 **`2-cluster`(destroy 대상)** 소속으로 적어놨으나
+  **실제 `.tf`엔 `aws_ecr_*` 리소스가 0건**(전수 grep). 계획대로 두면 **destroy마다 이미지 전멸**
+  → 세션마다 Spring Boot 이미지 3개 재빌드·재푸시(5~10분×3) = destroy-after-use의 실질 마찰.
+- **→ ECR은 `0-bootstrap`에 편입**(2026-07-22 확정). 새 레이어(`1-shared`) 신설안은 **폐기** —
+  영속 대상이 ECR 하나뿐이라 레이어를 늘리면 `tofu init/apply` 대상과 CI 매트릭스만 증가한다.
+  0-bootstrap은 이미 **계정 수준 공유·영속 인프라**(S3 state·DynamoDB·OIDC·IAM·예산)를 담고 있어
+  성격이 같고, `infra-deploy.yml` 매트릭스에 이미 있어 **CI 변경도 불필요**. **lifecycle policy 필수**(무한 누적 방지).
+- **EBS는 terraform이 소유하고 K8s는 static PV로 바인딩** ~~(동적 PVC 아님)~~ **→ 07-30 정정:
+  동적 PVC를 배제하지 않는다. 3a에서 동적으로 먼저 배우고 3b에서 이 구성으로 전환한다(위 D-004).**
+  근거: ①IaC-first 원칙
+  ②ALB 고아와 같은 실패 모드 원천 차단 ③**학습 가치** — 동적 프로비저닝은 쉽고, 어려운 건
+  "이미 있는 볼륨에 StatefulSet 붙이기"(`volumeHandle` static PV). **부수고 다시 지어도 데이터가
+  그대로 붙는 것**을 확인하는 게 진짜 교보재.
+- **EBS를 6개월 영속 유지한다** (월 $1.82 = 6개월 $11 = 크레딧 5.5%). *"한 번 확인하면 끝"*이라는
+  초안 판단은 **철회** — 학습은 반복에서 나오고, **아래 실패 6종은 여러 번 밟아야만 만난다.**
+  ⭐ **destroy-after-use 규율이 희소한 반복 기회를 공짜로 만든다**: 보통 학습자는 클러스터를 부술
+  이유가 없어 이 경험 자체를 못 한다(kind는 EBS가 없고, 회사에선 플랫폼팀이 소유). 우리는 비용 때문에
+  **어차피 매번 부수므로**, 그 사이클에 볼륨 재바인딩을 얹으면 **추가 작업 없이 매 세션 연습**된다.
+- ⚠️ **반복해야만 만나는 실패 6종** — 번호 정의는 `infra/aws-eks/PERSISTENT-RESOURCES.md`
+  「실패 6종」 표가 **유일 출처**다(레포 23곳이 번호로만 참조한다). 요약·재번호 금지.
+
+
+#### 🔴 DB 전략 — 환경별 분리 확정 (2026-07-22)
+> 📌 **D-001** · 상태 `🔄부분무효` · 영향 `infra/aws-eks/2-cluster/rds.tf`, `docs/eks-tutorial-steps.md`, `infra/aws-eks/README.md`, Stage 2·3 · 재판정 `docs/eks-migration-log.md` 07-28 "RDS를 destroy-after-use로 Stage 2에 편입"
+
+> **prod(Fly)는 Neon 그대로. EKS 학습 클러스터에서만 in-cluster PostgreSQL + 영속 EBS.**
+
+> 🔄 **07-28 재판정 — 아래 "RDS 재탈락" 3개 사유 중 ①이 무효화됐다.** RDS는 **Stage 2에 편입**됐고
+> 실제로 사용됐다(#339). 이 블록만 읽으면 "RDS는 기각됨"으로 오독하게 되므로 여기 명시한다.
+> **07-29에 실제로 그 오독이 발생했다** — 이 역참조가 없어서였다.
+> 단, **최종 목표가 in-cluster라는 결론 자체는 유지**된다(사유 ③이 살아남음). 아래 표 참조.
+
+| 환경 | DB | 근거 |
+|------|-----|------|
+| **Fly (prod, 24/7)** | **Neon** (변경 없음) | 상시 필요 · **$0** · 관리형 백업/PITR/풀링 |
+| **EKS (학습, 가동률 ~15%)** | **in-cluster PostgreSQL + 영속 EBS** | 자기완결형 풀스택 · K8s 스토리지 실습 |
+
+- **코드 변경 0** — `application-prod.yml`이 `jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}` 등
+  **100% 환경변수 기반**(실측 확인). 환경변수만 다르게 주입하면 됨(`transport` 플래그와 같은 패턴).
+  **Flyway 마이그레이션 12개**가 스키마를 자동 생성 → 시드 불필요.
+- **왜 Neon을 못 걷어내나** (걷어내자는 검토 → 기각):
+  ①**비용 동기 없음** — Neon은 현재 **$0**, 걷어내도 절감 0원
+  ②**가동률 충돌** — 650h/4,380h ≈ **15%**. prod DB가 클러스터 안이면 **85% 시간 앱이 죽는다**
+  ③**역설: in-cluster가 최고가** — 상시로 돌리려면 컨트롤플레인 $73이 따라붙어 **월 $125+**
+  (Neon 무료 $0 · Supabase $0 · RDS $12~15 · Neon 유료 ~$19 **< in-cluster 상시 $125+**)
+  ④관리형에서 얻던 **자동 백업·PITR·scale-to-zero·PgBouncer·HA**를 전부 자작해야 하고,
+  그것들이 클러스터와 함께 85% 시간 죽는다 ⑤노드가 **스팟** — 회수 시 DB 파드 다운
+- **왜 RDS가 아니라 in-cluster인가** (RDS 재탈락) — **⚠️ 3개 중 1개는 07-28에 무효화됨**:
+
+  | # | 원래 사유 | 07-28 재판정 |
+  |:-:|---|---|
+  | ① | RDS는 **클러스터를 꺼도 상시 과금** → 15%만 쓰고 100% 지불, 6개월 $72~90 = 크레딧의 36~45% | 🔴 **무효.** 클러스터와 함께 destroy하면 성립하지 않는다. 원 기각안이 "RDS 상시 가동"만 상정했던 것 |
+  | ② | "클러스터 밖 관리형 Postgres"는 **Neon이 이미 그거고 공짜**다 | 🟡 **절반만 유효.** prod DB 대체 목적엔 맞으나 **학습 목적엔 틀렸다** — Neon은 AWS를 안 가르친다 |
+  | ③ | **배우려는 걸 안 가르친다** — RDS는 클러스터 밖이라 **EBS·PVC를 전혀 안 건드림.** README 학습 목표(StatefulSet·PVC·EBS)와 불일치 | 🔴 **여전히 유효** — 그래서 최종 목표는 여전히 in-cluster다 |
+
+  → **결론(07-28)**: RDS는 in-cluster의 **대체가 아니라 Stage 2를 완성시키는 임시 조각**이다.
+  Stage 3에서 in-cluster로 스왑하는 것은 계획 이탈이 아니라 **이 결정으로 복귀**하는 것.
+  단 **`rds.tf`를 삭제하지는 않는다** — 지우면 튜토리얼 Stage 2가 재현 불가가 된다(변수 토글로 처리).
+- **학습 워크로드로 Redis보다 Postgres가 낫다** (초안의 Redis 제안 **철회**): 캐시는 유실돼도 안 아파서
+  `reclaimPolicy`를 대충 넘기게 된다. **긴장감이 학습을 만든다.** + 앱 연결에 코드 변경이 0이고
+  실제 스키마(Flyway 12개)가 돈다.
+- ⚠️ **"in-cluster Postgres는 설계와 모순"이라던 초기 경고는 *Neon 대체* 경우에만 유효**했다.
+  **병행은 표준 패턴**(테스트 환경)이며 모순이 아니다.
+- **부수 효과**: EKS 클러스터가 **외부 의존 0의 자기완결 스택**이 되어 NetworkPolicy·서비스간 통신
+  실습이 깨끗해진다(외부 Neon egress 예외 처리 불필요).
+- **Neon을 실제로 걷어낼 트리거**: 무료 한도(storage·compute 시간·연결수) 부족. 그때 후보는
+  **Neon 유료 · Supabase · RDS**. **in-cluster는 그때도 답이 아니다**(상시 $125+).
+  별건: **Neon cold start**(앱 cold start 2~3분의 한 원인)는 DB 이전이 아니라
+  `min_machines_running`·lazy-init·PgBouncer로 푼다 — 백로그의 "Spring 시작 시간 최적화" 항목.
