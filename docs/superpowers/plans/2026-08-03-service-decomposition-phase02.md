@@ -670,3 +670,24 @@ Stage C 완료 기준(*"무로그인으로 오늘의 질문 → **AI 설명**까
 **Phase 3**: EKS 배포 토폴로지, `client-ai` 컴파일 의존 제거, 분산 트레이싱.
 ⚠️ Stage C 착수 전 확인할 것 — vpc-cni에 `enableNetworkPolicy` 필요(현재 맨몸) ·
 ~~t4g.small 파드 상한 11인데 Stage 3a에서 이미 11/11~~ → **정정 (2026-08-28)**: Stage 3a 의 11/11 은 **Stage 3b 에서 `coredns` replicaCount 를 1로 낮추기 전** 숫자다(`2-cluster/addons.tf`). 현재 `.tf` 기준 베이스라인은 **10/11, 여유 1** → JVM 2개(ai-api·daily-api) 추가 시 **12 > 11, 정확히 1칸 부족**. 🔴 **그런데 파드 상한보다 메모리가 먼저 막는다** — Stage 3a 실측 스케줄러 메시지가 `Insufficient memory, Too many pods` **둘 다**였다(`docs/eks-migration-log.md:1079`). 상세는 §Stage C 착수 블로커.
+
+---
+
+## 📌 D-003 — 서비스 분해 에픽 (2026-09-18 이관)
+
+> **원래 `.claude/CONTEXT.md:236` 에 있었다.** 그 파일이 1017→117줄로 압축되면서 **한 번 통째로
+> 유실됐고 QA F-1(HIGH)이 잡았다.** `design-change-procedure.md` 는 *"원본을 지우지 말 것 —
+> 취소선·표로 남기고 정정을 병기한다"* 고 규정한다. D-001·D-002·D-004 는 그 규칙대로 옮겼는데
+> **D-003 만 예외였다.** 상태 갱신도 *지우기*가 아니라 *남기고 표시하기* 여야 한다.
+>
+> 🔴 **왜 여기인가**: `check-design-integrity.sh` 의 `DOCS` 가 `docs/superpowers/plans/*.md` 를
+> glob 으로 포함한다. 그리고 D-003 의 하위 결정(D-005~D-012)이 이미 이 문서에 산다.
+
+> 📌 **D-003** · 상태 `🚧진행중` · 영향 `docs/superpowers/specs/2026-07-20-service-decomposition-design.md`, `docs/superpowers/plans/2026-07-21-service-decomposition-phase01.md`, `be/core/ai-api`, `infra/aws-eks/2-cluster/addons.tf`, `.claude/review-ledger.md`, Stage 3~5
+
+> ⚠️ **가장 많이 바뀔 결정이다** — Phase 0~1만 구현됐고 2~3은 계획 상태다. 계획과 구현이 갈라지기
+> 가장 쉬운 지점이므로, **Phase를 넘길 때마다 이 블록을 갱신**한다(완료 표시가 아니라 *계획이 바뀌었는지*).
+> 특히 아래 두 가지는 **아직 코드가 없는 약속**이라 드리프트 1순위다:
+> ① ~~`enableNetworkPolicy` (vpc-cni addon 현재 맨몸)~~ → **코드 반영됨(#402)**, 단 **"막는다"는 미검증**(C-5)
+> ② ~~t4g.small → medium 상향~~ → 🔴 **폐기(D-010)** — 계정이 medium 을 launch 하지 못한다. ~~재개 1순위는 **노드 2대**.~~ → 🔴 **재정정(D-011, #407): 노드 3대.** 2대는 비관 가정에서 **Pending 이 증명된다**(조각화). 3대는 미측정 값에 의존하지 않는다. 차액 세션당 ~~$0.021~~ **$0.0236** (09-04 루트 EBS 반영)
+> 상태가 `🚧진행중`인 동안에는 이 블록의 서술을 **"확정된 것"으로 인용하지 말 것.**
