@@ -144,7 +144,10 @@ ArgoCD 기본 설치도 PVC 미사용(상태는 CRD, repo-server 는 emptyDir), 
 - 🔴 **폐쇄 트리거 2개**: *"Account closes when credits are depleted **OR** when the plan duration ends."*
   **만료일만이 아니라 크레딧 소진도 즉시 계정 폐쇄**다. 한국어 랜딩은 이 문장을 통째로 누락해
   *"요금 안 나감"* 만 강조한다. ***돈이 아니라 계정이 대가.*** (폐쇄 후 90일 content 보관)
-  → **안전 예비 $30 규칙** — 사용 가능액 $170.
+  → **안전 예비 $30 규칙** — 사용 가능액 $170. 단 **"다 태우기"를 목표로 삼지 말 것.**
+  🔑 **prod 는 Fly+Neon 이라 계정 폐쇄돼도 무영향이다** — 이 문장이 $30 규칙을 *"파산 방지"* 가
+  아니라 *"학습 자원 관리"* 로 만든다. (2026-09-18 복원: #427 이관 중 이 한 줄이 탈락했고
+  QA F-7 이 잡았다 — 계획서가 이 문장을 인용하는데 인용 대상에 없었다.)
 - 🟡 **Spot vCPU 쿼터 0 은 Free Plan 제한이 아니라 신규 계정 기본값.** 단 스팟↔온디맨드 650h 차이가
   **$13뿐**이고 회수 중단이 사라지니 **온디맨드가 낫다**(`nodes.tf` 기본값 `ON_DEMAND`).
 - 🟡 **자동 Paid 전환 트리거**: AWS Organizations 가입·Control Tower·Partner Network·Enterprise
