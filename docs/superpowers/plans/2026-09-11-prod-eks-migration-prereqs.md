@@ -119,11 +119,18 @@ core-api.yaml:97  limits: 576Mi   ← 하드 OOMKill 선
 MemTotal 459 MiB · MemAvailable 26.6 MiB · SwapTotal 256 · SwapFree 223 (사용 32.6) · java RSS 386.7 MiB
 ```
 
-| | 실효 용량 |
+| | 실효 용량 (앱 레벨) |
 |---|---|
-| **Fly** | RAM 459 + swap 256 = **715 MiB** |
+| **Fly** | **앱 상한 409** + swap 256 = **665 MiB** |
 | **K8s** | limits 576 + swap 0 = **576 MiB** |
-| | → **K8s 가 139 MiB 적다** |
+| | → **K8s 가 89 MiB(13%) 적다** |
+
+> 🔴 **처음엔 `459 + 256 = 715` 로 적어 격차를 139 MiB(24%)로 과대평가했다 (QA F-1).**
+> **층위가 달랐다** — `459` 는 **Fly VM 총 메모리**(비앱 오버헤드 ~50 MiB 포함)인데
+> `576Mi` 는 **컨테이너 전용 한계**다. 이 문서가 이미 확립한 **앱 레벨 상한은 `anon-rss ~409`**
+> (kill 수위, 커널 OOM 로그 8건 전수)이므로 그쪽에 맞춰야 사과 대 사과가 된다.
+> 방향(K8s 가 작다)은 같지만 **크기가 1.6배 부풀어 있었고**, 그 수치가 아래 옵션①의
+> 상향폭 판단에 직접 들어간다.
 
 🔴 **핵심은 *"swap 이 없다"* 가 아니라 *"Fly 의 RAM(459)이 K8s limits(576)보다 작아서
 swap 을 뺀 총량이 역전된다"* 는 것이다.** 위 산술의 *"마진 168Mi(576−408)"* 는 **RSS 가 408 에서
@@ -131,6 +138,9 @@ swap 을 뺀 총량이 역전된다"* 는 것이다.** 위 산술의 *"마진 16
 swap 32.6 MiB 사용 = RAM 초과분이 이미 나가고 있다).
 
 현재 RSS 기준 K8s 런웨이 = (576 − 386.7) ÷ 3MB/h = **63시간 ≈ 2.6일** → 원 산술과 같은 자릿수.
+
+> ⚠️ **확도 🟡 — 이것도 산술이다.** `3MB/h` 는 **2026-07 측정값**이고 현재 속도는 미지수다.
+> 위 원 산술에 붙인 경고와 **같은 수준으로 읽어야 한다**(QA F-6: 이 마커를 빠뜨렸었다).
 
 > 🔑 **`swap_size_mb = 256`(#245)이 유일한 방어선이고 설계대로 작동 중이다.**
 > 이관하면 그 방어선이 사라진다.
@@ -143,8 +153,8 @@ swap 32.6 MiB 사용 = RAM 초과분이 이미 나가고 있다).
 **대응 선택지 (미결정)**
 | | 내용 | 대가 |
 |---|---|---|
-| ① | `limits` 576 → 768Mi | 노드 메모리 재산정 필요(현 requests 480+512+256+LBC 로 이미 3노드) |
-| ② | K8s swap 활성화 | **알파 기능**(`NodeSwap`). 학습 가치는 있으나 prod 전제로는 미성숙 |
+| ① | `limits` 576 → 768Mi | 노드 메모리 재산정 필요. **현 requests 합계 1568Mi** (core-api 480 + **ai-api 320** + daily-api 512 + postgres 256, 전부 replicas=1) + LBC 96 — ⚠️ 처음엔 ai-api 320Mi 를 빠뜨려 1248 로 적었다(QA F-2). **1568 은 #414 가 산출한 그 값**이고, 거기에 노드당 allocatable 1365Mi 를 나누면 3노드가 이미 꽉 찬다 |
+| ② | K8s swap 활성화 (`NodeSwap`) | ⚪ **성숙도를 확인해야 한다** — 내가 *"알파"* 로 적었는데 QA 가 *"1.28 에서 Beta 승격"* 을 지적했다(F-5). 이 클러스터는 **1.36** 이다. 둘 다 오프라인에서 확정할 수 없으므로 **착수 시 문서로 확인할 것.** 어느 쪽이든 AL2023 노드에서 실제로 켜지는지는 별도 검증이 필요하다 |
 | ③ | creep 자체를 잡는다 | 근본적이지만 원인이 `⚪ 미확정`(커밋된 페이지를 서서히 터치 + native ~95MB) |
 | ④ | 1GB 인스턴스 | Fly ~$5.7/월. **prod 를 Fly 에 두는 한 이게 가장 싸다** — 이관 자체의 동기를 약화시킨다 |
 
@@ -175,7 +185,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
                → 돈이 아니라 **계정**이 대가
 ```
 
-더 나쁜 것: **안전 예비 $30 규칙의 근거 문장**이 `CONTEXT.md:745` — *"prod는 Fly+Neon이라
+더 나쁜 것: **안전 예비 $30 규칙의 근거 문장**이 `docs/eks-cost-model.md` 「Free Plan」 — *"prod는 Fly+Neon이라
 계정 폐쇄돼도 무영향"* 이다. **이 계획은 그 전제를 깨면서 그 전제 위에 세워진 예산 상한을
 그대로 쓴다.**
 
@@ -186,7 +196,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | # | 내용 | 근거 |
 |:-:|---|---|
 | B-7 | in-cluster TLS가 자체서명 — 코드가 *"MITM을 막지 못한다. 실제 운영이라면 cert-manager"* 라고 명시. 인증서도 2-cluster 소유라 세션마다 재생성 | `postgres-tls.tf:28-60` |
-| B-8 | **백업 0건.** `pg_dump`·`pg_restore`·스냅샷 스케줄 레포 전체 0. D-001 기각 사유 ④가 정확히 *"자동 백업·PITR을 전부 자작"* | 전수 grep · `CONTEXT.md:650` |
+| B-8 | **백업 0건.** `pg_dump`·`pg_restore`·스냅샷 스케줄 레포 전체 0. D-001 기각 사유 ④가 정확히 *"자동 백업·PITR을 전부 자작"* | 전수 grep · `infra/aws-eks/README.md` 「결정 기록」 D-001 기각 사유 ④ |
 | B-9 | Neon 크리덴셜을 **읽을 수 없다** — Fly secrets가 write-only. `pg_dump` 선행 조건 미충족 | `eks-migration-log.md:365` |
 | | ⚠️ **09-12 재배치**: 항목 1의 대상을 in-cluster 로 정했으므로 **항목 1은 B-9 를 닫지 않는다.** Fly secrets 는 그대로 write-only 다. B-9 는 **전환 시점 항목**(B-6·B-11·B-16 과 같은 묶음)으로 옮긴다 — 실데이터 이전을 실제로 할 때 사용자가 Neon 콘솔에서 재발급해야 한다 | |
 | B-10 | 3서비스로 가면 **기동 순서 강제 필요**(core-api가 Flyway를 먼저 끝내야 daily-api가 뜬다). `k8s/base/`에 initContainer·Job·순서 제약 0건 | `daily-api/application-prod.yml:30-41` |
@@ -195,7 +205,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | B-13 | Fly를 살려두면 **롤백 타깃이 계속 움직인다**(main push마다 재배포 + 동결된 Neon). 끄면 롤백 가치가 준다. 원장 **L-36** | `be-cd.yml:5-7,40` |
 | B-14 | `prod-smoke-daily.yml` **3중 고장**: Vercel을 때려 Fly/EKS 구분 불가 · 실패 안내가 `fly status` 하드코딩 · 05:23 KST라 클러스터 상시 가동 전제 | `prod-smoke-daily.yml:20,45,54` |
 | B-15 | 🔴 **재판정 (2026-09-14) — 대부분 해소.** ~~`secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다.~~ → **섞이지 않는다.** 학습 클러스터에 `GRAFANA_API_KEY` 가 없어 `GrafanaOtlpCredentialsCondition` 이 false 이고, 이는 **#355(08-03)에서 자리표시 3종을 삭제하며 이미 끝난 사고**다. 이 행은 그것을 09-11 에 **현재형으로 다시 적은 것**이다. `instance-id` 도 Basic auth 의 username 이라 시크릿이 아니다(상세: 하단 「항목 2b — 재판정」). `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | ~~`secrets.tf:144-166`~~ → 남은 실행 항목은 `be/core/core-api/.../SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절뿐이고, **항목 3 에서 처리한다** |
-| B-16 | **Fly `suspend`의 "$0"이 미검증** — `min_machines_running=1`이면 최소 1대는 계속 running일 수 있다. `CONTEXT.md:520`은 이걸 **"(비용)" 항목으로 분류**해뒀다. `grep suspend *.md` → 0건 | ⚪ 실측 필요 |
+| B-16 | **Fly `suspend`의 "$0"이 미검증** — `min_machines_running=1`이면 최소 1대는 계속 running일 수 있다. ~~`CONTEXT.md:520` 은 이걸 "(비용)" 항목으로 분류해뒀다~~ → **그 줄은 #427 로 소멸했다** (A/B/C 판정에서 이관 대상이 아니었다). **분류 근거가 없어졌으므로 이 항목은 실측으로만 판정한다.** `grep suspend *.md` → 0건 | ⚪ 실측 필요 |
 | B-17 | $140에서 빠진 것: **ALB LCU**(prod는 정의상 실트래픽 상시 — `ingress.yaml:9-11`이 최악 고정비의 4배 경고) · NAT +$32 · KMS $1+ · CloudWatch. 그리고 **이상탐지 DAILY $5 임계가 $4.6/일 상주로 무력화** | `budget.tf` · `cost-anomaly.tf:55,71` |
 | B-18 | 상시 전환은 **학습 전제 위에 세운 통제 전체를 무근거로 만든다**: SOP 전체 · `assert-eks-quiz.sh` · tfsec 예외 4건(전부 *"세션마다 폐기되는 학습 자산"* 근거) · 원장 L-49 | 다수 |
 
@@ -206,7 +216,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | 결정 | 현재 상태 | 내용 |
 |---|---|---|
 | `infra/aws-eks/README.md:9,11-22` | **갱신 없음** | *"프로덕션은 Fly.io($0) 그대로"* · *"이건 프로덕션 이관이 아니다 — 명시적으로 기각"* |
-| **D-001** (`CONTEXT.md:628`) | `🔄부분무효` (무효화된 건 RDS 편입 1건뿐) | `:648` *"**역설: in-cluster가 최고가**"* · `:671` *"**in-cluster는 그때도 답이 아니다**(상시 $125+)"* |
+| **D-001** (`infra/aws-eks/README.md:362`) | `🔄부분무효` (무효화된 건 RDS 편입 1건뿐) | `README.md` D-001 블록 *"**역설: in-cluster가 최고가**"* · `README.md` D-001 블록 *"**in-cluster는 그때도 답이 아니다**(상시 $125+)"* |
 
 기각 근거는 *"월 $35도 비싸다"* 였다($200÷$35=5.7개월 → *"문제를 없앤 게 아니라 이연"*).
 **새 계산 $140은 그 4배**이므로 **원래 기각 근거를 강화한다.**
