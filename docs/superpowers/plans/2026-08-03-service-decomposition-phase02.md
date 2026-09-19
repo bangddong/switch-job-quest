@@ -137,7 +137,7 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 
 ### G-4 → 학습 클러스터의 AI 호출은 **스텁**으로 대체 (2026-08-28)
 
-> 📌 **D-008** · 상태 `✅유효` · 영향 `docs/superpowers/plans/2026-08-03-service-decomposition-phase02.md`(Stage C 완료 기준), `infra/aws-eks/2-cluster/secrets.tf`, `be/core/ai-api/src/main/resources/application.yml`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml`, Stage C
+> 📌 **D-008** · 상태 `✅유효` · 영향 `docs/superpowers/plans/2026-08-03-service-decomposition-phase02.md`(Stage C 완료 기준), `infra/aws-eks/2-cluster/secrets.tf`, `be/core/ai-api/src/main/resources/application.yml`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml`, `docs/superpowers/plans/2026-09-11-prod-eks-migration-prereqs.md`, Stage C
 
 **`ANTHROPIC_API_KEY` 를 학습 클러스터에 넣지 않는다.** ai-api 에 **학습 전용 스텁 프로필**을 두고 고정 응답을 돌려준다.
 
@@ -152,6 +152,21 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 
 ⚠️ **감수하는 대가 (명시)**: **검증 범위가 좁아진다.** Stage C 가 증명하는 것은 **토폴로지**(3서비스가 클러스터에서 서로를 찾고 라우팅되는가)이지 *"AI 설명이 실제로 나온다"* 가 아니다. 완료 기준 문장을 그에 맞게 정정했다(위 표).
 🔑 **재검토 트리거**: ①실제 LLM 응답이 필요한 검증(응답 지연·타임아웃 튜닝·토큰 비용 실측)을 하게 되면 그때 **별도 예산 키**를 다시 본다 ②Phase 3 에서 분산 트레이싱을 붙일 때 스텁이 trace 를 왜곡하면 재판정.
+
+🔎 **이 결정이 실제로 다른 계획을 움직인 사례 (2026-09-19)** — `plans/2026-09-11-prod-eks-migration-prereqs.md`
+「항목 5 — 착수 설계」⑥. **prod→EKS 선행 조건 5번(*실 AI·메일·채점 경로 검증 = 스텁 해제*)이
+이 결정과 정면으로 부딪혀 선행 조건에서 빠졌다.** 클러스터가 하나이고 선행 조건은 이관 **전**에
+태워야 하므로, 원문대로 실행하면 **D-008 반전**이 된다. 위 「기각한 대안」의 *별도 예산 키* 도
+그 계획서에서 재검토됐고 **같은 이유로 다시 기각**됐다.
+
+🔑 ***D-008 의 근거는 "**학습** 클러스터"라는 말에 걸려 있다 — 이관 전에는 해소될 수 없고,
+이관 후에는 애초에 적용되지 않는다.*** 그래서 위 **재검토 트리거 ①**의 발동 시점은
+"유료 세션"이 아니라 **이관 완료 직후**로 굳었다. 그때 첫 단계는 **AI 호출 비용 추정**이다
+(16개 evaluator 실호출 비용은 한 번도 추정된 적이 없다).
+
+⚠️ **D-008 을 뒤집을 때 반드시 함께 볼 것**: 이관 체크리스트에서
+`k8s/base/ai-api.yaml` 의 `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED` **삭제**.
+기본값이 off 라 *"잊으면 안 돈다"* 형태이지만, **명시적으로 켜둔 것은 명시적으로 지워야 한다.**
 
 📌 **부수 결정** (같은 자리에서 확정):
 - **스텁은 ai-api 소유**다 — `client-ai` 를 건드리지 않는다(롤백 불변식: *"`client-ai` 의존 제거 금지"*, 아래 #193).
