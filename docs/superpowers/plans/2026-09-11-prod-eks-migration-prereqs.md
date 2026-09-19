@@ -733,8 +733,34 @@ Fly 는 `[metrics]` 블록이 없어(파일 전체 확인) 인바운드 스크�
 | B-4 주장 | 실측 (2026-09-19) |
 |---|---|
 | `grep ANTHROPIC\|RESEND\|JUDGE0\|MAIL_ENABLED k8s/ infra/` → **0건** | ✅ 맞다. 매칭 2건은 `ai-api.yaml` 의 **주석**이고 실제 주입은 없다 |
-| 스텁은 `TechInterview` 하나뿐 | ✅ `TechInterviewStubEvaluator` 1개. `client-ai` 의 Evaluator 구현체는 **17개 파일 − `BaseAiEvaluator` = 16개** → **15개가 무스텁** |
+| 무스텁 AI 포트 수 | 🔴 **16개** (내 첫 집계 15 는 틀렸다 — QA F-1). `AiEvaluatorPort` 를 확장하는 Port **17개** 중 `TechInterviewPort` 하나만 스텁된다. 구현체 디렉토리 `client-ai/.../evaluator/` 도 **17개 파일**로 일치 |
 | `${ANTHROPIC_API_KEY:}` 빈 기본값 → 부팅은 성공, 호출 시 런타임 실패 | ✅ |
+
+### ①-b 🔴 세는 방법이 틀렸다 — 이름 기반 grep 의 사각지대
+
+처음엔 **파일명에 `Evaluator` 가 있는 것**을 셌다(`find -name '*Evaluator*.kt'` → 17개,
+`BaseAiEvaluator` 빼고 16, 스텁 1 빼고 **15**). QA 가 **16** 이라고 정정했고 맞았다.
+
+```
+누락된 것:  JourneyReportGenerator.kt
+            ← 클래스명이 "Generator" 라 이름 기반 grep 에 안 걸린다
+            BaseAiEvaluator 를 상속하고 JourneyReportPort 를 구현하며
+            실제 bossChatClient(Anthropic)를 호출하는 진짜 AI 평가자다
+```
+
+**올바른 세는 법 — 이름이 아니라 타입으로 센다:**
+```bash
+grep -rl ": AiEvaluatorPort\|, AiEvaluatorPort" be/core/core-domain/src/main/kotlin | wc -l   # → 17
+# TechInterviewPort 1개만 스텁 → 무스텁 16
+```
+
+> 🔑 ***이름 기반 검색은 네이밍 규약을 벗어난 것을 구조적으로 못 본다.*** 그리고 규약을 벗어난
+> 항목이야말로 **누락되기 쉬운 것**이다 — 여기서도 정확히 그게 빠졌다.
+> 이 세션의 반복 주제(*"이 관측이 무엇을 배제하는가"*)와 같은 형태다: 이름 grep 은
+> *"이름이 다른 구현체가 없다"* 를 **전혀 배제하지 못한다.**
+
+⚠️ **별건**: `AiStubConfig.kt` 의 주석도 *"나머지 17개 AiEvaluatorPort + Judge0Port"* 로
+같은 오프바이원을 갖고 있다(QA 부수 발견). 이 PR 범위 밖이라 손대지 않았다.
 
 ### ② 🟢 메일은 기본적으로 안전하다 — 확인됨
 
