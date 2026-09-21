@@ -203,7 +203,7 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | | ⚠️ **09-12 재배치**: 항목 1의 대상을 in-cluster 로 정했으므로 **항목 1은 B-9 를 닫지 않는다.** Fly secrets 는 그대로 write-only 다. B-9 는 **전환 시점 항목**(B-6·B-11·B-16 과 같은 묶음)으로 옮긴다 — 실데이터 이전을 실제로 할 때 사용자가 Neon 콘솔에서 재발급해야 한다 | |
 | B-10 | 3서비스로 가면 **기동 순서 강제 필요**(core-api가 Flyway를 먼저 끝내야 daily-api가 뜬다). `k8s/base/`에 initContainer·Job·순서 제약 0건 | `daily-api/application-prod.yml:30-41` |
 | B-11 | 노드 2대가 **단일 AZ** 핀 = 가용성 아님. `replicas: 1` + `Recreate` = 배포마다 ~30초 다운타임. PDB 없음. 원장 **L-43·L-47** 미해결 | `nodes.tf:28` · `core-api.yaml:20,30,37` |
-| B-12 | **EKS CD가 0.** `ecr-push.yml`이 `workflow_dispatch`+`pull_request`만, 배포는 손작업 `sed \| kubectl apply`. 원장 **L-44**(PR 빌드 태그가 레포에 없는 커밋을 가리킴) | `ecr-push.yml:12-37` |
+| B-12 | **EKS CD가 0.** `ecr-push.yml`이 `workflow_dispatch`+`pull_request`만, 배포는 손작업 `sed \| kubectl apply`. ~~원장 **L-44**(PR 빌드 태그가 레포에 없는 커밋을 가리킴)~~ → 🔴 **인용 철회 (2026-09-21)**: L-44 는 **`⚪ obsolete`(09-04)** 다 — ①SOP §2b 가 이미 문서화한 **중복 등재**였고 ②`latest` 불일치는 재빌드로 소멸했다. **남는 근거는 트리거 부재 하나뿐**이고, 그건 여전히 유효하다. 상세: 「항목 6 — 착수 설계」① | `ecr-push.yml:12-37` |
 | B-13 | Fly를 살려두면 **롤백 타깃이 계속 움직인다**(main push마다 재배포 + 동결된 Neon). 끄면 롤백 가치가 준다. 원장 **L-36** | `be-cd.yml:5-7,40` |
 | B-14 | `prod-smoke-daily.yml` **3중 고장**: Vercel을 때려 Fly/EKS 구분 불가 · 실패 안내가 `fly status` 하드코딩 · 05:23 KST라 클러스터 상시 가동 전제 | `prod-smoke-daily.yml:20,45,54` |
 | B-15 | 🔴 **재판정 (2026-09-14) — 대부분 해소.** ~~`secrets.tf`가 *"값의 부재를 스위치로"* 확정한 것을 뒤집어야 함. `application-prod.yml:19` `instance-id: "1680166"` 이 **진짜 값 하드코딩**이라 학습/prod 메트릭이 섞인다.~~ → **섞이지 않는다.** 학습 클러스터에 `GRAFANA_API_KEY` 가 없어 `GrafanaOtlpCredentialsCondition` 이 false 이고, 이는 **#355(08-03)에서 자리표시 3종을 삭제하며 이미 끝난 사고**다. 이 행은 그것을 09-11 에 **현재형으로 다시 적은 것**이다. `instance-id` 도 Basic auth 의 username 이라 시크릿이 아니다(상세: 하단 「항목 2b — 재판정」). `SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절(Fly 사설망)은 **EKS에서 아무것도 열지 않는다** | ~~`secrets.tf:144-166`~~ → 남은 실행 항목은 `be/core/core-api/.../SecurityConfig.kt` 의 `hasIpAddress('fdaa::/16')` 절뿐이고, **항목 3 에서 처리한다** |
@@ -241,7 +241,8 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | 3 | 🔴 **쪼갰다 (2026-09-15, Blindspot U-3)** — ~~한 유료 세션(~$0.1)~~. **$0 선행분**: ⓐ ACM 발급 **✅** ⓑ Cloudflare 수동 검증(사용자, TASK-10) ⓒ `SecurityConfig` 의 `fdaa::/16` 절 삭제. **유료분**: Ingress annotation 3개 + 실 HTTPS + 2a 실검증. ⚠️ ~~*"같은 `/actuator/**` 노출 표면"* 이라 묶는다~~ → **근거가 성립하지 않는다**: EKS 쪽 그 표면은 코드가 아니라 `ingress.yaml` 라우팅이 소유한다(*"📌 노출하지 않는 것: `/actuator/**`"*). 게다가 `be/**` 와 `infra/aws-eks/**` 는 **서로 다른 자동 파이프라인**(`be-cd`→Fly prod, `infra-deploy`→`tofu apply`)을 발사하므로 한 PR 에 담으면 안 된다. 상세: 「항목 3 — 착수 설계」 | B-3, B-15 | **$0 + ~$0.1** |
 | 4 | 🔴 **재정의됨 (2026-09-18)** — ~~메타스페이스 누수 검증~~ → **RSS creep vs swap 부재**. 메타스페이스 누수는 **이미 없음이 확정**(2026-07-15 근거 3종)이고 *"두 리스크는 별개"* 로 명시 판정돼 있다(0.73 vs 3 MB/h). README:24 의 옛 프레이밍을 이 계획서가 현재형으로 옮긴 것 — **2b 와 같은 형태의 오류**. **$0 로 실측 완료**: Fly 실효 715 MiB vs K8s 576 MiB → 139 MiB 적다. 상세: 「항목 4 — 재정의」 | B-5 | **$0** (실측 완료) |
 | ~~5~~ | 🔴 **선행 조건에서 제외 (2026-09-19) — 이관 *후* 작업이다.** ~~실 AI·메일·채점 경로 검증(스텁 해제)~~. **📌 D-008(`✅유효`)과 정면 충돌**: *"`ANTHROPIC_API_KEY` 를 학습 클러스터에 넣지 않는다"*. 클러스터는 하나이고 선행 조건은 이관 **전**에 태워야 하므로 그 클러스터는 학습용이다 → 원문 실행 = **D-008 반전**. 우회로(*별도 예산 키*)는 D-008 의 「기각한 대안」에 **이미 닫혀 있다**. 🔑 **D-008 의 근거는 이관 전에는 해소 불가, 이관 후에는 적용되지 않는다** — 따라서 선행 조건의 자격이 없다. ④ 5개 질문 답: 메일 ✅안 켠다(`MAIL_ENABLED:false`) · egress ✅제약없음 · ESO→env ✅2a 가 증명 · 남은 후보는 ③타임아웃 차이뿐인데 재려면 과금이다. 남는 것은 **매니페스트 배선**(ExternalSecret 1 + `envFrom` 1줄 + 스텁 플래그 제거) — 이관 계획서에서 다룬다(B-6·B-11·B-16 과 같은 취급). 상세: 「항목 5 — 착수 설계」⑥ | B-4 → **이관 계획서로 이관** | **$0** |
-| 6 | EKS CD 파이프라인 | B-12, B-13 | $0~0.1 |
+| **6a** | 🔴 **쪼갰다 (2026-09-21, Blindspot Pass)** — 토폴로지 **무관** $0 분. ~~①L-44 수정~~ → 🔴 **철회**: L-44 는 `obsolete`(09-04)이고 SOP 가 이미 다른 처방(*main 에서 `workflow_dispatch` 재빌드*)을 골라뒀다 — **틀린 게 아니라 불필요**. ②**치환 체인 일원화**(6종 PLACEHOLDER 가 문서 3곳에 산재 → 스크립트 1개 + `--dry-run=client` 검증, 클러스터 불요). ③~~CI 역할 access entry~~ → 🔴 **하지 않는다**: 신뢰정책이 `pull_request` 를 포함해 **PR 트리거로 클러스터 admin 이 열린다**. 지금 entry 가 1개인 것이 사실상의 방어선 | B-12 (일부) | **$0** |
+| ~~6b~~ | 🔴 **이관 후로 이동 (2026-09-21)** — ~~ArgoCD gitops 레이어~~. **하드 블로커 2개**: Ⓐ `design-integrity` 의 **verify 앵커 2개가 렌더 매니페스트 커밋을 기계적으로 실패**시킨다 (퍼블릭 레포 제약이 CI 로 구현돼 있다 — 치환값 6종 중 5종이 계정 ID·ARN). Ⓑ **ArgoCD selfHeal + SOP §8 + 리퍼 = 고아 ALB 확정 경로**($16.43/월 + IP $7.30, SG `DependencyViolation` 으로 destroy 실패까지). 🔴 **순서도 뒤집힌다** — 상주형 CD 는 항목 7(B-18)의 결론을 선취하고 📌 **D-002(`✅유효`)** 를 건드린다. 🔑 Ⓑ·순서·D-002 는 **전부 destroy-after-use 한 뿌리**라 이관 후 저절로 풀린다(항목 5 와 같은 모양). **Ⓐ만 이관 후에도 남으므로 해법을 먼저 정할 것.** ✅ **용량은 $0 로 쟀다**: `helm template` → 파드 **7** (슬롯 18칸 여유라 들어감) · LoadBalancer·PVC·Ingress **0개**(추가 과금 없음) · 🔴 **`memory:` 선언 0건 = requests 0Mi** → ESO 와 같은 *"스케줄러 예산 0"* 함정. 상세: 「항목 6 — 착수 설계」 | B-12(잔여) · **B-13 → 이관 계획서** | **이관 후** |
 | 7 | 상시 운영 전제로 안전장치 개정 (리퍼·SOP·이상탐지 임계) | B-1, B-14, B-18 | $0 |
 
 > 🔑 **1번을 먼저 하는 이유**: 백업이 없으면 DB 이전을 **시작할 수 없다**. 그리고 관리형이
@@ -256,6 +257,11 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 > 선행 조건에 들어가 있었다. 판별 기준은 **"이관 전에 답이 나오는가"** 이고,
 > B-4 는 D-008 때문에 **이관 전에는 원리적으로 답이 안 나온다**.
 > ***선행 조건은 7건에서 6건이 됐다 — 남는 것은 `1 · 2(=2a) · 3 · 4 · 6 · 7` 이다.***
+>
+> 🔴 **2026-09-21 — B-13 도 합류했다** (위 6b 행). *"Fly 를 살려두면 롤백 타깃이 계속 움직인다"* 인데,
+> **Fly 를 끄는 것이 곧 이관**이다. 같은 기준(*"이관 전에 답이 나오는가"*)에 걸린다.
+> ⚠️ **다만 항목 6 은 통째로 빠지지 않는다** — `6a`(토폴로지 무관 $0 분)가 남는다.
+> ***6 은 제외가 아니라 축소다.*** 그래서 위 "6건" 은 그대로다.
 > (`2b` 는 2026-09-14 재판정으로 이미 해소돼 **항목 2 는 2a 하나로 센다**. 거기에 `5` 가 이번에 빠졌다.)
 >
 > ⚠️ **첫 서술은 *"6건이 아니라 5건"* 이었고 틀렸다** — 괄호 안에 **6개를 나열해놓고 5건이라 썼다**.
@@ -923,3 +929,229 @@ k8s/eso/                ExternalSecret 4종 — AI 키를 담는 것 0개
 ①-b 의 별건(*"나머지 **17개** `AiEvaluatorPort`"* → **16**)은 한 단어 수정이지만 `be/**` 다.
 **`be-cd` 가 `paths: ['be/**']` 로 main push 에 걸려 Fly prod 를 재배포한다**(워크플로 실측).
 ***주석 한 줄을 고치려고 prod 를 재배포하지 않는다.*** 다음 `be/` 변경에 묶는다.
+
+---
+
+## 항목 6 — 착수 설계 ($0 사전 조사 + Blindspot Pass, 2026-09-21)
+
+> **결론 먼저: 항목 6 을 쪼갠다.** `6a` = 토폴로지 무관 $0 분 / `6b` = **ArgoCD gitops 레이어 → 이관 후**.
+> 항목 3 이 $0분/유료분으로 쪼개진 것과 같은 처리이고, `6b` 가 밀리는 이유는 항목 5 와 같다.
+
+### ⓪ 절차 오류 기록 — **토폴로지를 Blindspot Pass 전에 물었다**
+
+오케스트레이터 절차는 Blindspot Pass 가 **3.5단계, 설계 확정 앞**이다. 그런데 이번엔
+*"ArgoCD 냐 Actions 냐"* 를 **먼저 사용자에게 물어 결정을 받고**, 그 뒤에 Blindspot 을 돌렸다.
+**Blindspot 결과가 그 결정을 뒤집어서 같은 질문을 두 번 하게 됐다.**
+
+🔑 ***설계 질문은 Blindspot 뒤에 해야 한다 — 앞에 하면 사용자가 정보 없이 고르게 된다.***
+이 항목은 절차 자체의 교훈이라 여기 남긴다.
+
+### ① 🔴 ArgoCD 가 **B-12 를 닫지 못한다** — 단, 그 근거 절반은 **내가 틀렸다**
+
+```
+B-12 의 인용 증거 = ecr-push.yml:12-37 (트리거가 workflow_dispatch + pull_request 뿐)
+                  + 원장 L-44        ← 🔴 이 인용이 낡았다 (아래)
+```
+
+**트리거 쪽은 유효하다** — ArgoCD 는 배포 "방식"만 바꾸므로 `main push` 트리거 부재는 그대로 남는다.
+
+#### 🔴 정정 — L-44 는 `deferred` 가 아니라 **`⚪ obsolete`(2026-09-04)** 다
+
+내가 이 조사 내내 *"L-44 가 항목 6 의 토대를 무너뜨린다"* 고 보고했는데 **틀렸다.**
+
+```
+원장에서 grep → 행 본문에 "🔵 deferred — 하네스 동결 규칙" 문자열이 보인다
+실제로는      → 그 행은 `## 처리 완료 (closed / wontfix / obsolete)` 절에 있고
+                끝에 "⚪ obsolete — 2026-09-04" 가 덧붙어 있다
+```
+
+🔑 ***행을 읽고 절을 안 읽었다.*** `deferred` 는 그 행의 **과거 상태**이고 지금 상태는 뒤쪽에 있다.
+**원장은 상태를 덧붙이는 append 형식이라, 행 안에 상태 단어가 여러 개 산다** — grep 한 줄로는
+최신 상태를 알 수 없다. 이 세션에서 같은 형태의 오류가 네 번째다(`15 vs 16` · `459 vs 576` · `5 vs 6` · 이번).
+
+**obsolete 사유 2개** (원장 원문):
+1. **중복 등재였다** — `docs/eks-session-sop.md:92-104` 가 PR #355 실측(`6f6c0932…` 부모 = main + 브랜치)까지
+   붙여 이미 문서화했다. *"발견을 등재하기 전에 이미 있는지 검색하지 않았다"*.
+2. `latest` 서비스 간 불일치는 **09-04 재빌드로 세 서비스 전부 `14cb335`** 가 되며 소멸했다.
+
+#### 🔴 그리고 SOP 가 이미 **다른 처방**을 골라뒀다
+
+`eks-session-sop.md:96-104`:
+
+> *"🔴가 뜨면 **main 에서 `ECR Push` 를 `workflow_dispatch` 로 한 번 굽는다.** 태그가 main 커밋이 되어
+> ✅로 바뀌고, 그 자체가 **'배포된 이미지 = main 의 상태'** 를 보장한다."*
+>
+> *"⚠️ `git fetch origin '+refs/pull/*/merge:...'` 로 머지 커밋까지 끌어와 판정을 통과시키는 우회는
+> **일부러 택하지 않았다.** 판정은 통과하지만 **추적성은 그대로 없고**, 머지된 PR 의 merge ref 는
+> GitHub 이 정리할 수 있어 조용한 실패 경로가 하나 더 생긴다."*
+
+⚖️ **내가 제안했던 `github.event.pull_request.head.sha` 는 위에서 기각된 그 우회가 *아니다*** —
+merge ref 를 끌어오는 것과 브랜치 head 를 태그로 쓰는 것은 다르고, 후자는 **실재하는 커밋**이라
+추적성이 진짜로 생긴다. 그러나 **SOP 의 처방이 더 강한 성질을 산다**: 브랜치 head 는 추적은 되지만
+*main 의 상태가 아니다*. SOP 는 *"배포된 이미지 = main 의 상태"* 를 원한다.
+
+→ ***그래서 이 수정은 틀린 게 아니라 **불필요**하다.*** 6a 에서 뺀다.
+
+#### 🔴 가장 아픈 부분 — **Blindspot 에 내 오류를 전제로 주입했다**
+
+Blindspot 프롬프트에 `## 이미 확인한 것 (다시 조사하지 말 것)` 절을 두고 거기에
+*"원장 L-44(PR 빌드 sha 가 레포에 없는 커밋)"* 를 넣었다. 에이전트는 **지시대로 재조사하지 않았고**,
+그 전제 위에 U-1·U-2 를 세웠다.
+
+> 🔑 ***조사 에이전트에 전제를 주입하면 그 전제만은 검증되지 않는다.*** 위임의 가치는 독립 검증인데,
+> *"다시 조사하지 말 것"* 이 정확히 그것을 껐다. **앞으로 그 절에는 "내가 코드로 직접 확인한 것"만
+> 넣고, 남의 기록(원장·문서)을 요약한 것은 넣지 않는다** — 그건 검증 대상이지 전제가 아니다.
+
+#### 그래서 B-12 자체도 손봐야 한다
+
+`## 🔴 계획이 성립하지 않는 6건` 의 B-12 행이 **obsolete 된 L-44 를 살아 있는 근거로 인용**하고 있다.
+이번에 정정했다.
+
+### ② 🔴🔴 하드 블로커 A — `design-integrity` CI 가 렌더 매니페스트 커밋을 **기계적으로 실패**시킨다
+
+```
+check-design-integrity.sh 의 verify 앵커 (내용 단언형):
+  infra/aws-eks/README.md:153      <!-- verify: k8s/base/ingress.yaml ~ io/certificate-arn:[[:space:]]*CERT_ARN_PLACEHOLDER -->
+  docs/eks-tutorial-steps.md:952   <!-- verify: k8s/eso/externalsecret-app.yaml ~ ^        key: APP_SECRET_NAME_PLACEHOLDER -->
+
+design-integrity.yml:12-13   경로 필터 없음 = 모든 PR 에서 돈다
+```
+
+**퍼블릭 레포 제약이 문서 규칙이 아니라 CI 로 구현돼 있다.** 치환값 6종 중 **5종이 "커밋 금지" 사유로 존재**한다:
+
+| PLACEHOLDER | 실제 값 | 금지 근거 |
+|---|---|---|
+| `IMAGE_` ×3 | `<account>.dkr.ecr…` | `k8s/README.md:124,141` |
+| `CERT_ARN_` | `arn:aws:acm:<region>:<account>:certificate/…` | `ingress.yaml:70-73` — ***"선택이 아니라 강제다"*** |
+| `EBS_VOLUME_ID_` · `PERSISTENT_AZ_` | `vol-…` | `k8s/README.md:124` |
+| `RDS_MASTER_SECRET_` ×2 · `APP_SECRET_NAME_` | 시크릿 이름/ARN | `externalsecret-db.yaml:15-20`, `externalsecret-app.yaml:49` |
+
+🔴 **결정적 증거**: `ecr-push.yml:123,127` 은 이미지 URI 에서 계정 ID 를 **치환해 지우고**
+*"`<account>` 자리의 실제 값은 로컬에서 얻으세요 — 퍼블릭 레포라 여기 찍지 않습니다"* 를 출력한다.
+***같은 워크플로가 로그에 찍는 것조차 거부하는 값을, 이 계획은 git 에 커밋하려 했다.***
+
+**탈출구도 이미 닫혀 있다** — kustomize 는 `k8s/README.md:145` 가 기각(*"생 yaml + 치환으로 일관"*).
+남는 것은 ArgoCD CMP 로 **클러스터 안에서 sed** = *"git 이 단일 진실"* 의 포기다.
+또는 **프라이빗 렌더 레포** = *"이 레포만 보고 재현"*(`README:255`, 블로그 원고 전제)의 포기.
+
+### ③ 🔴🔴 하드 블로커 B — selfHeal + SOP §8 + 리퍼 = **고아 ALB 확정 경로**
+
+```
+SOP §8 ②   kubectl delete ingress --all -A --timeout=180s
+              ↓ ArgoCD selfHeal 이 Ingress 를 되살린다
+              ↓ LBC 가 ALB 를 새로 만든다
+           tofu destroy
+              ↓
+           고아 ALB $16.43/월 + 퍼블릭 IP $7.30/월  +  SG DependencyViolation 으로 destroy 실패
+```
+
+- SOP 는 *"AWS 에 직접 물어 0 이 아니면 **여기서 멈춘다**"* 로 사람이 막게 돼 있으나 **0 이 될 수가 없다.**
+- 리퍼 `cleanup_k8s_loadbalancers()` 는 `delete ingress` 를 **한 번만** 치고 실패해도 destroy 를 진행한다.
+- `warn_orphan_albs()` 는 스스로 **감지 전용·삭제 불가**라고 적어뒀다(*"리퍼가 할 수 있는 일은 tofu destroy 하나뿐"*).
+- 🔑 **리퍼가 도는 상황 = 사람이 없는 상황**이다. 아무도 안 지운다.
+
+> SOP 가 ESO 에 대해 적어둔 *"`delete secret` 만 하면 8초 만에 부활한다"* 의 **한 층 위**다.
+> 착수하려면 **teardown 1단계에 `argocd` Application/네임스페이스 삭제**를 넣고 **리퍼에도 같은 단계**를 넣어야 한다. 지금 코드엔 없다.
+
+### ④ 🔴 순서가 뒤집혀 있다 — 6 이 7 에 의존한다
+
+```
+계획서 순서:  6 CD 파이프라인  →  7 상시 운영 전제로 안전장치 개정 (B-1·B-14·B-18)
+B-18       =  "상시 전환은 학습 전제 위에 세운 통제 전체를 무근거로 만든다"
+```
+
+**ArgoCD 상주형 CD 는 항목 7 의 결론을 선취한다.** 그리고 상주는 📌 **D-002(`✅유효`)** 를 건드리는데,
+그 블록이 *"이 결정이 뒤집히면 destroy-after-use 규율 전체가 무너진다 — 리퍼·SOP·`guard-local-layers` 가
+전부 이 결정의 파생물"* + *"뒤집으려면 숫자를 **다시 실측**하고 `design-change-procedure.md` 전 단계를 밟을 것"*
+이라고 못박고 있다.
+
+🔑 ***블로커 ③·순서·D-002 가 전부 destroy-after-use 한 뿌리에서 나온다.*** 이관 후엔 클러스터가
+상주하므로 **셋 다 저절로 풀린다** — 항목 5 와 정확히 같은 모양이다.
+
+### ⑤ ✅ 용량 미지수를 $0 로 닫았다 — **helm 렌더 실측 (2026-09-21)**
+
+Blindspot 이 *"ArgoCD 의 메모리·파드 수가 레포에 0건"* 이라고 정확히 지적했다. 클러스터 없이 쟀다:
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm && helm repo update argo
+helm template argocd argo/argo-cd --namespace argocd > /tmp/argocd-rendered.yaml
+```
+
+| 항목 | 실측 | 판정 |
+|---|---|---|
+| 차트 / 앱 버전 | `argo-cd 10.9.2` / `v3.5.3` | — |
+| 워크로드 | Deployment **6** + StatefulSet **1** (`replicas: 1` ×7) | **파드 7개** |
+| `Service type` | `ClusterIP` ×2 — **LoadBalancer 0개** | ✅ **ALB/NLB 추가 과금 없음** |
+| `kind: Ingress` | **0** | ✅ |
+| `kind: PersistentVolumeClaim` / `volumeClaimTemplates` | **0** | ✅ `cost-model.md:108` 서술과 일치 |
+| CRD | 3 | — |
+| **`memory:` 선언** | 🔴 **0건** — 차트가 `resources` 를 **전혀 설정하지 않는다** | **아래** |
+
+#### 🔴 `requests` 가 0 인 것은 좋은 소식이 아니다 — **ESO 와 같은 함정**
+
+`migration-log.md:2397` 이 이미 적어뒀다 — *"ESO 3파드가 `requests: {}` 라 **스케줄러 예산 0**, 슬롯만 3칸"*.
+ArgoCD 7파드가 **정확히 같은 성질**이다.
+
+```
+슬롯   3대 × 11 = 33칸,  현재 15칸 사용 → 18칸 여유.  ArgoCD 7칸 → ✅ 들어간다
+메모리 requests 0Mi → 스케줄러가 막지 않는다
+       그러나 실사용 RAM 은 그대로 먹는다 → 노드당 가용 959Mi / 가장 큰 연속 블록 447Mi 를 잠식
+```
+
+🔑 ***스케줄러가 통과시키는 것과 노드가 버티는 것은 다르다.*** 이 레포의 반복 실패 형태
+(*"검사가 주장보다 헐겁다"*)가 여기서도 그대로다 — **`requests` 는 "얼마나 쓰는가"의 대리 지표일 뿐이고,
+ArgoCD 는 그 대리 지표를 0 으로 신고한다.**
+
+⚠️ **실사용량은 $0 로 못 잰다** — 띄워봐야 안다. 숫자를 만들지 않는다.
+`6b` 착수 시 **첫 단계는 `resources` 를 명시적으로 박는 것**이다(차트 기본값을 그대로 쓰지 말 것).
+
+> ⚠️ 참고 — `t4g.medium` 으로 도망갈 수 없다: **이 계정에서 launch 되지 않는다**(D-010, 신 Free Tier).
+> `addons.tf:97` 의 *"medium = 파드 상한 17"* 은 **취소선으로 무효 처리**돼 있다. 인용하면 D-009 잔재다.
+> 그리고 3대로 올리면 `coredns replicaCount=1` 규율이 풀려 ~70~100Mi(🟡 미실측)가 더 나간다(`variables.tf:125-131`).
+
+### ⑥ gitops 레이어의 현재 상태 — **기각된 적은 없지만 "선택"이고, 디렉토리는 없다**
+
+| | |
+|---|---|
+| 설계 존재 | `README:111`(레이어 표) · `:113`(두 평면 분리) · `:176`(디렉토리) · `:252`(착수 순서 5번) |
+| 🔴 **디렉토리 부재** | `ls infra/aws-eks/` → `0-bootstrap 1-network 2-cluster PERSISTENT-RESOURCES.md README.md reaper scripts`. **`gitops/` 는 없다.** `README:176` 은 계획을 **현재형으로 적어둔 것** |
+| 강등 상태 | Stage 5 = **`(선택)`** (`README:140,154`). `CONTEXT.md` 도 이미 경고해뒀다 |
+| 🔴 **조건 위반** | `infra-deploy.yml:35` — *"**gitops 등 상주형($0 유지) 레이어만** 생기면 추가"*. ArgoCD 를 설치하는 gitops 레이어는 **$0 상주가 아니다**(세션 클러스터 의존) |
+| 🔴 **guard 사각지대** | `infra-ci.yml:55` 의 로컬전용 목록이 `for local_layer in 2-cluster` **하드코딩**이다. `gitops` 를 매트릭스에 넣어도 **guard 는 통과시킨다** |
+| 🔴 **레포 관례 충돌** | `irsa-alb.tf:9-11` — *"이 레이어의 provider 는 aws·tls·random 뿐 … 서드파티는 CLI helm"*. `README:113` 의 *"terraform kubernetes provider 로 워크로드 안 넣음"* 과 합치면 **ArgoCD 를 tofu 로 설치하는 레이어는 두 규칙 모두와 부딪힌다.** 남는 경로는 세션마다 손으로 `helm install` |
+
+🔑 마지막 항목의 귀결: **세션마다 손으로 설치하면 reconcile 루프가 세션 길이(실측 20~100분)만 존재한다.**
+남는 이득은 *"선언적 매니페스트 적용"* 인데 그건 `kubectl apply -f` 가 이미 한다.
+그리고 그 설치·동기화 디버깅이 **전부 과금 구간**에서 일어난다 — SOP 가 *"이 구간에서 질문하지 않는다"* 로 봉인한 구간이다.
+
+### ⑦ 그 외 Blindspot 발견 (6b 착수 시 반드시 다시 볼 것)
+
+| # | 불일치 | 근거 | 확도 |
+|:-:|---|---|:-:|
+| U-3 | **`ecr-push` 에 main push 트리거가 없는 것은 사유가 명시된 판단이다** — *"EKS 는 destroy-after-use 라 클러스터가 없는 동안 자동 푸시는 낭비"*. CD 자동화는 이걸 뒤집어야 하는데 계획서에 언급이 없었다 | `ecr-push.yml:13` | 🔴 |
+| U-4 | **매니페스트 커밋 잡은 권한·가드를 모두 건드린다.** `ecr-push.yml:52` 는 `contents: read`. 커밋하려면 `write` + main push 가 필요한데 레포는 main 직접 push 를 훅으로 차단해왔다. 봇 커밋은 PR 리뷰 게이트 **밖으로 나간다**. 게다가 main push 는 `infra-deploy`·`design-integrity` 를 재발사한다 | `ecr-push.yml:52`, `assert-no-main-push.sh`, `infra-deploy.yml:10-13` | 🟡 |
+| U-5 | 🔴 **CI 역할에 EKS access entry 가 없다.** `access.tf` 의 유일한 entry 는 `data.aws_caller_identity.current.arn`(로컬 apply 수행자)이고 `cluster.tf:23 authentication_mode = "API"` 다 → IAM `AdministratorAccess` 는 **kubectl 권한을 주지 않는다**. ⚠️ **그런데 entry 를 추가하면 신뢰정책이 `pull_request` 를 포함하므로 PR 트리거로 클러스터 admin 이 열린다.** 지금 entry 가 1개로 좁혀져 있는 것이 **사실상의 방어선**이다 — 넓히기 전에 신뢰정책부터 좁혀야 한다 | `access.tf`, `cluster.tf:23`, `iam-github-oidc.tf:37-39,50` | 🔴 / 🟡 |
+| U-6 | **tfsec 예외 4건 + `cluster.tf:6-9`(퍼블릭 엔드포인트 `0.0.0.0/0`)의 근거가 *"세션마다 폐기되는 학습 자산"*이다.** ArgoCD 상주 = **상시 노출되는 CD 컨트롤 플레인**. B-18 이 가리키는 무근거화가 항목 6 단계에서 발생한다 | `cluster.tf:6-9`, B-18 | 🟡 |
+| U-8 | **비용 산정 `$0~0.1` 이 이 트랙의 실적과 안 맞는다.** 항목 3 도 $0.13 예상 → **$2.77~3.14 실측(21~24배)**. ArgoCD 는 설치·동기화·teardown 확인이 **전부 과금 구간**이고 ③의 고아 ALB 리스크가 붙는다 | `README:153`, #426 | 🟡 |
+| U-10 | **`prod-smoke-daily.yml` 3중 고장(B-14)이 CD 의 자연스러운 후속인데 방치돼 있다** — Vercel 을 때려 Fly/EKS 구분 불가 · 실패 안내가 `fly status` 하드코딩 · 05:23 KST 라 상시 가동 전제 | B-14, `prod-smoke-daily.yml:20,45,54` | 🟡 |
+| U-11 | **`406Mi` 시스템 requests 에 ESO 3파드가 빠져 있고**, DaemonSet ÷ Deployment 분리는 **여전히 미측정**(원장 L-43, *"$0 경로가 없다"*). 6b 메모리 예산을 짤 때 이 둘을 빼먹으면 `variables.tf` 가 *"정정할 때마다 다른 항목을 빠뜨렸다"* 고 적어둔 패턴의 4번째 재현이 된다 | `migration-log.md:2366,2397`, `variables.tf:110` | 🟡 |
+
+### ⑧ 그래서 — 쪼갠 결과
+
+#### `6a` — 토폴로지 무관 $0 분 (지금 할 수 있는 것)
+
+| | 내용 | 파일 계층 | 상태 |
+|:-:|---|---|---|
+| ~~①~~ | ~~L-44 수정~~ | — | 🔴 **철회.** L-44 는 `obsolete`(09-04)이고 SOP 가 이미 다른 처방(*main 에서 `workflow_dispatch` 재빌드*)을 골라뒀다. **틀린 게 아니라 불필요하다.** 상세: ① |
+| ② | **치환 체인 일원화** — 6종 PLACEHOLDER 가 `k8s/README.md`·`eks-tutorial-steps.md`·`eks-session-sop.md` **3곳에 흩어져 어긋날 수 있다**. 스크립트 1개로 모으고 `kubectl apply --dry-run=client` 로 검증(클러스터 불요) | `k8s/` 또는 `scripts/` | **착수 가능 — 유일하게 남은 실행 항목** |
+| ③ | ~~CI 역할 access entry~~ | `2-cluster/access.tf` | 🔴 **하지 않는다** — U-5 대로 지금 넓히면 신뢰정책의 `pull_request` 때문에 **PR 트리거로 클러스터 admin 이 열린다**. 신뢰정책을 먼저 좁히는 설계가 선행이고 그건 6b 와 같이 간다 |
+| ④ | **B-12 행의 L-44 인용 정정** | 이 계획서 | ✅ 이번에 처리 |
+
+> ⚠️ **6a 가 ①을 잃어 실행 항목이 ② 하나로 줄었다.** 그래도 $0 이고 클러스터가 필요 없으며,
+> **문서 3곳이 어긋날 수 있는 상태**는 실재한다(항목 3 에서 `sed` 치환을 빠뜨려 겪은 형태).
+
+#### `6b` — ArgoCD gitops 레이어 → **이관 후**
+
+블로커 ②(퍼블릭 레포 ↔ git 단일 진실)만 이관 후에도 **남는다.** 나머지(③고아 ALB·④순서·D-002)는
+destroy-after-use 가 사라지면 함께 사라진다. → **이관 계획서에서 다루되, ②의 해법
+(프라이빗 렌더 레포 / CMP / 렌더 안 하는 구조)을 반드시 먼저 정할 것.**
