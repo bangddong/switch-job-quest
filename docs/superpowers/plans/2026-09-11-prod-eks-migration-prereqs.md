@@ -1085,7 +1085,22 @@ helm template argocd argo/argo-cd --namespace argocd > /tmp/argocd-rendered.yaml
 | `kind: Ingress` | **0** | ✅ |
 | `kind: PersistentVolumeClaim` / `volumeClaimTemplates` | **0** | ✅ `cost-model.md:108` 서술과 일치 |
 | CRD | 3 | — |
-| **`memory:` 선언** | 🔴 **0건** — 차트가 `resources` 를 **전혀 설정하지 않는다** | **아래** |
+| **컨테이너 `resources`** | 🔴 **`memory:` 0건 · `cpu:` 0건** — 차트가 **컨테이너 requests/limits 를 설정하지 않는다** | **아래** |
+
+> ⚠️ **문구를 한정한 이유 (QA F-4)**: 처음엔 *"`resources` 를 **전혀** 설정하지 않는다"* 로 썼는데,
+> 렌더 결과에 `resources:` **문자열 자체는 51건** 있다 — 대부분 CRD 스키마의 `subresources` 와 RBAC 규칙의
+> `resources:` 다. **컨테이너의 requests/limits 와 다른 것**이다. 무한정 문구를 그대로 뒀으면
+> 나중에 `grep -c 'resources:'` 로 독립 검증하는 사람이 **51 vs 0 을 모순으로 읽는다.**
+> 🔑 ***주장의 범위를 검사의 범위에 맞춘다*** — 이 레포의 반복 실패(*"검사가 주장보다 헐겁다"*)의 역방향 교정이다.
+>
+> **재현**(클러스터 불요):
+> ```bash
+> helm repo add argo https://argoproj.github.io/argo-helm && helm repo update argo
+> helm template argocd argo/argo-cd --namespace argocd > /tmp/a.yaml
+> grep -c 'memory:' /tmp/a.yaml          # → 0
+> # 반증 주입 — grep 이 실제로 탐지하는지 확인 (이 단계를 건너뛰지 마라)
+> helm template argocd argo/argo-cd --set controller.resources.requests.memory=256Mi | grep -c 'memory:'   # → 1
+> ```
 
 #### 🔴 `requests` 가 0 인 것은 좋은 소식이 아니다 — **ESO 와 같은 함정**
 
