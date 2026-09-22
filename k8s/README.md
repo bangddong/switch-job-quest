@@ -77,7 +77,13 @@ helm install external-secrets external-secrets/external-secrets \
 
 # ② SecretStore + ExternalSecret 적용
 kubectl apply -f k8s/eso/secretstore.yaml
-kubectl apply -f k8s/eso/externalsecret-app.yaml
+
+#   🔴 app 용은 **치환이 필요하다.** 시크릿 이름이 `<cluster_name>/<environment>/app` 이라
+#      환경이 들어가고, 그래서 매니페스트에 박지 않았다(`2-cluster/secrets.tf`).
+#      치환을 빠뜨리고 그대로 apply 하면 ESO 가 `APP_SECRET_NAME_PLACEHOLDER` 라는 시크릿을
+#      찾다가 **SecretSyncError** 를 낸다 — 시끄럽게 실패한다(조용히 틀리는 것보다 낫다).
+NAME=$(tofu -chdir=infra/aws-eks/2-cluster output -raw app_secret_name)
+sed "s|APP_SECRET_NAME_PLACEHOLDER|$NAME|" k8s/eso/externalsecret-app.yaml | kubectl apply -f -
 
 # ③ db용 — 🔴 db_mode에 따라 갈린다 (둘 중 하나만!)
 
@@ -94,6 +100,30 @@ kubectl apply -f k8s/eso/externalsecret-postgres-tls.yaml
 # ④ 동기화 확인 — Ready=True 여야 한다
 kubectl get externalsecret
 ```
+
+<!-- verify: k8s/eso/externalsecret-app.yaml ~ key: APP_SECRET_NAME_PLACEHOLDER -->
+
+> 🔴 **②의 `sed` 는 2026-09-22 까지 이 문서에 없었다 — 문서가 매니페스트보다 뒤처져 있었다.**
+>
+> | | |
+> |---|---|
+> | `README` 의 `kubectl apply -f …externalsecret-app.yaml` (치환 없음) | **#339** (Stage 2) |
+> | 매니페스트에 `APP_SECRET_NAME_PLACEHOLDER` 도입 | **#418** (2a 시크릿 환경 축) |
+> | README 갱신 | **없었다** |
+>
+> 즉 **#418 이 플레이스홀더를 넣으면서 이 문서를 같이 고치지 않았고**, 그 뒤로 이 절차를 그대로 따르면
+> `SecretSyncError` 가 난다. `externalsecret-app.yaml` 자신은 올바른 명령을 주석으로 갖고 있었으므로
+> **같은 지식이 두 곳에 살면서 한쪽만 갱신된** 형태다.
+>
+> 위 `verify` 마커는 **역방향 드리프트**를 막는다 — 누가 매니페스트에서 플레이스홀더를 없애면
+> (예: 이름을 코드에 박으면) 마커가 깨져 이 문서를 함께 고치게 된다.
+> ⚠️ **정방향(플레이스홀더가 새로 생겼는데 문서가 안 따라오는 것)은 여전히 막지 못한다** —
+> 그건 이 마커 문법으로 표현되지 않는다. **매니페스트에 새 `*_PLACEHOLDER` 를 넣을 때는
+> 이 절과 `docs/eks-tutorial-steps.md` 를 함께 고칠 것.**
+>
+> 🔑 ***"스크립트 하나로 모으자"는 해법은 일부러 택하지 않았다*** — 이 레포는 아래 §3 에서
+> *"도구를 하나 더 들이는 것보다 절차가 눈에 보이는 편"* 을 이미 골랐다(kustomize 기각).
+> 같은 근거가 `sed` 래퍼 스크립트에도 그대로 적용된다.
 
 > 🔑 **"관리형이 편한 대신 이름을 못 정한다"는 트레이드오프를 양쪽에서 겪게 된다.**
 > Stage 2에서 `sed` 치환이 귀찮았던 이유가, 3a에서 그게 사라지는 것으로 증명된다.

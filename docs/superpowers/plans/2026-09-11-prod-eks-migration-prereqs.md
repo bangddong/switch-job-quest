@@ -1011,11 +1011,20 @@ Blindspot 프롬프트에 `## 이미 확인한 것 (다시 조사하지 말 것)
 
 ```
 check-design-integrity.sh 의 verify 앵커 (내용 단언형):
-  infra/aws-eks/README.md:153      <!-- verify: k8s/base/ingress.yaml ~ io/certificate-arn:[[:space:]]*CERT_ARN_PLACEHOLDER -->
-  docs/eks-tutorial-steps.md:952   <!-- verify: k8s/eso/externalsecret-app.yaml ~ ^        key: APP_SECRET_NAME_PLACEHOLDER -->
+  infra/aws-eks/README.md:153      verify: k8s/base/ingress.yaml ~ io/certificate-arn:[[:space:]]*CERT_ARN_PLACEHOLDER
+  docs/eks-tutorial-steps.md:952   verify: k8s/eso/externalsecret-app.yaml ~ ^        key: APP_SECRET_NAME_PLACEHOLDER
 
 design-integrity.yml:12-13   경로 필터 없음 = 모든 PR 에서 돈다
 ```
+
+> 🔴 **위 두 줄에서 `<!-- -->` 를 일부러 뗐다 (2026-09-22 정정).** #431 에서 이 두 마커를
+> **코드펜스 안에 그대로 인용**했는데, `check-design-integrity.sh` 는 **원문 grep** 이라
+> ***인용이 곧 live 단언이 됐다.*** 실제로 이 계획서가 `:1015` 에서 단언을 하고 있었다
+> (09-22 에 반증 주입으로 발견 — 일부러 플레이스홀더를 지우자 **계획서 줄이 에러에 같이 찍혔다**).
+>
+> 지금 당장 해롭진 않았다(참인 단언의 중복). 그러나 **실제 앵커를 정당하게 바꿀 때
+> "설명문 안의 인용"까지 찾아 고쳐야 한다** — 문서가 자기도 모르게 가드가 된 것이다.
+> 🔑 ***마커를 인용하면 마커가 된다.*** 설명 목적이면 `<!-- -->` 를 떼고 쓴다.
 
 **퍼블릭 레포 제약이 문서 규칙이 아니라 CI 로 구현돼 있다.** 치환값 6종 중 **5종이 "커밋 금지" 사유로 존재**한다:
 
@@ -1161,6 +1170,28 @@ ArgoCD 는 그 대리 지표를 0 으로 신고한다.**
 | ② | **치환 체인 일원화** — 6종 PLACEHOLDER 가 `k8s/README.md`·`eks-tutorial-steps.md`·`eks-session-sop.md` **3곳에 흩어져 어긋날 수 있다**. 스크립트 1개로 모으고 `kubectl apply --dry-run=client` 로 검증(클러스터 불요) | `k8s/` 또는 `scripts/` | **착수 가능 — 유일하게 남은 실행 항목** |
 | ③ | ~~CI 역할 access entry~~ | `2-cluster/access.tf` | 🔴 **하지 않는다** — U-5 대로 지금 넓히면 신뢰정책의 `pull_request` 때문에 **PR 트리거로 클러스터 admin 이 열린다**. 신뢰정책을 먼저 좁히는 설계가 선행이고 그건 6b 와 같이 간다 |
 | ④ | **B-12 행의 L-44 인용 정정** | 이 계획서 | ✅ 이번에 처리 |
+
+#### `6a ②` 실행 결과 (2026-09-22) — **스크립트가 아니라 드리프트 1건이었다**
+
+착수 전 전제 검증에서 항목 정의가 **네 번째로** 바뀌었다.
+
+| 내가 적어둔 전제 | 실측 |
+|---|---|
+| *"6종 PLACEHOLDER 가 문서 **3곳**에 산재"* | 🔴 **2곳.** `docs/eks-session-sop.md` 의 `PLACEHOLDER` 언급은 **0건**이다 |
+| *"어긋날 수 있다"* | 🔴 **이미 어긋나 있었다** — 가정이 아니라 실현된 버그 |
+
+**실제 치환 지점 9곳 / 7파일**을 전수 확인한 결과 **틀린 지시는 정확히 1건**이다:
+
+```
+k8s/README.md:80   kubectl apply -f k8s/eso/externalsecret-app.yaml      ← sed 없음
+매니페스트 :57      key: APP_SECRET_NAME_PLACEHOLDER                      ← 치환 필요
+```
+
+**드리프트 경위 (`git log -S` 실측)**: README 줄은 **#339**(Stage 2), 플레이스홀더 도입은 **#418**(2a). ***#418 이 매니페스트를 고치면서 이 문서를 같이 안 고쳤다.*** `externalsecret-app.yaml` 자신은 올바른 명령을 주석으로 갖고 있었으므로 **같은 지식이 두 곳에 살면서 한쪽만 갱신된** 형태다.
+
+🔑 **스크립트를 만들지 않았다** — `k8s/README.md` §3 이 kustomize 를 기각하며 *"도구를 하나 더 들이는 것보다 절차가 눈에 보이는 편"* 을 이미 골랐고, **`sed` 래퍼 스크립트에도 같은 근거가 적용된다**. 대신 **이미 있는 기계장치**(`verify` 마커)를 썼다 — 신설 0줄.
+
+⚠️ **마커는 역방향만 막는다**(플레이스홀더가 *사라지면* 깨진다). **정방향**(새 플레이스홀더가 생겼는데 문서가 안 따라오는 것 = 이번에 실제로 난 사고)은 **이 마커 문법으로 표현되지 않는다.** 문서에 명시만 해뒀다.
 
 > ⚠️ **6a 가 ①을 잃어 실행 항목이 ② 하나로 줄었다.** 그래도 $0 이고 클러스터가 필요 없으며,
 > **문서 3곳이 어긋날 수 있는 상태**는 실재한다(항목 3 에서 `sed` 치환을 빠뜨려 겪은 형태).
