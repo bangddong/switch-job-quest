@@ -24,6 +24,68 @@
 4. "configure 했어" → Claude가 `aws sts get-caller-identity` 확인 → `0-bootstrap` 코드 착수
    - 부트스트랩 후 GitHub OIDC로 전환하고 **이 액세스키 폐기**
 
+### TASK-12: RSS creep 기울기 재측정 (사용자, 2026-09-23) — **선행 조건 4 의 마지막 조각**
+
+> **이것이 선행 조건 5건 중 유일한 미완이다.** $0 · 클러스터 불필요 · prod 를 한 번도 죽이지 않는다.
+> 근거: `plans/2026-09-11-prod-eks-migration-prereqs.md` 「B-5」 + `docs/jvm-observability-notes.md` §1.
+
+**왜 Claude 가 못 하나**: `flyctl auth whoami` → `Error: no access token available`.
+토큰은 사용자 자격증명이라 대신 받을 수 없다.
+
+**무엇을 알아내려는 것인가**: 현재 RSS creep 속도. 지금 쓰는 `3 MB/h` 는 **2026-07 측정값**이고,
+그 값이 K8s 런웨이(`(576 − RSS) ÷ 속도`)를 직접 결정한다. 09-18 실측은 **점 하나**라 기울기가 안 나온다.
+
+#### 🔴 찍는 시각이 중요하다 — 스케줄러 발화 전후로 **갈라서**
+
+`DailyMailScheduler` 가 **매일 09:00 KST** 에 돌며 **+4.2 MiB** 점프를 만든다. 그런데 09-18 에 관측된
+작동점 상승분도 **정확히 4.2 MiB** 였다 → *"Phase 2 로 작동점이 올랐다"* 와 *"이미 알려진 일일 점프를
+한 번 더 봤다"* 를 **구분할 근거가 없다**. 그래서 **하루 두 번**, 08:30 과 09:30 KST 에 찍는다.
+
+#### 명령 (그대로 복사)
+
+```bash
+flyctl auth login          # 최초 1회
+```
+
+```bash
+# 08:30 KST 와 09:30 KST 에 각각 1회. 이틀 이상 반복하면 기울기가 나온다.
+flyctl ssh console -a devquest-api -C 'sh -c "
+  date -u +%Y-%m-%dT%H:%M:%SZ
+  grep -E \"^(MemTotal|MemAvailable|SwapTotal|SwapFree)\" /proc/meminfo
+  ps -o rss= -C java
+  cat /proc/uptime
+"'
+```
+
+#### 기준값 (2026-09-18, 업타임 70.8h)
+
+```
+MemTotal 459 MiB · MemAvailable 26.6 MiB · SwapTotal 256 · SwapFree 223 (사용 32.6)
+java RSS 386.7 MiB
+```
+
+#### 판정
+
+| 보는 것 | 뜻 |
+|---|---|
+| `java RSS` 증가분 ÷ 경과시간 | **현재 creep 속도**. 구하려는 값이다 |
+| `SwapFree` 감소분 | **RAM 초과분**. K8s 는 swap 0 이므로 이 값이 곧 K8s 에서 넘칠 양이다 |
+| `/proc/uptime` 리셋 | 재배포·autostop 이 있었다 → **그 구간은 기울기 계산에서 뺀다** |
+
+⚠️ **업타임이 리셋됐으면 측정을 다시 시작한다.** 배포가 끼면 RSS 가 초기화돼 기울기가 과소평가된다.
+
+#### 끝나면
+
+출력을 Claude 에게 주면 → 기울기 산출 → **대응 선택지 ①~④ 결정** → 선행 조건 4 종료
+→ **선행 조건 5건 전부 완료** → 이관 계획서 착수(0번 = 월 $140 실지출 결정).
+
+| | 선택지 | 대가 |
+|---|---|---|
+| ① | `limits` 576 → 768Mi | 노드 메모리 재산정. requests 합 1568Mi 에 allocatable 1365Mi/노드 → **3노드가 이미 꽉 찬다** |
+| ② | K8s swap (`NodeSwap`) | ⚪ 이 클러스터는 1.36. 성숙도를 **문서로 확인할 것**(알파/베타 기록이 엇갈렸다) |
+| ③ | creep 자체를 잡는다 | 근본적이나 원인이 ⚪ 미확정 |
+| ④ | Fly 1GB 인스턴스 (~$5.7/월) | **prod 를 Fly 에 두는 한 가장 싸다** — 이관 동기를 약화시킨다 |
+
 ### TASK-6: AWS 크레딧 만료일 캘린더 등록 (사용자, 2026-07-23)
 
 Free Plan 크레딧은 **소진 OR 만료 중 먼저 오는 시점에 계정이 자동 폐쇄**된다(과금이 아니라 폐쇄).
