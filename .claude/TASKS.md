@@ -57,12 +57,39 @@
 >
 > | | 상태 |
 > |---|---|
-> | **안쪽 payload** (`pgrep -x java` · `grep VmRSS /proc/$P/status` · `/proc/meminfo` · `/proc/uptime`) | ✅ `eclipse-temurin:21-jre-alpine` 에서 직접 실행, **EXIT:0** + 4개 값 출력 |
+> | **안쪽 payload** | ✅ **이 파일에서 `-C` 인자를 추출해** `eclipse-temurin:21-jre-alpine` 에 먹였다(기억으로 재입력하지 않았다). 실제 java 프로세스(`jdk.httpserver`)에서 **8줄 · `EXIT:0` · `VmRSS: 41292 kB` 관측**. **반증 주입**: java 없으면 `ERROR: java 프로세스 없음` + **`EXIT:1`** |
 > | **`-C` 인자 이스케이프** (`\"` → `"`, `\$` → `$` 가 단일 인자로 넘어가는지) | ✅ 로컬 셸에서 인자 경계를 분해해 확인 (QA 독립 재현) |
 > | **`fly ssh console` end-to-end** | ⚪ **미검증** — flyctl 인증이 없어 실제로 못 돌렸다 |
 >
-> → **첫 실행에서 출력 4줄(날짜·meminfo 4행·`pid=`+`VmRSS`·uptime)이 다 나오는지 먼저 확인할 것.**
+> → **첫 실행에서 출력 8줄이 다 나오는지 먼저 확인할 것**
+> (날짜 1 + meminfo **4** + `pid=` 1 + `VmRSS` 1 + uptime 1 = **8**).
 > 안 나오면 명령 문제이지 앱 문제가 아니다.
+>
+> 🔴 **처음엔 *"출력 4줄"* 이라고 썼다 (QA F-5).** 괄호 안에 *"meminfo 4행"* 을 적어놓고
+> 총계를 4 라고 했다 — **구간 수(4)와 줄 수(8)를 섞었다.** 이 세션 네 번째 세기 오류다
+> (`15/16` · `5/6` · `12/13` · `4/8`).
+>
+> 🔴 **그리고 `EXIT:0` 은 이 스크립트에서 약한 신호였다 (같은 F-5).** `pgrep` 이 실패해
+> `$P` 가 비면 `grep VmRSS /proc//status` 가 조용히 죽어도 **마지막 `cut` 이 성공해 EXIT 는 0**
+> 이다. 실측:
+> ```
+> pid=
+> grep: /proc//status: No such file or directory
+> 4158515.50
+> EXIT:0          ← 값을 하나도 못 얻었는데 성공으로 보인다
+> ```
+> → 위 명령에 **`[ -n "$P" ] || exit 1`** 과 **`grep ... || exit 1`** 을 넣어 **시끄럽게 실패**하게 했다.
+> ***"검사가 주장보다 헐겁다" 를 고치는 표 안에서 같은 병이 재발했다.***
+>
+> 🔴 **그리고 그 수정을 검증하는 과정에서 세 번째로 재발했다.** 최종 명령을 파일에서 추출해
+> docker 로 돌릴 때 `-v /tmp/payload.sh:/p.sh` 마운트가 macOS 에서 **빈 디렉토리**를 만들었는데,
+> 결과가 `EXIT:0` 이라 **통과로 보였다**. 줄 수를 함께 찍지 않았으면 못 잡았다:
+> ```
+> 줄수: 0 / EXIT:0        ← 아무것도 실행 안 됐는데 성공으로 보인다
+> cat: /p.sh: Is a directory
+> ```
+> 📌 **관례: 성공 여부를 종료코드로만 판정하지 않는다. 기대 산출물의 개수·내용을 함께 찍는다.**
+> (같은 세션에 `EXIT:0` 이 두 번 거짓말했다 — 가드 없는 스크립트에서 한 번, 공회전 테스트에서 한 번.)
 >
 > 🔑 처음엔 이 블록에 *"✅ 실제 이미지에서 검증함"* 이라고만 적었는데, 실제로 검증한 것은
 > **payload 뿐**이었다. `CLAUDE.md` 의 반복 실패 형태 — ***검사가 주장보다 헐겁다*** — 그대로다.
@@ -74,7 +101,7 @@ flyctl auth login          # 최초 1회
 ```bash
 # 08:30 KST 와 09:30 KST 에 각각 1회. 이틀 이상 반복하면 기울기가 나온다.
 fly ssh console -a devquest-api \
-  -C "/bin/sh -c 'date -u +%Y-%m-%dT%H:%M:%SZ; grep -E \"^(MemTotal|MemAvailable|SwapTotal|SwapFree)\" /proc/meminfo; P=\$(pgrep -x java | head -1); echo pid=\$P; grep VmRSS /proc/\$P/status; cut -d\" \" -f1 /proc/uptime'" \
+  -C "/bin/sh -c 'date -u +%Y-%m-%dT%H:%M:%SZ; grep -E \"^(MemTotal|MemAvailable|SwapTotal|SwapFree)\" /proc/meminfo; P=\$(pgrep -x java | head -1); [ -n \"\$P\" ] || { echo \"ERROR: java 프로세스 없음\"; exit 1; }; echo pid=\$P; grep VmRSS /proc/\$P/status || exit 1; cut -d\" \" -f1 /proc/uptime'" \
   < /dev/null
 ```
 
