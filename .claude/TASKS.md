@@ -27,7 +27,9 @@
 ### TASK-12: RSS creep 기울기 재측정 (사용자, 2026-09-23) — **선행 조건 4 의 마지막 조각**
 
 > **이것이 선행 조건 5건 중 유일한 미완이다.** $0 · 클러스터 불필요 · prod 를 한 번도 죽이지 않는다.
-> 근거: `plans/2026-09-11-prod-eks-migration-prereqs.md` 「B-5」 + `docs/jvm-observability-notes.md` §1.
+> 근거: `plans/2026-09-11-prod-eks-migration-prereqs.md` 「B-5」 절 +
+> **`docs/jvm-observability-notes.md` §6**(RSS creep·kill 수위·665/576/89 산출) ·
+> **§3**(`fly ssh console` 레시피 — JRE 이미지엔 `jcmd` 가 없다).
 
 **왜 Claude 가 못 하나**: `flyctl auth whoami` → `Error: no access token available`.
 토큰은 사용자 자격증명이라 대신 받을 수 없다.
@@ -35,13 +37,21 @@
 **무엇을 알아내려는 것인가**: 현재 RSS creep 속도. 지금 쓰는 `3 MB/h` 는 **2026-07 측정값**이고,
 그 값이 K8s 런웨이(`(576 − RSS) ÷ 속도`)를 직접 결정한다. 09-18 실측은 **점 하나**라 기울기가 안 나온다.
 
-#### 🔴 찍는 시각이 중요하다 — 스케줄러 발화 전후로 **갈라서**
+#### 🔴 찍는 시각 — 스케줄러 발화 전후로 **갈라서**
 
-`DailyMailScheduler` 가 **매일 09:00 KST** 에 돌며 **+4.2 MiB** 점프를 만든다. 그런데 09-18 에 관측된
-작동점 상승분도 **정확히 4.2 MiB** 였다 → *"Phase 2 로 작동점이 올랐다"* 와 *"이미 알려진 일일 점프를
-한 번 더 봤다"* 를 **구분할 근거가 없다**. 그래서 **하루 두 번**, 08:30 과 09:30 KST 에 찍는다.
+`DailyMailScheduler` 가 **매일 09:00 KST** 에 돌며 **메타스페이스 +4.2 MiB** 점프를 만든다
+(§1, 지연 로딩). 09-18 에 관측된 **메타스페이스 작동점** 상승(134.6 → 138.8)도 **같은 4.2 MiB** 라
+*"Phase 2 로 작동점이 올랐다"* 와 *"일일 점프를 한 번 더 봤다"* 가 안 갈린다 — **이 모호성은
+메타스페이스의 것이다.**
 
-#### 명령 (그대로 복사)
+🟡 **그런데 RSS 측정에도 걸린다**: 메타스페이스는 힙 밖 네이티브 메모리라 **VmRSS 에 포함**된다.
+따라서 09:00 직후에 찍으면 그날의 계단이 creep 으로 오인된다.
+⚠️ **§1 의 판정을 RSS 에 그대로 옮기지 말 것** — 같은 문서가 *"메타스페이스와 RSS creep 은
+별개 리스크(0.73 vs 3 MB/h)"* 라고 **명시 판정**해뒀다. 겹치는 것은 *시각*이지 *원인*이 아니다.
+
+→ **하루 두 번, 08:30 과 09:30 KST.**
+
+#### 명령 (그대로 복사) — ✅ **2026-09-23 실제 이미지에서 검증함**
 
 ```bash
 flyctl auth login          # 최초 1회
@@ -49,26 +59,39 @@ flyctl auth login          # 최초 1회
 
 ```bash
 # 08:30 KST 와 09:30 KST 에 각각 1회. 이틀 이상 반복하면 기울기가 나온다.
-flyctl ssh console -a devquest-api -C 'sh -c "
-  date -u +%Y-%m-%dT%H:%M:%SZ
-  grep -E \"^(MemTotal|MemAvailable|SwapTotal|SwapFree)\" /proc/meminfo
-  ps -o rss= -C java
-  cat /proc/uptime
-"'
+fly ssh console -a devquest-api \
+  -C "/bin/sh -c 'date -u +%Y-%m-%dT%H:%M:%SZ; grep -E \"^(MemTotal|MemAvailable|SwapTotal|SwapFree)\" /proc/meminfo; P=\$(pgrep -x java | head -1); echo pid=\$P; grep VmRSS /proc/\$P/status; cut -d\" \" -f1 /proc/uptime'" \
+  < /dev/null
 ```
 
-#### 기준값 (2026-09-18, 업타임 70.8h)
+> 🔴 **`ps -o rss= -C java` 를 쓰지 마라.** 런타임 이미지가 `eclipse-temurin:21-jre-alpine`
+> (= **BusyBox ps**)이고 `procps` 가 안 깔려 있다. 2026-09-23 실측:
+> ```
+> ps -o rss= -C java   →  "ps: unrecognized option" · EXIT 1
+> ps -o rss,comm       →  "39m"      ← MB 로 반올림. 3 MB/h 측정에 못 쓴다
+> grep VmRSS /proc/<pid>/status  →  "VmRSS:  41060 kB"   ✅ kB 정밀도
+> ```
+> **09-18 기준값도 `VmRSS` 로 잰 것**이다(§6 블록의 `java VmRSS 386.7 MiB`).
+> 같은 방법으로 재야 비교가 성립한다.
+>
+> ⚠️ `fly ssh console` 은 Windows 에서 끝에 `Error: The handle is invalid` 를 뱉지만
+> **출력은 정상**이다 — 무시. `< /dev/null` 이 tty 문제를 완화한다(§3).
+
+#### 기준값 (2026-09-18, 업타임 70.8h = 2.95일)
 
 ```
-MemTotal 459 MiB · MemAvailable 26.6 MiB · SwapTotal 256 · SwapFree 223 (사용 32.6)
-java RSS 386.7 MiB
+MemTotal      459 MiB
+MemAvailable   26.6 MiB
+SwapTotal     256 MiB
+SwapFree      223 MiB   →  사용 32.6 MiB
+java VmRSS    386.7 MiB        ← kill 수위 ~409 MiB 대비 22 MiB 아래
 ```
 
 #### 판정
 
 | 보는 것 | 뜻 |
 |---|---|
-| `java RSS` 증가분 ÷ 경과시간 | **현재 creep 속도**. 구하려는 값이다 |
+| `VmRSS` 증가분 ÷ 경과시간 | **현재 creep 속도**. 구하려는 값이다 |
 | `SwapFree` 감소분 | **RAM 초과분**. K8s 는 swap 0 이므로 이 값이 곧 K8s 에서 넘칠 양이다 |
 | `/proc/uptime` 리셋 | 재배포·autostop 이 있었다 → **그 구간은 기울기 계산에서 뺀다** |
 
