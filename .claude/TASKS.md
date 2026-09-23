@@ -57,7 +57,7 @@
 >
 > | | 상태 |
 > |---|---|
-> | **안쪽 payload** | ✅ **이 파일에서 `-C` 인자를 추출해** `eclipse-temurin:21-jre-alpine` 에 먹였다(기억으로 재입력하지 않았다). 실제 java 프로세스(`jdk.httpserver`)에서 **8줄 · `EXIT:0` · `VmRSS: 41292 kB` 관측**. **반증 주입**: java 없으면 `ERROR: java 프로세스 없음` + **`EXIT:1`** |
+> | **안쪽 payload** | ✅ **이 파일에서 `-C` 인자를 추출해** `eclipse-temurin:21-jre-alpine` 에 먹였다(기억으로 재입력하지 않았다). 실제 java 프로세스(`jdk.httpserver`)에서 **8줄 · `EXIT:0` · `VmRSS: 41292 kB` 관측**. **반증 주입 3종**: ⓐjava 없음 → `ERROR` + **`EXIT:1`** ⓑ`P` 는 있는데 `/proc/$P/status` 부재(stale pid) → **`EXIT:1`** (QA 4라운드 독립 재현) ⓒ**java 가 PID 1 인 실제 구성** — `be/Dockerfile` 의 `ENTRYPOINT ["java", ...]` 와 동일하게 `--entrypoint java` 로 띄워 `pgrep -x java` → `1`, 8줄 · `EXIT:0` · `VmRSS: 41924 kB` |
 > | **`-C` 인자 이스케이프** (`\"` → `"`, `\$` → `$` 가 단일 인자로 넘어가는지) | ✅ 로컬 셸에서 인자 경계를 분해해 확인 (QA 독립 재현) |
 > | **`fly ssh console` end-to-end** | ⚪ **미검증** — flyctl 인증이 없어 실제로 못 돌렸다 |
 >
@@ -80,6 +80,10 @@
 > ```
 > → 위 명령에 **`[ -n "$P" ] || exit 1`** 과 **`grep ... || exit 1`** 을 넣어 **시끄럽게 실패**하게 했다.
 > ***"검사가 주장보다 헐겁다" 를 고치는 표 안에서 같은 병이 재발했다.***
+>
+> 🔑 **ⓒ 를 따로 잰 이유**: 처음 검증은 java 가 **pid=7 인 자식 프로세스**였는데 실제 Fly 는
+> **PID 1** 이다. QA 가 *"pgrep 이 엉뚱한 pid 를 잡나"* 를 물어서 다시 쟀고 결과는 같았다.
+> ***"비슷한 조건에서 통과했다" 를 "그 조건에서 통과했다" 로 쓸 뻔한 자리다.***
 >
 > 🔴 **그리고 그 수정을 검증하는 과정에서 세 번째로 재발했다.** 최종 명령을 파일에서 추출해
 > docker 로 돌릴 때 `-v /tmp/payload.sh:/p.sh` 마운트가 macOS 에서 **빈 디렉토리**를 만들었는데,
