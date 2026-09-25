@@ -799,12 +799,25 @@ grep -rl ": AiEvaluatorPort\|, AiEvaluatorPort" be/core/core-domain/src/main/kot
 > 이 세션의 반복 주제(*"이 관측이 무엇을 배제하는가"*)와 같은 형태다: 이름 grep 은
 > *"이름이 다른 구현체가 없다"* 를 **전혀 배제하지 못한다.**
 
-⚠️ **별건 — 소스 주석 2곳이 같은 오프바이원을 갖고 있다** (2026-09-19 전수 확인):
+⚠️ **별건 — 소스 주석의 오프바이원** ~~2곳~~ → **1곳** (2026-09-19 전수 확인 · **2026-09-25 재판정**):
 
 ```
-be/core/ai-api/.../config/AiStubConfig.kt:28           "나머지 17개 AiEvaluatorPort + Judge0Port"   → 16
-be/core/ai-api/.../stub/TechInterviewStubEvaluator.kt:15  "다른 17개 AI 포트는 스텁되지 않는다"        → 16
+be/core/ai-api/.../config/AiStubConfig.kt:28              "나머지 17개 AiEvaluatorPort + Judge0Port"  → 16       🔴 틀렸다
+be/core/ai-api/.../stub/TechInterviewStubEvaluator.kt:15  "다른 17개 AI 포트는 스텁되지 않는다"       → ~~16~~    ✅ 17 이 맞다
 ```
+
+> 🔴 **재판정 (2026-09-25) — 두 번째 줄은 오류가 아니었다. 모집단이 다르다.**
+> `AiEvaluatorPort` = **17개** / `AI 포트` = **18개**(17 + `Judge0Port`). 레포가 **세 곳**에서
+> 후자를 그렇게 정의한다 — `BaseAiHttpAdapter.kt:14` · `AiTransportConfig.kt:65` ·
+> `AiTransportSwitchTest.kt:69` 가 전부 *"18개 AI 포트(17개 `AiEvaluatorPort` + `Judge0Port`)"* 다.
+> 그러므로 *"다른 17개 **AI 포트**"* = 18 − 스텁 1 = **17 로 맞다.**
+> 틀린 것은 `AiStubConfig` 한 곳뿐이다(*"나머지 **16개** `AiEvaluatorPort`"*).
+>
+> 🔑 **바로 아래 ⚠️ 문단이 답을 이미 갖고 있었다.** *"인용으로서는 정확하다"* 라고 써놓고
+> 같은 화면의 표에는 `→ 16` 을 남겼다. `CLAUDE.md` 의 **「검사가 주장보다 헐겁다」의 교과서적 형태**다:
+> 주장은 *"이 두 문장이 틀렸다"* 인데 실제로 검사한 것은 *"개수가 17이다"* 였다.
+> **개수를 재검증해도 각 문장의 모집단은 검증되지 않는다.**
+> 📌 관례: ***개수를 인용한 문장을 고칠 때는 숫자가 아니라 그 문장의 모집단을 먼저 확정한다.***
 
 🔴 **다음 `be/` 변경에 묶어 고친다 — 이것만으로 PR 을 만들지 않는다.**
 `be-cd` 가 `paths: ['be/**']` 로 main push 에 걸려 **Fly prod 를 재배포**한다(워크플로 실측).
@@ -948,7 +961,7 @@ k8s/eso/                ExternalSecret 4종 — AI 키를 담는 것 0개
 | **스텁 플래그를 지우는 것을 잊으면** | `[STUB]` 응답이 **prod 에서** 나간다. 다만 기본값이 off 라 *"잊으면 안 돈다"* 가 아니라 *"명시적으로 켠 것을 지워야 한다"* — 매니페스트에서 `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED` **삭제**가 이관 체크리스트 항목이다 |
 | **③타임아웃·재시도 차이** | 🟡 유일하게 살아남은 "K8s 에서만 드러나는 것" 후보. 재려면 실패를 유발해야 하고 = 과금. **이관 후 실트래픽으로 자연 관측**하는 것이 맞다 |
 
-#### ⚠️ `AiStubConfig.kt:30` 주석 오프바이원 — **이 PR 에 담지 않는다**
+#### ⚠️ `AiStubConfig.kt:28` 주석 오프바이원 — **이 PR 에 담지 않는다**
 
 ①-b 의 별건(*"나머지 **17개** `AiEvaluatorPort`"* → **16**)은 한 단어 수정이지만 `be/**` 다.
 **`be-cd` 가 `paths: ['be/**']` 로 main push 에 걸려 Fly prod 를 재배포한다**(워크플로 실측).
