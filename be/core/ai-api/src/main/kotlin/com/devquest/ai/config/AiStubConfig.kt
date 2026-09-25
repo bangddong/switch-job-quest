@@ -25,8 +25,14 @@ import org.springframework.context.annotation.Primary
  * 이어진다(daily-api가 실제로 겪은 문제). 여기서는 ai-api가 `client-ai`를 항상 의존하므로
  * `client-ai`의 `@Component` 구현이 게이트가 닫혀 있어도 항상 폴백으로 존재해 안전하다.
  *
- * `TechInterviewPort` 하나만 스텁한다 — 나머지 17개 `AiEvaluatorPort` + `Judge0Port`는 스텁 대상이
+ * `TechInterviewPort` 하나만 스텁한다 — 나머지 16개 `AiEvaluatorPort` + `Judge0Port`는 스텁 대상이
  * 아니며 여전히 실제 `ANTHROPIC_API_KEY`가 필요하다.
+ *
+ * ⚠️ 이 문서의 숫자는 **모집단이 두 개**라 헷갈린다. 세지 말고 단일 출처를 보라 —
+ * com.devquest.core.domain.port.ArchAiPortConventionTest 가 개수를 기계로 고정한다.
+ *   - `AiEvaluatorPort` 하위 타입 = 17개 → `TechInterviewPort` 를 뺀 **나머지 16개**
+ *   - `AI 포트` 전체 = 18개 (위 17개 + `AiEvaluatorPort` 를 상속하지 않는 `Judge0Port`)
+ * 실제로 이 구분을 놓쳐 `17`로 적혀 있었다(원장 L-64).
  */
 @Configuration
 class AiStubConfig {
