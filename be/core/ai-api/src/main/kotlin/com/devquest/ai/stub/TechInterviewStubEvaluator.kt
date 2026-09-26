@@ -12,8 +12,10 @@ import org.slf4j.LoggerFactory
  * `daily-api` → ai-api `/internal/ai/tech-interview/{daily-question,explain-followup,evaluate}` 뿐이므로
  * [TechInterviewPort] 하나만 스텁한다.
  *
- * 🔴 **다른 17개 AI 포트는 스텁되지 않는다** — 여전히 실제 `ANTHROPIC_API_KEY`가 필요하다.
- * "AI가 전부 스텁된다"고 오해하지 말 것.
+ * 🔴 **다른 16개 `AiEvaluatorPort`는 스텁되지 않는다** — 여전히 실제 `ANTHROPIC_API_KEY`가 필요하다.
+ * `Judge0Port`도 스텁되지 않는 것은 같지만, 필요한 키는 `ANTHROPIC_API_KEY`가 아니라
+ * `JUDGE0_API_KEY`다(`devquest.judge0.api-key` 프로퍼티 → RapidAPI `X-RapidAPI-Key` 헤더,
+ * `Judge0Adapter.kt:12,23,37`). "AI가 전부 스텁된다"고 오해하지 말 것.
  *
  * 스텁 응답에는 `[STUB]` 표식을 항상 포함한다 — "통과했다고 믿게 만드는 검사"를 만들지 않기 위해
  * (Stage A 스모크 원칙). 이 클래스가 실제로 호출됐다는 사실도 로그로 남긴다.
