@@ -268,8 +268,8 @@ D-013 항목 1 이 *"목적은 데이터 보존이 아니라 **복구 절차의 
 ```bash
 # 🔴 ref 는 반드시 SHA. 브랜치 이름은 움직인다 (아래 ⓑ 참조).
 # 🔴 `| grep -v node_modules` 를 붙이지 마라 (아래 ⓒ 참조).
-git grep -n "상시 운영" 59698c8 -- '*.md' | wc -l   # 25  (줄)
-git grep -l "상시 운영" 59698c8 -- '*.md' | wc -l   #  9  (파일)
+git grep -n "상시 운영" 59698c882a12f364e1e63d4e922d54429720d744 -- '*.md' | wc -l   # 25  (줄)
+git grep -l "상시 운영" 59698c882a12f364e1e63d4e922d54429720d744 -- '*.md' | wc -l   #  9  (파일)
 
 ```
 
@@ -280,7 +280,7 @@ for f in docs/superpowers/plans/2026-09-11-prod-eks-migration-prereqs.md \
          infra/aws-eks/README.md docs/eks-cost-model.md \
          infra/aws-eks/PERSISTENT-RESOURCES.md .claude/CONTEXT.md; do
   printf '%-58s %s\n' "$(basename $f)" \
-    "$(git show 59698c8:$f | grep -o '상시 운영' | wc -l)"
+    "$(git show 59698c882a12f364e1e63d4e922d54429720d744:$f | grep -o '상시 운영' | wc -l)"
 done
 # 계획서 14 · README 3 · cost-model 1 · PERSISTENT-RESOURCES 1 · CONTEXT 1  = 20
 ```
