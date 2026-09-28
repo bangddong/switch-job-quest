@@ -40,7 +40,15 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 
 ## 현재 영속 리소스
 
-**합계 ≈ $1.08/월** (ECR $0.17 + EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00**). 6개월 ≈ $6.5 = 크레딧의 3.2%
+**합계 ≈ $1.14/월** (ECR **$0.23** + EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00**). 6개월 ≈ $6.8 = 크레딧의 3.5%
+
+> 🔴 **$1.08 → $1.14 재검산 (2026-09-28 실측).** 금액이 아니라 **표가 틀려 있던 것**이 문제다 —
+> `ai-api`·`daily-api` 가 *"현재 0개"* 로 적혀 있었는데 실제로는 각각 **2개**가 올라가 있었다.
+> Stage C 3서비스 배포(#397·#403 무렵)로 들어온 것으로 보인다(🟡 — 푸시 시점 미대조).
+> 이 문서의 검증 규칙은 *"개수·크기가 표와 **일치**해야 한다 (0건이 아니라 일치)"* 인데,
+> **§확인 명령이 ECR 은 레포 이름만 나열하고 개수·크기를 묻지 않아** 대조가 불가능했다.
+> → 아래 §확인 명령에 ECR 개수·용량 조회를 추가했다. **표가 주장하는 것을 검사가 재지 않으면
+> 그 표는 검증되지 않는다** (`CLAUDE.md` 「검사가 주장보다 헐겁다」).
 >
 > ℹ️ **2026-09-15 ACM 행 추가 시 재검산함 — 값은 그대로다**($0 항목이라). QA F-6 규칙(*"행을 더할 때 합계를 다시 더하지 않으면 그 합계는 행이 하나 적던 시절의 값"*)에 따라 **변화 없음도 명시**한다. 재검산하지 않은 것과 재검산해서 같은 것은 다른 사실이다.
 
@@ -55,9 +63,9 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 |---|---|---|---|---|---|---|
 | **S3** `devquest-eks-tfstate-seoul` | 0-bootstrap | tfstate 원격 백엔드. 지우면 모든 레이어의 state 유실 | 상태 파일 수 KB 단위 | ~$0 | 2026-07 | — |
 | **DynamoDB** `devquest-eks-tflock` | 0-bootstrap | state 잠금(동시 apply 방지) | 온디맨드, 항목 1개 | ~$0 | 2026-07 | — |
-| **ECR** `devquest/core-api` | 0-bootstrap | 이미지가 destroy마다 사라지면 세션당 재빌드 5~10분 | 🔒 **lifecycle 10개** (실측 10개 = 1.74 GB) | **$0.17** | 2026-07-27 | 2027-01-15 |
-| **ECR** `devquest/ai-api` | 0-bootstrap | 위와 동일 (Phase 2 대비) | 🔒 lifecycle 10개 (현재 0개) | $0 | 2026-07-27 | 2027-01-15 |
-| **ECR** `devquest/daily-api` | 0-bootstrap | 위와 동일. Stage C 3서비스 배포 대상 | 🔒 lifecycle 10개 (현재 0개) | $0 | 2026-08-29 | 2027-01-15 |
+| **ECR** `devquest/core-api` | 0-bootstrap | 이미지가 destroy마다 사라지면 세션당 재빌드 5~10분 | 🔒 **lifecycle 10개** (실측 **10개 = 1.75 GB**, 2026-09-28) | **$0.18** | 2026-07-27 | 2027-01-15 |
+| **ECR** `devquest/ai-api` | 0-bootstrap | 위와 동일 (Phase 2 대비) | 🔒 lifecycle 10개 (**실측 2개 = 0.26 GB**, 2026-09-28) | **$0.03** | 2026-07-27 | 2027-01-15 |
+| **ECR** `devquest/daily-api` | 0-bootstrap | 위와 동일. Stage C 3서비스 배포 대상 | 🔒 lifecycle 10개 (**실측 2개 = 0.27 GB**, 2026-09-28) | **$0.03** | 2026-08-29 | 2027-01-15 |
 | **IAM** OIDC 프로바이더 · GitHub Actions 역할 | 0-bootstrap | CI가 AWS에 붙는 통로 | 고정 | $0 | 2026-07 | — |
 | **S3** `devquest-eks-backups-seoul` | 0-bootstrap | **백업은 자기가 백업하는 대상보다 오래 살아야 한다.** 데이터 볼륨이 이 레이어에 있으므로 백업도 이 레이어(D-004·L-14 규칙의 3번째 적용) | 🔒 **lifecycle 30일 × 3종** — `expiration` + `noncurrent_version_expiration` + `abort_incomplete_multipart_upload`. ⚠️ 버저닝이 켜져 있어 **앞의 하나만으로는 상한이 아니다** | ~$0 (덤프 KB 단위) | 2026-09-12 | 2027-01-15 |
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
@@ -213,6 +221,24 @@ tofu -chdir=infra/aws-eks/0-bootstrap state list | grep random_password
 
 ---
 
+## 표 밖에서 발견된 것 (2026-09-28 계정 전수 스윕)
+
+| 리소스 | 실측 | 비용 | 판정 |
+|---|---|---:|---|
+| **CloudWatch 로그 그룹** `/aws/lambda/test` | 2026-07-16 생성 · 스트림 1개 · **600 바이트** · 보존 `None`(무기한) | ~$0 | 🟡 **고아.** 계정에 Lambda 함수 **0개**, 레포에 `aws_lambda` 정의 **0건** |
+
+로그 내용으로 정체가 확정된다 — `INIT_START Runtime Version: nodejs:22`, 호출 2회
+(`Duration 17.90 ms`, `Memory Size: 128 MB`), 2026-07-16 00:00Z. **콘솔에서 만든 일회성 실험**이고
+함수는 지워졌는데 로그 그룹만 남았다. 보존이 `None` 이라 **영원히 남는다**(내용이 안 늘 뿐).
+
+- **지우지 않고 등재만 했다.** 600바이트·$0 이고, 지우면 *"무엇이었는지"* 의 유일한 증거가 사라진다.
+  🔑 이 문서의 목적은 절약이 아니라 ***"표에 없는 과금 리소스가 생기지 않게"*** 다 — 등재로 목적 달성.
+- 🔴 **교훈은 금액이 아니라 사각지대다.** SOP §9 고아 검사는 EBS·ALB·스냅샷만 보고, 이 문서의 표는
+  `0-bootstrap` 이 만든 것만 본다. ***콘솔에서 손으로 만든 것은 양쪽 어디에도 안 잡힌다.***
+  → §확인 명령에 계정 전역 조회를 추가했다.
+
+---
+
 ## 제거됨
 
 | 리소스 | 제거일 | 근거 |
@@ -230,7 +256,25 @@ R=ap-northeast-2
 aws ec2 describe-volumes --region $R --filters Name=tag:Persistent,Values=true \
   --query 'Volumes[].[VolumeId,Size,AvailabilityZone,State]' --output table
 
-aws ecr describe-repositories --region $R --query 'repositories[].repositoryName' --output text
+# 🔴 레포 **이름만** 나열하면 표의 「개수·크기」를 대조할 수 없다 — 2026-09-28 에 실제로
+#    `ai-api`·`daily-api` 가 "0개" 로 적힌 채 각각 2개를 품고 있었다. 개수와 용량을 함께 묻는다.
+# ⚠️ **`list-images` 를 쓰지 마라 — 그것은 이미지가 아니라 *태그* 를 센다.**
+#    `latest` 와 커밋 SHA 가 같은 다이제스트에 붙어 있으면 1개를 2개로 보고한다
+#    (실측: core-api = 다이제스트 10 / 태그 11). lifecycle 의 `imageCountMoreThan` 은
+#    **다이제스트** 기준이므로, 태그 수로 비교하면 멀쩡한 레포를 "상한 초과"로 오판한다.
+for r in $(aws ecr describe-repositories --region $R --query 'repositories[].repositoryName' --output text); do
+  printf '%-22s 이미지 %2s개  %5.2f GB\n' "$r" \
+    "$(aws ecr describe-images --region $R --repository-name "$r" --query 'length(imageDetails)' --output text)" \
+    "$(aws ecr describe-images --region $R --repository-name "$r" --query 'sum(imageDetails[].imageSizeInBytes)' --output text | awk '{print $1/1e9}')"
+done
+# 합격 기준: 위 표와 **일치**. 각 레포 ≤ 10개(lifecycle 상한).
+
+# 🔴 계정 전역 고아 — 이 문서의 표에 없는데 과금 가능한 것이 있는지 묻는다.
+#    §9(SOP)도 이 문서의 표도 **CloudWatch 로그 그룹을 보지 않는다.**
+#    실측(2026-09-28): `/aws/lambda/test` 가 Lambda 함수 없이 홀로 남아 있었다.
+aws logs describe-log-groups --region $R --query 'logGroups[].[logGroupName,storedBytes]' --output table
+aws lambda list-functions --region $R --query 'length(Functions)' --output text   # 기대: 0
+# 로그 그룹이 나오는데 함수가 0이면 = 고아. 비용은 $0 에 가깝지만 **표에 없는 리소스**다.
 
 # 🔴 S3 는 SOP §9 고아 검사 대상이 **아니다**(세션과 함께 사라지는 물건이 아니므로).
 #    그래서 여기 안 적으면 신설 버킷은 원장 대조에서 **영원히 안 보인다.**
