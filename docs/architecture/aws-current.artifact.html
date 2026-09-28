@@ -1,0 +1,278 @@
+<title>현재 AWS 아키텍처 — 계정 전경 (2026-09-28 실측)</title>
+<style>
+:root{
+  --ground:#F7F8FA; --surface:#FFFFFF; --surface-2:#EFF2F6;
+  --ink:#151A21; --ink-2:#4A5563; --ink-3:#7A8697;
+  --rule:#DDE3EA; --rule-2:#C6CFDA;
+  --accent:#2C5F8A; --accent-soft:#E8F0F7;
+  --hot:#B4433A; --hot-bg:#FBEDEC;
+  --warm:#9A6F14; --warm-bg:#FBF3DF;
+  --zero:#3F7A5A; --zero-bg:#EAF4EE;
+  --plate:#FFFFFF; --plate-rule:#D7DEE7;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#11151A; --surface:#171D24; --surface-2:#1E2630;
+    --ink:#E6EAEF; --ink-2:#AAB6C4; --ink-3:#7F8C9C;
+    --rule:#28313C; --rule-2:#39434F;
+    --accent:#7FB0DA; --accent-soft:#1B2833;
+    --hot:#E08379; --hot-bg:#33201E;
+    --warm:#D9AE52; --warm-bg:#312816;
+    --zero:#6FB58E; --zero-bg:#182A22;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#11151A; --surface:#171D24; --surface-2:#1E2630;
+  --ink:#E6EAEF; --ink-2:#AAB6C4; --ink-3:#7F8C9C;
+  --rule:#28313C; --rule-2:#39434F;
+  --accent:#7FB0DA; --accent-soft:#1B2833;
+  --hot:#E08379; --hot-bg:#33201E;
+  --warm:#D9AE52; --warm-bg:#312816;
+  --zero:#6FB58E; --zero-bg:#182A22;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+  font-size:16px; line-height:1.68; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:900px; margin:0 auto; padding:56px 24px 96px; display:flex; flex-direction:column; gap:52px}
+code,.mono,th,td.num{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+
+header{display:flex; flex-direction:column; gap:14px; border-bottom:2px solid var(--ink); padding-bottom:26px}
+.eyebrow{font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-3); font-weight:600}
+h1{margin:0; font-size:clamp(1.85rem,4.4vw,2.6rem); line-height:1.16; letter-spacing:-.022em; font-weight:700; text-wrap:balance}
+.lede{margin:0; color:var(--ink-2); font-size:1.03rem; max-width:64ch}
+.lede strong{color:var(--ink); font-weight:650}
+
+.ledger{background:var(--surface); border:1px solid var(--rule); border-radius:3px; padding:24px 26px; display:flex; flex-direction:column; gap:18px}
+.ledger-top{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+.ledger-figure{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:2.3rem; font-weight:600; letter-spacing:-.02em; color:var(--ink); font-variant-numeric:tabular-nums}
+.ledger-label{font-size:.85rem; color:var(--ink-2)}
+.chips{display:flex; flex-wrap:wrap; gap:8px}
+.chip{display:inline-flex; align-items:center; gap:7px; font-size:.79rem; padding:4px 10px; border-radius:2px; border:1px solid var(--rule-2); background:var(--surface-2); color:var(--ink-2)}
+.chip b{font-family:ui-monospace,Menlo,monospace; color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
+.dot{width:8px; height:8px; border-radius:50%; flex:none}
+.d-hot{background:var(--hot)} .d-warm{background:var(--warm)} .d-zero{background:var(--zero)}
+
+section{display:flex; flex-direction:column; gap:18px}
+.sec-head{display:flex; align-items:baseline; gap:12px; border-bottom:1px solid var(--rule); padding-bottom:9px; flex-wrap:wrap}
+.sec-tag{font-family:ui-monospace,Menlo,monospace; font-size:.71rem; letter-spacing:.08em; padding:3px 8px; border-radius:2px; background:var(--accent-soft); color:var(--accent); font-weight:600; white-space:nowrap}
+h2{margin:0; font-size:1.22rem; font-weight:650; letter-spacing:-.012em}
+p{margin:0; max-width:68ch; color:var(--ink-2)}
+p strong{color:var(--ink); font-weight:650}
+
+.plate{background:var(--plate); border:1px solid var(--plate-rule); border-radius:3px; padding:20px 8px; overflow-x:auto}
+.plate .mermaid{display:flex; justify-content:center; min-width:min-content}
+.plate-cap{font-size:.76rem; color:var(--ink-3); padding:0 14px; margin-top:-6px}
+
+.tbl{overflow-x:auto; border:1px solid var(--rule); border-radius:3px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:.875rem}
+th{text-align:left; font-size:.71rem; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); font-weight:600; padding:11px 14px; border-bottom:1px solid var(--rule-2); white-space:nowrap}
+td{padding:11px 14px; border-bottom:1px solid var(--rule); vertical-align:top; color:var(--ink-2)}
+tr:last-child td{border-bottom:none}
+td.num{text-align:right; white-space:nowrap; color:var(--ink); font-weight:600}
+td.res{color:var(--ink); font-weight:600; white-space:nowrap}
+.tag{display:inline-block; font-size:.7rem; padding:2px 7px; border-radius:2px; font-weight:600; white-space:nowrap}
+.t-hot{background:var(--hot-bg); color:var(--hot)}
+.t-warm{background:var(--warm-bg); color:var(--warm)}
+.t-zero{background:var(--zero-bg); color:var(--zero)}
+
+.callout{border-left:3px solid var(--accent); background:var(--surface); padding:15px 18px; display:flex; flex-direction:column; gap:7px; font-size:.93rem}
+.callout.warn{border-left-color:var(--hot)}
+.callout .k{font-size:.72rem; letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3); font-weight:600}
+
+footer{border-top:1px solid var(--rule); padding-top:22px; font-size:.83rem; color:var(--ink-3); display:flex; flex-direction:column; gap:8px}
+footer code{background:var(--surface-2); padding:1px 6px; border-radius:2px; font-size:.86em; color:var(--ink-2)}
+a{color:var(--accent)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">switch-job-quest · AWS 계정 전경</div>
+  <h1>지금 AWS 에서 시간당 과금되는 것은 하나도 없다</h1>
+  <p class="lede">
+    EKS · EC2 · NAT · ALB · RDS <strong>전부 0개</strong>. 남아 있는 것은 월 <strong>$1.14</strong> 짜리
+    영속 레이어뿐이고, 실사용 서비스는 <strong>AWS 밖</strong>(Vercel → Fly → Neon)에 있다.
+    2026-09-28 <code>aws</code> CLI 실측.
+  </p>
+</header>
+
+<div class="ledger">
+  <div class="ledger-top">
+    <div class="ledger-figure">$1.14</div>
+    <div class="ledger-label">/ 월 · 계정 전체 상시 비용 &nbsp;·&nbsp; 6개월 ≈ $6.8 = 크레딧의 3.5%</div>
+  </div>
+  <div class="chips">
+    <span class="chip"><span class="dot d-warm"></span>EBS 10 GiB <b>$0.91</b></span>
+    <span class="chip"><span class="dot d-warm"></span>ECR 2.28 GB <b>$0.23</b></span>
+    <span class="chip"><span class="dot d-zero"></span>S3 · DynamoDB <b>~$0</b></span>
+    <span class="chip"><span class="dot d-zero"></span>ACM · IAM · Budgets <b>$0</b></span>
+    <span class="chip"><span class="dot d-hot"></span>시간당 과금 <b>0건</b></span>
+  </div>
+</div>
+
+<section>
+  <div class="sec-head"><span class="sec-tag">0-bootstrap</span><h2>지금 이 순간 — 영속 레이어만 남아 있다</h2></div>
+  <div class="plate">
+<pre class="mermaid">
+flowchart TB
+  dev["개발 머신<br/>OpenTofu · kubectl · aws-cli"]
+  gha["GitHub Actions<br/>be-cd · infra-deploy"]
+
+  subgraph aws["AWS Cloud · ap-northeast-2"]
+    direction TB
+    subgraph boot["0-bootstrap — 상시 존재 · 월 $1.14"]
+      direction LR
+      s3s["S3 tfstate<br/>3객체 · 47 KB"]
+      ddb["DynamoDB lock"]
+      s3b["S3 backups<br/>2객체 · 47 KB"]
+      ecr["ECR × 3<br/>core-api 10 · ai-api 2 · daily-api 2<br/>2.28 GB · $0.23"]
+      ebs["EBS 10 GiB gp3<br/>available 미연결<br/>$0.91 · prevent_destroy"]
+      acm["ACM eks.quest.dhbang.co.kr<br/>ISSUED"]
+      iam["IAM OIDC + Actions Role"]
+      bud["Budgets × 2 · Cost Anomaly"]
+    end
+    orphan["CloudWatch /aws/lambda/test<br/>고아 · 600 B"]
+    subgraph off["세션 레이어 — 지금 0개"]
+      none["VPC · EKS · 노드 · ALB · RDS<br/>존재하지 않음"]
+    end
+  end
+
+  dev -->|"tofu apply"| s3s
+  dev --> ddb
+  gha -->|"AssumeRole OIDC"| iam
+  gha -->|"docker push"| ecr
+
+  classDef warm fill:#FBF3DF,stroke:#9A6F14,stroke-width:2px,color:#3A2C08
+  classDef free fill:#EAF4EE,stroke:#3F7A5A,color:#173026
+  classDef gone fill:#F2F4F7,stroke:#9AA5B1,stroke-dasharray:5 5,color:#6B7683
+  class ebs,ecr,orphan warm
+  class s3s,s3b,ddb,acm,iam,bud free
+  class none,off gone
+</pre>
+  </div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>리소스</th><th>실측</th><th>성격</th><th style="text-align:right">월</th></tr></thead>
+    <tbody>
+      <tr><td class="res">EBS 10 GiB gp3</td><td><code>available</code> · 미연결</td><td><span class="tag t-warm">용량 과금</span> Postgres 데이터 · Stage 3b static PV</td><td class="num">$0.91</td></tr>
+      <tr><td class="res">ECR × 3</td><td>이미지 14개 · 2.28 GB</td><td><span class="tag t-warm">용량 과금</span> lifecycle 각 10개 상한</td><td class="num">$0.23</td></tr>
+      <tr><td class="res">S3 × 2</td><td>5객체 · 94 KB</td><td><span class="tag t-zero">$0</span> tfstate · 논리 백업</td><td class="num">~$0</td></tr>
+      <tr><td class="res">DynamoDB</td><td>항목 1개 · 온디맨드</td><td><span class="tag t-zero">$0</span> state 락</td><td class="num">~$0</td></tr>
+      <tr><td class="res">ACM · IAM · Budgets</td><td>인증서 1 · OIDC · 예산 2</td><td><span class="tag t-zero">$0</span> 무료 티어</td><td class="num">$0</td></tr>
+      <tr><td class="res">CloudWatch 로그</td><td><code>/aws/lambda/test</code> 600 B</td><td><span class="tag t-warm">고아</span> Lambda 함수 0개</td><td class="num">~$0</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout">
+    <span class="k">아낄 것이 없다</span>
+    <p>비싼 것은 이미 다 꺼져 있다. 남은 것은 <strong>꺼두면 다음에 켤 때 더 비싼</strong> 것들이다 —
+    ECR 을 비우면 세션당 재빌드 5~10분, EBS 를 스냅샷으로 내리면 3중 삭제 방어를 뚫어야 하고 절감은 월 $0.5 다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-tag">AWS 밖</span><h2>prod 는 AWS 에 없다 — 실사용자 경로</h2></div>
+  <p>AWS 계정이 통째로 사라져도 서비스는 죽지 않는다. 이것이 안전 예비 $30 규칙이 서 있는 전제이고,
+  이관 계획 <strong>D-014</strong> 가 건드리려는 바로 그 전제다.</p>
+  <div class="plate">
+<pre class="mermaid">
+flowchart LR
+  u["사용자"]
+  cf["Cloudflare DNS<br/>quest.dhbang.co.kr<br/>api.quest.dhbang.co.kr"]
+  v["Vercel<br/>React 프런트엔드<br/>vercel.json rewrite"]
+  fly["Fly.io · nrt<br/>devquest-api<br/>shared-cpu-1x 512MB × 1<br/>min_machines_running=1"]
+  neon["Neon Postgres<br/>앱 DB"]
+  ext["Resend · Judge0<br/>Anthropic · Grafana Cloud"]
+
+  u --> cf --> v
+  v -->|"/api/* rewrite"| fly
+  fly --> neon
+  fly --> ext
+
+  classDef out fill:#E8F0F7,stroke:#2C5F8A,color:#12293C
+  class cf,v,fly,neon,ext out
+</pre>
+  </div>
+  <div class="callout warn">
+    <span class="k">24/7 을 강제하는 실체</span>
+    <p>매일 <code>09:00</code> 메일 발송 · <code>00:00</code> rate limit 리셋 (<code>Asia/Seoul</code>).
+    Fly 를 <code>min_machines_running=0</code> 으로 내리면 월 $3 을 아끼지만 <strong>콜드 스타트 2~3분 동안 사용자가 503</strong> 을 본다.
+    일부러 1로 둔 것이다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-tag">1-network · 2-cluster</span><h2>세션 중 — <code>tofu apply</code> 때만 생긴다</h2></div>
+  <div class="plate">
+<pre class="mermaid">
+flowchart TB
+  igw["Internet Gateway"]
+  alb["ALB (Ingress)<br/>ALB Controller 가 생성<br/>시간당 + LCU"]
+
+  subgraph vpc["VPC 10.0.0.0/16 — 퍼블릭 서브넷만"]
+    direction TB
+    subgraph az1["AZ ap-northeast-2a · persistent_az"]
+      sn1["public subnet 10.0.0.0/20"]
+      node["EKS 노드그룹<br/>t4g.medium × 1~2 · ON_DEMAND"]
+      pv["static PV → 영속 EBS<br/>0-bootstrap 소유"]
+    end
+    subgraph az2["AZ ap-northeast-2c"]
+      sn2["public subnet 10.0.16.0/20<br/>노드는 여기 안 뜬다"]
+    end
+    rds["RDS — db_mode=rds 일 때만<br/>기본값은 in-cluster Postgres"]
+  end
+
+  cp["EKS 컨트롤플레인<br/>$0.10/h 고정"]
+  sm["Secrets Manager × 3"]
+
+  igw --> alb --> node
+  cp --- node
+  node --> pv
+  node -.->|"ESO"| sm
+  node -.->|"db_mode=rds"| rds
+
+  classDef hot fill:#FBEDEC,stroke:#B4433A,stroke-width:2px,color:#3A1512
+  classDef warm fill:#FBF3DF,stroke:#9A6F14,color:#3A2C08
+  classDef free fill:#EAF4EE,stroke:#3F7A5A,color:#173026
+  class cp,node,alb,rds hot
+  class pv warm
+  class igw,sm,sn1,sn2 free
+</pre>
+  </div>
+  <p class="plate-cap">세션 켜짐 = 시간당 <strong>$0.13 ~ $0.25</strong>. 끄면 $1.14/월 로 되돌아온다.</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-tag">대조</span><h2>교과서 3-tier 구성도와 무엇이 다른가</h2></div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>교과서</th><th>여기</th><th>왜</th></tr></thead>
+    <tbody>
+      <tr><td class="res">Route 53</td><td>Cloudflare</td><td>도메인이 Cloudflare 에 있다. ACM 검증도 수동 CNAME</td></tr>
+      <tr><td class="res">CloudFront · WAF · Shield</td><td>없음</td><td>학습장에 붙일 이유가 없다. prod 는 Vercel 이 엣지를 담당</td></tr>
+      <tr><td class="res">Public / Web / App / DB 4계층</td><td>퍼블릭 서브넷 1종</td><td><strong>프라이빗 서브넷을 두면 NAT 가 필수</strong>가 된다</td></tr>
+      <tr><td class="res">NAT Gateway × 2</td><td>0개</td><td>시간당 과금. 노드가 퍼블릭 서브넷에서 IGW 로 직접 나간다</td></tr>
+      <tr><td class="res">Multi-AZ · Auto Scaling</td><td>단일 AZ · 노드 1~2대</td><td>영속 EBS 가 <code>2a</code> 에 묶여 노드를 같은 AZ 로 고정 (실패 6종 ①)</td></tr>
+      <tr><td class="res">RDS primary / secondary</td><td>in-cluster Postgres</td><td>RDS 는 월 +$18. Neon 이 같은 일을 $0 에 한다</td></tr>
+      <tr><td class="res">ElastiCache · EFS</td><td>없음</td><td>필요가 없다</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout">
+    <span class="k">차이는 실력이 아니라 목적이다</span>
+    <p>교과서 그림은 <strong>가용성</strong>을 사고, 이 구성은 <strong>destroy-after-use 로 학습 시간</strong>을 산다.
+    NAT 하나($0.059/h ≈ 월 $43)만 붙여도 이 계정의 상시 비용이 <strong>38배</strong>가 된다.</p>
+  </div>
+</section>
+
+<footer>
+  <div>재현 명령 — <code>infra/aws-eks/PERSISTENT-RESOURCES.md</code> §확인 명령. 문서 소스 <code>docs/architecture/aws-current.md</code></div>
+  <div>⚠️ <code>list-images</code> 는 이미지가 아니라 <strong>태그</strong>를 센다 — <code>describe-images</code> 로 다이제스트를 세야 lifecycle 상한과 비교된다.</div>
+  <div>Fly · Neon · Vercel · Grafana 비용은 레포 기록상 $0 이며 <strong>CLI 미검증</strong>이다.</div>
+</footer>
+
+</div>
