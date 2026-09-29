@@ -180,7 +180,19 @@ DailyMailScheduler.kt:41  중복 방지 = dailyMailLogPort.existsTodayLog
 | Fly(Neon) + EKS(in-cluster) 동시 | 두 스케줄러가 각자 발송 → **사용자가 메일 하루 2통** |
 | 둘 다 Neon 을 보게 | *"학습 클러스터를 prod DB 에 연결 금지"* 위반. `migrate-on-startup: true` 라 **EKS 가 뜨는 순간 Neon 에 Flyway** |
 
-`RateLimitResetScheduler`도 같은 구조다.
+~~`RateLimitResetScheduler`도 같은 구조다.~~
+
+> 🔴 **정정 (2026-09-29, Blindspot U-6) — 같은 구조가 아니다. DB 가 아니라 프로세스 메모리다.**
+> ```
+> AbstractRateLimitBucketStore.kt:18   private val buckets = ConcurrentHashMap<String, Bucket>()
+> AbstractRateLimitBucketStore.kt:22   fun clear() = buckets.clear()
+> RateLimitResetScheduler.kt:16-21     clear() 3개 · DB 접근 0
+> ```
+> 🔑 **방향이 반대다.** B-6 이 제시한 완화책(*"둘 다 Neon 을 보게 하면 dedup 이 작동한다"*)이
+> 여기엔 **적용 불가능**하다 — 상태가 DB 에 없으므로 DB 를 공유해도 합쳐지지 않는다.
+> ⇒ Fly·EKS 동시 가동 구간에서 **사용자 1인의 AI 호출 한도가 2배**가 된다(비용 직결).
+> ***"같은 구조다" 는 검증 없이 인접 항목의 성질을 복사한 것이다*** — 이 레포의 반복 형태
+> (`CLAUDE.md` 「검사가 주장보다 헐겁다」)의 문서판.
 
 ---
 
