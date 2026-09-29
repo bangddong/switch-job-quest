@@ -1,11 +1,33 @@
-# prod → EKS 기간 한정 이관 (2026-09-27)
+# ~~prod → EKS 기간 한정 이관~~ **착수하지 않음** (2026-09-27 작성 · 2026-09-29 폐기)
 
-> 📌 **D-014** · 상태 `🚧진행중` · 영향 `infra/aws-eks/README.md`(D-001·D-002),
-> `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`,
-> `.claude/scripts/eks-heartbeat-reminder.sh`, `reaper/com.devquest.eks-reaper.plist`,
-> `infra/aws-eks/scripts/db-backup.sh`, `infra/aws-eks/scripts/db-restore.sh`,
-> `infra/aws-eks/PERSISTENT-RESOURCES.md`, `k8s/base/`, `.github/workflows/be-cd.yml`
-> 재판정 `0번 항목(창 길이·예산)이 미결인 동안 착수하지 않는다`
+> 📌 **D-014** · 상태 `❌폐기` · 영향 `infra/aws-eks/README.md`, `docs/eks-cost-model.md` · 재판정 `infra/aws-eks/README.md 📌D-015 (2026-09-29) — prod 이관을 하지 않기로 확정. 사유 4건은 아래 「폐기 사유」`
+
+> **원 영향 목록(참고용 — 위 메타 줄은 검사기가 한 줄만 읽으므로 분리했다)**:
+> `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.claude/scripts/eks-heartbeat-reminder.sh`,
+> `reaper/com.devquest.eks-reaper.plist`, `infra/aws-eks/scripts/db-backup.sh`,
+> `infra/aws-eks/scripts/db-restore.sh`, `infra/aws-eks/PERSISTENT-RESOURCES.md`,
+> `k8s/base/`, `.github/workflows/be-cd.yml` — **폐기됐으므로 이 중 어느 것도 개정하지 않는다.**
+
+---
+
+## 🔴 폐기 사유 (2026-09-29) — 이 문서를 지우지 않고 남기는 이유
+
+**결정**: prod 를 EKS 로 옮기지 않는다. 간헐 세션형을 유지한다 → 📌**D-015** (`infra/aws-eks/README.md`).
+
+| # | 사유 | 근거 |
+|:-:|---|---|
+| ① | **자금이 어떤 듀티로도 안 맞는다** | 24/7 = 3주 · 매일 6h = 만료일에 소진 · 평일 8h = 여유 $6. `docs/eks-cost-model.md` 「듀티 사이클」 |
+| ② | **요청 베이스 콜드스타트도 안 된다** | 예산이 허용하는 유일한 상태(전체 destroy)가 **12~13분**. 컨트롤플레인 $0.10/h 를 destroy 외에 끌 수 없다. `docs/eks-cost-model.md` 「요청 베이스」 |
+| ③ | 🔑 **EKS 로만 배울 수 있는 것은 이미 다 배웠다** | `infra/aws-eks/README.md` 「진행 현황」 — Stage 0·1·2(IRSA)·3a·3b·4·4b 전부 `✅`(= 실클러스터 확인). EKS 전용 잔여는 **Karpenter 1개**이고 `선택` 이다. 아직 못 배운 **상시 운영**은 distro 무관 |
+| ④ | **prod 트래픽을 EKS 로 보내면 prod 가 영구 사망할 수 있다** | Blindspot 22건(아래 「Blindspot U-1~U-22」). 최악 = `FlywayConfig.kt:55-56` 의 `repair()` — KDoc 이 *"core-api 단독으로 도는 지금은 안전하다"* 로 끝나고, 이관이 없애는 전제가 정확히 그것 |
+
+🔑 **이 문서의 0번 항목(창 길이 × 예산)은 자기 자신을 기각했다.** 게이트로 세워둔 산술이
+*"3주만 살 수 있다"* 를 내놨고, 그 답이 계획 전체의 전제를 무효화했다.
+***착수 전 검증이 항목 정의를 뒤집은 것이 이번이 아홉 번째이고, 처음으로 「항목」이 아니라 「계획」이 뒤집혔다.***
+
+⚠️ **아래 본문은 폐기된 계획이다.** T-1~T-3·R-1~R-9·13건 재판정·순서표는 **실행하지 않는다.**
+남겨두는 이유는 ***"그때 무엇을 믿었는가"*** 와 **22건의 코드 실측**이 k3s 트랙이나 재이관 검토에서 재사용되기 때문이다.
+
 
 **선행 문서**: `2026-09-11-prod-eks-migration-prereqs.md`(D-013, 선행 조건 5건 완료 2026-09-24)
 
@@ -371,3 +393,44 @@ D-002 「영향」 목록에도 그 문장 관련 항목 없음
 📌 관례 (재확인): ***주입 테스트는 "주입이 실제로 닿았는지"를 먼저 찍는다.*** #434 에서
 단일파일 마운트가 macOS 에서 빈 디렉토리를 만들어 `EXIT:0` 이 통과로 보였던 것과 **같은 형태**이고,
 ***이 세션에서만 두 번째다.*** 공회전한 테스트는 음성 결과를 **거짓 안심**으로 바꾼다.
+
+---
+
+## Blindspot U-1~U-22 — 형태 B(왕복) 검증 (2026-09-29)
+
+사용자가 2026-09-28 에 형태 **B**(*평소 Fly · 필요할 때만 EKS 가 prod 트래픽 · DB 는 Neon 유지 · 왕복 반복*)를
+택했고, 착수 전 Explore 로 코드에 직접 물었다. **22건 전부 "prod 트래픽이 EKS 를 향한다"에서만 발생하고,
+실습을 막는 것은 0건이다** — 이것이 D-015 사유 ③·④ 의 근거다.
+
+🔴 **내가 사용자에게 *"B 면 T-1·T-3 이 소멸한다"* 고 말했는데 둘 다 틀렸다** (U-20·U-12).
+
+| ID | 발견 | 근거 | B 판정 |
+|---|---|---|---|
+| U-1 | *"학습 클러스터를 prod DB 에 연결 금지"* 의 **기계적 강제가 0건** — 문서 3곳뿐 | `eks-migration-log.md:377` · 앱 DB 경로는 `k8s/base/core-api.yaml:66-79` 100% 환경변수 | 신규(제약의 성질 변경) |
+| **U-2** | 🔴 **Flyway `repair()` 가 공유 이력을 서로 DELETED 마킹** → prod 영구 부팅 불가 | `FlywayConfig.kt:55-56` + KDoc(*"core-api 단독으로 도는 지금은 안전하다"*) · `application-prod.yml:37` · `be-cd.yml:3-7` | **커짐 (최악)** |
+| U-3 | 금지 근거 ③(비가역)은 그대로 — ⓐ 가 없애는 건 데이터 왕복뿐 | `0-bootstrap/s3-backups.tf:99` | 그대로 |
+| U-4 | 커넥션 경합 근거에 **측정·설정 0건** (Hikari pool·Neon 상한 미기록) | `application-prod.yml:41-45` | 그대로(미측정) |
+| U-5 | B-6 *"메일 2통"* 은 축소되나 **09:00 동시각 check-then-act 경합**은 남음 | `DailyMailScheduler.kt:25,29,41` · `DailyQuestionContentService.kt:28,42` | 축소 + 신규 |
+| **U-6** | 🔴 **`prereqs.md:183` 이 사실과 다르다** — `RateLimitResetScheduler` 는 DB 가 아니라 **프로세스 메모리** | `AbstractRateLimitBucketStore.kt:18` `ConcurrentHashMap` · `:22 clear()` | **신규** — Neon 공유로 안 고쳐짐. 동시 가동 시 1인 AI 한도 **2배**(비용 직결) |
+| **U-7** | **Fly ↔ EKS 트래픽 전환/복귀 절차·스크립트 = 0건** | `eks-session-sop.md` §6·§8 에 DNS 단계 0개 · `.claude/scripts/` 14개 중 0건 | **신규(1순위)** |
+| U-8 | 전환 대상 호스트가 2곳 하드코딩, 한쪽은 tofu 가 **금지** | `fe/vercel.json:5` · `0-bootstrap/variables.tf:279-280` | 그대로 (R-2 는 축소) |
+| **U-9** | `ingress.yaml` 에 **`host:` 키 0개**, 인증서는 학습 도메인 → DNS 만 돌리면 **TLS 이름 불일치로 실패** | `k8s/base/ingress.yaml:135-140` · `0-bootstrap/acm.tf:78` | 신규 |
+| **U-10** | Neon DSN 이 들어갈 Secrets Manager 항목이 **destroy 대상 레이어**에 있고 `recovery_window_in_days = 0` | `2-cluster/secrets.tf:45-52,85-93` | **커짐 — B-9 가 왕복마다 반복** |
+| U-11 | `environment=prod` 의 JWT 키는 Fly 와 무관한 **제3의 키** → 강제 로그아웃 **왕복 × 2회** | `0-bootstrap/jwt-secret.tf:85` · `README.md` Stage 4b 행 | 커짐 |
+| **U-12** | 🔴 **리퍼 소멸 아님** — 규모만 줄고 빈도는 늘며, destroy 전에 **Ingress 를 먼저 지운다**(prod ALB 회수) | `eks-reaper.sh:17`(TTL 7200) · **`:83` `kubectl delete ingress --all -A`** · `:174` · 하트비트는 `settings.json` Stop 훅에만 | **축소 후 그대로** |
+| U-13 | SOP §8(종료)이 **prod 장애 유발 런북**이 되고 DNS 복귀 단계가 없다 | `eks-session-sop.md` §8 | 커짐 |
+| U-14 | 과금구간 *"질문 금지"* 의 19분 손익분기가 **되살아난다** → 계획서 **R-6 이 틀린 항목** | `eks-session-sop.md:108-130` ↔ 본 문서 R-6 | 소멸 취소 |
+| U-15 | 퀴즈 게이트는 애초에 적용 범위 밖 (브랜치명 축) | `assert-eks-quiz.sh:7,20-21` | 소멸(항목 무효) |
+| U-16 | tfsec 예외 수치 스테일 — B-18 "4건" · 재실측 "25건" · **현재 26건** | `infra/aws-eks/*/*.tf` | 그대로(스테일) |
+| U-17 | 퍼블릭 엔드포인트 예외의 *"세션마다 폐기"* 는 참으로 남지만 **보호 대상이 prod 컨트롤플레인**이 된다 | `2-cluster/cluster.tf` · `postgres-tls.tf:63` | 축소 + 성질 변경 |
+| **U-18** | in-cluster Postgres 목적 소멸 but **EBS $0.91 은 3중 봉쇄로 계속 과금** | `ebs-postgres.tf:67-68` · `postgres-static.yaml:70,80,86` · `PERSISTENT-RESOURCES.md:110-124` | 목적 소멸 / 비용 그대로 |
+| **U-19** | **0번 항목의 정의 자체가 성립하지 않는다** — B 는 고정 창이 없고 학습 트랙과 배타도 아니다 | 본 문서 `:36-82` | **소멸/재정의 필요** |
+| **U-20** | 🔴 **T-1 "소멸" 은 절반만 맞다** — 데이터 복귀는 소멸, **트래픽 복귀가 그 자리를 대체** | `db-backup.sh:28-29` · 대체 블로커 U-7·U-8·U-9 | 소멸(데이터) + 신규(트래픽) |
+| U-21 | `be-cd.yml` 은 축소가 아니라 **상시 위험** — 창 중 Fly 차단이 **B 의 복귀 전제와 정면 충돌** | `be-cd.yml:3-7,44` · `be/fly.toml:26-28` | 그대로/커짐 |
+| U-22 | prod 스모크가 두 배포를 구분 못 한다 → **전환 성공을 검증할 수단이 없다** | `prod-smoke-daily.yml:43-45,54` · `fe/vercel.json:5` | 그대로(B-14 유효) |
+
+### 🔑 U-18 은 D-015 하에서 뒤집힌다
+
+B 에서는 in-cluster Postgres 가 불필요해져 EBS 10 GiB 가 **한 번도 마운트되지 않는 자산**이 되지만,
+**간헐 세션형(D-015)에서는 Stage 3b 의 학습 자산으로 계속 쓰인다.** 제거 검토 대상이 아니다
+(`infra/aws-eks/PERSISTENT-RESOURCES.md` 의 삭제 방지 3종은 그대로 유지).
