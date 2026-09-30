@@ -135,6 +135,7 @@ DB에서 `validate`가 깨진다. prod에 적용돼 있고, #364 이후 CI도 �
 
 | 주제 | 위치 |
 |------|------|
+| **블로그 원고 개요** (형태 A/B/C — **형태 미정**) | `docs/superpowers/plans/2026-09-29-blog-outline.md` |
 | **EKS 비용 상수·전략·Free Plan** | `docs/eks-cost-model.md` |
 | **JVM·관측 현장 노트** (메타스페이스·GC·OOM·Grafana·flyctl) | `docs/jvm-observability-notes.md` |
 | **EKS 결정 기록 (📌 D-001·D-002·D-004)** | `infra/aws-eks/README.md` 「결정 기록」 |
