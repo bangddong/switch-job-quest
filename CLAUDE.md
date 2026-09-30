@@ -13,11 +13,52 @@
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
 | 멀티 에이전트 운영 | `.claude/docs/agent-workflow.md` |
 | 스킬 작성/수정 | `.claude/docs/skill-guide.md` |
+| 🔴 **블로그 글 작성·발행** | **이 레포가 아니다** → 형제 디렉토리 `study-log` ← 아래 「블로그」 절 **먼저** |
 | **설계·전략 결정을 바꿀 때** | `.claude/docs/design-change-procedure.md` ← 영향 범위를 기억 아닌 조회로. **기각했던 선택지를 다시 채택할 때 특히** |
 | **EKS 실습 세션 (apply→작업→destroy)** | `docs/eks-session-sop.md` ← 과금 시작 전 **반드시**. 시작/종료 체크리스트 + dead man's switch 안전장치 |
 | 사용자 직접 실행 필요한 작업 | `.claude/TASKS.md` ← 파일이 존재하면 미완료 작업 있음 |
 | 현재 작업 상태 / PR / 최근 결정 | `.claude/CONTEXT.md` ← 새 대화 시작 시 **먼저 읽기** |
 | 미해결 QA 지적 (미룬 것) | `.claude/review-ledger.md` ← PR에서 안 고치기로 한 지적의 유일한 영속 저장소 |
+
+## 블로그 — 원고는 이 레포에 쓰지 않는다 (2026-09-30)
+
+🔴 **글을 쓰기로 했으면 `study-log` 레포로 간다.** sjq 에 원고 파일을 만들지 마라.
+
+> **위치**: 이 레포의 **형제 디렉토리**다(`../study-log`). 이 기기에서는 `~/Develop/Sources/study-log`.
+> ⚠️ **절대경로를 스크립트·문서에 박지 마라** — 개발 기기가 Windows·macOS 둘 다라, 한쪽으로 못 박으면
+> 반대편이 조용히 죽는다(아래 mneme 절의 `$WIKI_DIR` 건과 **같은 함정**이고, 이 절 초안에서 내가 실제로 밟았다).
+
+| | sjq (여기) | **study-log** |
+|---|---|---|
+| 소유 | **원고의 재료** — 일지·튜토리얼·결정 기록·비용 모델·구성도 | **원고 자체와 발행** |
+| 소스 | 커밋된 마크다운 | 🔴 **Notion Study Log DB** — `contents/posts/*.md` 는 **CI 산출물이다** |
+| 발행 | 없음 | Notion → CI(`convert-notion.mjs`) → Gatsby → https://dhbang.co.kr |
+
+### 착수 전 반드시 읽을 것 (순서 고정)
+
+```
+study-log/.claude/CLAUDE.md        Notion 스키마 · Slug 규칙 · 발행 워크플로 · 태그 허용값
+study-log/.claude/writing-style.md 문체·구조 (경어체 필수·줄표 금지·소제목=주장문·한계/정리/참고 절 필수)
+study-log/.claude/skills/write-study-post/  발행까지 하는 스킬
+```
+
+⚠️ **`push` 전에 반드시 사용자 검토를 받는다** — study-log CLAUDE.md 2단계의 명시 규칙이다.
+
+### 왜 이 절이 생겼나 (2026-09-30 실제 사고)
+
+EKS 트랙이 끝나고 블로그 원고에 착수하면서 **sjq 안에 `docs/blog/01-*.md` 를 만들어 초고를 썼다.**
+사용자가 *"옆 경로에 study-log 없니?"* 라고 물어서야 발견했고, 그 시점엔 이미 규약 위반이 쌓여 있었다.
+
+```
+경어체(필수)   0회       ← 평서체 `~다.` 76회
+줄표 `—`       10회      ← 본문 금지
+소제목         8개 중 6개가 라벨   ← 주장문이어야 한다
+정리 · 참고 절  없음      ← 둘 다 필수
+```
+
+🔑 ***재료가 있는 레포와 결과물이 사는 레포가 다르다는 것을 아무 데도 안 적어놨다.***
+`CLAUDE.md` 가 *"블로그 원고 소스다"* 라고 쓴 문장이 **소스만 말하고 목적지를 말하지 않아서**,
+"여기가 원고를 쓰는 곳"으로 읽혔다. **포인터 한 줄이면 막혔을 일이다.**
 
 ## mneme (외부 성장 두뇌)
 
@@ -57,7 +98,8 @@ sjq에 **커밋할 게 한 줄도 없는 작업**을 이 레포 우선순위로 
 ## EKS 작업 일지 규칙 (EKS 이관 작업 종료 시까지 유지)
 
 EKS 관련 작업(계획: `infra/aws-eks/README.md`) 중에는 **`docs/eks-migration-log.md`를 실시간 유지**한다.
-블로그 "AWS free tier $200 EKS 실습기" 원고 소스다.
+블로그 "AWS free tier $200 EKS 실습기" 의 **원고 소스**다.
+🔴 **소스일 뿐이다 — 원고 자체는 `study-log` 레포에 쓴다**(위 「블로그」 절).
 
 | 규칙 | 내용 |
 |------|------|
