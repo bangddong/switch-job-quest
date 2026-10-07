@@ -4652,3 +4652,30 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   `get-cost-and-usage` 는 `$0.01/요청` 이라 매 세션은 과하다 → **월 1회**가 적정선.
 - `[비용]` 위 조회 1회 = **$0.01**. Cost Explorer 누적이 `$0.25 → $0.26` 이 됐다(전체의 4.4%).
 
+
+## 2026-10-07
+
+- `[비용]` 🔴 **노드(`t4g.small`) 인스턴스 요금이 한 번도 청구되지 않았다.** 블로그 ①편에 넣을 청구 구성 그림을
+  만들다가, 서비스별 표의 `Amazon Elastic Compute Cloud - Compute` 가 넉 달 내내 `0.0000` 인 것을 보고 사용 유형별로 다시 조회했다.
+  ```
+  aws ce get-cost-and-usage --time-period Start=2026-07-01,End=2026-10-08 \
+    --granularity MONTHLY --metrics UnblendedCost UsageQuantity \
+    --filter '{"And":[{"Dimensions":{"Key":"RECORD_TYPE","Values":["Usage"]}},
+               {"Dimensions":{"Key":"SERVICE","Values":["Amazon Elastic Compute Cloud - Compute","EC2 - Other","Amazon Virtual Private Cloud"]}}]}' \
+    --group-by Type=DIMENSION,Key=USAGE_TYPE
+  ```
+  | 사용 유형 | 금액 | 수량 |
+  |---|---:|---:|
+  | `APN2-EBS:VolumeUsage.gp3` | $2.1654 | 23.74 GB-월 |
+  | `APN2-PublicIPv4:InUseAddress` | $0.3190 | 63.80 h |
+  | `APN2-CPUCredits:t4g` | $0.0021 | 0.05 |
+  | **`APN2-BoxUsage:t4g.small`** | **$0.0000** | **63.30 h** |
+  노드를 **63.3 인스턴스-시간** 썼는데 `$0` 이다. 퍼블릭 IP 는 같은 시간만큼 정가(`$0.005/h`)로 청구됐으므로 조회 누락이 아니다.
+- `[메모]` **원인은 확인하지 못했다.** `t4g.small` 무료 체험(월 750시간) 적용으로 추정하지만,
+  `aws freetier get-free-tier-usage` 에는 Glue·CloudWatch·KMS 3건만 나오고 EC2 항목이 없다. 추정으로만 적는다.
+  ⚠️ 07-27 엔트리의 *"750시간 무료가 아니라 크레딧 구조라서 위 단가가 그대로 청구된다"* 는 **청구서와 맞지 않는다.**
+- `[메모]` 영향 범위. ① `docs/eks-cost-model.md` 의 시간당 합계(`$0.1663` 등)는 **정가 모델**로는 맞지만 이 계정의 실제 청구보다 크다.
+  ② 09-16 밤샘 사고의 `$2.77~3.14` 는 노드 요금 `$1.02~1.39` 를 더한 추정이었다. 실제로 청구된 것은
+  컨트롤플레인 `$1.73` + 퍼블릭 IP(49.2h × $0.005 ≈ `$0.25`) + 노드 루트 볼륨이라 **`$2` 남짓**이다.
+  ③ 블로그 단가표는 정가를 유지하고, 청구서에는 `$0` 로 찍혔다는 사실을 본문에 따로 적었다.
+- `[비용]` 위 조회 1회 = $0.01. Cost Explorer 누적 `$0.27`.
