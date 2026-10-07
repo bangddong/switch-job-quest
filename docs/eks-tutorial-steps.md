@@ -157,7 +157,7 @@ Stage 0의 첫 과금 apply를 하기 **전에** 반드시 끝내야 하는 단�
 |---|---|---|
 | `backend-state.tf` | S3 버킷 + DynamoDB 락 테이블 | 원격 state 저장소와 동시 실행 잠금 |
 | `backend.tf` | `backend "s3"` 블록 | 이 레이어가 **자기 state를 자기가 만든 버킷에** 두게 함 |
-| `budget.tf` | Budget + 알림 3단계 | 절대 금액 초과 감시 |
+| `budget.tf` | Budget 2개 + 알림 20단계($10 간격, 누적) | 절대 금액 초과 감시 |
 | `cost-anomaly.tf` | 이상탐지 모니터 + 구독 | 패턴 이탈 감시 (예산이 못 잡는 것) |
 | `ecr.tf` | ECR 레포 + lifecycle | Stage 1의 이미지 보관소 |
 | `iam-github-oidc.tf` | OIDC 공급자 + 역할 | CI가 장기 액세스키 없이 AWS를 만지게 함 |
@@ -240,7 +240,9 @@ tofu plan                                  # No changes. 여야 함 (드리프�
 `budget.tf`·`cost-anomaly.tf`의 주석이 각 설정이 왜 그 값인지 설명하니 **코드를 읽는 게 곧 학습**이다.
 
 **두 장치의 역할이 다르다**:
-- **예산** = 절대 금액 감시. `$10 / $50 / $150` 초과 시 이메일.
+- **예산** = 절대 금액 감시. **누적** 소진액이 `$10` 을 넘을 때마다(`$10 · $20 · … · $200`, 20단계) 이메일.
+  예산 1개당 알림 10개가 AWS 하드 리밋이라 예산이 2개로 나뉜다(`budget.tf` 의 `chunklist`).
+  월간이 아니라 `ANNUALLY` + 시작일 고정이다 — 크레딧은 달이 바뀌어도 리셋되지 않으므로.
 - **이상탐지** = 패턴 감시. 금액이 작아도 "안 쓰던 서비스가 갑자기 켜졌다"를 잡는다. 즉 **끄는 걸 잊은 리소스** 탐지용.
 
 > 🔴 **둘 다 실시간이 아니다 — 기대치를 정확히 해 둘 것.** 예산은 `ACTUAL` 비용 기준이라 AWS 청구
@@ -311,16 +313,23 @@ tofu import aws_ce_anomaly_subscription.alerts "$SUB"
 
 검증 (apply 후):
 ```bash
+aws budgets describe-budgets \
+  --account-id "$(aws sts get-caller-identity --query Account --output text)" \
+  --query 'Budgets[].[BudgetName,TimeUnit,CostTypes.IncludeCredit]' --output text
 aws budgets describe-notifications-for-budget \
   --account-id "$(aws sts get-caller-identity --query Account --output text)" \
-  --budget-name devquest-eks-monthly \
-  --query 'Notifications[].[ComparisonOperator,Threshold,ThresholdType]' --output table
+  --budget-name devquest-eks-credit-010-100 \
+  --query 'sort_by(Notifications,&Threshold)[].[Threshold,ThresholdType,NotificationType]' --output text
 aws ce get-anomaly-monitors --query 'AnomalyMonitors[].[MonitorName,MonitorDimension]' --output table
 aws ce get-anomaly-subscriptions \
   --query 'AnomalySubscriptions[].[SubscriptionName,Frequency,ThresholdExpression.Dimensions.Values[0]]' \
   --output table
 ```
-기대: 알림 3건이 전부 `ABSOLUTE_VALUE` `10 / 50 / 150`, 모니터 1건이 `SERVICE`,
+> 🔴 **2026-10-06 정정** — 이 절은 `devquest-eks-monthly` 월간 예산·알림 3단계(`10/50/150`)로 적혀 있었다.
+> 코드는 07-31 에 누적 20단계로 바뀌었는데 **이 문서를 안 고쳤다.** 블로그 ③편을 쓰며 `describe-budgets` 실측으로 발견.
+
+기대: 예산 2건(`devquest-eks-credit-010-100` · `-110-200`)이 `ANNUALLY` · `False`,
+첫 예산의 알림 10건이 전부 `ABSOLUTE_VALUE` `ACTUAL` 로 `10 … 100`, 모니터 1건이 `SERVICE`,
 구독 1건이 `DAILY` + 임계값 `5`(기본 `100.0`이 아니라).
 
 ### B-4. 이후는 CI가 apply한다
