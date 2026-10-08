@@ -2391,13 +2391,240 @@ aws elbv2 describe-load-balancers --region ap-northeast-2 \
 
 ---
 
-## Stage 5 — (선택, 미착수)
+## Stage 5 — 오토스케일과 GitOps (선택)
 
-| Stage | 세울 것 | 새로 배우는 것 |
-|:--:|---|---|
-| **5** | metrics-server·HPA, Karpenter, ArgoCD | 오토스케일, GitOps |
+| Stage | 세울 것 | 새로 배우는 것 | 상태 |
+|:--:|---|---|:--:|
+| **5a** | metrics-server · HPA | 지표 수집, 파드 수 자동 조절 | ✅ 2026-10-08 |
+| **5b** | Karpenter | 노드 자동 조절 | ⬜ |
+| **5c** | ArgoCD | GitOps | ⬜ |
 
 > `infra/aws-eks/README.md`가 **"선택"** 으로 표시해 둔 단계다. EKS 이관 완료의 필수 조건이 아니다.
+
+## Stage 5a — metrics-server + HPA
+
+> 2026-10-08 유료 세션에서 확인한 명령만 적는다. 계획과 산술은
+> `docs/superpowers/plans/2026-10-07-eks-stage5a-hpa.md`, 실측 원문은 일지 2026-10-08 엔트리.
+
+### 무엇을 세우나, 왜
+
+지금까지의 클러스터는 **파드가 CPU 를 얼마나 쓰는지 물어볼 곳이 없었다.** `kubectl top` 은
+`Metrics API not available` 을 내고, 그래서 09-08 부하 실측 때는 컨테이너 안의 cgroup 파일을
+직접 읽었다. 앱은 전부 `replicas: 1` 고정이었다.
+
+| | 하는 일 | 없으면 |
+|---|---|---|
+| **metrics-server** | 각 노드의 kubelet 에서 파드별 CPU·메모리 사용량을 긁어 `metrics.k8s.io` API 로 내놓는다. **저장하지 않는다** — "지금" 값만 있다 | `kubectl top` 불가. HPA 가 볼 숫자가 없다 |
+| **HPA** | 15초마다 그 숫자를 읽어 Deployment 의 `replicas` 를 고친다 | 사람이 `kubectl scale` 을 친다 |
+
+HPA 의 계산은 이 한 줄이다:
+
+```
+필요 파드 수 = 올림( 현재 파드 수 × 현재 사용률 ÷ 목표 사용률 )
+사용률       = 실제 CPU 사용량 ÷ requests        ← limits 가 아니다. 노드 용량도 아니다
+```
+
+`daily-api` 의 `requests.cpu` 는 200m 이다. 목표를 70% 로 두면 **파드당 평균 140m** 를 넘을 때 늘린다.
+🔴 **requests 가 없는 컨테이너는 사용률을 계산할 수 없어** HPA 가 `<unknown>` 을 낸다.
+
+### 사전 조건
+
+| | |
+|---|---|
+| 앞 단계 | Stage 0~3b 와 3서비스 배포(`k8s/README.md` §3)까지 |
+| 노드 | **4대** — 아래 「왜 4대인가」 |
+| 부하 도구 | `k8s/loadtest/k6.yaml` · `pin-loadgen-node.sh` (09-08 에 만든 것 그대로) |
+| 외부 노출 | **ALB 없음.** 부하는 클러스터 안에서 Service 로 건다 |
+
+#### 왜 4대인가
+
+부하 생성기(k6)는 노드 하나를 비워 거기에만 둔다 — 측정 대상과 같은 노드에 두면 측정이 오염된다.
+그래서 앱이 쓸 수 있는 노드는 **전체 − 1** 이다.
+
+```
+노드당 allocatable 1365Mi − DaemonSet 104Mi = 1261Mi
+앱 requests 1568Mi + 시스템 Deployment 302Mi + metrics-server 200Mi = 2070Mi
+
+3대(앱 노드 2대)  2522 − 2070 =  452Mi   ← daily-api 복제본 하나가 512Mi. 한 개도 못 늘린다
+4대(앱 노드 3대)  3783 − 2070 = 1713Mi   ← 3개까지
+```
+
+### 5a-1. 클러스터를 4대로 올린다 — 🔴 과금 시작
+
+```bash
+cd infra/aws-eks/2-cluster
+tofu plan  -var node_desired_size=4      # Plan: 32 to add
+tofu apply -var node_desired_size=4
+```
+
+metrics-server 는 `addons.tf` 의 `aws_eks_addon.metrics_server` 가 함께 올린다(44초).
+`node_max_size` 기본값이 4 라서 `-var` 한 줄로 된다.
+
+<!-- verify: infra/aws-eks/2-cluster/addons.tf ~ ^resource "aws_eks_addon" "metrics_server" -->
+
+> 💰 시간당 **$0.2132** (컨트롤플레인 $0.10 + 노드 4대 × $0.0283).
+
+이어서 Stage 2~3b 와 `k8s/README.md` §3 의 순서대로 ESO · postgres · 앱 3종을 올린다.
+
+### 5a-2. 지표가 수집되는지 확인한다
+
+```bash
+kubectl get apiservice v1beta1.metrics.k8s.io
+kubectl top nodes
+```
+```
+v1beta1.metrics.k8s.io   kube-system/metrics-server   True   102s
+```
+
+🔴 **파드가 `Running` 인 것으로 판정하지 마라.** metrics-server 는 API 서버에 자기 경로를 등록해
+요청을 넘겨받는 방식(aggregation)이라, 파드가 떠 있어도 `AVAILABLE` 이 `False` 면 HPA 는 못 읽는다.
+
+### 5a-3. 그 숫자를 믿어도 되는지 확인한다
+
+`kubectl top` 이 숫자를 낸다는 것과 그 숫자가 맞다는 것은 다르다. 같은 구간에서 컨테이너 자신의
+누적 CPU 카운터와 비교한다.
+
+```bash
+P=$(kubectl get pod -l app=daily-api -o jsonpath='{.items[0].metadata.name}')
+kubectl exec k6 -- k6 run -q -e RATE=50 -e DUR=130s -e PREVUS=200 /scripts/journey.js &   # 150 req/s
+sleep 25
+a=$(kubectl exec $P -- awk '$1=="usage_usec"{print $2}' /sys/fs/cgroup/cpu.stat); ta=$(date +%s.%N)
+for i in 1 2 3 4 5 6; do sleep 14; kubectl top pod $P --no-headers; done
+b=$(kubectl exec $P -- awk '$1=="usage_usec"{print $2}' /sys/fs/cgroup/cpu.stat); tb=$(date +%s.%N)
+echo "($b-$a)/($tb-$ta)/1000" | bc -l      # 밀리코어
+```
+```
+cgroup 평균      139.31m
+kubectl top 평균 147.17m   (+5.6%)
+개별 샘플        153m 272m 158m 100m 116m 84m
+```
+
+🔴 **`kubectl top` 을 한 번만 찍어 판단하지 마라.** 개별 샘플은 84m 에서 272m 까지 흩어진다.
+첫 시도에서 한 번 찍은 값(210m)을 45초 평균(156m)과 비교했더니 35% 가 어긋났다.
+
+### 5a-4. HPA 를 적용한다
+
+```bash
+kubectl apply -f k8s/hpa/daily-api-hpa.yaml
+kubectl get hpa daily-api
+```
+```
+daily-api   Deployment/daily-api   cpu: 4%/70%   1   4   1   21s
+```
+
+`TARGETS` 가 `<unknown>/70%` 이면 metrics-server 가 없거나 대상 컨테이너에 `requests.cpu` 가 없는 것이다.
+🔴 **이 매니페스트는 metrics-server 없이도 에러 없이 적용된다.** 적용 성공은 동작의 증거가 아니다.
+
+<!-- verify: k8s/hpa/daily-api-hpa.yaml ~ averageUtilization: 70 -->
+
+**왜 `daily-api` 인가**: `core-api` 에는 정해진 시각에 도는 `@Scheduled` 잡이 2개 있고 분산 락이 없다.
+복제하면 그 잡이 파드 수만큼 중복 실행된다. `daily-api` 에는 `@Scheduled` 가 없다.
+
+### 5a-5. 부하를 걸어 늘어나는 것을 본다
+
+```bash
+sh k8s/loadtest/pin-loadgen-node.sh && kubectl apply -f k8s/loadtest/k6.yaml
+kubectl exec k6 -- k6 run -q -e RATE=200 -e DUR=420s -e PREVUS=600 /scripts/journey.js &   # 600 req/s
+watch -n 15 'kubectl get hpa daily-api; kubectl top pods -l app=daily-api'
+```
+
+부하 단계별 `daily-api` 사용률(파드 1개):
+
+| req/s | CPU | 사용률 |
+|---:|---:|---:|
+| 300 | 118m | 59% |
+| **600** | **241m** | **120%** |
+
+```
+01:56:17  cpu 120%/70%  rep=1
+01:56:19  SuccessfulRescale  New size: 2; reason: cpu resource utilization (percentage of request) above target
+01:56:49  새 파드 1/1 Ready                     ← 32초 이내
+```
+
+### 5a-6. 🔴 늘어난 파드가 일을 하는지 확인한다
+
+**파드 수가 늘었다는 것과 부하가 나뉘었다는 것은 다르다.** 확장 직후의 파드별 CPU:
+
+```
+01:57:21  hpa 56%/70%   새 파드 4m · 기존 파드 220m
+01:58:24  hpa 53%/70%   새 파드 2m · 기존 파드 212m
+```
+
+기존 파드는 여전히 110% 인데 평균이 56% 라 HPA 는 *"목표 이하"* 로 본다. Service(ClusterIP)는
+요청이 아니라 **연결** 단위로 파드를 고르고, k6 는 한 번 맺은 연결을 계속 쓴다. 새 파드는 새 연결이
+생길 때만 일을 받는다. 연결을 재사용하지 않게 하면 바로 나뉜다:
+
+```bash
+kubectl exec k6 -- k6 run -q --no-connection-reuse -e RATE=200 -e DUR=200s -e PREVUS=600 /scripts/journey.js
+```
+```
+02:07:25  새 파드 483m · 새 파드 434m · 기존 파드 95m
+```
+
+> 실서비스에서 이 문제는 keep-alive 를 오래 유지하는 클라이언트(다른 서비스의 커넥션 풀, gRPC)에서
+> 난다. 브라우저 트래픽이 ALB 를 거쳐 들어오는 경로는 ALB 가 요청 단위로 나누므로 양상이 다르다.
+
+#### 갓 뜬 JVM 이 HPA 를 과하게 늘린다
+
+위 출력에서 새 파드는 같은 몫의 요청에 **기존 파드의 4~5배 CPU**(483m vs 95m)를 쓴다. JIT 컴파일이
+끝나지 않았기 때문이다. 기동 직후에는 1.5코어 이상을 쓴다. 그 결과:
+
+```
+01:58:40  cpu 198%/70%  → New size: 4      정상 상태에서 필요한 수는 2 였다(02:01 이후 54%)
+02:00:49  → New size: 2                    60초 뒤 되돌아옴
+```
+
+**늘린 파드의 워밍업 비용이 다시 늘릴 근거가 된다.** `maxReplicas` 가 이 과확장의 상한이다.
+
+### 5a-7. 천장 — 4번째는 자리가 없다
+
+```bash
+kubectl get events --field-selector reason=FailedScheduling
+```
+```
+0/4 nodes are available: 1 node(s) were unschedulable, 3 Insufficient memory.
+```
+
+`1 unschedulable` 은 k6 용으로 cordon 한 노드다. HPA 는 파드를 **만들어 달라고 할 뿐** 노드를
+늘리지 못한다. 이 `Pending` 을 푸는 것이 Stage 5b(Karpenter)다.
+
+### 5a-8. 부하를 빼면 줄어든다
+
+부하 종료 02:02:54 → 파드 1개 02:03:56. 매니페스트의 `stabilizationWindowSeconds: 60` 과 맞는다.
+기본값은 300초다 — 지난 300초 동안 계산된 필요 수의 **최댓값**까지만 줄여서, 들쭉날쭉한 부하에
+늘렸다 줄였다를 반복하지 않게 한다. 이 클러스터는 기다리는 시간이 과금이라 줄였다.
+
+### 5a-9. 🔴 HPA 가 켜진 동안 base 매니페스트를 다시 적용하지 마라
+
+`k8s/base/daily-api.yaml` 에는 `replicas: 1` 이 있다. HPA 가 4 를 원하는 부하 중에 다시 적용하면:
+
+```
+02:07:41  kubectl apply           (replicas: 1)
+02:07:47  파드 1개만 남음          ← 6초 안에 부하 중인 파드가 죽었다
+02:08:17  HPA 가 2 로 다시 늘림    ← 36초 뒤
+```
+
+HPA 를 상시 쓰려면 매니페스트에서 `replicas` 줄을 지운다. 이 레포는 HPA 가 실습 세션 한정이라
+남겨 두었다.
+
+### 5a-10. 정리 — 과금 종료
+
+```bash
+kubectl delete hpa daily-api
+kubectl delete pod k6
+```
+
+그다음 `docs/eks-session-sop.md` 종료 절차(§8~9b)를 그대로 따른다.
+
+> 🔴 **끄는 명령이 실제로 실행될 때까지 자리를 뜨지 마라 (2026-10-08, 약 $0.43 손실).**
+> 이 세션은 측정을 33분에 끝냈는데 `tofu destroy` 호출이 승인을 기다리며 113분 멈췄고, 그동안
+> 맥이 잠들어 dead man's switch 도 돌지 못했다. 예상 $0.23 이 $0.59 가 됐다. 일지 2026-10-08 참조.
+
+### 이 Stage 에서 알아 둘 한계
+
+- 부하 요청의 1/3(`POST …/explain`)이 요청 한도에 걸려 429 였다. CPU 는 쓰이므로 HPA 관찰은 유효하다.
+- CPU limits 없이 봤다. limits 를 걸면 스로틀이라는 변수가 하나 더 생긴다.
+- `core-api` 는 스케줄 잡에 분산 락이 없어 복제 대상이 아니다.
 
 ---
 
