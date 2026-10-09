@@ -168,7 +168,13 @@ variable "node_max_size" {
   #    이 값이 2 로 남아 있으면 `-var node_desired_size=3` 이 ASG 제약에 걸려 apply 가 죽는다.
   #    ⚠️ 상한만 올린다. `node_desired_size` 기본값은 **1 그대로** 두므로 이 커밋으로
   #       비용이 늘지 않는다 — 3대는 세션에서 `-var` 로 명시할 때만 뜬다.
-  default = 3
+  #
+  # 🔴 3 → 4 (2026-10-07, Stage 5a). HPA 실습은 부하 생성기용으로 노드 하나를 비워야 해서
+  #    앱이 쓸 수 있는 노드가 **전체 − 1** 이다. 3대면 앱 노드 2대에 남는 메모리가 452Mi 인데
+  #    `daily-api` 복제본 하나가 512Mi 라 **한 개도 더 안 들어간다.** 4대면 1713Mi 가 남는다.
+  #    산술 전문: `docs/superpowers/plans/2026-10-07-eks-stage5a-hpa.md` §3.
+  #    위와 마찬가지로 상한만 올린다 — `node_desired_size` 기본값은 1 그대로다.
+  default = 4
 }
 
 # ── DB 모드 (Stage 2 ↔ 3a 전환 스위치) ─────────────────────────

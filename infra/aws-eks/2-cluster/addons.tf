@@ -131,3 +131,41 @@ resource "aws_eks_addon" "ebs_csi" {
   # 애드온 파드가 스케줄되려면 노드가 있어야 한다(coredns와 같은 이유).
   depends_on = [aws_eks_node_group.main]
 }
+
+# ── ⑬ metrics-server (Stage 5a) ───────────────────────────────
+#
+# 이게 없으면 `kubectl top` 이 `Metrics API not available` 을 내고, HPA 는 TARGETS 가
+# `<unknown>` 인 채로 **아무것도 하지 않는다** — 에러를 내지 않고 조용히 멈춘다.
+#
+# 하는 일: 각 노드의 kubelet(:10250 `/metrics/resource`)을 주기적으로 긁어 파드별 CPU·메모리
+# 사용량을 **메모리에만** 들고 있다가 `metrics.k8s.io` API 로 내놓는다. 저장하지 않는다 —
+# 과거 값은 없고 "지금"만 있다. 그래서 대시보드용이 아니라 **오토스케일러용**이다
+# (이력이 필요하면 Prometheus 가 따로 있어야 한다).
+#
+# API 서버에 붙는 방식이 특이하다: `APIService v1beta1.metrics.k8s.io` 를 등록해
+# API 서버가 그 경로의 요청을 이 파드로 **넘겨주게** 한다(aggregation layer).
+# 그래서 확인은 파드 Running 이 아니라 `kubectl get apiservice v1beta1.metrics.k8s.io`
+# 의 `AVAILABLE=True` 로 한다 — 파드가 떠도 이게 False 면 HPA 는 못 읽는다.
+#
+# 📏 카탈로그·스키마 실측 (2026-10-07 · 클러스터 미가동 · 무료):
+#   aws eks describe-addon-versions --addon-name metrics-server --kubernetes-version 1.36
+#     → owner `community` · publisher `eks` · v0.9.0-eksbuild.11
+#   aws eks describe-addon-configuration ... → `replicas` default **2**, minimum 1
+#
+# ⚠️ **레포 관례의 경계선에 있다.** 관례는 *"AWS 1st-party 애드온만 `aws_eks_addon`, 서드파티는
+#    CLI helm"*(irsa-alb.tf)인데, 이것은 커뮤니티 제작물을 EKS 가 애드온으로 배포하는 형태다.
+#    애드온을 택한 이유: `tofu destroy` 가 함께 지워 **세션 뒤에 남는 것이 없다.**
+#    IRSA 는 필요 없다 — AWS API 를 부르지 않고 클러스터 안의 kubelet 만 본다.
+#
+# replicas=1: coredns·ebs-csi 와 같은 이유(학습 클러스터에서 2개는 메모리만 먹는다).
+#   🟡 파드 하나의 requests 는 upstream 기본 100m/200Mi 로 **추정**했다 — 계획서
+#      `2026-10-07-eks-stage5a-hpa.md` §3 의 용량 산술이 이 값에 기대므로 세션에서 실측한다.
+resource "aws_eks_addon" "metrics_server" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "metrics-server"
+
+  # 파드가 스케줄되려면 노드가 있어야 한다(coredns 와 같은 이유).
+  depends_on = [aws_eks_node_group.main]
+
+  configuration_values = jsonencode({ replicas = 1 })
+}

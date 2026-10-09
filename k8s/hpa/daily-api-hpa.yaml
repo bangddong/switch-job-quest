@@ -1,0 +1,51 @@
+# HPA — daily-api 를 CPU 사용률로 늘리고 줄인다 (Stage 5a)
+# 계획서: docs/superpowers/plans/2026-10-07-eks-stage5a-hpa.md
+#
+# 🔴 선행 조건: metrics-server (infra/aws-eks/2-cluster/addons.tf ⑬).
+#   없어도 이 파일은 **에러 없이 적용된다.** 그 대신 `kubectl get hpa` 의 TARGETS 가
+#   `<unknown>/70%` 로 남고 파드 수는 영영 안 바뀐다. 적용 성공 ≠ 동작.
+#
+# 왜 k8s/base/ 가 아니라 여기인가: HPA 는 실습 세션에서만 쓴다. base 에 두면 HPA 를 쓰지 않는
+#   세션에도 붙는다. k8s/eso/ · k8s/loadtest/ 와 같은 분리 방식이다.
+#
+# 왜 daily-api 인가:
+#   ① 부하 스크립트(k8s/loadtest/k6.yaml)의 요청 3개 중 2개가 여기로 온다.
+#   ② 🔴 core-api 는 복제하면 안 된다 — `@Scheduled` 잡 2개(DailyMailScheduler ·
+#      RateLimitResetScheduler)가 분산 락 없이 돌아서, 파드 수만큼 **중복 실행**된다.
+#      daily-api 에는 `@Scheduled` 가 없다.
+#
+# 계산식 (15초마다):
+#   필요 파드 수 = 올림( 현재 파드 수 × 현재 사용률 ÷ 목표 사용률 )
+#   사용률 = 실제 CPU 사용량 ÷ **requests**  (limits 가 아니다. 노드 용량도 아니다)
+#   → daily-api 의 requests.cpu 는 200m 이므로 목표 70% = 파드당 평균 **140m**.
+#   🔴 requests 가 없는 컨테이너는 사용률을 계산할 수 없어 HPA 가 `<unknown>` 을 낸다.
+#
+# ⚠️ k8s/base/daily-api.yaml 에 `replicas: 1` 이 그대로 있다. HPA 가 3 으로 늘린 상태에서
+#    그 파일을 다시 `kubectl apply` 하면 매니페스트 값이 덮어쓴다(계획서 E1 실험).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: daily-api
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: daily-api
+  minReplicas: 1
+  # 4: 노드 4대(앱 노드 3대)에서 3개까지는 최악 배치에서도 들어간다(계획서 §3).
+  #    4번째는 배치에 따라 Pending 이 될 수 있다 — 그게 Stage 5b(Karpenter)의 출발 장면이다.
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      # 기본값은 300초다. "지난 300초 동안 계산된 필요 파드 수 중 **가장 큰 값**"까지만 줄인다.
+      # 부하가 들쭉날쭉할 때 줄였다 늘렸다를 반복하지 않게 하려는 장치인데, 이 클러스터에서는
+      # 기다리는 5분이 그대로 과금이라 60초로 줄였다. 상시 운영이면 기본값 쪽이 맞다.
+      stabilizationWindowSeconds: 60
