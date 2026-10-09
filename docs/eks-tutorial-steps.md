@@ -2453,7 +2453,7 @@ HPA 의 계산은 이 한 줄이다:
 
 ```bash
 cd infra/aws-eks/2-cluster
-tofu plan  -var node_desired_size=4      # Plan: 32 to add
+tofu plan  -var node_desired_size=4      # Plan: 32 to add (2026-10-07 실측, in-cluster 모드)
 tofu apply -var node_desired_size=4
 ```
 
@@ -2479,7 +2479,16 @@ v1beta1.metrics.k8s.io   kube-system/metrics-server   True   102s
 🔴 **파드가 `Running` 인 것으로 판정하지 마라.** metrics-server 는 API 서버에 자기 경로를 등록해
 요청을 넘겨받는 방식(aggregation)이라, 파드가 떠 있어도 `AVAILABLE` 이 `False` 면 HPA 는 못 읽는다.
 
-### 5a-3. 그 숫자를 믿어도 되는지 확인한다
+### 5a-3. 부하 생성기를 올리고, 그 숫자를 믿어도 되는지 확인한다
+
+먼저 k6 를 전용 노드에 올린다. 이후 단계가 전부 이 파드를 쓴다.
+
+```bash
+sh k8s/loadtest/pin-loadgen-node.sh        # 노드 하나를 비워 cordon + 라벨
+kubectl apply -f k8s/loadtest/k6.yaml
+kubectl get pod k6 -o wide                 # 라벨 붙은 노드에 Running. Pending 이면 격리 실패
+kubectl exec k6 -- k6 run -q -e RATE=25 -e PREVUS=200 /scripts/journey.js   # 워밍업 1회
+```
 
 `kubectl top` 이 숫자를 낸다는 것과 그 숫자가 맞다는 것은 다르다. 같은 구간에서 컨테이너 자신의
 누적 CPU 카운터와 비교한다.
@@ -2523,7 +2532,6 @@ daily-api   Deployment/daily-api   cpu: 4%/70%   1   4   1   21s
 ### 5a-5. 부하를 걸어 늘어나는 것을 본다
 
 ```bash
-sh k8s/loadtest/pin-loadgen-node.sh && kubectl apply -f k8s/loadtest/k6.yaml
 kubectl exec k6 -- k6 run -q -e RATE=200 -e DUR=420s -e PREVUS=600 /scripts/journey.js &   # 600 req/s
 watch -n 15 'kubectl get hpa daily-api; kubectl top pods -l app=daily-api'
 ```
@@ -2571,7 +2579,7 @@ kubectl exec k6 -- k6 run -q --no-connection-reuse -e RATE=200 -e DUR=200s -e PR
 
 ```
 01:58:40  cpu 198%/70%  → New size: 4      정상 상태에서 필요한 수는 2 였다(02:01 이후 54%)
-02:00:49  → New size: 2                    60초 뒤 되돌아옴
+02:00:49  → New size: 2                    사용률이 목표 아래로 내려간 지 약 50초 뒤
 ```
 
 **늘린 파드의 워밍업 비용이 다시 늘릴 근거가 된다.** `maxReplicas` 가 이 과확장의 상한이다.
@@ -2616,9 +2624,10 @@ kubectl delete pod k6
 
 그다음 `docs/eks-session-sop.md` 종료 절차(§8~9b)를 그대로 따른다.
 
-> 🔴 **끄는 명령이 실제로 실행될 때까지 자리를 뜨지 마라 (2026-10-08, 약 $0.43 손실).**
+> 🔴 **끄는 명령이 실제로 실행될 때까지 자리를 뜨지 마라 (2026-10-08, 유휴 구간 비용 약 $0.46).**
 > 이 세션은 측정을 33분에 끝냈는데 `tofu destroy` 호출이 승인을 기다리며 113분 멈췄고, 그동안
-> 맥이 잠들어 dead man's switch 도 돌지 못했다. 예상 $0.23 이 $0.59 가 됐다. 일지 2026-10-08 참조.
+> 맥이 잠들어(🟡 `pmset` 기록에 의한 간접 근거) dead man's switch 도 돌지 못했다. 예상 $0.23 이 $0.59 가 됐다.
+> 일지 2026-10-08 참조.
 
 ### 이 Stage 에서 알아 둘 한계
 
