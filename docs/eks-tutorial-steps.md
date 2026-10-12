@@ -2396,7 +2396,7 @@ aws elbv2 describe-load-balancers --region ap-northeast-2 \
 | Stage | 세울 것 | 새로 배우는 것 | 상태 |
 |:--:|---|---|:--:|
 | **5a** | metrics-server · HPA | 지표 수집, 파드 수 자동 조절 | ✅ 2026-10-08 |
-| **5b** | Karpenter | 노드 자동 조절 | ⬜ |
+| **5b** | Karpenter | 노드 자동 조절 | ✅ 2026-10-12 |
 | **5c** | ArgoCD | GitOps | ⬜ |
 
 > `infra/aws-eks/README.md`가 **"선택"** 으로 표시해 둔 단계다. EKS 이관 완료의 필수 조건이 아니다.
@@ -2643,6 +2643,243 @@ kubectl delete pod k6
 - 부하 요청의 1/3(`POST …/explain`)이 요청 한도에 걸려 429 였다. CPU 는 쓰이므로 HPA 관찰은 유효하다.
 - CPU limits 없이 봤다. limits 를 걸면 스로틀이라는 변수가 하나 더 생긴다.
 - `core-api` 는 스케줄 잡에 분산 락이 없어 복제 대상이 아니다.
+
+## Stage 5b — Karpenter
+
+> 2026-10-12 실클러스터 확인. 과금 구간의 실제 작업은 29분, 시간당 최대 $0.27.
+> 5a 가 끝난 자리에서 시작한다: HPA 가 4번째 파드를 원했는데 올릴 노드가 없었다.
+
+### 무엇이 달라지는가
+
+HPA 는 **파드 수**를 고친다. 노드가 모자라면 파드는 `Pending` 으로 남고 HPA 는 더 할 일이 없다.
+Karpenter 는 그 `Pending` 을 보고 **EC2 를 직접 띄워** 노드로 붙이고, 노드가 비면 지운다.
+
+| 용어 | 뜻 | 관리형 노드그룹의 대응물 |
+|---|---|---|
+| **NodePool** | 어떤 노드를 얼마까지 만들어도 되는가 | `instance_types` · `scaling_config` |
+| **EC2NodeClass** | 그 노드를 AWS 에서 어떻게 만드는가 (AMI · 서브넷 · 보안그룹 · IAM 역할) | `ami_type` · `subnet_ids` · `node_role_arn` |
+| **NodeClaim** | Karpenter 가 노드 한 대를 만들 때마다 남기는 기록 | 없음 |
+| **통합**(consolidation) | 비었거나 덜 찬 노드를 지우는 동작 | 없음 |
+
+🔴 **Karpenter 가 만든 EC2 는 OpenTofu 가 모른다.** state 에 없으므로 `tofu destroy` 가 지우지 않는다.
+이 레포는 삭제 순서 한가운데에 정리 단계를 끼워 그 구멍을 막았다(5b-7).
+
+### 5b-1. 권한과 클러스터를 올린다 — 🔴 과금 시작
+
+```bash
+cd infra/aws-eks/2-cluster
+tofu plan  -var node_desired_size=4      # Plan: 42 to add (2026-10-12 실측)
+tofu apply -var node_desired_size=4
+```
+
+5a 의 32개에 Karpenter 몫 10개가 더해진다: 컨트롤러 IAM 역할 1 · 권한 정책 4 · 연결 4 · 정리 리소스 1.
+권한 정책은 공식 CloudFormation 템플릿(v1.14)에서 변수만 바꿔 옮긴 것이다(`iam-policy-karpenter/`).
+
+<!-- verify: infra/aws-eks/2-cluster/irsa-karpenter.tf ~ ^resource "aws_iam_role" "karpenter" -->
+
+노드의 IAM 역할은 새로 만들지 않고 관리형 노드그룹의 것을 같이 쓴다. 그 역할의 access entry 가 이미 있어서
+Karpenter 가 띄운 노드가 추가 설정 없이 클러스터에 붙는다.
+
+```bash
+aws eks list-access-entries --cluster-name devquest-eks --region ap-northeast-2
+# → …:role/devquest-eks-node-role 이 목록에 있어야 한다
+```
+
+이어서 `k8s/README.md` §2~3 의 순서대로 ESO · postgres · 앱 3종을 올린다.
+
+> 💰 시간당 **$0.2132** + Karpenter 노드 한 대당 $0.0283 (NodePool 상한까지 최대 2대).
+
+### 5b-2. Karpenter 를 설치한다
+
+```bash
+helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter \
+  --version 1.14.1 --namespace kube-system -f k8s/karpenter/values.yaml \
+  --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$(tofu -chdir=infra/aws-eks/2-cluster output -raw karpenter_role_arn)" \
+  --wait --timeout 5m
+
+kubectl -n kube-system get deploy karpenter                    # 1/1
+kubectl -n kube-system logs deploy/karpenter | grep -i -E 'denied|WebIdentity'   # 아무것도 안 나와야 한다
+```
+
+설치는 20초 걸렸다. 버전은 호환표를 보고 고른다 — K8s 1.36 은 Karpenter **1.13 이상**이 필요하다.
+
+🔴 **차트 기본값으로는 이 클러스터에서 뜨지 않는다.** `values.yaml` 이 세 가지를 바꾼다.
+
+| 기본값 | 문제 | 바꾼 값 |
+|---|---|---|
+| `replicas: 2` + 같은 노드 금지 | 노드 2대를 차지한다 | `replicas: 1` |
+| requests 없음 | 스케줄러가 0 으로 계산해 용량 산술이 틀어진다 | `cpu 200m · memory 256Mi` |
+| (공식 안내 권장) 1 vCPU · 1Gi | `t4g.small` 에 안 들어간다 | 위와 같음. 실측 사용량 75~148Mi |
+
+역할 ARN 에는 계정 ID 가 들어 있어 파일에 적지 않고 설치할 때 넘긴다.
+
+### 5b-3. 노드를 만드는 규칙을 적용한다
+
+```bash
+kubectl apply -f k8s/karpenter/ec2nodeclass.yaml -f k8s/karpenter/nodepool.yaml
+kubectl get ec2nodeclass default -o yaml      # status 를 본다
+```
+
+`status.conditions` 의 `Ready=True`, 그리고 `status.subnets` · `status.securityGroups` 에 실제 ID 가 채워져야 한다.
+
+```
+SubnetsReady=True  SecurityGroupsReady=True  AMIsReady=True  InstanceProfileReady=True  Ready=True
+subnets         2개 (ap-northeast-2a, 2c)      ← AZ 는 NodePool 이 2a 로 좁힌다
+securityGroups  1개 (EKS 가 만든 클러스터 보안그룹)
+instanceProfile devquest-eks_<해시>             ← Karpenter 가 스스로 만들었다
+```
+
+🔴 **이 매니페스트는 선택자가 아무것도 못 찾아도 에러 없이 적용된다.** 적용 성공은 동작의 증거가 아니다.
+
+서브넷과 보안그룹은 새 태그를 붙이지 않고 이미 있는 태그로 찾는다. 서브넷은 `kubernetes.io/cluster/<이름>: shared`,
+보안그룹은 EKS 가 클러스터 보안그룹에 붙여 두는 `kubernetes.io/cluster/<이름>: owned` 다.
+
+```bash
+aws ec2 describe-security-groups --region ap-northeast-2 \
+  --filters Name=tag:kubernetes.io/cluster/devquest-eks,Values=owned --query 'SecurityGroups[].GroupId'
+# → 1개. `aws eks describe-cluster` 의 clusterSecurityGroupId 와 같다
+```
+
+### 5b-4. 🔴 계정이 띄울 수 있는 인스턴스만 후보에 넣는다
+
+```bash
+aws ec2 describe-instance-types --region ap-northeast-2 \
+  --filters Name=free-tier-eligible,Values=true --query 'InstanceTypes[].InstanceType' --output text
+```
+```
+c7i-flex.large m7i-flex.large t3.micro t3.small t4g.micro t4g.small t8i.micro t8i.small
+```
+
+처음에는 후보에 `t4g.medium` 도 넣었다. `Pending` 파드 3개가 한꺼번에 생기자 Karpenter 는 3개를 한 대에 담을 수 있는
+medium 을 골랐고 AWS 가 거절했다.
+
+```
+created nodeclaim  requests {"cpu":"780m","memory":"1640Mi"}  instance-types "t4g.medium"
+ERROR … InvalidParameterCombination: The specified instance type is not eligible for Free Tier.
+```
+
+**Karpenter 는 small 2대로 바꿔 다시 시도하지 않는다.** NodeClaim 이 `Launched=Unknown` 으로 멈추고 파드는 계속
+`Pending` 이다. 멈춘 NodeClaim 을 지우고 후보를 고쳐야 풀린다.
+
+```bash
+kubectl get nodeclaim                      # READY 가 Unknown 인 채 1분 넘게 있으면 의심
+kubectl get nodeclaim <이름> -o yaml        # status.conditions 의 Launched 사유를 본다
+kubectl delete nodeclaim <이름>
+```
+
+<!-- verify: k8s/karpenter/nodepool.yaml ~ values: \["t4g.small"\] -->
+
+### 5b-5. Pending 이 노드를 만드는 것을 본다
+
+```bash
+sh k8s/loadtest/pin-loadgen-node.sh && kubectl apply -f k8s/loadtest/k6.yaml
+kubectl apply -f k8s/hpa/daily-api-hpa.yaml
+kubectl exec k6 -- k6 run -q --no-connection-reuse -e RATE=200 -e DUR=540s -e PREVUS=600 /scripts/journey.js &
+watch -n 10 'kubectl get hpa daily-api; kubectl get pods -l app=daily-api -o wide; kubectl get nodeclaim'
+```
+
+HPA 가 4개를 원하면 4번째가 `Pending` 이 되고(`3 Insufficient memory` — 5a 의 끝 장면), Karpenter 가 받는다.
+
+| 시각 (UTC) | 일 | 누적 |
+|---|---|---:|
+| 05:44:50 | 파드 생성, 자리 없음 | 0초 |
+| 05:44:51.6 | Karpenter 가 발견하고 NodeClaim 생성 | 1.6초 |
+| 05:44:54.0 | EC2 생성 호출 완료 (`t4g.small`) | 4초 |
+| 05:45:11.4 | 노드가 클러스터에 등록 | 21초 |
+| 05:45:21 | 파드가 그 노드에 배치 | 31초 |
+| 05:45:27 | 이미지 풀 5초 → 컨테이너 시작 | 37초 |
+| 05:45:51 | 파드 Ready (앱 기동 24초) | **61초** |
+
+Karpenter 의 판단은 로그에 그대로 남는다.
+
+```bash
+kubectl -n kube-system logs deploy/karpenter | grep -E 'provisionable|nodeclaim|disrupting'
+```
+
+만들어진 EC2 에는 Karpenter 가 태그를 붙인다. 뒷정리와 IAM 조건이 전부 이 태그에 걸려 있다.
+
+```
+karpenter.sh/nodepool               default
+karpenter.sh/nodeclaim              default-brmzc
+kubernetes.io/cluster/devquest-eks  owned
+```
+
+### 5b-6. 비면 사라진다 — 그리고 덜 차도 사라진다
+
+부하를 끝내면 HPA 가 파드를 줄이고, 노드가 비면 Karpenter 가 지운다.
+
+```
+05:49:22.994  disrupting node(s)  Empty/…: delete: [ip-10-0-15-116…] (savings: $0.02)
+05:49:58.102  deleted node                                  ← 판정 35초 뒤
+```
+
+🔴 **비지 않아도 지운다.** `consolidationPolicy: WhenEmptyOrUnderutilized` 는 *"이 노드의 파드를 다른 노드로 옮길 수
+있으면 지운다"* 는 뜻이다. 부하가 아직 걸려 있던 중에 실제로 일어났다.
+
+```
+05:43:28  HPA 4 → 3        (관리형 노드의 파드 하나가 줄어 자리가 났다)
+05:43:36  disrupting node(s)  Underutilized/…: delete: [ip-10-0-1-175…] (savings: $0.02)
+05:44:07  deleted node       (그 노드의 파드는 관리형 노드로 옮겨져 **새로 뜬다**)
+05:44:51  found provisionable pod(s)     ← 44초 뒤 다시 Pending, 노드를 또 만든다
+```
+
+옮겨진 파드는 갓 뜬 JVM 이라 CPU 를 4~5배 쓰고(5a-6), 그 사용률이 HPA 를 다시 4 로 올려 방금 지운 노드를 다시 부른다.
+**HPA 는 파드 수를, Karpenter 는 노드 수를 각자 최적화하는데 서로의 결정이 상대의 입력이 된다.**
+
+상시 운영에서 쓰는 완화책은 세 가지다(이 레포에서 실측하지 않았다 🟡): 정책을 `WhenEmpty` 로 바꾸기,
+`consolidateAfter` 를 HPA 축소 대기 시간보다 길게 잡기, 옮기면 안 되는 파드에 `karpenter.sh/do-not-disrupt` 를 붙이기.
+
+### 5b-7. 정리 — `tofu destroy` 하나로 끝난다
+
+```bash
+cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=4
+```
+
+이 세션은 HPA · k6 · NodePool 을 지우지 않고 **Karpenter 노드가 살아 있는 채로** 바로 destroy 했다
+(사람이 사라져 자동 종료 장치가 `tofu destroy` 만 치는 상황을 재현하려는 것이다).
+
+Karpenter 가 만든 것 세 가지 — EC2 · 시작 템플릿 · 인스턴스 프로파일 — 는 state 밖이다. 클러스터만 지우면
+EC2 는 주인 없이 남아 과금되고, 프로파일이 노드 역할을 물고 있어 역할 삭제가 실패한다.
+`karpenter-cleanup.tf` 가 삭제 순서 한가운데에서 정리 스크립트를 돌린다.
+
+```
+지울 때   노드그룹 → 정리 스크립트 → { 노드 역할 · 클러스터 }
+```
+
+노드그룹이 먼저인 이유: Karpenter 컨트롤러가 관리형 노드 위에서 돈다. 컨트롤러가 살아 있을 때 EC2 를 지우면
+`Pending` 을 보고 다시 띄운다.
+
+<!-- verify: infra/aws-eks/2-cluster/karpenter-cleanup.tf ~ when += destroy -->
+
+```
+terraform_data.karpenter_cleanup (local-exec): [karpenter-cleanup] 인스턴스 프로파일 삭제: devquest-eks_<해시>
+terraform_data.karpenter_cleanup (local-exec): [karpenter-cleanup] ✅ 잔존 EC2 0
+aws_iam_role.node: Destruction complete after 1s
+```
+
+끝난 뒤 AWS 에 직접 묻는다. SOP §8b 의 조회에 두 줄을 더한다.
+
+```bash
+R=ap-northeast-2
+aws ec2 describe-instances --region $R --filters "Name=tag-key,Values=karpenter.sh/nodepool" \
+  "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+  --query 'length(Reservations[].Instances[])' --output text      # → 0
+aws ec2 describe-launch-templates --region $R --query 'length(LaunchTemplates)' --output text   # → 0
+```
+
+> ⚠️ **이 세션에서 정리 스크립트가 실물로 지운 것은 인스턴스 프로파일뿐이다.** Karpenter 노드 한 대를 일부러 살려 둔 채
+> destroy 했는데, 시작 35초 뒤 Karpenter 가 그 노드를 스스로 종료했다(CloudTrail 로 확인, 이유는 확인하지 못했다).
+> EC2 를 종료하는 경로는 가짜 `aws` 를 주입한 시험으로만 검증돼 있다. 정리 뒤 위 조회가 0 인지 반드시 확인한다.
+
+> 🔴 **끄는 명령이 승인을 기다리는 동안에도 과금된다.** 이 세션은 측정을 29분에 끝냈는데 destroy 승인을
+> 64분 + 89분 기다려 예상 $0.27 이 약 $0.53 이 됐다(유휴 77%). 5a 와 같은 원인이다. 일지 2026-10-12 참조.
+
+### 이 Stage 에서 알아 둘 한계
+
+- 스팟을 쓰지 않았다. 스팟은 중단 알림 큐(SQS)와 EventBridge 규칙이 따라오는 별개 주제다.
+- 노드 총량 상한(`limits.cpu`)을 넘겼을 때의 동작은 보지 못했다(5b-4 의 멈춘 NodeClaim 에 가렸다).
+- AMI 를 `al2023@latest` 로 뒀다. 상시 운영이면 버전을 고정한다 — 새 AMI 가 나올 때마다 노드가 교체된다.
+- 관리형 노드그룹 4대를 그대로 두고 Karpenter 는 넘치는 몫만 맡았다. 전부 Karpenter 에 맡기는 구성은 다루지 않았다.
 
 ---
 
