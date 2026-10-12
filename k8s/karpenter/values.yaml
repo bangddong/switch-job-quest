@@ -1,0 +1,29 @@
+# Karpenter helm 값 (Stage 5b) — 차트 1.14.1 기준
+# 계획서: docs/superpowers/plans/2026-10-12-eks-stage5b-karpenter.md
+#
+# 설치 (IRSA 역할 ARN 은 계정 ID 가 들어 있어 이 파일에 적지 않는다. 설치할 때 넘긴다):
+#   helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter \
+#     --version 1.14.1 --namespace kube-system -f k8s/karpenter/values.yaml \
+#     --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$(tofu -chdir=infra/aws-eks/2-cluster output -raw karpenter_role_arn)" \
+#     --wait
+#
+# 🔴 차트 기본값은 이 클러스터에서 뜨지 않는다:
+#   · replicas: 2 + "같은 노드에 두 개 금지"(필수 반친화성) → 노드 2대를 차지한다
+#   · requests 가 **없다** → 스케줄러가 0 으로 계산해 용량 산술(계획서 §3)이 틀어진다
+#   · 공식 안내의 권장값 1 vCPU / 1Gi 는 t4g.small(여유 1261Mi)에 들어가지 않는다
+
+replicas: 1
+
+settings:
+  # Karpenter 가 만드는 EC2 에 `kubernetes.io/cluster/<이름>: owned` 태그를 붙이는 기준이다.
+  # IAM 정책의 조건과 뒷정리 스크립트의 필터가 전부 이 이름에 걸려 있다.
+  clusterName: devquest-eks
+  # interruptionQueue 는 비워 둔다 — 스팟을 쓰지 않아 중단 알림 큐를 만들지 않았다.
+
+controller:
+  resources:
+    requests:
+      cpu: 200m
+      # 🟡 256Mi 는 추정이다. 세션에서 실제 사용량을 재서 고친다.
+      memory: 256Mi
+    # limits 는 두지 않는다. 과금 중에 컨트롤러가 OOM 으로 죽으면 세션 전체가 멈춘다.

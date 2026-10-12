@@ -72,5 +72,8 @@ resource "aws_eks_node_group" "main" {
     aws_iam_role_policy_attachment.node_worker,
     aws_iam_role_policy_attachment.node_cni,
     aws_iam_role_policy_attachment.node_ecr,
+    # 삭제 순서용(Stage 5b): 노드그룹이 **먼저** 지워져야 Karpenter 컨트롤러가 죽고,
+    # 그 뒤에 정리 스크립트가 돈다. 이유는 karpenter-cleanup.tf.
+    terraform_data.karpenter_cleanup,
   ]
 }

@@ -1,0 +1,34 @@
+# EC2NodeClass — "노드를 AWS 에서 **어떻게** 만드는가" (Stage 5b)
+# 관리형 노드그룹의 ami_type · subnet_ids · node_role_arn 에 해당한다.
+#
+# 적용 후 반드시 확인:  kubectl get ec2nodeclass default -o yaml
+#   status.conditions 의 Ready=True, status.subnets · status.securityGroups 에 실제 ID 가 채워져야 한다.
+#   🔴 이 파일은 선택자가 아무것도 못 찾아도 **에러 없이 적용된다.** 적용 성공 ≠ 동작.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  # 노드가 쓸 IAM 역할의 **이름**(ARN 아님). Karpenter 가 이 역할로 인스턴스 프로파일을 스스로 만든다.
+  # 관리형 노드그룹과 같은 역할이다 — 그 역할의 access entry 가 이미 있어 추가 설정 없이 붙는다.
+  # 값은 `tofu output -raw node_role_name` 과 같아야 한다.
+  role: devquest-eks-node-role
+
+  # AL2023 최신. 🔴 `@latest` 는 새 AMI 가 나오면 Karpenter 가 노드를 교체한다(drift).
+  # 1시간짜리 실습이라 문제없지만, 상시 운영이면 `al2023@v20260101` 처럼 버전을 고정한다.
+  amiSelectorTerms:
+    - alias: al2023@latest
+
+  # 서브넷: 1-network 가 이미 붙여 둔 태그로 찾는다. 두 AZ 모두 잡히고, AZ 는 NodePool 이 좁힌다.
+  # 공식 안내는 `karpenter.sh/discovery` 태그를 새로 붙이지만, 있는 태그로 충분하다.
+  subnetSelectorTerms:
+    - tags:
+        kubernetes.io/cluster/devquest-eks: shared
+
+  # 보안그룹: EKS 가 클러스터를 만들 때 함께 만드는 "클러스터 보안그룹". 관리형 노드도 이것을 쓴다.
+  # 🟡 태그는 세션에서 적용 전에 조회로 확인한다(계획서 §6 분기):
+  #   aws ec2 describe-security-groups --region ap-northeast-2 \
+  #     --filters Name=tag:kubernetes.io/cluster/devquest-eks,Values=owned --query 'SecurityGroups[].GroupId'
+  securityGroupSelectorTerms:
+    - tags:
+        kubernetes.io/cluster/devquest-eks: owned

@@ -1,0 +1,47 @@
+# NodePool — "어떤 노드를 **얼마까지** 만들어도 되는가" (Stage 5b)
+# 관리형 노드그룹의 instance_types · scaling_config 에 해당한다.
+#
+# Karpenter 는 Pending 파드의 요구량을 보고, 아래 조건을 만족하는 인스턴스 중 **가장 싼 것**을 고른다.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      requirements:
+        # 앱 이미지가 arm64 전용이다(ECR 에 arm64 만 올린다).
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["arm64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        # 스팟은 쓰지 않는다 — 중단 알림 큐가 따라오는 별개 주제다.
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        # 고를 수 있는 종류를 둘로 묶는다. 안 묶으면 수백 종 중에서 고른다.
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["t4g.small", "t4g.medium"]
+        # postgres 볼륨이 있는 AZ. 다른 AZ 에 뜨면 AZ 간 전송 요금이 붙는다.
+        # 값은 `tofu output -raw persistent_az` 와 같아야 한다.
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: ["ap-northeast-2a"]
+
+  # 🔴 **비용 상한이다.** 이 NodePool 이 만든 노드의 vCPU 합이 4 를 넘지 못한다
+  #    = t4g.small(2 vCPU) 2대 또는 t4g.medium(2 vCPU) 2대.
+  limits:
+    cpu: "4"
+
+  disruption:
+    # 비었거나, 파드를 다른 노드로 옮기면 더 싸지는 노드를 지운다.
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    # 조건이 성립한 뒤 기다리는 시간. 실습은 기다리는 시간이 과금이라 짧게 잡았다.
+    consolidateAfter: 30s

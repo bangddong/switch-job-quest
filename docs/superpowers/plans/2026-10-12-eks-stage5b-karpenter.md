@@ -1,6 +1,6 @@
 # EKS Stage 5b — Karpenter 계획서
 
-> 2026-10-12 작성 · 브랜치 `stage/eks-13-karpenter` · 상태: **계획 (승인 전, $0)**
+> 2026-10-12 작성 · 브랜치 `stage/eks-13-karpenter` · 상태: **$0 준비 완료 (2026-10-12) — 유료 세션 전**
 >
 > Stage 5 의 두 번째다(5a 지표·HPA ✅ → **5b Karpenter** → 5c ArgoCD).
 > 세션 절차는 `docs/eks-session-sop.md` 를 따른다. 이 문서는 **그 위에 얹는 5b 고유 부분**만 적는다.
@@ -100,7 +100,7 @@ Karpenter 가 띄울 노드: `t4g.small` 한 대의 여유는 1261Mi 🟡 → `d
 
 | # | 계획이 가정한 것 | 실제 | 이번에 |
 |:-:|---|---|---|
-| U-1 | `tofu destroy` 가 다 지운다 | 🔴 **Karpenter 가 만든 EC2·인스턴스 프로파일·시작 템플릿은 state 밖이다.** 클러스터만 지우면 EC2 가 주인 없이 남아 과금되고, 프로파일이 노드 역할을 물고 있어 역할 삭제가 실패한다. 리퍼(`eks-reaper.sh`)는 Ingress 정리 + `tofu destroy` 만 하고, 생존 판정도 EKS·RDS 뿐이다 | D9 — 삭제 시점 실행기. 순서: **노드그룹 삭제(= 컨트롤러 사망) → 정리 → 노드 역할 삭제.** 컨트롤러가 살아 있을 때 EC2 를 지우면 다시 띄운다 |
+| U-1 | `tofu destroy` 가 다 지운다 | 🔴 **Karpenter 가 만든 EC2·인스턴스 프로파일·시작 템플릿은 state 밖이다.** 클러스터만 지우면 EC2 가 주인 없이 남아 과금되고, 프로파일이 노드 역할을 물고 있어 역할 삭제가 실패한다. 리퍼(`eks-reaper.sh`)는 Ingress 정리 + `tofu destroy` 만 하고, 생존 판정도 EKS·RDS 뿐이다 | D9 — 삭제 시점 실행기. 순서: **노드그룹 삭제(= 컨트롤러 사망) → 정리 → { 노드 역할 · 클러스터 } 삭제.** 컨트롤러가 살아 있을 때 EC2 를 지우면 다시 띄운다. 클러스터보다 먼저여야 하는 이유는 클러스터 보안그룹이다(Karpenter EC2 가 쓰고 있으면 삭제가 걸린다 🟡) |
 | U-2 | 공식 안내대로 하면 된다 | 공식 안내는 `eksctl` + CloudFormation + Pod Identity + 스팟 큐 전제다. 이 레포는 OpenTofu + IRSA 다 | CloudFormation 템플릿(v1.14)의 정책 6종 중 **4종**(`NodeLifecycle`·`IAMIntegration`·`EKSIntegration`·`ResourceDiscovery`)을 tofu 로 옮긴다. `Interruption`·`ZonalShift` 는 뺀다 |
 | U-3 | 차트 기본값으로 뜬다 | `replicas: 2` + 호스트 단위 필수 반친화성 + AZ 분산 `DoNotSchedule`, requests 없음 | D5. requests 를 안 주면 스케줄러가 0 으로 계산해 §3 산술이 틀어진다 |
 | U-4 | 서브넷에 Karpenter 용 태그가 있다 | 없다. `kubernetes.io/role/elb` 와 `kubernetes.io/cluster/<이름>: shared` 뿐이고 두 AZ 모두에 붙어 있다 | D7. AZ 는 NodePool 요구 조건으로 좁힌다 |
@@ -183,7 +183,9 @@ aws ec2 terminate-instances --region $R --instance-ids <위 결과>
 
 | 파일 | 변경 |
 |---|---|
-| `infra/aws-eks/2-cluster/irsa-karpenter.tf` | 신규. 컨트롤러 역할·신뢰 정책·권한 정책 |
+| `infra/aws-eks/2-cluster/irsa-karpenter.tf` | 신규. 컨트롤러 역할·신뢰 정책·권한 정책 4종 |
+| `infra/aws-eks/2-cluster/iam-policy-karpenter/*.json.tftpl` | 신규 4개. 공식 CloudFormation 템플릿(v1.14)에서 변수만 바꿔 옮겼다 |
+| `infra/aws-eks/2-cluster/scripts/karpenter-cleanup.sh` | 신규. 정리 스크립트 본체(사람이 직접 돌릴 수도 있다) |
 | `infra/aws-eks/2-cluster/karpenter-cleanup.tf` | 신규. D9 삭제 시점 실행기 + 의존 순서 |
 | `infra/aws-eks/2-cluster/nodes.tf` | `depends_on` 에 정리 리소스 추가(삭제 순서용) |
 | `infra/aws-eks/2-cluster/outputs.tf` | 컨트롤러 역할 ARN · 노드 역할 이름 |
@@ -194,3 +196,19 @@ aws ec2 terminate-instances --region $R --instance-ids <위 결과>
 | `docs/eks-quizzes/stage-eks-13-karpenter.md` | PR 전 이해도 퀴즈 (필수). **출제 전에 용어부터 설명한다**(5a 교훈) |
 
 `be/`·`fe/`·`.claude/scripts/` 는 건드리지 않는다.
+
+## 9. $0 준비 결과 (2026-10-12)
+
+| 확인 | 결과 |
+|---|---|
+| `tofu validate` · `fmt` | 통과 |
+| `tofu plan -var node_desired_size=4` | **`Plan: 42 to add`** = 5a 의 32 + Karpenter 역할 1 · 정책 4 · 연결 4 + 정리 리소스 1 |
+| 삭제 순서 (`tofu graph`) | `노드그룹 → 정리`, `정리 → 클러스터`, `정리 → 노드 역할` 세 간선 확인 |
+| 정리 스크립트 — 실계정(지금은 아무것도 없다) | `Karpenter EC2 없음` · `잔존 EC2 0` · exit 0 |
+| 정리 스크립트 — 가짜 aws 주입 3종 | 정상: 종료·대기·시작 템플릿·프로파일 삭제 후 exit 0, **EKS 가 만든 프로파일은 건드리지 않음** / 종료해도 남는 경우: exit 1 / 조회 거부: 아무것도 지우지 않고 exit 1 |
+| 차트 렌더링 (`helm template`, 1.14.1) | `replicas: 1` · requests `200m/256Mi` · `CLUSTER_NAME=devquest-eks` · 서비스 계정 어노테이션 주입 확인 |
+| 매니페스트 ↔ 차트 CRD 스키마 | EC2NodeClass 필수 3필드·`role`·`alias`, NodePool `limits`·`consolidateAfter`·`WhenEmptyOrUnderutilized` 전부 스키마에 있다 |
+| 영속 AZ | `tofu output persistent_az` = `ap-northeast-2a` = NodePool 의 AZ 제한 값 |
+
+**실클러스터에서만 확인되는 것** (세션으로 넘긴다): D3 access entry · D5 컨트롤러 메모리 · D7 보안그룹 태그 ·
+U-5 공인 IP · 정리 스크립트가 실물 EC2 와 프로파일에 대해 동작하는가(P7).
