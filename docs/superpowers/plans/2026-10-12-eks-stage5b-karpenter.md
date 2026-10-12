@@ -1,6 +1,12 @@
 # EKS Stage 5b — Karpenter 계획서
 
-> 2026-10-12 작성 · 브랜치 `stage/eks-13-karpenter` · 상태: **$0 준비 완료 (2026-10-12) — 유료 세션 전**
+> 2026-10-12 작성 · 브랜치 `stage/eks-13-karpenter` · 상태: **실행 완료 (2026-10-12)**
+>
+> **결과**: P1~P6·P8 통과, **P7 조건부**(인스턴스 프로파일 정리는 실물 확인, EC2 종료 경로는 Karpenter 가 먼저 지워 미확인).
+> 계획에 없던 발견 2건: ① 부하 중인 노드를 `Underutilized` 로 지워 HPA 와 맞물려 진동 ② `t4g.medium` 은 이 계정이 띄울 수 없다
+> (`not eligible for Free Tier`) — NodePool 후보에서 뺐다. E2 미관측.
+> 🔴 **비용 상한 초과: 예상 $0.27 · 상한 $0.40 → 약 $0.53.** 측정은 29분에 끝났고 destroy 승인을 64분 + 89분 기다렸다.
+> §6 의 *"apply 전에 시각 확답"* 은 막지 못했다. 원문은 `docs/eks-migration-log.md` 2026-10-12 엔트리.
 >
 > Stage 5 의 두 번째다(5a 지표·HPA ✅ → **5b Karpenter** → 5c ArgoCD).
 > 세션 절차는 `docs/eks-session-sop.md` 를 따른다. 이 문서는 **그 위에 얹는 5b 고유 부분**만 적는다.
@@ -45,7 +51,7 @@ HPA 는 **파드 수**를 고친다. 그 파드를 올릴 **노드**가 모자�
 | D3 | Karpenter 노드의 IAM 역할 | **기존 `aws_iam_role.node` 재사용** | 관리형 노드그룹이 이 역할의 access entry 를 이미 만든다 🟡 → 추가 리소스 없이 노드가 붙는다. 기각: 전용 역할 (공식 안내 방식. access entry 를 따로 만들어야 하고 실습에서 얻는 것이 없다) |
 | D4 | 컨트롤러가 사는 곳 | **관리형 노드그룹** (그대로 유지) | Karpenter 는 자기가 만든 노드 위에서 돌면 안 된다(그 노드를 지우면 자신이 죽는다). 차트 기본값이 `karpenter.sh/nodepool DoesNotExist` 로 이미 막아 둔다(1.14.1 `values.yaml` 확인) |
 | D5 | 컨트롤러 크기 | `replicas: 1` · requests `cpu 200m / memory 256Mi` 🟡 | 차트 기본은 `replicas: 2` + 필수 반친화성, requests **없음**이다. 공식 안내는 1 vCPU/1Gi 를 권하는데 `t4g.small` 노드(여유 1261Mi)에 넣을 수 없다. 256Mi 는 추정이라 세션에서 실측한다 |
-| D6 | 만들 수 있는 노드 | `arm64` · `on-demand` · `t4g.small`/`t4g.medium` · AZ 는 영속 볼륨과 같은 곳 · **총량 상한 `cpu: 4`** | 상한이 곧 비용 상한이다(§7). 기각: 스팟 (중단 알림 큐·EventBridge 규칙 4개가 따라온다. 별개 주제) |
+| D6 | 만들 수 있는 노드 | `arm64` · `on-demand` · ~~`t4g.small`/`t4g.medium`~~ → **`t4g.small` 만**(세션에서 정정, 위 결과 ②) · AZ 는 영속 볼륨과 같은 곳 · **총량 상한 `cpu: 4`** | 상한이 곧 비용 상한이다(§7). 기각: 스팟 (중단 알림 큐·EventBridge 규칙 4개가 따라온다. 별개 주제) |
 | D7 | 서브넷·보안그룹 찾는 법 | 서브넷: 기존 태그 `kubernetes.io/cluster/devquest-eks: shared` + NodePool 의 AZ 제한. 보안그룹: 클러스터 SG 의 `kubernetes.io/cluster/devquest-eks: owned` 🟡 | 공식 안내는 `karpenter.sh/discovery` 태그를 새로 붙이는데, 그러려면 이미 적용돼 있는 `1-network` 레이어를 다시 건드려야 한다. 있는 태그로 충분하다. 🟡 SG 태그는 세션에서 적용 전에 조회로 확인(§6 분기) |
 | D8 | 노드그룹 크기 | **4대** (5a 와 동일) | §3 산술. 5a 와 같은 출발선이라 *"같은 부하에서 4번째가 이번엔 뜬다"* 를 직접 비교할 수 있다 |
 | D9 | 🔴 **뒷정리 보장** | **`tofu destroy` 하나로 Karpenter 가 만든 것까지 지운다** (`terraform_data` 의 삭제 시점 실행기) | §5 U-1. 리퍼는 `tofu destroy` 만 친다 — 사람이 사라진 상황에서 `kubectl delete nodepool` 을 쳐 줄 주체가 없다. 기각: 리퍼 스크립트 수정 (하네스 동결. 그리고 수동 destroy 경로는 여전히 뚫려 있다) · 문서로만 안내 (09-16 에 *"쳤다 ≠ 끝났다"* 로 15.8시간 샜다) |
@@ -122,6 +128,11 @@ Karpenter 가 띄울 노드: `t4g.small` 한 대의 여유는 1261Mi 🟡 → `d
 | 통합이 **덜 찬** 노드를 합치는 장면 | 노드 2대 이상을 띄워 놓고 기다려야 한다. E2 까지 가면 일부 보일 수 있다 |
 | 리퍼의 생존 판정에 "Karpenter EC2" 추가 | 하네스 동결. D9 가 통과(P7)하면 필요가 없어진다. **P7 이 실패하면 이 항목이 5c 전 필수가 된다** |
 | 콜드 JVM 과확장이 노드까지 과하게 띄우는 문제 | 5a 에서 남긴 항목과 같다. 이번엔 현상이 보이면 기록만 |
+| 🔴 **세션 종료의 승인 대기 — 두 번째 발생** (2026-10-12) | 10-11 대책(시각 확답)이 첫 적용에서 실패했다. 유휴 $0.405. **다음 유료 세션(5c) 전에 다시 정한다.** 남은 선택지: 실습 레이어 한정 destroy 허용 규칙(10-11 기각) · 리퍼 대기 시간 단축 · 세션을 사용자가 지켜보는 시간에만 진행 |
+| P7 의 EC2 종료 경로를 실물로 확인 | Karpenter 가 destroy 시작 35초 뒤 자기 노드를 먼저 지웠다(원인 ⚪). 확인하려면 컨트롤러를 먼저 죽인 뒤 destroy 해야 한다(`kubectl scale deploy karpenter --replicas=0`). 다음 Karpenter 세션이 있으면 그때 |
+| Karpenter 가 destroy 직후 노드를 지운 이유 | 그 시각의 컨트롤러 로그를 받지 않았다. 과금 중이라 넘어갔다 |
+| `Underutilized` 통합과 HPA 의 진동 | 현상 확인까지. 완화책(`consolidationPolicy: WhenEmpty`, `consolidateAfter` 를 HPA 안정화 창보다 길게, `karpenter.sh/do-not-disrupt`)은 실측하지 않았다 |
+| E2 — `limits.cpu` 초과 시 동작 | E1 의 멈춘 NodeClaim 에 가려 못 봤다 |
 
 ## 6. 세션 절차 (5b 고유 부분)
 
