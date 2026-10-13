@@ -32,7 +32,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: daily-api
-  minReplicas: 2
+  minReplicas: 1
   # 4: 노드 4대(앱 노드 3대)에서 3개까지는 최악 배치에서도 들어간다(계획서 §3).
   #    4번째는 배치에 따라 Pending 이 될 수 있다 — 그게 Stage 5b(Karpenter)의 출발 장면이다.
   maxReplicas: 4

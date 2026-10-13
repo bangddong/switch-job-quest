@@ -39,7 +39,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: devquest/daily-api:bd51e18fb334ad7ed4ffdcdf8af50bfc08a42b96
+        value: devquest/daily-api:14cb335e66670470e674f0eb76d62e84ee76e0e5
   # HPA 가 파드 수를 정하는 Deployment 는 git 에 replicas 를 적지 않는다.
   # 적어 두면 ArgoCD("git 은 1")와 HPA("최소 2")가 같은 칸을 번갈아 고쳐 쓴다 — 5c 세션에서 실제로 파드가 죽고 떴다.
   - target: { kind: Deployment, name: daily-api }
