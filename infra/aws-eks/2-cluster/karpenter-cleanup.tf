@@ -37,7 +37,7 @@ resource "terraform_data" "karpenter_cleanup" {
 
   provisioner "local-exec" {
     when    = destroy
-    command = "bash ${path.module}/scripts/karpenter-cleanup.sh"
+    command = "bash \"${path.module}/scripts/karpenter-cleanup.sh\""
 
     environment = {
       CLUSTER_NAME = self.input.cluster_name

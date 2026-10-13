@@ -48,7 +48,7 @@ HPA 는 **파드 수**를 고친다. 그 파드를 올릴 **노드**가 모자�
 |:-:|---|---|---|
 | D1 | Karpenter 버전 | **1.14.1** (helm, `oci://public.ecr.aws/karpenter/karpenter`) | 호환표상 K8s 1.36 은 **1.13 이상**이 필요하다(2026-10-12 조회). 1.15.0 은 이틀 전(10-10) 나왔다 — 기각. 기각: EKS Auto Mode (노드 관리를 통째로 AWS 에 넘기는 방식이라 Karpenter 의 부품이 보이지 않고, 관리 수수료가 따로 붙는다) |
 | D2 | 컨트롤러의 AWS 권한 | **IRSA** (`irsa-karpenter.tf` 신규) | 이 레포의 관례다(ALB·EBS CSI·ESO 가 전부 IRSA, OIDC 공급자가 이미 있다). 기각: Pod Identity (공식 안내의 현재 기본이지만 애드온과 노드당 DaemonSet 이 하나 더 필요하다. 노드당 여유 메모리가 이미 빠듯하다) |
-| D3 | Karpenter 노드의 IAM 역할 | **기존 `aws_iam_role.node` 재사용** | 관리형 노드그룹이 이 역할의 access entry 를 이미 만든다 🟡 → 추가 리소스 없이 노드가 붙는다. 기각: 전용 역할 (공식 안내 방식. access entry 를 따로 만들어야 하고 실습에서 얻는 것이 없다) |
+| D3 | Karpenter 노드의 IAM 역할 | **기존 `aws_iam_role.node` 재사용** | 관리형 노드그룹이 이 역할의 access entry 를 이미 만든다 ✅(세션에서 확인 — Karpenter 노드가 21초에 등록됐다) → 추가 리소스 없이 노드가 붙는다. 기각: 전용 역할 (공식 안내 방식. access entry 를 따로 만들어야 하고 실습에서 얻는 것이 없다) |
 | D4 | 컨트롤러가 사는 곳 | **관리형 노드그룹** (그대로 유지) | Karpenter 는 자기가 만든 노드 위에서 돌면 안 된다(그 노드를 지우면 자신이 죽는다). 차트 기본값이 `karpenter.sh/nodepool DoesNotExist` 로 이미 막아 둔다(1.14.1 `values.yaml` 확인) |
 | D5 | 컨트롤러 크기 | `replicas: 1` · requests `cpu 200m / memory 256Mi` 🟡 | 차트 기본은 `replicas: 2` + 필수 반친화성, requests **없음**이다. 공식 안내는 1 vCPU/1Gi 를 권하는데 `t4g.small` 노드(여유 1261Mi)에 넣을 수 없다. 256Mi 는 추정이라 세션에서 실측한다 |
 | D6 | 만들 수 있는 노드 | `arm64` · `on-demand` · ~~`t4g.small`/`t4g.medium`~~ → **`t4g.small` 만**(세션에서 정정, 위 결과 ②) · AZ 는 영속 볼륨과 같은 곳 · **총량 상한 `cpu: 4`** | 상한이 곧 비용 상한이다(§7). 기각: 스팟 (중단 알림 큐·EventBridge 규칙 4개가 따라온다. 별개 주제) |
@@ -90,7 +90,7 @@ Karpenter 가 띄울 노드: `t4g.small` 한 대의 여유는 1261Mi 🟡 → `d
 | P1 | 컨트롤러가 떴고 AWS 권한이 붙었다 | `kubectl -n kube-system get deploy karpenter` · 로그 | `1/1` + 로그에 `AccessDenied`·`WebIdentityErr` 없음 | CrashLoop / 권한 에러 |
 | P2 | Karpenter 가 서브넷·보안그룹·AMI 를 찾았다 | `kubectl get ec2nodeclass default -o yaml` 의 `status` | `Ready=True`, 서브넷 1개(영속 AZ)·SG 1개 이상 | `SubnetsReady=False` 등 (P1 만으로는 못 잡는다) |
 | P3 | 🔑 **Pending 이 노드를 만든다** | 4번째 복제본 Pending → `kubectl get nodeclaim -w` | NodeClaim 생성 → 노드 `Ready`. **시각 4개 기록**: Pending · NodeClaim 생성 · 노드 Ready · 파드 Ready | Pending 이 그대로 남음 |
-| P4 | 고른 인스턴스가 규칙 안이다 | `kubectl get nodeclaim -o wide` · `aws ec2 describe-instances` | `t4g.small` 또는 `t4g.medium`, `arm64`, 영속 AZ | 다른 종류·다른 AZ |
+| P4 | 고른 인스턴스가 규칙 안이다 | `kubectl get nodeclaim -o wide` · `aws ec2 describe-instances` | `t4g.small`(~~또는 `t4g.medium`~~ — D6 정정), `arm64`, 영속 AZ | 다른 종류·다른 AZ |
 | P5 | 그 노드에서 파드가 실제로 일한다 | 새 노드의 `daily-api` 파드 `kubectl top` (연결 재사용 끈 부하) | 유휴보다 뚜렷이 높다 | Ready 인데 유휴 |
 | P6 | 비면 사라진다 | 부하 중지 → HPA 축소 → 관찰 | NodeClaim 0, EC2 `terminated`. **시각 기록**: 파드 0 → 노드 삭제 | 빈 노드가 남음 |
 | P7 | 🔴 **`tofu destroy` 만으로 고아가 안 남는다** | Karpenter 노드를 **살려 둔 채** `kubectl` 정리 없이 destroy → AWS 직접 조회 | 클러스터 태그 달린 EC2 0 · 인스턴스 프로파일 0 · 시작 템플릿 0 · destroy 에러 없음 | 인스턴스 잔존 / 노드 역할 삭제가 `DeleteConflict` |

@@ -20,7 +20,9 @@ set -uo pipefail
 
 OWNED="Name=tag:kubernetes.io/cluster/${CLUSTER_NAME},Values=owned"
 POOL="Name=tag-key,Values=karpenter.sh/nodepool"
-ALIVE="Name=instance-state-name,Values=pending,running,stopping,stopped"
+# shutting-down 도 센다 — 종료 중인 인스턴스의 네트워크 인터페이스가 아직 클러스터 보안그룹을 잡고 있을 수 있다.
+# (2026-10-12 세션에서 Karpenter 가 먼저 종료를 걸어 둔 상태로 이 스크립트가 돌았다.)
+ALIVE="Name=instance-state-name,Values=pending,running,shutting-down,stopping,stopped"
 
 list_instances() {
   aws ec2 describe-instances --region "$REGION" --filters "$OWNED" "$POOL" "$ALIVE" \
@@ -54,15 +56,27 @@ done
 # ── ③ 인스턴스 프로파일 ───────────────────────────────────────────────────
 # 노드 역할에 붙은 프로파일 중 **Karpenter 태그가 있는 것만** 뗀다.
 # (관리형 노드그룹의 프로파일은 EKS 가 만들고 EKS 가 지운다 — 건드리지 않는다.)
-PROFILES=$(aws iam list-instance-profiles-for-role --role-name "$NODE_ROLE" \
-  --query 'InstanceProfiles[].InstanceProfileName' --output text 2>/dev/null || true)
+#
+# 🔴 여기서 실패를 삼키면 안 된다. 이 스크립트가 exit 0 으로 끝나면 tofu 는 정리 리소스를 state 에서 지운다.
+#    프로파일이 남은 채 그렇게 되면 노드 역할 삭제가 DeleteConflict 로 실패하고, `tofu destroy` 를 다시 돌려도
+#    **이 스크립트는 다시 돌지 않는다.** 실패를 exit 1 로 올려야 재실행 때 다시 시도한다.
+PROFILE_FAIL=0
+if ! PROFILES=$(aws iam list-instance-profiles-for-role --role-name "$NODE_ROLE" \
+  --query 'InstanceProfiles[].InstanceProfileName' --output text); then
+  echo "[karpenter-cleanup] ⛔ 노드 역할의 인스턴스 프로파일 조회 실패" >&2
+  exit 1
+fi
 for p in $PROFILES; do
-  IS_KARPENTER=$(aws iam list-instance-profile-tags --instance-profile-name "$p" \
-    --query 'length(Tags[?Key==`karpenter.k8s.aws/ec2nodeclass`])' --output text 2>/dev/null || echo 0)
+  if ! IS_KARPENTER=$(aws iam list-instance-profile-tags --instance-profile-name "$p" \
+    --query 'length(Tags[?Key==`karpenter.k8s.aws/ec2nodeclass`])' --output text); then
+    echo "[karpenter-cleanup] ⛔ 프로파일 태그 조회 실패: $p" >&2
+    PROFILE_FAIL=1
+    continue
+  fi
   [ "$IS_KARPENTER" = "1" ] || continue
   echo "[karpenter-cleanup] 인스턴스 프로파일 삭제: $p"
-  aws iam remove-role-from-instance-profile --instance-profile-name "$p" --role-name "$NODE_ROLE" || true
-  aws iam delete-instance-profile --instance-profile-name "$p" || true
+  aws iam remove-role-from-instance-profile --instance-profile-name "$p" --role-name "$NODE_ROLE" || PROFILE_FAIL=1
+  aws iam delete-instance-profile --instance-profile-name "$p" || PROFILE_FAIL=1
 done
 
 # ── ④ 완료 확인 — "지우라고 했다"와 "없다"는 다르다 ──────────────────────────
@@ -71,4 +85,8 @@ if [ -n "$LEFT" ]; then
   echo "[karpenter-cleanup] ⛔ 종료 후에도 EC2 가 남았다: $LEFT" >&2
   exit 1
 fi
-echo "[karpenter-cleanup] ✅ 잔존 EC2 0"
+if [ "$PROFILE_FAIL" != "0" ]; then
+  echo "[karpenter-cleanup] ⛔ 인스턴스 프로파일 정리 실패 — 노드 역할 삭제가 막힌다. 원인을 고친 뒤 destroy 를 다시 돌린다." >&2
+  exit 1
+fi
+echo "[karpenter-cleanup] ✅ 잔존 EC2 0 · 프로파일 정리 완료"

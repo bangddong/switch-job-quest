@@ -2664,6 +2664,15 @@ Karpenter 는 그 `Pending` 을 보고 **EC2 를 직접 띄워** 노드로 붙�
 🔴 **Karpenter 가 만든 EC2 는 OpenTofu 가 모른다.** state 에 없으므로 `tofu destroy` 가 지우지 않는다.
 이 레포는 삭제 순서 한가운데에 정리 단계를 끼워 그 구멍을 막았다(5b-7).
 
+### 사전 조건
+
+| 무엇 | 확인 |
+|---|---|
+| Stage 5a 까지의 레포 상태 | `k8s/hpa/` 와 `k8s/loadtest/` 가 있다 |
+| 도구 | `tofu version` · `aws --version` · `kubectl version --client` · `helm version` 이 모두 답한다 |
+| AWS 자격증명 | `aws sts get-caller-identity` 가 계정을 돌려준다 |
+| `0-bootstrap` · `1-network` | 이미 apply 돼 있다(영속 레이어) |
+
 ### 5b-1. 권한과 클러스터를 올린다 — 🔴 과금 시작
 
 ```bash
@@ -2741,6 +2750,12 @@ aws ec2 describe-security-groups --region ap-northeast-2 \
 ```
 
 ### 5b-4. 🔴 계정이 띄울 수 있는 인스턴스만 후보에 넣는다
+
+> 5b-3 에서 적용한 `nodepool.yaml` 에는 **이 절의 결론이 이미 들어 있다**(후보 = `t4g.small` 하나). 따라 할 때 더 할 일은
+> 없고, 아래 조회로 자기 계정의 목록만 확인한다. 이 절은 그 값이 왜 그렇게 됐는지의 기록이다.
+>
+> ⚠️ 2026-10-12 세션은 후보에 `t4g.medium` 이 있던 판으로 돌았다. `t4g.small` 하나로 좁힌 **최종 파일은 실클러스터에
+> 적용해 본 적이 없다.** 세션에서 확인된 것은 "멈춘 NodeClaim 을 지우자 `t4g.small` 이 정상으로 떴다"까지다.
 
 ```bash
 aws ec2 describe-instance-types --region ap-northeast-2 \
