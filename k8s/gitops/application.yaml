@@ -1,0 +1,40 @@
+# ArgoCD Application (Stage 5c) — "이 git 폴더를 이 클러스터에 맞춰 놓아라"는 주문서.
+#
+# 이것만 손으로 한 번 넣는다. 그 뒤로 앱 배포에 kubectl apply 를 쓰지 않는다.
+#
+# 적용 (자리표시자 2개를 치환한다):
+#   REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-northeast-2.amazonaws.com
+#   REVISION=main          # 세션 중에는 작업 브랜치 이름
+#   sed -e "s|REGISTRY_PLACEHOLDER|$REGISTRY|g" -e "s|REVISION_PLACEHOLDER|$REVISION|" \
+#     k8s/gitops/application.yaml | kubectl apply -f -
+#
+# 🔴 치환한 결과를 파일로 저장하지 마라 — 계정 ID 가 들어간다.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devquest-apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # 공개 레포라 인증 정보가 필요 없다. 비공개면 여기에 자격 증명을 따로 등록해야 한다.
+    repoURL: https://github.com/bangddong/switch-job-quest.git
+    targetRevision: REVISION_PLACEHOLDER
+    path: k8s/gitops/apps
+    kustomize:
+      # "이름이 왼쪽인 이미지를 오른쪽 주소로 바꿔라." 태그는 적지 않았으므로 git 의 것이 유지된다.
+      images:
+        - devquest/core-api=REGISTRY_PLACEHOLDER/devquest/core-api
+        - devquest/ai-api=REGISTRY_PLACEHOLDER/devquest/ai-api
+        - devquest/daily-api=REGISTRY_PLACEHOLDER/devquest/daily-api
+  destination:
+    server: https://kubernetes.default.svc # ArgoCD 가 설치된 바로 그 클러스터
+    namespace: default
+  syncPolicy:
+    automated:
+      # selfHeal: 누가 클러스터를 손으로 바꾸면 git 상태로 되돌린다. 끄면 "다르다"고 표시만 한다.
+      selfHeal: true
+      # prune: git 에서 지운 것을 클러스터에서도 지운다. 끄면 고아가 남는다.
+      # ⚠️ 그래서 DB 처럼 지워지면 안 되는 것은 이 Application 에 넣지 않았다.
+      prune: true

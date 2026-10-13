@@ -184,3 +184,29 @@ AWS 쪽(OpenTofu) 변경은 **없다.** ArgoCD 는 AWS API 를 부르지 않으�
 - `helm template` 에 `k8s/argocd/values.yaml` 을 넣었을 때 워크로드가 4개이고 requests 가 들어갔는가.
 - ECR 의 `daily-api` 태그 2개(U-12). 조회는 무료다.
 - 기존 절차가 그대로 도는가: `sed … k8s/base/core-api.yaml` 의 출력이 이전과 같은가.
+
+### 결과 (2026-10-13 14:53 KST, 전부 로컬 · $0)
+
+| 확인 | 결과 | 확도 |
+|---|---|---|
+| `kubectl kustomize k8s/gitops/apps` | 렌더됨. Deployment 3 · Service 3 · HPA 1 · NetworkPolicy 1. `postgres` · `Ingress` · 자리표시자 **0건** | 🔴 |
+| D7 레지스트리 덮어쓰기 | 사본에 `images: [{name: devquest/<앱>, newName: <가짜 레지스트리>/devquest/<앱>}]` 를 붙여 렌더 → 셋 다 `<레지스트리>/devquest/<앱>:<태그>`. **패치가 먼저, 이미지 치환이 나중**이라는 순서가 맞았다 | 🟡 아래 |
+| `helm template` + `values.yaml` | 파드가 뜨는 것 4개(controller · repo-server · server · redis), 넷 다 requests 들어감. 합 512Mi | 🔴 |
+| ECR 태그 | `daily-api` · `ai-api` 각 2개(`bd51e18…` 08-31, `14cb335…` 09-03). `core-api` 최신 `1a8a9aa…` 10-08 | 🔴 |
+| 기존 sed 절차 | `core-api.yaml` 을 건드리지 않았으므로 출력 동일(구성상 당연) | 🔴 |
+
+계획과 달랐던 것:
+
+- **applicationSet 은 끌 수 없고 0 으로 줄일 수만 있다.** 이 차트 버전에 `enabled` 스위치가 없다.
+  Deployment 는 남고 파드만 0 이다. "워크로드 4개"가 아니라 **"뜨는 파드 4개"** 가 정확하다.
+- **설치 때 Job 파드가 하나 잠깐 뜬다**(`argocd-redis-secret-init`, 설치 전 훅). requests 없음. 끝나면 사라진다.
+- **repo-server 에 초기화 컨테이너(`copyutil`)가 있고 같은 requests 를 받는다.** 초기화 컨테이너는 본 컨테이너와
+  동시에 돌지 않으므로 파드의 요청량은 합이 아니라 큰 쪽(128Mi)이다. 용량 산술(§3)은 그대로다.
+- 차트의 NetworkPolicy 는 값 적용 뒤 **4개**(기본 6개에서 끈 부품 몫이 빠짐).
+
+아직 🟡 인 것 — 세션에서만 확인된다:
+
+- D7 은 **Kustomize 의 동작**만 확인했다. ArgoCD 의 `spec.source.kustomize.images` 가 같은 `images:` 항목을
+  만들어 낸다는 것은 문서 기준이고 실물 미확인이다. 틀리면 P2 에서 `ImagePullBackOff` 로 드러난다(§6 분기 있음).
+- P7 의 태그 교체는 `14cb335…` → `bd51e18…`(더 오래된 이미지)로 한다. 그 이미지가 지금 DB 스키마로 뜨는지 미확인.
+  안 뜨면 "잘못된 커밋을 되돌리면 복구된다"(E2)를 대신 확인한 것으로 기록한다.

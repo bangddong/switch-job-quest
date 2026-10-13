@@ -4981,3 +4981,17 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   - 차트 기본값: 워크로드 7개, requests 없음(`helm template` 로 확인). Karpenter 때와 같은 함정.
   - ArgoCD 가 볼 브랜치: main 은 직접 push 금지라 세션 중에는 작업 브랜치를 본다.
 
+
+## 2026-10-13 — Stage 5c $0 준비
+
+- `[결정]` 14:40 KST **범위 유지(A안)** — 시크릿 참조(`k8s/eso/`)를 ArgoCD 에 넣는 것은 다음 단계로 미룬다(사용자 결정).
+  실무에서는 `ExternalSecret` 선언을 git 에 두는 것이 주류지만, 설치 순서 제어(sync wave)가 5c 의 핵심과 섞이면
+  막혔을 때 원인을 가르기 어렵다. DB 는 어느 쪽이든 넣지 않는다 — `prune` 이 지우면 안 되는 것이다.
+- `[메모]` 14:53 KST 파일 5개 작성, 로컬 확인(계획서 §9 결과).
+  - `kubectl kustomize k8s/gitops/apps` → Deployment 3 · Service 3 · HPA 1 · NetworkPolicy 1. postgres · Ingress · 자리표시자 0건.
+  - 레지스트리 덮어쓰기 흉내(`images.newName`) → `000000000000.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/daily-api:14cb335…`.
+    세 앱이 같은 자리표시자를 쓰므로 `images:` 로는 구분이 안 돼 **Deployment 지정 패치로 이름:태그를 넣고, 레지스트리만 `images:` 로 붙인다.**
+  - `helm template … -f k8s/argocd/values.yaml` → 뜨는 파드 4개, requests 합 512Mi.
+- `[메모]` 예상과 달랐던 것: 차트 10.10.2 에 applicationSet 을 끄는 스위치가 없다(`replicas: 0` 만 가능).
+  설치 전 훅 Job(`argocd-redis-secret-init`)이 requests 없이 잠깐 뜬다.
+- `[메모]` ECR 태그(무료 조회): daily-api · ai-api 는 2개씩(08-31, 09-03), core-api 최신은 10-08. 앱마다 최신 태그가 다르다.
