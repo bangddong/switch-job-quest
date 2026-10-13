@@ -2780,15 +2780,15 @@ watch -n 10 'kubectl get hpa daily-api; kubectl get pods -l app=daily-api -o wid
 
 HPA 가 4개를 원하면 4번째가 `Pending` 이 되고(`3 Insufficient memory` — 5a 의 끝 장면), Karpenter 가 받는다.
 
-| 시각 (UTC) | 일 | 누적 |
+| 시각 (KST) | 일 | 누적 |
 |---|---|---:|
-| 05:44:50 | 파드 생성, 자리 없음 | 0초 |
-| 05:44:51.6 | Karpenter 가 발견하고 NodeClaim 생성 | 1.6초 |
-| 05:44:54.0 | EC2 생성 호출 완료 (`t4g.small`) | 4초 |
-| 05:45:11.4 | 노드가 클러스터에 등록 | 21초 |
-| 05:45:21 | 파드가 그 노드에 배치 | 31초 |
-| 05:45:27 | 이미지 풀 5초 → 컨테이너 시작 | 37초 |
-| 05:45:51 | 파드 Ready (앱 기동 24초) | **61초** |
+| 14:44:50 | 파드 생성, 자리 없음 | 0초 |
+| 14:44:51.6 | Karpenter 가 발견하고 NodeClaim 생성 | 1.6초 |
+| 14:44:54.0 | EC2 생성 호출 완료 (`t4g.small`) | 4초 |
+| 14:45:11.4 | 노드가 클러스터에 등록 | 21초 |
+| 14:45:21 | 파드가 그 노드에 배치 | 31초 |
+| 14:45:27 | 이미지 풀 5초 → 컨테이너 시작 | 37초 |
+| 14:45:51 | 파드 Ready (앱 기동 24초) | **61초** |
 
 Karpenter 의 판단은 로그에 그대로 남는다.
 
@@ -2809,18 +2809,18 @@ kubernetes.io/cluster/devquest-eks  owned
 부하를 끝내면 HPA 가 파드를 줄이고, 노드가 비면 Karpenter 가 지운다.
 
 ```
-05:49:22.994  disrupting node(s)  Empty/…: delete: [ip-10-0-15-116…] (savings: $0.02)
-05:49:58.102  deleted node                                  ← 판정 35초 뒤
+14:49:22.994  disrupting node(s)  Empty/…: delete: [ip-10-0-15-116…] (savings: $0.02)
+14:49:58.102  deleted node                                  ← 판정 35초 뒤
 ```
 
 🔴 **비지 않아도 지운다.** `consolidationPolicy: WhenEmptyOrUnderutilized` 는 *"이 노드의 파드를 다른 노드로 옮길 수
 있으면 지운다"* 는 뜻이다. 부하가 아직 걸려 있던 중에 실제로 일어났다.
 
 ```
-05:43:28  HPA 4 → 3        (관리형 노드의 파드 하나가 줄어 자리가 났다)
-05:43:36  disrupting node(s)  Underutilized/…: delete: [ip-10-0-1-175…] (savings: $0.02)
-05:44:07  deleted node       (그 노드의 파드는 관리형 노드로 옮겨져 **새로 뜬다**)
-05:44:51  found provisionable pod(s)     ← 44초 뒤 다시 Pending, 노드를 또 만든다
+14:43:28  HPA 4 → 3        (관리형 노드의 파드 하나가 줄어 자리가 났다)
+14:43:36  disrupting node(s)  Underutilized/…: delete: [ip-10-0-1-175…] (savings: $0.02)
+14:44:07  deleted node       (그 노드의 파드는 관리형 노드로 옮겨져 **새로 뜬다**)
+14:44:51  found provisionable pod(s)     ← 44초 뒤 다시 Pending, 노드를 또 만든다
 ```
 
 옮겨진 파드는 갓 뜬 JVM 이라 CPU 를 4~5배 쓰고(5a-6), 그 사용률이 HPA 를 다시 4 로 올려 방금 지운 노드를 다시 부른다.

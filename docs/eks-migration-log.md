@@ -4848,28 +4848,28 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 
 ## 2026-10-12 — Stage 5b 유료 세션
 
-- `[메모]` **세션 시작 14:24 KST (05:24 UTC).** 사전 점검(무료): 도구 4종 존재, 자격증명 정상, 기존 클러스터 0 · EC2 0 · LB 0,
+- `[메모]` **세션 시작 14:24 KST.** 사전 점검(무료): 도구 4종 존재, 자격증명 정상, 기존 클러스터 0 · EC2 0 · LB 0,
   리퍼 로드됨, vCPU 쿼터 32, 누적 지출 $6.50. 이미지: core-api `1a8a9aac` · ai-api/daily-api `14cb335e`(전부 레포 커밋).
   사용자 확답: 시작부터 destroy 까지 자리에 있음(승인 창 apply 2 · destroy 2).
 - `[메모]` (세션 중 속기 — 종료 후 원문 표로 보강) apply 14:25:08~14:30:43(3) · 14:30:51~14:33:10(39).
   Karpenter 설치 14:35:27~47, EC2NodeClass `Ready=True`. P3: Pending→NodeClaim 1초→launched 2.5초→registered 20초→
-  initialized 31초→파드 Ready 약 61~66초. 부하 중 `Underutilized` 로 일하던 노드를 지움(05:43:36 UTC) → 44초 뒤 다시 Pending → 새 노드.
+  initialized 31초→파드 Ready 약 61~66초. 부하 중 `Underutilized` 로 일하던 노드를 지움(14:43:36) → 44초 뒤 다시 Pending → 새 노드.
   빈 노드: `Empty` 판정 후 35초에 삭제. E1: Pending 3개 동시 → `t4g.medium` 한 대를 고름 →
   `InvalidParameterCombination: The specified instance type is not eligible for Free Tier` 로 실패, NodeClaim 이 그대로 멈춤.
-  HPA 를 4 로 되돌리고 NodeClaim 삭제 → `t4g.small` 정상. 05:54 UTC 에 Karpenter 노드 1대를 살린 채 destroy 시작(P7).
+  HPA 를 4 로 되돌리고 NodeClaim 삭제 → `t4g.small` 정상. 14:54 에 Karpenter 노드 1대를 살린 채 destroy 시작(P7).
 
-### 2026-10-12 세션 결과 (종료 후 정리 — 시각은 UTC, KST = +9)
+### 2026-10-12 세션 결과 (종료 후 정리 — 시각은 전부 KST. 원본 로그는 UTC 이고 +9 로 옮겨 적었다)
 
 - `[메모]` **통과 기준**: P1·P2·P3·P4·P5·P6·P8 통과, **P7 조건부**. E1 은 예상 밖 실패를 관측, E2 는 그 실패에 가려 미관측.
 
   | # | 결과 | 실측 |
   |:-:|:-:|---|
-  | P1 | ✅ | `karpenter 1/1`, 설치 20초(05:35:27~47). 로그에 권한 에러 0건. 메모리 75Mi → 148Mi |
+  | P1 | ✅ | `karpenter 1/1`, 설치 20초(14:35:27~47). 로그에 권한 에러 0건. 메모리 75Mi → 148Mi |
   | P2 | ✅ | EC2NodeClass 조건 8개 전부 `True`. 보안그룹 1개(클러스터 SG), 서브넷 2개(2a·2c — AZ 는 NodePool 이 좁힌다), 인스턴스 프로파일 `devquest-eks_<해시>` 자동 생성 |
   | P3 | ✅ | 아래 구간 표 |
   | P4 | ✅ | `t4g.small` · `arm64` · `ap-northeast-2a` · on-demand · 공인 IP 있음(U-5 확인) |
   | P5 | ✅ | 새 노드의 파드 480m, 나머지 3개 73~91m (콜드 JVM — 5a 와 같은 현상) |
-  | P6 | ✅ | 파드가 빠진 뒤 `Empty` 판정 05:49:22.994 → 노드 삭제 05:49:58.102 (35초) |
+  | P6 | ✅ | 파드가 빠진 뒤 `Empty` 판정 14:49:22.994 → 노드 삭제 14:49:58.102 (35초) |
   | P7 | 🟡 | 인스턴스 프로파일은 정리 스크립트가 **실물을 지웠고** 노드 역할 삭제도 에러 없이 끝났다. **EC2 종료 경로는 실물로 못 봤다** — 아래 |
   | P8 | ✅ | EC2 0 · EKS 0 · LB 0 · NAT 0 · RDS 0 · 시작 템플릿 0 · ENI 0 · 프로파일 0 · 시크릿 0 · `state list` 0. 영속 EBS 10GiB `available` |
 
@@ -4877,26 +4877,26 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 
   | 시각 | 일 | 누적 |
   |---|---|---:|
-  | 05:44:50 | 파드 생성(HPA 3 → 4), 자리 없음 | 0초 |
-  | 05:44:51.590 | Karpenter `found provisionable pod(s)` | 1.6초 |
-  | 05:44:51.602 | `created nodeclaim` — 요구량 `cpu 380m · memory 616Mi`, 후보 `t4g.medium, t4g.small` | 1.6초 |
-  | 05:44:54.014 | `launched nodeclaim` — `t4g.small` (EC2 생성 호출 완료) | 4초 |
-  | 05:45:11.442 | `registered nodeclaim` (노드가 클러스터에 등록) | 21초 |
-  | 05:45:21 | 파드 스케줄됨 | 31초 |
-  | 05:45:22.219 | `initialized nodeclaim` | 32초 |
-  | 05:45:27 | 이미지 풀 5초 → 컨테이너 시작 | 37초 |
-  | 05:45:51 | 파드 Ready (Spring 기동 24초) | **61초** |
+  | 14:44:50 | 파드 생성(HPA 3 → 4), 자리 없음 | 0초 |
+  | 14:44:51.590 | Karpenter `found provisionable pod(s)` | 1.6초 |
+  | 14:44:51.602 | `created nodeclaim` — 요구량 `cpu 380m · memory 616Mi`, 후보 `t4g.medium, t4g.small` | 1.6초 |
+  | 14:44:54.014 | `launched nodeclaim` — `t4g.small` (EC2 생성 호출 완료) | 4초 |
+  | 14:45:11.442 | `registered nodeclaim` (노드가 클러스터에 등록) | 21초 |
+  | 14:45:21 | 파드 스케줄됨 | 31초 |
+  | 14:45:22.219 | `initialized nodeclaim` | 32초 |
+  | 14:45:27 | 이미지 풀 5초 → 컨테이너 시작 | 37초 |
+  | 14:45:51 | 파드 Ready (Spring 기동 24초) | **61초** |
 
-  첫 주기도 같은 모양이다: 05:38:51.096 발견 → 05:38:53.633 launched → 05:39:11.057 registered → 05:39:22.403 initialized.
+  첫 주기도 같은 모양이다: 14:38:51.096 발견 → 14:38:53.633 launched → 14:39:11.057 registered → 14:39:22.403 initialized.
   스케줄러 이벤트 원문: `0/4 nodes are available: 1 node(s) were unschedulable, 3 Insufficient memory.` (5a 의 끝 장면과 같다)
   → `Nominated: Pod should schedule on: nodeclaim/default-brmzc`.
 
-- `[막힘]` **계획에 없던 발견 ① — Karpenter 가 일하고 있는 노드를 지웠다.** 부하가 아직 걸려 있는 05:43:28 에 HPA 가
+- `[막힘]` **계획에 없던 발견 ① — Karpenter 가 일하고 있는 노드를 지웠다.** 부하가 아직 걸려 있는 14:43:28 에 HPA 가
   4 → 3 으로 줄였고, 줄어든 파드는 관리형 노드 쪽이었다. 그 자리가 비자 Karpenter 가 8초 뒤 판단했다:
   ```
-  05:43:36.405 disrupting node(s)  Underutilized/…: delete: nodepools=[default]: [ip-10-0-1-175…] (savings: $0.02)
-  05:44:07.975 deleted node
-  05:44:51.590 found provisionable pod(s)      ← 44초 뒤 다시 Pending, 새 노드를 또 만든다
+  14:43:36.405 disrupting node(s)  Underutilized/…: delete: nodepools=[default]: [ip-10-0-1-175…] (savings: $0.02)
+  14:44:07.975 deleted node
+  14:44:51.590 found provisionable pod(s)      ← 44초 뒤 다시 Pending, 새 노드를 또 만든다
   ```
   자기 노드의 파드를 관리형 노드로 옮기면 노드 한 대가 필요 없어진다는 계산이다(`WhenEmptyOrUnderutilized`).
   옮겨진 파드는 **새로 뜨므로 다시 콜드 JVM** 이 되고, 그 CPU 가 HPA 를 다시 4 로 올려 방금 지운 노드를 다시 만든다.
@@ -4904,9 +4904,9 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 
 - `[막힘]` **계획에 없던 발견 ② — 고른 인스턴스를 계정이 띄울 수 없었다 (E1).** HPA 를 6 으로 고정해 Pending 3개를 한꺼번에 만들었다.
   ```
-  05:50:37.091 computed new nodeclaim(s) to fit pod(s)  {"nodeclaims":1,"pods":3}
-  05:50:37.102 created nodeclaim  requests {"cpu":"780m","memory":"1640Mi","pods":"6"}  instance-types "t4g.medium"
-  05:50:39.637 ERROR launching nodeclaim, creating instance, creating nodeclaim, InvalidParameterCombination:
+  14:50:37.091 computed new nodeclaim(s) to fit pod(s)  {"nodeclaims":1,"pods":3}
+  14:50:37.102 created nodeclaim  requests {"cpu":"780m","memory":"1640Mi","pods":"6"}  instance-types "t4g.medium"
+  14:50:39.637 ERROR launching nodeclaim, creating instance, creating nodeclaim, InvalidParameterCombination:
                The specified instance type is not eligible for Free Tier. For a list of Free Tier instance types,
                run 'describe-instance-types' with the filter 'free-tier-eligible=true'.
                (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-status-code=200)
@@ -4920,7 +4920,7 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   🟡 그동안 노드 EC2 요금이 $0 로 청구돼 온 것(일지 10-07, 원인 미확인)도 이 계정이 무료 플랜이라는 같은 사실에서 나올 수 있다. 확인하지 않았다.
 - `[메모]` **E2(총량 상한) 미관측.** HPA 를 9 로 올려 Pending 6개를 만들었지만 위 NodeClaim 이 막고 있어 새 계산이 돌지 않았다.
 - `[메모]` **P7 — EC2 가 destroy 보다 먼저 사라졌다.** Karpenter 노드 1대(`i-0c69…`)를 살린 채 `kubectl` 정리 없이 destroy 를 시작했다.
-  CloudTrail: 노드그룹 destroy 시작(06:58:05) 35초 뒤인 **06:58:40 에 Karpenter 자신이** 그 인스턴스를 종료했다(호출 주체가 앞선 두 번의
+  CloudTrail: 노드그룹 destroy 시작(15:58:05) 35초 뒤인 **15:58:40 에 Karpenter 자신이** 그 인스턴스를 종료했다(호출 주체가 앞선 두 번의
   통합 삭제와 같은 형태의 세션 이름). 왜 지웠는지는 **확인하지 못했다**(⚪ — 그 시각의 컨트롤러 로그를 받지 않았다).
   그래서 정리 스크립트가 돌았을 때는 `Karpenter EC2 없음` 이었다. 스크립트가 실물로 한 일은 인스턴스 프로파일 삭제 하나다:
   ```
@@ -4931,7 +4931,7 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
   → 프로파일을 안 지웠다면 노드 역할 삭제가 실패했을 자리다(그 대조 실험은 하지 않았다).
   **EC2 종료 경로의 근거는 여전히 가짜 aws 주입 시험뿐이다.**
-- `[메모]` destroy(KST): 15:58:05~16:06:37 노드그룹 등 4개(8m20s) · 17:35:14~17:37:27 나머지 38개. 위 P7 항목의 `06:58` 은 같은 시각의 UTC 표기다.
+- `[메모]` destroy(KST): 15:58:05~16:06:37 노드그룹 등 4개(8m20s) · 17:35:14~17:37:27 나머지 38개.
 - `[비용]` 🔴 **상한 초과 — 예상 $0.27 · 상한 $0.40 → 약 $0.53.** 5a 와 같은 원인이 한 번 더 났다.
 
   | 구간 (KST) | 길이 | 켜져 있던 것 | 금액 |
