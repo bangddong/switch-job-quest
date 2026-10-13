@@ -18,7 +18,7 @@
 |--------|--------|--------|----------|------------|
 | 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **노드 1대 $0.1299/h · 2대 $0.1582/h · 3대 $0.1865/h**<br>  (노드 1대 = t4g.small `$0.0208` + 공인 IPv4 `$0.005` + **루트 EBS 20GiB `$0.0025`** = `$0.0283/h`;<br>   + 컨트롤플레인 `$0.100` + Secrets Manager 3종 일할 `$0.0016`)<br>  ~~노드 1대 $0.128/h · 2대 $0.154/h · 3대 $0.180/h~~ — 🔴 **루트 EBS 누락이었다 (09-04 정정)**<br>▸ ~~$0.149/h (t4g.medium 상향 후)~~ — **medium 은 이 계정에서 launch 불가**(D-010)<br>▸ 🔴 **Stage C 재개 = 3대** (D-011) → 50분 세션 ≈ ~~$0.150~~ **$0.1554** | |
 | ECR `devquest/daily-api` (영속, 빈 레포) | 2026-08-30 | 없음 | **$0** (저장분만 $0.10/GB-월) | |
-| 🔴 **영속 EBS** `vol-041e5a6705f7b4975` 10GiB gp3 | **2026-09-13** (재생성) | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$5.8693 소진 / $200 (2.93%)** — 2026-10-06 `ce get-cost-and-usage` **실측** (서비스별 분해는 10-06 엔트리)<br>🔴 ~~$2.936 (2026-09-15)~~ — **09-16 밤샘 사고($2.77~3.14)를 반영하지 않은 스냅샷이었다.** 사고 엔트리에 *"누적을 한 세션이 거의 두 배로 만들었다"* 고 적고도 **이 표를 안 고쳤다**<br>▸ EKS 컨트롤플레인 `$2.5750` = **가동 25.75시간** (그중 **17.34h 가 사고 한 번**)<br>~~$2.823 (2026-09-13)~~ |
+| 🔴 **영속 EBS** `vol-041e5a6705f7b4975` 10GiB gp3 | **2026-09-13** (재생성) | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$6.903 소진 / $200 (3.45%)** — 2026-10-13 08:16 `budgets describe-budgets` 조회(무료). 5b 세션 직전 $6.50 에서 +$0.40 — 반영이 최대 24시간 늦으므로 5b 몫(산정 $0.53)이 아직 다 잡히지 않았을 수 있다<br>~~$5.8693 소진 (2.93%)~~ — 2026-10-06 `ce get-cost-and-usage` **실측** (서비스별 분해는 10-06 엔트리)<br>🔴 ~~$2.936 (2026-09-15)~~ — **09-16 밤샘 사고($2.77~3.14)를 반영하지 않은 스냅샷이었다.** 사고 엔트리에 *"누적을 한 세션이 거의 두 배로 만들었다"* 고 적고도 **이 표를 안 고쳤다**<br>▸ EKS 컨트롤플레인 `$2.5750` = **가동 25.75시간** (그중 **17.34h 가 사고 한 번**)<br>~~$2.823 (2026-09-13)~~ |
 | | | | | ⚠️ **볼륨 ID 가 바뀌었다** — 09-13 백업·복구 리허설에서 `vol-0518b6d0dcd2b0d70`(07-31~09-13)을 **의도적으로 파괴**하고 재생성했다. 시작일은 데이터 수명이 아니라 **이 볼륨의** 수명이다 |
 | **S3** `devquest-eks-backups-seoul` (DB 논리 백업) | **2026-09-13** | 없음 (영속) | **≈ $0.00/월** (덤프 KB 단위, lifecycle 30일) | 위 합계에 포함 |
 | 🔴 **`AWS Cost Explorer` API 호출** (리소스가 아니라 **행위**) | 2026-07 | — | **$0.01 / `get-cost-and-usage` 요청** | **누적 $0.190 = 전체의 6.5%** — #417 세션 전체($0.0848)의 2배. 2026-09-15 등재 |
@@ -4827,3 +4827,139 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   | **apply 승인 때 destroy 승인 횟수·예상 시각을 알리고 확답** | **채택** — SOP §시작 1 에 표로 추가 |
 - `[메모]` 비용 영향: 없음($0). 다음 유료 세션(5b)부터 적용. 허용 규칙은 추가하지 않았으므로
   그 규칙이 실제로 `ask` 를 비켜 가는지는 **검증하지 않았다.**
+
+## 2026-10-12 — Stage 5b(Karpenter) 계획과 $0 준비
+
+- `[결정]` **Karpenter 1.14.1, IRSA, 노드 역할 재사용, on-demand 만, 총량 상한 `cpu: 4`.**
+  호환표상 K8s 1.36 은 Karpenter 1.13 이상이 필요하다. 1.15.0 은 10-10 에 나와 피했다.
+  기각: EKS Auto Mode · Pod Identity · 전용 노드 역할 · 스팟. 근거는 계획서 §2
+  (`docs/superpowers/plans/2026-10-12-eks-stage5b-karpenter.md`).
+- `[결정]` **`tofu destroy` 하나로 Karpenter 가 만든 EC2 까지 지운다.** Karpenter 가 띄운 EC2 · 시작 템플릿 ·
+  인스턴스 프로파일은 state 밖이고, 리퍼는 `tofu destroy` 만 친다. `terraform_data` 의 삭제 시점 실행기를
+  의존 순서 한가운데에 끼웠다: `노드그룹 → 정리 → { 노드 역할 · 클러스터 }`.
+  기각: 리퍼 스크립트 수정(하네스 동결) · 문서 안내만.
+- `[메모]` 차트 기본값이 이 클러스터에 안 맞는다 — `replicas: 2` + 필수 반친화성, requests **없음**.
+  공식 안내의 1 vCPU/1Gi 는 `t4g.small`(여유 1261Mi)에 안 들어간다. `replicas: 1`, `200m/256Mi`(🟡 추정)로 잡았다.
+- `[메모]` 공식 권한 템플릿(v1.14)은 정책 6종이고 그중 4종만 옮겼다(중단 알림 큐·zonal shift 제외).
+  4종 합계 5,214자(공백 제거)로 관리형 정책 한도 6,144자 아래지만 공식 구조대로 4개로 뒀다.
+- `[메모]` 준비 검증: `Plan: 42 to add`(5a 32 + 10). 정리 스크립트는 가짜 aws 로 정상·잔존·조회 거부 3종을
+  돌렸다(잔존·거부는 exit 1). 차트 CRD 스키마와 매니페스트 필드 대조 통과.
+- `[비용]` 변동 없음($0). 세션 예상 $0.27 · 상한 $0.40.
+
+## 2026-10-12 — Stage 5b 유료 세션
+
+- `[메모]` **세션 시작 14:24 KST.** 사전 점검(무료): 도구 4종 존재, 자격증명 정상, 기존 클러스터 0 · EC2 0 · LB 0,
+  리퍼 로드됨, vCPU 쿼터 32, 누적 지출 $6.50. 이미지: core-api `1a8a9aac` · ai-api/daily-api `14cb335e`(전부 레포 커밋).
+  사용자 확답: 시작부터 destroy 까지 자리에 있음(승인 창 apply 2 · destroy 2).
+- `[메모]` (세션 중 속기 — 종료 후 원문 표로 보강) apply 14:25:08~14:30:43(3) · 14:30:51~14:33:10(39). 둘로 나눈 것은 도구 호출 한 번이 10분으로 제한돼서다(SOP §시작 1) — 한 번에 쳐도 결과는 같다.
+  Karpenter 설치 14:35:27~47, EC2NodeClass `Ready=True`. P3: Pending→NodeClaim 1초→launched 2.5초→registered 20초→
+  initialized 31초→파드 Ready 약 61~66초. 부하 중 `Underutilized` 로 일하던 노드를 지움(14:43:36) → 44초 뒤 다시 Pending → 새 노드.
+  빈 노드: `Empty` 판정 후 35초에 삭제. E1: Pending 3개 동시 → `t4g.medium` 한 대를 고름 →
+  `InvalidParameterCombination: The specified instance type is not eligible for Free Tier` 로 실패, NodeClaim 이 그대로 멈춤.
+  HPA 를 4 로 되돌리고 NodeClaim 삭제 → `t4g.small` 정상. 14:54 에 Karpenter 노드 1대를 살린 채 destroy 승인을 요청했다(P7). 실제 destroy 시작은 승인이 온 15:58:05 다.
+
+### 2026-10-12 세션 결과 (종료 후 정리 — 시각은 전부 KST. 원본 로그는 UTC 이고 +9 로 옮겨 적었다)
+
+- `[메모]` **통과 기준**: P1·P2·P3·P4·P5·P6·P8 통과, **P7 조건부**. E1 은 예상 밖 실패를 관측, E2 는 그 실패에 가려 미관측.
+
+  | # | 결과 | 실측 |
+  |:-:|:-:|---|
+  | P1 | ✅ | `karpenter 1/1`, 설치 20초(14:35:27~47). 로그에 권한 에러 0건. 메모리 75Mi → 148Mi |
+  | P2 | ✅ | EC2NodeClass 조건 8개 전부 `True`. 보안그룹 1개(클러스터 SG), 서브넷 2개(2a·2c — AZ 는 NodePool 이 좁힌다), 인스턴스 프로파일 `devquest-eks_<해시>` 자동 생성 |
+  | P3 | ✅ | 아래 구간 표 |
+  | P4 | ✅ | `t4g.small` · `arm64` · `ap-northeast-2a` · on-demand · 공인 IP 있음(U-5 확인) |
+  | P5 | ✅ | 새 노드의 파드 480m, 나머지 3개 73~91m (콜드 JVM — 5a 와 같은 현상) |
+  | P6 | ✅ | 파드가 빠진 뒤 `Empty` 판정 14:49:22.994 → 노드 삭제 14:49:58.102 (35초) |
+  | P7 | 🟡 | 인스턴스 프로파일은 정리 스크립트가 **실물을 지웠고** 노드 역할 삭제도 에러 없이 끝났다. **EC2 종료 경로는 실물로 못 봤다** — 아래 |
+  | P8 | ✅ | EC2 0 · EKS 0 · LB 0 · NAT 0 · RDS 0 · 시작 템플릿 0 · ENI 0 · 프로파일 0 · 시크릿 0 · `state list` 0. 영속 EBS 10GiB `available` |
+
+- `[메모]` **P3 구간 — Pending 에서 파드 Ready 까지 61초** (두 번째 주기, 파드 `…-66qfz`):
+
+  | 시각 | 일 | 누적 |
+  |---|---|---:|
+  | 14:44:50 | 파드 생성(HPA 3 → 4), 자리 없음 | 0초 |
+  | 14:44:51.590 | Karpenter `found provisionable pod(s)` | 1.6초 |
+  | 14:44:51.602 | `created nodeclaim` — 요구량 `cpu 380m · memory 616Mi`, 후보 `t4g.medium, t4g.small` | 1.6초 |
+  | 14:44:54.014 | `launched nodeclaim` — `t4g.small` (EC2 생성 호출 완료) | 4초 |
+  | 14:45:11.442 | `registered nodeclaim` (노드가 클러스터에 등록) | 21초 |
+  | 14:45:21 | 파드 스케줄됨 | 31초 |
+  | 14:45:22.219 | `initialized nodeclaim` | 32초 |
+  | 14:45:27 | 이미지 풀 5초 → 컨테이너 시작 | 37초 |
+  | 14:45:51 | 파드 Ready (Spring 기동 24초) | **61초** |
+
+  첫 주기도 같은 모양이다: 14:38:51.096 발견 → 14:38:53.633 launched → 14:39:11.057 registered → 14:39:22.403 initialized.
+  스케줄러 이벤트 원문: `0/4 nodes are available: 1 node(s) were unschedulable, 3 Insufficient memory.` (5a 의 끝 장면과 같다)
+  → `Nominated: Pod should schedule on: nodeclaim/default-brmzc`.
+
+- `[막힘]` **계획에 없던 발견 ① — Karpenter 가 일하고 있는 노드를 지웠다.** 부하가 아직 걸려 있는 14:43:28 에 HPA 가
+  4 → 3 으로 줄였고, 줄어든 파드는 관리형 노드 쪽이었다. 그 자리가 비자 Karpenter 가 8초 뒤 판단했다:
+  ```
+  14:43:36.405 disrupting node(s)  Underutilized/…: delete: nodepools=[default]: [ip-10-0-1-175…] (savings: $0.02)
+  14:44:07.975 deleted node
+  14:44:51.590 found provisionable pod(s)      ← 44초 뒤 다시 Pending, 새 노드를 또 만든다
+  ```
+  자기 노드의 파드를 관리형 노드로 옮기면 노드 한 대가 필요 없어진다는 계산이다(`WhenEmptyOrUnderutilized`).
+  옮겨진 파드는 **새로 뜨므로 다시 콜드 JVM** 이 되고, 그 CPU 가 HPA 를 다시 4 로 올려 방금 지운 노드를 다시 만든다.
+  HPA(파드 수) · Karpenter(노드 수) · JIT 워밍업이 서로를 밀어 올리는 고리다.
+
+- `[막힘]` **계획에 없던 발견 ② — 고른 인스턴스를 계정이 띄울 수 없었다 (E1).** HPA 를 6 으로 고정해 Pending 3개를 한꺼번에 만들었다.
+  ```
+  14:50:37.091 computed new nodeclaim(s) to fit pod(s)  {"nodeclaims":1,"pods":3}
+  14:50:37.102 created nodeclaim  requests {"cpu":"780m","memory":"1640Mi","pods":"6"}  instance-types "t4g.medium"
+  14:50:39.637 ERROR launching nodeclaim, creating instance, creating nodeclaim, InvalidParameterCombination:
+               The specified instance type is not eligible for Free Tier. For a list of Free Tier instance types,
+               run 'describe-instance-types' with the filter 'free-tier-eligible=true'.
+               (aws-error-code=UnfulfillableCapacity, aws-operation-name=CreateFleet, aws-status-code=200)
+  ```
+  Karpenter 는 3개를 **한 대에 몰아 담는 쪽**을 골랐다(1640Mi 는 `t4g.small` 에 안 들어가므로 후보가 medium 하나).
+  실패한 뒤 small 2대로 나눠 다시 시도하지 않았다. NodeClaim 은 `Launched=Unknown (FreeTierIneligible)` 로 멈췄고
+  10초마다 `cluster is waiting on sync for extended duration` 이 찍혔다. 파드 3개는 2분 40초 동안 Pending.
+- `[해결]` HPA 를 4 로 되돌리고 멈춘 NodeClaim 을 지우자 8초 뒤 `t4g.small` 이 정상으로 떴다. 근본 수정은 NodePool 의
+  후보에서 `t4g.medium` 을 뺀 것이다(`k8s/karpenter/nodepool.yaml`). 이 계정이 띄울 수 있는 종류(세션 뒤 무료 조회):
+  `c7i-flex.large m7i-flex.large t3.micro t3.small t4g.micro t4g.small t8i.micro t8i.small`.
+  🟡 그동안 노드 EC2 요금이 $0 로 청구돼 온 것(일지 10-07, 원인 미확인)도 이 계정이 무료 플랜이라는 같은 사실에서 나올 수 있다. 확인하지 않았다.
+- `[메모]` **E2(총량 상한) 미관측.** HPA 를 9 로 올려 Pending 6개를 만들었지만 위 NodeClaim 이 막고 있어 새 계산이 돌지 않았다.
+- `[메모]` **P7 — EC2 가 destroy 보다 먼저 사라졌다.** Karpenter 노드 1대(`i-0c69…`)를 살린 채 `kubectl` 정리 없이 destroy 를 시작했다.
+  CloudTrail: 노드그룹 destroy 시작(15:58:05) 35초 뒤인 **15:58:40 에 Karpenter 자신이** 그 인스턴스를 종료했다(호출 주체가 앞선 두 번의
+  통합 삭제와 같은 형태의 세션 이름). 왜 지웠는지는 **확인하지 못했다**(⚪ — 그 시각의 컨트롤러 로그를 받지 않았다).
+  그래서 정리 스크립트가 돌았을 때는 `Karpenter EC2 없음` 이었다. 스크립트가 실물로 한 일은 인스턴스 프로파일 삭제 하나다:
+  ```
+  terraform_data.karpenter_cleanup (local-exec): [karpenter-cleanup] Karpenter EC2 없음
+  terraform_data.karpenter_cleanup (local-exec): [karpenter-cleanup] 인스턴스 프로파일 삭제: devquest-eks_<해시>
+  terraform_data.karpenter_cleanup (local-exec): [karpenter-cleanup] ✅ 잔존 EC2 0
+  aws_iam_role.node: Destruction complete after 1s
+  ```
+  → 프로파일을 안 지웠다면 노드 역할 삭제가 실패했을 자리다(그 대조 실험은 하지 않았다).
+  **EC2 종료 경로의 근거는 여전히 가짜 aws 주입 시험뿐이다.**
+- `[메모]` destroy(KST): 15:58:05~16:06:37 노드그룹 등 4개(8m32s) · 17:35:14~17:37:27 나머지 38개.
+- `[비용]` 🔴 **상한 초과 — 예상 $0.27 · 상한 $0.40 → 약 $0.53.** 5a 와 같은 원인이 한 번 더 났다.
+
+  | 구간 (KST) | 길이 | 켜져 있던 것 | 금액 |
+  |---|---:|---|---:|
+  | 컨트롤플레인 14:25:08~17:37:27 | 192분 | $0.10/h | $0.320 |
+  | 관리형 노드 4대 14:32~16:00:43(3대)·16:04:45(1대) | 360 노드·분 | $0.0283/h | $0.170 |
+  | Karpenter 노드 3번 | 74분 | $0.0283/h | $0.035 |
+  | **합계** | | | **$0.525** |
+
+  측정은 **29분**에 끝났다(14:25 → 14:54). 그 뒤 destroy 승인을 **64분**(14:54:19 → 15:58:05, 전체 가동) +
+  **89분**(16:06:37 → 17:35:14, 컨트롤플레인만) 기다렸다. 유휴 = 64분 × $0.2415/h + 89분 × $0.10/h = **$0.405 (77%)**.
+  apply 전에 알린 destroy 승인 시각은 15:25 였고 실제 요청은 14:54 였다 — **측정이 31분 일찍 끝났고, 약속한 시각보다 이른 요청이었다.**
+  푸시 알림을 한 번 보냈다. 두 번째 승인은 *"4~8분 뒤"* 라고 알렸으나 89분 뒤에 왔다.
+  리퍼는 이번에도 움직이지 않았다(`reaper.log` 에 오늘 기록 없음. 하트비트 14:25 → 16:25 이후 발동했어야 한다. 원인 미확인 🟡 수면).
+  **10-11 에 정한 대책(apply 전에 시각 확답)은 첫 적용에서 막지 못했다.**
+- `[비용]` 누적 지출 $6.50 → 예산 조회 $6.51(반영 지연 있음).
+
+## 2026-10-13 — Stage 5b 퀴즈 · QA
+
+- `[메모]` 이해도 퀴즈 5문제. 1차에서 온전히 맞은 문제 0, 재확인 문제는 전부 맞힘. 기록 `docs/eks-quizzes/stage-eks-13-karpenter.md`.
+  사용자 요청으로 5b 기록의 시각을 KST 로 통일했다(원본 로그는 UTC).
+- `[해결]` QA 지적 9건(HIGH 0 · MEDIUM 2 · LOW 7)을 전부 이 브랜치에서 고쳤다.
+  - **정리 스크립트가 프로파일 정리 실패를 삼켰다(F-1).** ③ 의 조회·삭제가 `|| true` 여서, 실패해도 exit 0 이었다.
+    그러면 tofu 는 정리 리소스를 state 에서 지우고, 노드 역할 삭제가 `DeleteConflict` 로 실패한 뒤 destroy 를 다시 돌려도
+    **스크립트가 다시 돌지 않는다.** 조회 실패는 즉시 exit 1, 삭제 실패는 모아서 마지막에 exit 1 로 올렸다.
+  - 잔존 확인이 `shutting-down` 을 세지 않았다(F-3) → 필터에 추가. 실행 경로에 따옴표가 없었다(F-4) → 추가.
+  - 가짜 `aws` 로 5종을 돌렸다: 프로파일 없음 0 · 정상 삭제 0 · **삭제 실패 1** · **조회 실패 1** · 종료 중 인스턴스 발견 0(종료 호출 1회).
+    `tofu fmt -check` · `tofu validate` 통과. EC2 종료 경로가 실물에서 돈 적이 없다는 한계는 그대로다.
+  - 퀴즈 기록이 HPA 대상을 core-api 로 적었다(실제 daily-api). 파드 요청량 616Mi 도 틀렸다(512Mi. 616 은 노드 요구량) (F-2).
+    출제할 때 사용자에게도 그렇게 말했다 — 기록에 정정 문단을 남겼다.
+- `[비용]` 누적 **$6.903** (2026-10-13 08:16 조회, 무료). 최상단 표 갱신.

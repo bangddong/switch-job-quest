@@ -139,3 +139,15 @@ output "acm_certificate_arn" {
   value       = data.terraform_remote_state.bootstrap.outputs.acm_certificate_arn
   sensitive   = true
 }
+
+# Stage 5b — helm install 이 서비스 계정 어노테이션에 넣을 값.
+# 🔴 ARN 에는 계정 ID 가 들어 있다. 매니페스트 파일에 적지 말고 설치 시점에 이 output 을 읽어 넘긴다.
+output "karpenter_role_arn" {
+  description = "Karpenter 컨트롤러 IRSA 역할 ARN (helm --set 으로 주입)"
+  value       = aws_iam_role.karpenter.arn
+}
+
+output "node_role_name" {
+  description = "노드 IAM 역할 이름. Karpenter EC2NodeClass 의 spec.role 과 같아야 한다"
+  value       = aws_iam_role.node.name
+}
