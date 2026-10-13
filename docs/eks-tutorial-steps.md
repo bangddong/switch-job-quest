@@ -2896,6 +2896,262 @@ aws ec2 describe-launch-templates --region $R --query 'length(LaunchTemplates)' 
 - AMI 를 `al2023@latest` 로 뒀다. 상시 운영이면 버전을 고정한다 — 새 AMI 가 나올 때마다 노드가 교체된다.
 - 관리형 노드그룹 4대를 그대로 두고 Karpenter 는 넘치는 몫만 맡았다. 전부 Karpenter 에 맡기는 구성은 다루지 않았다.
 
+## Stage 5c — ArgoCD
+
+> 2026-10-13 실클러스터 확인. 과금 구간의 실제 작업은 32분, 시간당 $0.1865(노드 3대).
+> 5b 까지는 배포할 때마다 사람이 `sed … | kubectl apply` 를 쳤다. 여기서는 **git 에 커밋하면 클러스터가 따라온다.**
+
+### 무엇이 달라지는가
+
+지금까지는 사람이 클러스터에 **밀어 넣었다**(push). ArgoCD 는 클러스터 안에서 돌면서 git 을 **끌어온다**(pull).
+git 에 적힌 것과 클러스터에 실제로 있는 것을 계속 비교하고, 다르면 git 쪽으로 맞춘다.
+
+| 용어 | 뜻 |
+|---|---|
+| **GitOps** | "클러스터가 어떤 모습이어야 하는가"의 정답을 git 에 두는 운영 방식 |
+| **Application** | ArgoCD 에 내는 주문서. "이 git 폴더를 이 클러스터의 이 네임스페이스에 맞춰 놓아라" |
+| **Synced / OutOfSync** | git 과 클러스터가 같다 / 다르다 |
+| **Healthy / Degraded** | 같고 다르고와 별개로, 올라간 것이 실제로 정상인가 |
+| **selfHeal** | 누가 클러스터를 손으로 바꾸면 git 상태로 되돌린다 |
+| **prune** | git 에서 지운 것을 클러스터에서도 지운다 |
+| **Kustomize** | 여러 yaml 을 묶고 일부만 덮어쓰는 도구. `kubectl` 에 들어 있다 |
+
+🔴 **전부 맡기지 않는다.** 이 Stage 에서 ArgoCD 가 관리하는 것은 앱 3종 · NetworkPolicy · HPA 뿐이다.
+
+| 맡기지 않은 것 | 이유 |
+|---|---|
+| postgres | `prune` 은 git 과 다르면 지운다. 데이터가 걸린 것을 그 경로에 두지 않는다. 실무에서도 DB 는 대개 클러스터 밖(RDS)에 둔다 |
+| 시크릿 참조(`k8s/eso/`) | 넣는 것이 실무 주류다(값이 아니라 "어디서 가져와라"만 적혀 있다). 다만 설치 순서 제어가 필요해 다음 단계로 미뤘다 |
+| Ingress | 적용하면 ALB 가 생긴다. 이 Stage 는 ALB 없이 진행한다 |
+
+### 사전 조건
+
+| 무엇 | 확인 |
+|---|---|
+| Stage 5a 까지의 레포 상태 | `k8s/hpa/daily-api-hpa.yaml` 이 있다 |
+| 도구 | `tofu` · `aws` · `kubectl`(1.14 이상이면 Kustomize 내장) · `helm` |
+| 레포가 공개다 | 비공개면 ArgoCD 에 git 자격 증명을 따로 등록해야 한다(이 문서 범위 밖) |
+| ECR 에 이미지 3종 | `aws ecr describe-images --repository-name devquest/daily-api --region ap-northeast-2 --query 'sort_by(imageDetails,&imagePushedAt)[].imageTags'` |
+| ArgoCD 버전 | **3.5 계열**이어야 K8s 1.36 을 지원한다(2026-10-13 호환표). 차트 `argo/argo-cd` 10.10.2 = ArgoCD v3.5.4 |
+
+### 5c-1. 레포 쪽 준비 — 무엇을 읽힐지 정한다 ($0)
+
+`k8s/base/` 를 통째로 읽히면 안 된다. 둘 중 하나만 써야 하는 postgres 매니페스트 쌍과 ALB 를 만드는 `ingress.yaml` 이
+같이 들어 있다. 그래서 **읽힐 파일을 명시한 목록**(`kustomization.yaml`)을 둔다.
+
+```
+k8s/base/kustomization.yaml         앱 3종 + NetworkPolicy 만 나열
+k8s/hpa/kustomization.yaml          HPA
+k8s/gitops/apps/kustomization.yaml  위 둘을 묶고, 앱마다 이미지를 정한다   ← ArgoCD 가 보는 폴더
+k8s/gitops/application.yaml         Application 주문서
+k8s/argocd/values.yaml              ArgoCD 설치 값
+```
+
+🔴 **이미지 주소를 둘로 쪼갠다.** ECR 주소에는 AWS 계정 ID 가 들어 있어 공개 레포에 적을 수 없다. 그런데
+"커밋하면 배포된다"가 되려면 태그는 git 에 있어야 한다.
+
+| 조각 | 어디에 두나 |
+|---|---|
+| 이름:태그 (`devquest/daily-api:<sha>`) | git — `k8s/gitops/apps/kustomization.yaml` |
+| 레지스트리 (`<account>.dkr.ecr.…`) | 클러스터 — Application 의 `kustomize.images` 에 적용 시점에 치환해 넣는다 |
+
+렌더해서 확인한다. 클러스터가 없어도 된다.
+
+```bash
+kubectl kustomize k8s/gitops/apps | grep -E "^kind:|image:"
+# → Deployment 3 · Service 3 · HorizontalPodAutoscaler 1 · NetworkPolicy 1
+# → image: devquest/core-api:<sha> 형태 3줄. 레지스트리가 없는 것이 정상이다 — ArgoCD 가 붙인다
+kubectl kustomize k8s/gitops/apps | grep -ciE "postgres|kind: Ingress|PLACEHOLDER"     # → 0
+```
+
+<!-- verify: k8s/base/kustomization.yaml ~ networkpolicy-ai-api.yaml -->
+
+이 파일들은 **ArgoCD 가 볼 브랜치에 push 돼 있어야** 한다. ArgoCD 는 내 로컬 디스크가 아니라 GitHub 를 본다.
+
+### 5c-2. 클러스터와 바탕을 올린다 — 🔴 과금 시작
+
+```bash
+cd infra/aws-eks/2-cluster
+tofu plan  -var node_desired_size=3      # Plan: 42 to add (2026-10-13 실측)
+tofu apply -var node_desired_size=3
+aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2
+kubectl get nodes                        # 3대 Ready
+```
+
+이어서 `k8s/README.md` §2 · §2.5 와 SOP §6b 대로 **ESO · 시크릿 참조 · postgres · 비밀번호 동기화까지만** 올린다.
+
+🔴 **앱 3종(§3)은 올리지 않는다.** ArgoCD 가 올리는 것을 보려는 것이다.
+metrics-server 는 EKS 애드온이라 이미 깔려 있다.
+
+> 💰 시간당 **$0.1865** (컨트롤플레인 $0.10 + 노드 3대). ArgoCD 는 AWS API 를 부르지 않아 IAM 역할도 추가 비용도 없다.
+
+### 5c-3. ArgoCD 를 설치한다
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm && helm repo update
+helm install argocd argo/argo-cd --version 10.10.2 -n argocd --create-namespace \
+  -f k8s/argocd/values.yaml --wait --timeout 5m          # 실측 54초
+kubectl get pods -n argocd
+```
+
+```
+argocd-application-controller-0   1/1 Running      ← git 과 클러스터를 비교하고 맞추는 본체
+argocd-repo-server-…              1/1 Running      ← git 을 받아 Kustomize 를 돌린다
+argocd-server-…                   1/1 Running      ← 화면 + API
+argocd-redis-…                    1/1 Running      ← 캐시
+argocd-redis-secret-init-…        0/1 Completed    ← 설치 때 한 번 도는 Job. 정상이다
+```
+
+차트 기본값으로 깔면 파드가 7개 뜨고 메모리 요청이 하나도 없다. 값 파일이 안 쓰는 부품 3개를 끄고 요청량을 적는다.
+실측 메모리는 4개 합 **272Mi**(앱 1건 관리, 설치 18분 뒤)였다. 값 파일의 요청 합은 512Mi 다.
+
+<!-- verify: k8s/argocd/values.yaml ~ replicas: 0 -->
+
+화면을 보려면 포트 포워딩으로만 연다. 밖으로 열지 않는다.
+
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8080:443     # https://localhost:8080 , 사용자 admin
+```
+
+> ⚠️ 초기 비밀번호는 `argocd-initial-admin-secret` 에 있다. 값을 문서 · 로그 · PR 에 남기지 않는다.
+> 이 세션은 화면 없이 `kubectl` 로만 진행했다. 아래 확인은 전부 명령으로 된다.
+
+### 5c-4. Application 을 등록한다 — 손으로 치는 마지막 `kubectl apply`
+
+```bash
+REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-northeast-2.amazonaws.com
+REVISION=main                            # 작업 브랜치에서 실습하면 그 브랜치 이름
+sed -e "s|REGISTRY_PLACEHOLDER|$REGISTRY|g" -e "s|REVISION_PLACEHOLDER|$REVISION|" \
+  k8s/gitops/application.yaml | kubectl apply -f -
+```
+
+🔴 치환한 결과를 파일로 저장하지 않는다. 계정 ID 가 들어간다.
+
+```bash
+kubectl get application devquest-apps -n argocd \
+  -o jsonpath='{.status.sync.status} {.status.health.status} {.status.sync.revision}{"\n"}'
+# → Synced Healthy <커밋 SHA>
+kubectl get pods                          # core-api · ai-api · daily-api 가 1/1 Running
+kubectl get deploy -o jsonpath='{range .items[*]}{.spec.template.spec.containers[0].image}{"\n"}{end}'
+# → <account>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/<앱>:<git 에 적은 태그>
+```
+
+실측: 적용 15초 뒤 `Synced`, 47초 뒤 파드 3개 모두 1/1, 79초 뒤 `Healthy`.
+중간에 30초쯤 `Synced` 이면서 `Degraded` 로 보였다가 `Healthy` 가 됐다(원인은 확인하지 못했다).
+
+<!-- verify: k8s/gitops/application.yaml ~ selfHeal: true -->
+
+### 5c-5. 손으로 바꿔 본다 — 되돌아온다
+
+```bash
+kubectl scale deploy ai-api --replicas=2
+kubectl get deploy ai-api -o jsonpath='{.spec.replicas}{"\n"}'      # 1초 뒤 → 1
+
+kubectl get svc ai-api -o jsonpath='{.metadata.uid}{"\n"}'
+kubectl delete svc ai-api
+kubectl get svc ai-api -o jsonpath='{.metadata.uid}{"\n"}'          # 2초 뒤 다시 있다. UID 가 다르다
+```
+
+UID 가 바뀐 것은 되살린 것이 아니라 **같은 이름으로 새로 만든 것**이기 때문이다.
+컨트롤러 로그에 `Synced -> OutOfSync` → `Initiated automated sync` → `Partial sync operation … succeeded` 가 찍힌다.
+
+### 5c-6. 커밋하면 배포된다 — 그런데 1~3분 걸린다
+
+`k8s/hpa/daily-api-hpa.yaml` 의 `minReplicas` 를 바꿔 커밋 · push 하고 기다린다.
+
+```bash
+kubectl get application devquest-apps -n argocd \
+  -o jsonpath='{range .status.history[*]}{.deployedAt} {.revision}{"\n"}{end}'
+```
+
+| | push → 클러스터 반영 |
+|---|---|
+| 4회 실측 | 1분 8초 · 1분 46초 · 2분 15초 · 2분 51초 |
+
+손으로 바꾼 것은 1초 만에 알고 git 을 바꾼 것은 분 단위다. 클러스터 쪽은 변화를 **통지받고**(watch),
+git 쪽은 **주기적으로 물어봐야**(폴링, 기본 약 3분) 알기 때문이다. 바로 반영하려면 GitHub 웹훅을 건다(이 문서 범위 밖).
+
+### 5c-7. 🔴 HPA 가 있는 Deployment 는 git 에 `replicas` 를 적지 않는다
+
+`k8s/base/daily-api.yaml` 에는 `replicas: 1` 이 적혀 있다. HPA 의 최소가 2 가 되면 같은 칸을 두 주체가 고쳐 쓴다.
+
+```
+16:45:53 spec=1 hpa=1/2 Synced     Running Terminating     ← HPA 가 2 로 올린 것을 ArgoCD 가 1 로 되돌렸다
+16:46:35 spec=2 hpa=1/2 OutOfSync  Running Running(2s)
+16:46:41 spec=1 hpa=1/2 Synced     Running
+16:46:53 spec=2 hpa=1/2 OutOfSync  Running Running(5s)
+```
+
+3분 동안 daily-api 의 둘째 파드가 4번 새로 만들어졌다. 무한히 빠르게 싸우지는 않는다 — ArgoCD 가 같은 커밋으로의
+재시도 간격을 늘린다(`retrying in 41s` → `retrying in 2m41s`). 그래서 잠깐 멈춘 것처럼 보이지만 끝난 것이 아니다.
+
+해결은 git 에서 그 칸을 빼는 것이다. base 파일은 손으로 올리는 절차도 쓰므로 그대로 두고, ArgoCD 가 보는 묶음에서만 뺀다.
+
+```yaml
+# k8s/gitops/apps/kustomization.yaml
+  - target: { kind: Deployment, name: daily-api }
+    patch: |-
+      - op: remove
+        path: /spec/replicas
+```
+
+<!-- verify: k8s/gitops/apps/kustomization.yaml ~ path: /spec/replicas -->
+
+반영되는 순간 파드 수가 **한 번 1 로 떨어진다**(적용하던 칸을 빼면 기본값으로 돌아간다). 6초 뒤 HPA 가 다시 올렸고
+그 뒤로는 되돌림이 없었다. 레포의 최종 상태에는 이 패치가 들어 있으므로, 처음부터 따라 하면 이 싸움은 일어나지 않는다.
+직접 보려면 패치를 지우고 `minReplicas` 를 2 로 올려 커밋한다.
+
+> 5a-9 의 "HPA 가 켜진 동안 base 매니페스트를 다시 적용하지 마라"와 같은 문제다. 그때는 사람이 한 번 덮어썼고,
+> 여기서는 ArgoCD 가 계속 덮어쓴다.
+
+### 5c-8. 이미지를 바꾼다 — 커밋 한 줄
+
+```bash
+# k8s/gitops/apps/kustomization.yaml 에서 daily-api 의 태그를 ECR 에 있는 다른 태그로 바꾸고 commit · push
+kubectl get deploy daily-api -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+kubectl get pods -l app=daily-api
+```
+
+실측: push 1분 46초 뒤 이미지가 바뀌고, 26초 뒤 새 파드가 1/1. 전략이 `Recreate` 라 그 26초 동안 daily-api 는 0개다.
+되돌리는 것도 같은 방식이다. 태그를 원래대로 커밋한다(`git revert`).
+
+### 5c-9. ArgoCD 가 죽으면 — 앱은 살고, 되돌리는 힘만 사라진다
+
+```bash
+kubectl scale sts argocd-application-controller -n argocd --replicas=0
+kubectl scale deploy ai-api --replicas=2          # 25초 뒤에도 2 로 남는다
+kubectl get application devquest-apps -n argocd -o jsonpath='{.status.sync.status}{"\n"}'   # → Synced (!)
+kubectl scale sts argocd-application-controller -n argocd --replicas=1    # 4초 뒤 ai-api 가 1 로 돌아온다
+```
+
+🔴 컨트롤러가 없는 동안 Application 은 **`Synced` 라고 표시한다.** 아무도 갱신하지 않아 옛 상태가 남은 것이다.
+"Synced 다"는 "누군가 방금 확인했다"와 같은 말이 아니다.
+
+### 5c-10. 정리 — 과금 종료
+
+SOP §8 그대로다. Application 이나 ArgoCD 를 따로 지울 필요는 없다. 클러스터와 함께 사라진다.
+
+```bash
+kubectl delete externalsecret --all -A && kubectl delete secretstore --all -A
+kubectl get ingress -A                                   # No resources found
+cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=3      # 42 destroyed
+```
+
+끝난 뒤 SOP §8b · §9 의 조회로 EKS 0 · EC2 0 · 고아 0 을 확인한다.
+
+> 💰 이 세션은 과금 70분, 약 **$0.18**. 측정은 32분에 끝났고 destroy 승인 대기가 27분(약 $0.07)이었다.
+
+### 이 Stage 에서 알아 둘 한계
+
+- **시크릿과 DB 는 여전히 손으로 올린다.** 클러스터를 새로 만들면 git 만으로는 복원되지 않는다.
+  시크릿 참조를 넣으려면 설치 순서 제어(sync wave)가 필요하다.
+- **ArgoCD 자신은 helm 으로 손수 깔았다.** ArgoCD 가 ArgoCD 를 관리하는 구성은 다루지 않았다.
+- **이미지 태그를 사람이 커밋했다.** CI 가 빌드 뒤 태그를 커밋하게 하거나 Image Updater 를 쓰는 것이 다음 단계다.
+- `prune`(git 에서 지우면 클러스터에서도 지운다)은 켜 두었지만 실물로 확인하지 않았다.
+- 화면 · SSO · 권한 분리 · 비공개 레포 인증 · 웹훅을 다루지 않았다.
+- `core-api` 를 먼저 띄워야 한다는 순서(마이그레이션 실행자)를 ArgoCD 에 알려 주지 않았다. 영속 볼륨에 스키마가
+  이미 있어서 문제가 없었을 뿐이다. 빈 DB 에서는 `daily-api` 가 먼저 떠서 실패할 수 있다.
+
 ---
 
 # 운영 편 1 — 백업·복구 리허설 (Stage 와 별개, 상시 운영 준비)
