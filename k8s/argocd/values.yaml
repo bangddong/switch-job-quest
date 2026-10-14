@@ -20,7 +20,8 @@ applicationSet:
   # ℹ️ 이 차트 버전에는 enabled 스위치가 없다. Deployment 는 남고 파드만 0 이 된다.
 
 # ── 켜 두는 부품 4개 ─────────────────────────────────────────────────────────
-# 🟡 아래 memory 는 추정치다. 세션에서 `kubectl top pod -n argocd` 로 실측해 고친다(P1).
+# 아래 memory 는 세션 전 추정치였다. 2026-10-13 실측(`kubectl top pod -n argocd`): 전체 215Mi(2분) → 272Mi(18분),
+# 합계 요청 512Mi 안이라 그대로 둔다(계획서 §10 P1).
 controller: # git 과 클러스터를 비교하고 맞추는 본체
   resources:
     requests: { cpu: 100m, memory: 256Mi }

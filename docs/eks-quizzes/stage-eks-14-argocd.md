@@ -118,6 +118,13 @@ git 에 없는, `kubectl` 로 따로 올린 metrics-server·postgres 를 prune �
 - 정오: 1 ✅ · 2 🟡 — 책임은 맞다. 찾는 방법은 git 과 비교해서는 안 나온다: ArgoCD 의 diff 는 **표식이 있는 리소스만** 다루므로
   이 파드는 ArgoCD 화면에도 diff 에도 나오지 않는다. **클러스터 쪽에서 표식이 없는 리소스를 찾아야 한다.** 실무에서는 아예
   운영 클러스터의 `kubectl` 쓰기 권한을 막거나 정책 도구로 막는다 → 설명으로 메움.
+- 사용자 후속 질문: "클러스터 쪽에서 표식이 없는 리소스를 어떻게 직접 찾나?" → 설명한 세 가지 (클러스터가 없어 실행하지 못함):
+  1. 부모 없는 파드 — `kubectl run` 파드에는 `ownerReferences` 가 없다. 표식은 Deployment 같은 최상위에만 붙으므로 파드는 이쪽이 정확하다.
+     `kubectl get pods -n default -o json | jq -r '.items[] | select(.metadata.ownerReferences == null) | .metadata.name'`
+  2. 최상위 리소스 중 표식 없는 것 — `select(.metadata.annotations["argocd.argoproj.io/tracking-id"] == null)`.
+     🟡 3.x 기본 표식이 이 어노테이션이라는 것은 클러스터에서 확인하지 않았다 — 다음 세션에서 `kubectl get deploy daily-api -o yaml` 로 먼저 본다.
+  3. ArgoCD 의 orphaned resources — AppProject `orphanedResources: { warn: true }` 를 켜면 목적지 네임스페이스의 소속 없는 리소스를
+     지우지 않고 경고로만 보여 준다. 이번 Stage 에서는 켜지 않았다.
 
 ## 요약
 

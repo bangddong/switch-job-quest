@@ -8,7 +8,7 @@
 #
 # ℹ️ 이 파일이 있어도 기존 절차(sed … | kubectl apply -f -)는 그대로 돈다 — 그 절차는
 #    파일을 하나씩 지정하므로 이 파일을 읽지 않는다.
-#    ⚠️ `kubectl apply -f k8s/base/` 처럼 폴더를 통째로 넘기지 마라. 원래도 안 되는 방식이고
+#    ⚠️ `kubectl apply -f k8s/base/`·`kubectl delete -f k8s/base/` 처럼 폴더를 통째로 넘기지 마라. 원래도 안 되는 방식이고
 #    (배타 쌍·자리표시자), 이제는 이 파일까지 리소스로 읽으려다 실패한다.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

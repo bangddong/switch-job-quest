@@ -299,8 +299,11 @@ curl -s -X POST localhost:8082/api/v1/daily-question/explain \
 kubectl delete externalsecret --all -A
 kubectl delete secretstore --all -A
 
-# ② 워크로드
-kubectl delete -f k8s/base/ --ignore-not-found
+# ② 워크로드 — 파일을 하나씩 지정한다. 폴더(-f k8s/base/)를 넘기면 5c 에서 추가한
+#    kustomization.yaml 까지 리소스로 읽으려다 오류가 난다.
+kubectl delete -f k8s/base/core-api.yaml -f k8s/base/ai-api.yaml -f k8s/base/daily-api.yaml \
+  -f k8s/base/networkpolicy-ai-api.yaml -f k8s/base/ingress.yaml \
+  -f k8s/base/postgres.yaml -f k8s/base/postgres-static.yaml --ignore-not-found
 
 # ③ 🔴 PVC — Stage 3a에서만 필수. **3b는 다르다(아래 표)**
 #    StatefulSet을 지워도 volumeClaimTemplates가 만든 PVC는 **의도적으로 남는다**(데이터 보호).

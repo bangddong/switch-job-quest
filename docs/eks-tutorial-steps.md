@@ -1123,8 +1123,11 @@ kubectl get secret core-api-db -o jsonpath='{.data.DB_HOST}' | base64 -d
 kubectl delete externalsecret --all -A
 kubectl delete secretstore --all -A
 
-# ② 워크로드
-kubectl delete -f k8s/base/ --ignore-not-found
+# ② 워크로드 — 파일을 하나씩 지정한다. 폴더(-f k8s/base/)를 넘기면 5c 에서 추가한
+#    kustomization.yaml 까지 리소스로 읽으려다 오류가 난다.
+kubectl delete -f k8s/base/core-api.yaml -f k8s/base/ai-api.yaml -f k8s/base/daily-api.yaml \
+  -f k8s/base/networkpolicy-ai-api.yaml -f k8s/base/ingress.yaml \
+  -f k8s/base/postgres.yaml -f k8s/base/postgres-static.yaml --ignore-not-found
 
 # ③ 인프라 (Stage 0-4·0-5와 동일)
 tofu -chdir=infra/aws-eks/2-cluster destroy -auto-approve
@@ -1401,7 +1404,10 @@ kubectl exec postgres-0 -- psql -U devquest -d devquest -tAc "select count(*) fr
 ```bash
 kubectl delete externalsecret --all -A     # ① 소유자부터 (Secret이 부활하지 않게)
 kubectl delete secretstore --all -A
-kubectl delete -f k8s/base/ --ignore-not-found   # ② 워크로드
+# ② 워크로드 — 파일을 하나씩 지정한다(폴더째 넘기면 5c 의 kustomization.yaml 때문에 오류)
+kubectl delete -f k8s/base/core-api.yaml -f k8s/base/ai-api.yaml -f k8s/base/daily-api.yaml \
+  -f k8s/base/networkpolicy-ai-api.yaml -f k8s/base/ingress.yaml \
+  -f k8s/base/postgres.yaml -f k8s/base/postgres-static.yaml --ignore-not-found
 ```
 
 여기서 **멈추고 확인해 본다**:
@@ -2920,7 +2926,7 @@ git 에 적힌 것과 클러스터에 실제로 있는 것을 계속 비교하�
 
 | 맡기지 않은 것 | 이유 |
 |---|---|
-| postgres | `prune` 은 git 과 다르면 지운다. 데이터가 걸린 것을 그 경로에 두지 않는다. 실무에서도 DB 는 대개 클러스터 밖(RDS)에 둔다 |
+| postgres | `prune` 은 **ArgoCD 가 만든(추적 표식이 붙은) 것 중 git 에서 빠진 것**을 지운다. 한 번 Application 에 넣으면 git 에서 파일을 옮기거나 지우는 순간 삭제 대상이 된다(🟡 prune 실동작은 이 Stage 에서 확인하지 못했다 — E1). 데이터가 걸린 것을 그 경로에 두지 않는다. 실무에서도 DB 는 대개 클러스터 밖(RDS)에 둔다 |
 | 시크릿 참조(`k8s/eso/`) | 넣는 것이 실무 주류다(값이 아니라 "어디서 가져와라"만 적혀 있다). 다만 설치 순서 제어가 필요해 다음 단계로 미뤘다 |
 | Ingress | 적용하면 ALB 가 생긴다. 이 Stage 는 ALB 없이 진행한다 |
 
