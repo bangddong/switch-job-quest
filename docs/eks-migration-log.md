@@ -5103,3 +5103,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   APN2-Logs-LiveTail          $0.01 per minute of CloudWatch Logs Live Tail session
   ```
   돈이 되는 것은 **수집(GB당 $0.76)** 이다. 저장·조회는 세션 규모(수십 MB)에선 ~$0. 🟡 세션당 로그량은 아직 모른다 — 계획서에서 상한을 정한다.
+- `[결정]` **범위 = 파드 로그 + K8s 이벤트. EKS 컨트롤플레인 로그는 뺀다** (사용자 선택). 켜려면 `cluster.tf:5` 의 "비용 회피로 생략"을 뒤집는 결정 블록 ·
+  비용 모델 · `cluster_name` 단일화까지 따라온다. 계획서 「이번에 하지 않는 것」에 등재.
+- `[메모]` Blindspot 21건. 큰 것: ① 로그 그룹을 0-bootstrap 에 두면 세션 중엔 아직 없다(CI 는 머지 때만 apply) → 세션 전 로컬 apply
+  ② `eks/aws-for-fluent-bit` 차트 기본값이 `region: us-east-1` · `autoCreateGroup: true` (`helm show values` 실측) — 빠뜨리면 다른 리전에 무기한 그룹
+  ③ 원장 §확인 명령이 "로그 그룹 + Lambda 0 = 고아"라 새 그룹을 고아로 오판 ④ JSON 로그는 core-api 뿐.
+- `[결정]` 수집기 = 공식 `fluent/fluent-bit` 0.58.3 두 벌(DaemonSet = 파일 로그, Deployment 1개 = 이벤트 — DaemonSet 에 넣으면 노드 수만큼 중복).
+  IRSA 에 `CreateLogGroup` 을 주지 않아 state 밖 그룹이 생길 길을 IAM 으로 막는다. 계획서 `docs/superpowers/plans/2026-10-14-eks-stage5d-logging.md`.
