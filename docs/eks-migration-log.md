@@ -5086,3 +5086,20 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 퀴즈 종료. 기록 `docs/eks-quizzes/stage-eks-14-argocd.md`. 1차 온전한 정답 0/5(부분 2), 재확인 핵심 질문은 모두 정답.
   가장 크게 어긋난 직관: **"prune 은 git 에 없는 것을 지운다"** — 실제로는 ArgoCD 가 표식을 붙인 것만 지운다(Q5-2).
   퀴즈 중 사용자 질문으로 "백오프 대 서킷 브레이커"를 정리했다(Q2).
+
+## 2026-10-14 — Stage 5d 로그 수집 $0 준비
+
+- `[결정]` **다음 Stage = 로그 수집** (사용자 선택, 시크릿-ArgoCD 단계보다 먼저). 계기는 5c 퀴즈 — 파드·노드와 함께 로그가 사라져 실제 로그로 복기할 수 없었다.
+  브랜치 `stage/eks-15-logging`.
+- `[결정]` **저장소 = CloudWatch Logs** (사용자 선택). 기각: S3 원본 파일(검색 화면이 없어 "로그를 찾아보며" 경험이 약함) · 학습 전용 Grafana Cloud
+  (외부 계정·자격증명 하나 더, 분리 규칙을 새로 설계해야 함) · 클러스터 안 Loki(클러스터와 함께 사라져 목표를 못 채움, 파드 자리 부족).
+- `[비용]` CloudWatch Logs 단가 — `aws pricing get-products`(서울, 무료 API) 실측:
+  ```
+  APN2-DataProcessing-Bytes   $0.76 per GB custom log data ingested in Standard log class
+  APN2-DataProcessingIA-Bytes $0.38 per GB custom log data ingested in Infrequent Access log class
+  APN2-VendedLog-Bytes        $0.76 per GB of vended logs ingested (첫 10TB) ← EKS 컨트롤플레인 로그가 여기
+  APN2-TimedStorage-ByteHrs   $0.0314 per GB-mo of log storage
+  APN2-DataScanned-Bytes      $0.0076 per GB log data scanned by CloudWatch Logs Insights queries
+  APN2-Logs-LiveTail          $0.01 per minute of CloudWatch Logs Live Tail session
+  ```
+  돈이 되는 것은 **수집(GB당 $0.76)** 이다. 저장·조회는 세션 규모(수십 MB)에선 ~$0. 🟡 세션당 로그량은 아직 모른다 — 계획서에서 상한을 정한다.
