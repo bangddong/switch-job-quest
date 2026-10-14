@@ -122,6 +122,7 @@ P5 에서 늘어나는 daily-api 1개                                          =
 | (세션 뒤 추가) Application 이 `Synced` + `Degraded` 로 30초쯤 보인 이유 | 미확인(추정: HPA 가 지표를 못 읽는 동안). 다음 세션에서 `kubectl get application -o yaml` 의 `status.resources[].health` 를 그 시점에 찍는다 |
 | (세션 뒤 추가) apply 뒤 세션 마커가 한 번 안 생긴 이유 | 미확인. 하네스 동결 규칙상 훅은 고치지 않는다. **apply 뒤 마커 육안 확인(SOP §5)이 실제로 걸러냈다** |
 | (퀴즈 중 추가, 사용자 지적) **로그 수집 단계가 트랙에 없다** — 파드 로그 · K8s 이벤트 · 감사 로그 | 클러스터를 내리자 ArgoCD 컨트롤러 로그와 이벤트가 전부 사라져, 퀴즈를 실제 로그로 풀 수 없었다(남은 것은 CloudTrail 의 AWS API 호출과 일지뿐). Stage 0~5c 어디에도 수집이 없다. 별도 Stage 감이다 — 저장소(CloudWatch Logs 면 영속 리소스 원장 · 고아 검사 수정, Loki 면 학습 클러스터에 Grafana 자격증명을 넣지 않는 규칙과 충돌) · 수집기 DaemonSet 의 파드 슬롯(t4g.small 11개 상한)을 먼저 정해야 한다. **5c 머지 뒤 다음 Stage 를 고를 때 시크릿 단계와 함께 후보로 올린다.** 그 전까지의 최소 조치: 세션 중 `kubectl logs` · `kubectl get events` 를 파일로 저장($0) |
+| (PR 후 추가, CI 실패) **이미지 태그를 바꿀 때마다 gitleaks 가 오탐할 수 있다** | PR #452 에서 `k8s/gitops/apps/kustomization.yaml` 의 태그 2줄이 `generic-api-key` 로 걸렸다 — 앱 이름 끝의 `api` 를 키워드로, 40자 커밋 SHA 를 엔트로피로 잡는다. 이번엔 지문 2개만 `.gitleaksignore` 에 등록했다(08-31·09-04 전례). GitOps 에서 태그 교체는 배포 그 자체라 **재발이 구조적**이다. 후보: ① `.gitleaks.toml` 에 40자 hex 이미지 태그 허용 규칙 ② 태그를 Kustomize `images:` 의 `newTag` 로 옮겨 유발 형태 제거(🟡 Application 의 `kustomize.images` 와 합쳐지는 방식을 실물로 확인해야 한다). 이미지 태그를 다시 바꾸는 세션 전에 정한다 |
 
 ## 6. 세션 절차 (5c 고유 부분)
 
