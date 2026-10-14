@@ -1,0 +1,48 @@
+# ArgoCD 가 실제로 바라보는 폴더 (Stage 5c).
+#
+# 이 파일이 말하는 것: "앱 3종 + NetworkPolicy + HPA 를 묶고, 각 앱의 이미지를 이것으로 정한다."
+#
+# ── 이미지 주소를 둘로 쪼갠 이유 ─────────────────────────────────────────────
+#   전체 주소 = <계정ID>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/<앱>:<태그>
+#               └────────── 레지스트리 ──────────┘ └── 이름 ──┘ └ 태그 ┘
+#   - 이름:태그  → **여기(git)** 에 둔다. "커밋하면 배포된다"가 되려면 태그가 git 에 있어야 한다.
+#   - 레지스트리 → git 에 **두지 않는다.** AWS 계정 ID 가 들어 있고 이 레포는 공개다.
+#                  클러스터에 등록하는 Application(../application.yaml)이 붙인다.
+#   ⇒ 이 폴더만 렌더하면 이미지가 `devquest/core-api:<태그>` 로 나온다. 그대로는 못 받아온다
+#     (docker.io 를 찾는다). **정상이다** — 레지스트리는 ArgoCD 가 붙인다.
+#
+# ── 왜 `images:` 가 아니라 패치인가 ─────────────────────────────────────────
+#   base 의 세 파일이 전부 같은 글자 `IMAGE_PLACEHOLDER` 를 쓴다. Kustomize 의 `images:` 는
+#   "이 이름을 가진 이미지를 전부 바꿔라"라서 세 앱을 구분하지 못한다. 그래서 Deployment 를
+#   지정해 이미지를 통째로 바꾼다.
+#
+# 태그 바꾸는 법: 아래 `value:` 의 `:` 뒤를 ECR 에 **실제로 있는** 태그로 바꾸고 커밋한다.
+#   aws ecr describe-images --repository-name devquest/daily-api --region ap-northeast-2 \
+#     --query 'sort_by(imageDetails,&imagePushedAt)[].imageTags' --output json
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - ../../hpa
+patches:
+  - target: { kind: Deployment, name: core-api }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: devquest/core-api:1a8a9aac9249d3cd995ac4cb3822e37b46b2eab1
+  - target: { kind: Deployment, name: ai-api }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: devquest/ai-api:14cb335e66670470e674f0eb76d62e84ee76e0e5
+  - target: { kind: Deployment, name: daily-api }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: devquest/daily-api:14cb335e66670470e674f0eb76d62e84ee76e0e5
+  # HPA 가 파드 수를 정하는 Deployment 는 git 에 replicas 를 적지 않는다.
+  # 적어 두면 ArgoCD("git 은 1")와 HPA("최소 2")가 같은 칸을 번갈아 고쳐 쓴다 — 5c 세션에서 실제로 파드가 죽고 떴다.
+  - target: { kind: Deployment, name: daily-api }
+    patch: |-
+      - op: remove
+        path: /spec/replicas

@@ -1,0 +1,5 @@
+# ArgoCD(Stage 5c)가 읽는 목록. HPA 는 metrics-server 가 있어야 동작한다(k8s/README.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - daily-api-hpa.yaml

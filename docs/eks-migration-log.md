@@ -4963,3 +4963,126 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   - 퀴즈 기록이 HPA 대상을 core-api 로 적었다(실제 daily-api). 파드 요청량 616Mi 도 틀렸다(512Mi. 616 은 노드 요구량) (F-2).
     출제할 때 사용자에게도 그렇게 말했다 — 기록에 정정 문단을 남겼다.
 - `[비용]` 누적 **$6.903** (2026-10-13 08:16 조회, 무료). 최상단 표 갱신.
+
+## 2026-10-13 — Stage 5c(ArgoCD) 계획
+
+- `[결정]` **세션 종료의 승인 대기 — 규칙 변경 없이 사용자가 지켜보는 시간에만 진행한다** (사용자 결정).
+  5b 에서 남긴 선택지 셋(destroy 허용 규칙 · 리퍼 대기 시간 단축 · 지켜보는 시간에만) 중 앞의 둘을 기각.
+  내가 지킬 것: apply 전에 destroy 예상 시각 확답, **측정이 일찍 끝나면 그 자리에서 알린다.**
+- `[결정]` **5c 진행.** 계획서 `docs/superpowers/plans/2026-10-13-eks-stage5c-argocd.md`.
+  - ArgoCD **v3.5.4**(차트 10.10.2). K8s 1.36 을 지원하는 것은 3.5 계열뿐이다(호환표 2026-10-13 조회). 3.5.5 는 어제 나와 기각.
+  - 범위는 **앱 3종 + NetworkPolicy + HPA.** ESO · postgres 는 손으로 올린다 — 중간에 `ALTER USER` 를 사람이 친다.
+  - 노드 3대, Karpenter 없음, ALB 없음. 예상 $0.18 · 상한 $0.30.
+- `[메모]` 착수 전 조사에서 나온 것(계획서 §5):
+  - `k8s/base/` 를 통째로 읽히면 안 된다 — 배타 쌍(`postgres.yaml` ↔ `postgres-static.yaml`)과 **ALB 를 만드는 `ingress.yaml`** 이 같이 있다.
+  - 이미지 자리표시자가 셋 다 `IMAGE_PLACEHOLDER` 로 같고, 실제 주소에는 계정 ID 가 있어 공개 레포에 못 적는다.
+    → 태그는 git 에, 레지스트리는 클러스터의 Application 에 두는 안(🟡 로컬 렌더로 확인 예정).
+  - Deployment 3개 모두 `replicas: 1` 이 적혀 있다 → HPA 와 부딪힐 것으로 예상(P5).
+  - 차트 기본값: 워크로드 7개, requests 없음(`helm template` 로 확인). Karpenter 때와 같은 함정.
+  - ArgoCD 가 볼 브랜치: main 은 직접 push 금지라 세션 중에는 작업 브랜치를 본다.
+
+
+## 2026-10-13 — Stage 5c $0 준비
+
+- `[결정]` 14:40 KST **범위 유지(A안)** — 시크릿 참조(`k8s/eso/`)를 ArgoCD 에 넣는 것은 다음 단계로 미룬다(사용자 결정).
+  실무에서는 `ExternalSecret` 선언을 git 에 두는 것이 주류지만, 설치 순서 제어(sync wave)가 5c 의 핵심과 섞이면
+  막혔을 때 원인을 가르기 어렵다. DB 는 어느 쪽이든 넣지 않는다 — `prune` 이 지우면 안 되는 것이다.
+- `[메모]` 14:53 KST 파일 5개 작성, 로컬 확인(계획서 §9 결과).
+  - `kubectl kustomize k8s/gitops/apps` → Deployment 3 · Service 3 · HPA 1 · NetworkPolicy 1. postgres · Ingress · 자리표시자 0건.
+  - 레지스트리 덮어쓰기 흉내(`images.newName`) → `000000000000.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/daily-api:14cb335…`.
+    세 앱이 같은 자리표시자를 쓰므로 `images:` 로는 구분이 안 돼 **Deployment 지정 패치로 이름:태그를 넣고, 레지스트리만 `images:` 로 붙인다.**
+  - `helm template … -f k8s/argocd/values.yaml` → 뜨는 파드 4개, requests 합 512Mi.
+- `[메모]` 예상과 달랐던 것: 차트 10.10.2 에 applicationSet 을 끄는 스위치가 없다(`replicas: 0` 만 가능).
+  설치 전 훅 Job(`argocd-redis-secret-init`)이 requests 없이 잠깐 뜬다.
+- `[메모]` ECR 태그(무료 조회): daily-api · ai-api 는 2개씩(08-31, 09-03), core-api 최신은 10-08. 앱마다 최신 태그가 다르다.
+
+## 2026-10-13 — Stage 5c 유료 세션
+
+- `[메모]` 16:09 KST 세션 시작. 사전 점검(무료): 도구 4종 · 자격증명 · K8s 1.36 표준 지원(~2027-08-02) ·
+  리퍼 등록됨 · 잔존 클러스터 0 · 실행 중 EC2 0 · 영속 EBS 1개(10GiB, 2a, available).
+  이미지 3개 태그(`1a8a9aa` · `14cb335` · `bd51e18`) 모두 관측 기본값 수정 포함(`git show <sha>:OtlpMetricsConfig.kt`).
+- `[메모]` `tofu plan -var node_desired_size=3` → **Plan: 42 to add.** 5b 와 같은 42개(Karpenter IAM 포함 — 무료, 이번엔 쓰지 않는다).
+  metrics-server 는 EKS 애드온으로 들어 있어 손으로 깔지 않는다(계획서 §6-2 의 "metrics-server" 는 불필요).
+- `[비용]` 사용자에게 알린 것: 승인 창 apply 2 · destroy 2, destroy 첫 승인 예상 17:05~17:10 KST, 지연 시 시간당 약 $0.19.
+- `[막힘]` 16:10 KST 첫 apply 가 5초 만에 `Error: No configuration files`. 과금 전(클러스터 0 · EC2 0 을 AWS 로 확인).
+  원인: **apply 를 다른 Bash 호출과 같은 묶음으로 보냈다.** 두 호출이 작업 폴더를 공유해 `cd 2-cluster` 뒤에 다른 호출의
+  `cd <레포 루트>` 가 끼어들었다. 16:34 에 같은 형태로 한 번 더 재현(`pwd` 가 레포 루트를 찍음). → **apply · destroy 는 단독 호출로만 보낸다.**
+- `[메모]` apply ① `-target=aws_eks_cluster.main` 16:27:25 → 16:33:50 (컨트롤플레인 6m21s, 3 added) ← **과금 시작 16:27**
+  apply ② 전체 16:36:14 → 16:38:53 (39 added). 합 42.
+- `[막힘]` apply ① 뒤 세션 마커가 없었다(`.claude/eks-session/active`). 16:10 실패 때 만들어진 마커는 클러스터가 없어 자가 청소됐고,
+  16:27 의 apply 에서는 훅이 만들지 않았다(원인 미확인). 손으로 만들었고, apply ② 에서는 훅이 갱신했다.
+- `[메모]` 16:39~16:40 손으로 올린 것: ESO(helm 2.8.0) · SecretStore · ExternalSecret 3개 · postgres-static · `ALTER USER`(→ `ALTER ROLE`, 파드 IP 로 `select 1` 확인).
+- `[메모]` **P1 통과** — ArgoCD 설치 16:40:25 → 16:41:19 (54초). 파드 4개 Running + 훅 Job 1개 Completed.
+  `kubectl top pod -n argocd` (앱 1건 관리 중, 설치 2분 뒤): controller 131Mi · server 44Mi · repo-server 35Mi · redis 5Mi = **215Mi** (요청 512Mi).
+- `[메모]` **P2 통과** — Application 적용 16:41:29 → 15초 뒤 `Synced`(커밋 `0c3ca73`), 앱 3종 파드 생성. 16:42:16 셋 다 1/1, 16:42:48 `Healthy`.
+  앱에 `kubectl apply` 를 한 번도 치지 않았다. core-api 가 먼저 떠야 한다는 순서(Flyway)는 지키지 않았는데 떴다 — 영속 볼륨에 스키마가 이미 있다.
+  - **D7 확인(🟡→🔴)**: 이미지가 `<account>.dkr.ecr…/devquest/<앱>:<git 의 태그>` 로 들어갔다. 레지스트리는 Application 의 `kustomize.images`, 태그는 git.
+  - 16:42:00~16:42:32 에 `Synced` 인데 `Degraded` 였다가 `Healthy` 가 됐다. 원인 미확인(추정: HPA 가 지표를 아직 못 읽음).
+- `[메모]` **P3 통과 (자가 복구)** 16:43 KST
+  - `kubectl scale deploy ai-api --replicas=2` (16:43:10.2) → 16:43:11 에 `spec=1`, 새 파드 `Terminating`. **1초 안.**
+  - `kubectl delete svc ai-api` (16:43:12) → 16:43:14 에 다시 있음. UID `20d3e54a…` → `e5b5dce9…` = 같은 이름의 **새 객체**.
+  - 컨트롤러 로그: `Updated sync status: Synced -> OutOfSync` → `Initiated automated sync` → `Partial sync operation … succeeded`.
+    git 을 다시 받은 것이 아니다(리비전 그대로) — 클러스터 쪽 변화를 **감시(watch)** 해서 바로 안다.
+- `[메모]` **P4 (커밋 → 배포 시각)** — 커밋 ① `d629819` HPA `minReplicas` 1 → 2
+  | push | 클러스터 반영 | 걸린 시간 |
+  |---|---|---|
+  | 16:43:24 | 16:45:39 (`history.deployedAt`) | **2분 15초** |
+  | 16:49:01 (② `ace6742`) | 16:50:09 | 1분 8초 |
+  | 16:51:42 (③ `2071daa`) | 16:53:28 | 1분 46초 |
+  | 16:55:51 (④ `980c78e`) | 16:58:42 | 2분 51초 |
+  손으로 바꾼 것은 1초, git 을 바꾼 것은 1~3분. git 은 **주기적으로 물어봐야**(폴링) 알기 때문이다. 기본 주기 약 3분 안쪽이라는 추정과 맞는다.
+- `[메모]` **P5 (HPA ↔ ArgoCD 충돌) 관측** 16:45:47 ~ 16:48:41. git 은 `replicas: 1`, HPA 는 최소 2.
+  ```
+  16:45:53 spec=1 hpa=1/2 Synced     Running Terminating     ← HPA 가 2 로 올린 것을 ArgoCD 가 1 로 되돌림
+  16:46:35 spec=2 hpa=1/2 OutOfSync  Running Running(2s)
+  16:46:41 spec=1 hpa=1/2 Synced     Running                 ← 다시 되돌림
+  16:46:53 spec=2 hpa=1/2 OutOfSync  Running Running(5s)
+  16:47:35 spec=2 hpa=1/2 OutOfSync  Running Running(2s)     ← 또 죽였다 살아남(파드 나이 2s)
+  16:47:53 ~ 16:48:41 spec=2 OutOfSync 로 유지
+  ```
+  - 3분 사이 daily-api 둘째 파드가 **4번 새로 만들어졌다.** HPA 이벤트: `New size: 2; reason: Current number of replicas below Spec.MinReplicas`.
+  - 예상과 달랐던 것: **무한히 빠르게 싸우지 않는다.** ArgoCD 가 같은 리비전으로의 재시도 간격을 늘린다.
+    `Skipping auto-sync: already attempted sync to [d629819…] with timeout 0s (retrying in 41.6s)` → 다음엔 `retrying in 2m41s`.
+    그래서 마지막 1분은 `OutOfSync` 인 채로 2개가 유지됐다 — 싸움이 끝난 게 아니라 **다음 되돌림을 기다리는 중**이다.
+- `[해결]` **P6 통과** — 커밋 ② 로 daily-api 의 `spec.replicas` 를 Kustomize 패치(`op: remove`)로 git 에서 뺐다.
+  16:50:12 반영 순간 `spec=1` 로 한 번 떨어졌다가(적용하던 칸을 빼면 기본값 1 로 돌아간다) 6초 뒤 HPA 가 2 로 올렸고,
+  이후 80초 동안 `Synced` + `spec=2` 유지. 되돌림 없음.
+- `[메모]` **P7 통과** — 커밋 ③ 태그 `14cb335` → `bd51e18`. 16:53:28 반영, 파드 2개가 동시에 교체(Recreate), 16:53:54 둘 다 1/1.
+  8월 31일자 이미지가 지금 스키마로 떴다(`Started DailyApiApplicationKt in 13.55 seconds`). 교체 중 약 26초는 daily-api 가 0개였다.
+- `[메모]` **E3** — `kubectl scale sts argocd-application-controller -n argocd --replicas=0` 뒤 `ai-api` 를 2 로 바꿨다.
+  25초 뒤에도 `spec=2`, Application 은 **`Synced` 라고 표시**(아무도 갱신하지 않으니 옛 상태가 남는다). 컨트롤러를 1 로 되돌리자 4초 만에 `spec=1`.
+  앱 파드는 컨트롤러가 없는 동안에도 그대로 돌았다 — ArgoCD 가 죽어도 서비스는 죽지 않고, **되돌리는 힘만 사라진다.**
+- `[메모]` 커밋 ④ `980c78e` 로 복원(minReplicas 1, 태그 `14cb335`, replicas 제거는 유지). 16:58:42 반영. 16:59:31 `Synced`, 파드 5개 Running.
+  `kubectl top pod -n argocd`(설치 18분 뒤): controller 198Mi · repo-server 45Mi · server 24Mi · redis 5Mi = **272Mi**. 요청 512Mi 는 넉넉하다.
+  E1(prune) · E2(되돌리기 단독)는 하지 않았다. 커밋 ④ 가 E2 와 같은 경로다.
+- `[메모]` **종료** — 측정 끝 16:59:31. ExternalSecret · SecretStore 삭제, Ingress 0, ALB 0, PVC 는 남김(static PV).
+  | | 시작 | 끝 | |
+  |---|---|---|---|
+  | destroy ① 노드 그룹 | 17:16:28 | 17:25:07 | 4 destroyed. **승인 대기 16분 47초**(요청 16:59:41) |
+  | destroy ② 전체 | 17:35:35 | 17:37:49 | 38 destroyed. **승인 대기 10분 28초** |
+  `karpenter-cleanup`: `Karpenter EC2 없음` → `✅ 잔존 EC2 0 · 프로파일 정리 완료`(Karpenter 를 깔지 않은 세션에서의 경로).
+  고아 검증: EC2 0 · EKS 0 · state 0 · ALB 0 · NAT 0 · 고아 EBS 0 · RDS 0 · 스냅샷 0 · 시크릿 0. 영속 EBS 1개(10GiB, 2a, available) = 원장과 일치.
+- `[비용]` 과금 구간 16:27:25 ~ 17:37:49 = **70분.** 예상 63분 · $0.18.
+  | 항목 | 시간 | 금액 |
+  |---|---|---|
+  | 컨트롤플레인 $0.10/h | 70.4분 | $0.117 |
+  | 노드 3대 (16:37:06 기동 → 17:19:04 ×2 · 17:23:05 ×1 종료) | 130 노드·분 × $0.0288/h | $0.062 |
+  | **합** | | **약 $0.18** (추정, 청구 반영 전) |
+  그중 승인 대기가 27분(약 $0.07). 측정 자체는 32분에 끝났다 — 대기가 없었다면 약 $0.11.
+  apply 승인도 10분 걸렸지만(16:17 요청 → 16:27 시작) 그 구간은 과금 전이다.
+- `[메모]` 내가 틀린 것: 사용자에게 destroy 첫 승인을 **17:10~17:15** 로 알렸는데 실제 요청은 **16:59:41** 이었다.
+  작업 구간을 계획서의 45분으로 잡았으나 실제 21분. "일찍 끝나면 알린다"는 같은 턴 안에서 글로만 했다 — 화면을 보고 있지 않으면 닿지 않는다.
+- `[메모]` 세션 뒤 문서: 튜토리얼 `Stage 5c — ArgoCD` 절, `infra/aws-eks/README.md` 진행표 5c ✅, 계획서 §10 결과.
+- `[결정]` **`k8s/README.md` 의 "kustomize 기각"을 ArgoCD 경로에 한해 뒤집었다.** 기각 근거는 사람이 치는 절차가 눈에 보여야 한다는 것이었고
+  그 절차(`sed`)는 그대로 둔다. ArgoCD 는 `sed` 를 못 치므로 읽힐 파일을 고르려면 Kustomize 가 필요하다. 두 곳(§2 주석 · §3)에 표시했다.
+
+## 2026-10-14 — Stage 5c 퀴즈
+
+- `[메모]` 퀴즈 중 사용자가 "md 말고 실제 로그를 보면서 풀고 싶다"고 했는데 **볼 것이 없었다.**
+  ArgoCD 컨트롤러 로그 · `kubectl get events` 는 노드와 함께 사라졌고, EKS 컨트롤플레인 로깅은 켠 적이 없으며(CloudWatch 로그 그룹 없음),
+  학습 클러스터는 Grafana 로 내보내지 않는다. 남은 것은 CloudTrail(AWS API 만 — `CreateCluster` 16:27:31 등)과 GitHub 커밋 시각, 로컬 tofu 로그.
+- `[결정]` **로그 수집을 다음 Stage 후보로 올린다**(사용자 지적: "파드가 죽으면 로그가 사라져 분석이 안 된다"). 이번 PR 범위는 아니다.
+  계획서 `2026-10-13-eks-stage5c-argocd.md` §5 「이번에 하지 않는 것」에 등재. 5c 머지 뒤 시크릿 단계와 함께 고른다.
+- `[메모]` 퀴즈 종료. 기록 `docs/eks-quizzes/stage-eks-14-argocd.md`. 1차 온전한 정답 0/5(부분 2), 재확인 핵심 질문은 모두 정답.
+  가장 크게 어긋난 직관: **"prune 은 git 에 없는 것을 지운다"** — 실제로는 ArgoCD 가 표식을 붙인 것만 지운다(Q5-2).
+  퀴즈 중 사용자 질문으로 "백오프 대 서킷 브레이커"를 정리했다(Q2).

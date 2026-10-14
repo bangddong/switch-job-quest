@@ -1,0 +1,19 @@
+# ArgoCD(Stage 5c)가 읽는 목록. 이 폴더의 파일 중 **여기 적힌 것만** 배포된다.
+#
+# 🔴 왜 폴더를 통째로 읽히지 않는가 — 이 폴더에는 같이 올리면 안 되는 파일이 섞여 있다.
+#   - postgres.yaml ↔ postgres-static.yaml : 둘 중 하나만 써야 하는 쌍이다.
+#   - ingress.yaml : 적용하면 ALB 가 생긴다(과금 + tofu 장부 밖).
+#   - postgres*.yaml · ingress.yaml 에는 손으로 치환하는 자리표시자가 남아 있다.
+#   그래서 "읽힐 파일"을 명시한다. 여기 없는 파일은 지금처럼 손으로 올린다(k8s/README.md).
+#
+# ℹ️ 이 파일이 있어도 기존 절차(sed … | kubectl apply -f -)는 그대로 돈다 — 그 절차는
+#    파일을 하나씩 지정하므로 이 파일을 읽지 않는다.
+#    ⚠️ `kubectl apply -f k8s/base/`·`kubectl delete -f k8s/base/` 처럼 폴더를 통째로 넘기지 마라. 원래도 안 되는 방식이고
+#    (배타 쌍·자리표시자), 이제는 이 파일까지 리소스로 읽으려다 실패한다.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - core-api.yaml
+  - ai-api.yaml
+  - daily-api.yaml
+  - networkpolicy-ai-api.yaml

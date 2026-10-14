@@ -19,6 +19,9 @@ k8s/
     externalsecret-db.yaml            # Stage 2 (RDS 모드) — ARN 치환 필요
     externalsecret-db-incluster.yaml  # Stage 3a (in-cluster 모드) — 치환 없음
     externalsecret-postgres-tls.yaml  # Stage 3a — Postgres 서버 인증서
+  hpa/ · karpenter/ · loadtest/         # Stage 5a · 5b
+  gitops/                               # Stage 5c — ArgoCD 가 읽는 묶음(apps/) + Application 주문서
+  argocd/values.yaml                    # Stage 5c — ArgoCD Helm 값
 ```
 
 > ⚠️ **배타 쌍이 둘 있다. 각각 하나만 적용한다.**
@@ -122,7 +125,7 @@ kubectl get externalsecret
 > 이 절과 `docs/eks-tutorial-steps.md` 를 함께 고칠 것.**
 >
 > 🔑 ***"스크립트 하나로 모으자"는 해법은 일부러 택하지 않았다*** — 이 레포는 아래 §3 에서
-> *"도구를 하나 더 들이는 것보다 절차가 눈에 보이는 편"* 을 이미 골랐다(kustomize 기각).
+> *"도구를 하나 더 들이는 것보다 절차가 눈에 보이는 편"* 을 이미 골랐다(손으로 올리는 경로에서는 kustomize 기각 — 2026-10-13 에 ArgoCD 경로에 한해 뒤집혔다, 아래 §3 주석).
 > 같은 근거가 `sed` 래퍼 스크립트에도 그대로 적용된다.
 
 > 🔑 **"관리형이 편한 대신 이름을 못 정한다"는 트레이드오프를 양쪽에서 겪게 된다.**
@@ -182,6 +185,12 @@ kubectl get pvc postgres-data         # VOLUME 이 postgres-data 인지 확인
 
 **Stage C 부터 3서비스다.** `sed` 치환을 서비스마다 한 번씩 한다(kustomize 를 쓰지 않는 이유는 이 레포가
 생 yaml + 치환으로 일관돼 있기 때문 — 도구를 하나 더 들이는 것보다 절차가 눈에 보이는 편을 택했다).
+
+> 🔁 **2026-10-13 일부 뒤집음 (Stage 5c).** ArgoCD 가 읽는 경로(`k8s/gitops/apps/`)는 Kustomize 를 쓴다.
+> 기각한 이유(*절차가 눈에 보이는 편*)는 **사람이 치는 절차**에 관한 것이었는데, ArgoCD 는 `sed` 를 칠 수 없다 —
+> 폴더를 통째로 읽거나 Kustomize · Helm 을 돌릴 뿐이다. 통째로 읽히면 배타 쌍(postgres 2종)과 ALB 를 만드는
+> `ingress.yaml` 이 같이 올라간다. **손으로 올리는 이 절의 절차는 그대로 `sed` 다.** 두 경로가 같은 base 파일을 읽는다.
+> 절차는 `docs/eks-tutorial-steps.md` Stage 5c.
 
 ```bash
 REG=<account>.dkr.ecr.ap-northeast-2.amazonaws.com
@@ -290,8 +299,11 @@ curl -s -X POST localhost:8082/api/v1/daily-question/explain \
 kubectl delete externalsecret --all -A
 kubectl delete secretstore --all -A
 
-# ② 워크로드
-kubectl delete -f k8s/base/ --ignore-not-found
+# ② 워크로드 — 파일을 하나씩 지정한다. 폴더(-f k8s/base/)를 넘기면 5c 에서 추가한
+#    kustomization.yaml 까지 리소스로 읽으려다 오류가 난다.
+kubectl delete -f k8s/base/core-api.yaml -f k8s/base/ai-api.yaml -f k8s/base/daily-api.yaml \
+  -f k8s/base/networkpolicy-ai-api.yaml -f k8s/base/ingress.yaml \
+  -f k8s/base/postgres.yaml -f k8s/base/postgres-static.yaml --ignore-not-found
 
 # ③ 🔴 PVC — Stage 3a에서만 필수. **3b는 다르다(아래 표)**
 #    StatefulSet을 지워도 volumeClaimTemplates가 만든 PVC는 **의도적으로 남는다**(데이터 보호).
