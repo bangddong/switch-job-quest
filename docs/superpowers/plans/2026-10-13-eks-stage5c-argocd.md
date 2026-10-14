@@ -121,6 +121,7 @@ P5 에서 늘어나는 daily-api 1개                                          =
 | (세션 뒤 추가) 빈 DB 에서의 기동 순서 — `core-api` 가 먼저 떠야 한다 | 영속 볼륨에 스키마가 이미 있어 드러나지 않았다. ArgoCD 에 순서를 알리는 것은 sync wave 로, 시크릿 단계와 같은 도구다 |
 | (세션 뒤 추가) Application 이 `Synced` + `Degraded` 로 30초쯤 보인 이유 | 미확인(추정: HPA 가 지표를 못 읽는 동안). 다음 세션에서 `kubectl get application -o yaml` 의 `status.resources[].health` 를 그 시점에 찍는다 |
 | (세션 뒤 추가) apply 뒤 세션 마커가 한 번 안 생긴 이유 | 미확인. 하네스 동결 규칙상 훅은 고치지 않는다. **apply 뒤 마커 육안 확인(SOP §5)이 실제로 걸러냈다** |
+| (퀴즈 중 추가, 사용자 지적) **로그 수집 단계가 트랙에 없다** — 파드 로그 · K8s 이벤트 · 감사 로그 | 클러스터를 내리자 ArgoCD 컨트롤러 로그와 이벤트가 전부 사라져, 퀴즈를 실제 로그로 풀 수 없었다(남은 것은 CloudTrail 의 AWS API 호출과 일지뿐). Stage 0~5c 어디에도 수집이 없다. 별도 Stage 감이다 — 저장소(CloudWatch Logs 면 영속 리소스 원장 · 고아 검사 수정, Loki 면 학습 클러스터에 Grafana 자격증명을 넣지 않는 규칙과 충돌) · 수집기 DaemonSet 의 파드 슬롯(t4g.small 11개 상한)을 먼저 정해야 한다. **5c 머지 뒤 다음 Stage 를 고를 때 시크릿 단계와 함께 후보로 올린다.** 그 전까지의 최소 조치: 세션 중 `kubectl logs` · `kubectl get events` 를 파일로 저장($0) |
 
 ## 6. 세션 절차 (5c 고유 부분)
 
