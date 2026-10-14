@@ -185,3 +185,7 @@ SOP 의 시작·종료 체크리스트는 그대로 따른다. 🔴 **과금 구
 | 0-bootstrap apply | 사용자 승인 후 저장한 계획 그대로 apply. 그룹 2개 `retentionInDays 30` · `storedBytes 0` ✅. 계정 전체 그룹 수 3 (= 학습용 2 + 기존 고아 1) ✅ |
 | `tofu plan` (2-cluster) | `Plan: 45 to add` (클러스터 전체 — 이번 추가분은 3). 쓰기 정책 문서가 plan 시점에 풀림 = 원격 상태 참조 정상 ✅. Action 3개 · Resource 는 두 그룹 `:*` 만 · `CreateLogGroup` 없음 ✅. 신뢰 `sub` 2개가 values 의 SA 이름과 일치 ✅ |
 | 🟡 남은 것 | IRSA 가 실제로 붙는지는 세션에서(P1) |
+
+### 1차 세션 (2026-10-14 17:20~17:42, 중단)
+
+apply 후 kubectl·destroy 가 auto mode 분류기에 거부돼 검증 0건으로 destroy. 원인은 `tofu -chdir=…` 형태가 settings `ask` 와 세션 마커 훅을 둘 다 비껴간 것 — 일지 2026-10-14 · SOP §5. 재시도 시 `cd infra/aws-eks/2-cluster && tofu apply …` 형태로만 친다. kubectl 이 분류기에 다시 막히면 즉시 destroy(같은 형태).

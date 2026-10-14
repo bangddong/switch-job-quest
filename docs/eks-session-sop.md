@@ -146,6 +146,18 @@
 
 5. `tofu apply` ← **과금 시작.** (`eks-session-marker.sh` 훅이 세션 마커 생성 → 리퍼 감시 개시)
 
+   🔴 **`tofu -chdir=… apply` / `tofu -chdir=… destroy` 형태로 치지 마라 (2026-10-14, Stage 5d 실측).**
+   반드시 `cd infra/aws-eks/2-cluster && tofu apply …` 처럼 **`tofu` 바로 뒤에 하위 명령**이 오게 친다.
+   | 무엇이 걸리는가 | 패턴 | `-chdir` 를 끼우면 |
+   |---|---|---|
+   | 사람 승인 게이트 | settings `ask`: `Bash(tofu apply:*)` · `Bash(tofu destroy:*)` — 접두 일치 | **안 걸린다** → 승인 창 없이 auto mode 분류기가 판정 |
+   | 세션 마커(dead man's switch) | `eks-session-marker.sh`: `tofu[[:space:]]+apply` | **안 걸린다** → 마커 없이 과금 |
+
+   실제로 일어난 일: apply 는 분류기가 통과시켜 **승인 창 없이** 돌았고 마커도 안 생겼다. 이어서 kubectl 과
+   destroy 를 분류기가 거부(`[Protected-Scope IaC Apply]`)해서 **켠 쪽은 끄지 못하는** 상태가 됐다.
+   `cd … && tofu destroy` 로 다시 치자 정상 경로(ask)로 돌았다. 22분 · 약 $0.07 소모, 검증 0건.
+   ⚠️ 가드는 고치지 않는다(하네스 동결) — **명령 형태를 지키는 것**으로 막는다. `tofu plan` 은 어느 쪽이든 무방.
+
    🔴 **`apply` 도 `destroy` 도 배경 프로세스로 보내지 마라 (2026-09-16 추가).**
    | | |
    |---|---|

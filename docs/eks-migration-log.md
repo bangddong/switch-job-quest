@@ -5131,3 +5131,18 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
               "arn:aws:logs:ap-northeast-2:<account>:log-group:/devquest/eks-learning/containers:*"]
   ```
   신뢰 정책 `sub` = `system:serviceaccount:logging:fluent-bit` · `system:serviceaccount:logging:fluent-bit-events` (helm values 의 SA 이름과 일치).
+- `[메모]` 17:20 KST Stage 5d 과금 세션 사전 점검 ($0): 도구 4종 · 자격증명(`bootstrap-admin`) ✅. 표준 지원 1.37/1.36/1.35/1.34 — 변수 기본 1.36 유지(지원 중, 트랙 중간 업그레이드는 범위 밖).
+  ECR 최신 태그 core-api `1a8a9aac…` · ai/daily `14cb335e…` — 셋 다 로컬에 커밋 존재, SOP 2b 검사 `✅ OK`. 세션 마커 없음(미가동).
+- `[비용]` 17:28 KST 2-cluster apply 완료 — 과금 시작. `aws_eks_cluster.main: Creation complete after 6m10s` · `aws_eks_node_group.main: Creation complete after 1m48s` · `Apply complete! Resources: 45 added, 0 changed, 0 destroyed.`
+- `[막힘]` apply 직후 "세션 마커 확인 + `update-kubeconfig` + `kubectl get nodes`" 를 한 번에 보낸 Bash 호출이 auto mode 분류기에 거부됨(사유 미표시). 우회 재시도하지 않고 사용자에게 보고.
+- `[막힘]` 사용자 B(즉시 destroy) 선택 → `tofu destroy -auto-approve` 가 분류기에 거부됨: `Reason: [Protected-Scope IaC Apply]`. 같은 세션에서 apply 는 통과했다. 재시도 금지 → 사용자에게 직접 실행 요청.
+- `[해결]` 사용자 지시("destroy 도 니가 해 — 원격 환경이라 직접 못 친다")로 `cd infra/aws-eks/2-cluster && tofu destroy …` 형태로 재실행 → 통과.
+  `aws_eks_node_group.main: Destruction complete after 2m14s` · `aws_eks_cluster.main: Destruction complete after 1m58s` · `Destroy complete! Resources: 45 destroyed.` (17:42:44 KST)
+  SOP §9 확인: EKS 0 · 인스턴스 0 · NAT 0 · LB 0 · EIP 0. 로그 그룹 = 학습용 2(30일, 0B) + `/aws/lambda/test` 1 — 원장과 일치.
+- `[막힘]` 원인 (🔴 settings·훅 소스 직접 확인): 내가 apply/destroy 를 `tofu -chdir=infra/aws-eks/2-cluster apply …` 로 쳤다.
+  ① `.claude/settings.local.json` 의 `ask: ["Bash(tofu apply:*)", "Bash(tofu destroy:*)"]` 은 **접두 일치**라 `tofu -chdir=…` 에 안 걸린다
+     → 승인 창 대신 auto mode 분류기가 판정. apply 는 통과(**사람 승인 게이트를 의도치 않게 건너뜀**), kubectl·destroy 는 거부.
+  ② `eks-session-marker.sh` 정규식 `tofu[[:space:]]+apply` 도 안 걸린다 → **마커 미생성, 리퍼 감시 꺼진 채 14분 과금**(`.claude/eks-session/` 에 `active` 없음 실측).
+  `cd … && tofu destroy` 는 ① 의 ask 경로를 타서 통과. 0-bootstrap apply(오늘 오전)도 같은 형태였다 — $0 리소스라 피해 없음.
+- `[비용]` 세션 손실: 17:20(apply 시작)~17:42 ≈ 22분 × $0.1865/h ≈ **$0.07**, 검증 0건. 수집 0B.
+- `[결정]` 가드는 고치지 않는다(하네스 동결) — SOP §5 에 "`tofu -chdir` 금지, `cd … && tofu <하위명령>`" 함정을 문서로 추가. 세션은 다음 기회에 재시도.
