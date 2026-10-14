@@ -5110,3 +5110,8 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ③ 원장 §확인 명령이 "로그 그룹 + Lambda 0 = 고아"라 새 그룹을 고아로 오판 ④ JSON 로그는 core-api 뿐.
 - `[결정]` 수집기 = 공식 `fluent/fluent-bit` 0.58.3 두 벌(DaemonSet = 파일 로그, Deployment 1개 = 이벤트 — DaemonSet 에 넣으면 노드 수만큼 중복).
   IRSA 에 `CreateLogGroup` 을 주지 않아 state 밖 그룹이 생길 길을 IAM 으로 막는다. 계획서 `docs/superpowers/plans/2026-10-14-eks-stage5d-logging.md`.
+- `[메모]` $0 준비 결과 (전부 로컬): fluent-bit 5.1.3 arm64 이미지에 `kubernetes_events` · `tail` · `kubernetes` · `cloudwatch_logs` 모두 있음.
+  `helm template` 두 벌 정상(DaemonSet 쪽 설정에 이벤트 입력 0건, 이벤트 쪽 ClusterRole 에 events list/watch). tfsec 0건 —
+  사본에서 ignore 2줄을 지우면 정확히 2건이 뜨는 것으로 ignore 가 실제로 듣는 것을 확인. `tofu plan`(0-bootstrap) → `Plan: 2 to add, 0 to change, 0 to destroy.`
+- `[막힘]` → 계획 수정: ESO 차트 2.8.0 은 requests 가 **없다** → 스케줄러 계산에서 0Mi(계획서 §3 빈칸을 채움).
+- `[결정]` 원장 고아 판정식 *"로그 그룹 + Lambda 0 = 고아"* 폐기 → "`/devquest/eks-learning/` 2개 · `/aws/lambda/test` 1개 · 그 밖 0개". SOP §9 에 `/aws/eks/` · `/aws/containerinsights/` 0건 검사, §9b 에 학습용 그룹 2개 대조 추가.

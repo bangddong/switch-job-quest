@@ -111,3 +111,10 @@ output "acm_domain_validation" {
     }
   }
 }
+
+# Stage 5d — 로그 그룹 **이름**만 내보낸다(ARN 아님). ARN 에는 계정 ID 가 들어가고, 이 레이어의 plan·apply
+# 출력은 공개 레포의 Actions 로그에 찍힌다. ARN 은 쓰는 쪽(2-cluster/irsa-fluent-bit.tf)에서 조립한다.
+output "learning_log_groups" {
+  description = "학습 클러스터 로그 그룹 이름 (containers · events). 수집기 설정 k8s/logging/*.yaml 의 log_group_name 과 같아야 한다"
+  value       = { for k, g in aws_cloudwatch_log_group.learning : k => g.name }
+}

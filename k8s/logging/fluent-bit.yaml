@@ -1,0 +1,89 @@
+# Stage 5d — 컨테이너 로그 수집기 (노드마다 1개, DaemonSet)
+#
+# 차트: fluent/fluent-bit 0.58.3 (앱 5.1.3). 계획서 docs/superpowers/plans/2026-10-14-eks-stage5d-logging.md
+#
+# 무엇을 하나: 각 노드의 /var/log/containers/*.log (kubelet 이 컨테이너 stdout 을 적는 파일)를 읽어
+#   파드 메타데이터를 붙인 뒤 CloudWatch Logs 그룹 /devquest/eks-learning/containers 로 보낸다.
+#   이 그룹은 0-bootstrap 에 있어서 클러스터를 destroy 해도 남는다(계획서 D3).
+#
+# 설치 (역할 ARN 은 계정 ID 를 담고 있어 이 파일에 적지 않는다 — --set 으로 주입):
+#   helm install fluent-bit fluent/fluent-bit --version 0.58.3 -n logging --create-namespace \
+#     -f k8s/logging/fluent-bit.yaml \
+#     --set-string serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(tofu -chdir=infra/aws-eks/2-cluster output -raw fluent_bit_role_arn)
+#
+# ⚠️ 차트 기본값을 그대로 두면 안 되는 것 (2026-10-14 `helm show values` 실측):
+#   - 출력이 elasticsearch-master 로 가게 돼 있다 → 아래 outputs 로 통째로 교체
+#   - systemd(kubelet) 입력이 켜져 있다 → 이번 범위가 아니라 뺀다
+#   - resources 가 비어 있다 → 스케줄러가 0 으로 계산한다(5b U-3). 직접 준다
+
+fullnameOverride: fluent-bit
+
+image:
+  tag: 5.1.3 # 차트 appVersion 과 같은 값을 고정. arm64 이미지 존재 확인(2026-10-14 docker manifest)
+
+testFramework:
+  enabled: false
+
+serviceAccount:
+  create: true
+  # 🔴 이 이름은 infra/aws-eks/2-cluster/irsa-fluent-bit.tf 의 locals 와 글자 단위로 같아야 한다.
+  #    다르면 IRSA 가 "Not authorized to perform sts:AssumeRoleWithWebIdentity" 로 실패한다.
+  name: fluent-bit
+
+rbac:
+  create: true
+  eventsAccess: false # 이벤트는 fluent-bit-events 가 맡는다(계획서 D7)
+
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 128Mi }
+
+config:
+  service: |
+    [SERVICE]
+        Daemon Off
+        Flush {{ .Values.flush }}
+        Log_Level {{ .Values.logLevel }}
+        Parsers_File /fluent-bit/etc/parsers.conf
+        Parsers_File /fluent-bit/etc/conf/custom_parsers.conf
+        HTTP_Server On
+        HTTP_Listen 0.0.0.0
+        HTTP_Port {{ .Values.metricsPort }}
+        Health_Check On
+
+  # 노드 디스크의 컨테이너 로그 파일을 읽는다.
+  # Exclude_Path — 수집기 자신의 로그는 뺀다. 넣으면 수집기 에러가 다시 수집돼 양이 스스로 불어난다(계획서 D10).
+  inputs: |
+    [INPUT]
+        Name tail
+        Path /var/log/containers/*.log
+        Exclude_Path /var/log/containers/fluent-bit*.log
+        multiline.parser docker, cri
+        Tag kube.*
+        Mem_Buf_Limit 5MB
+        Skip_Long_Lines On
+
+  # 파일 이름에서 파드를 찾아 네임스페이스·파드·컨테이너·라벨을 붙인다.
+  # Merge_Log On — 로그 줄이 JSON 이면(core-api) 필드로 풀어 붙이고, 평문이면(ai-api·daily-api) log 필드에 그대로 둔다(D11).
+  filters: |
+    [FILTER]
+        Name kubernetes
+        Match kube.*
+        Merge_Log On
+        Keep_Log Off
+        K8S-Logging.Parser On
+        K8S-Logging.Exclude On
+
+  # 🔴 region 명시 · auto_create_group Off — 기본값에 기대지 않는다(D8·D9).
+  #    그룹이 없으면 여기서 실패해야 한다. 조용히 새 그룹(보존 무기한, state 밖)을 만들면 안 된다.
+  #    IAM 정책에도 CreateLogGroup 이 없어 이중으로 막힌다.
+  # 로그 스트림 = 네임스페이스.파드.컨테이너 — 지운 파드도 이름으로 찾을 수 있게(P3).
+  outputs: |
+    [OUTPUT]
+        Name cloudwatch_logs
+        Match kube.*
+        region ap-northeast-2
+        log_group_name /devquest/eks-learning/containers
+        log_stream_prefix unknown.
+        log_stream_template $kubernetes['namespace_name'].$kubernetes['pod_name'].$kubernetes['container_name']
+        auto_create_group Off

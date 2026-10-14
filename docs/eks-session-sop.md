@@ -328,6 +328,14 @@
    #    (그래서 코드에서 recovery_window_in_days = 0 으로 둔다 — secrets.tf ⑨)
    aws secretsmanager list-secrets --region $R --include-planned-deletion \
      --query 'SecretList[].{Name:Name,DeletedDate:DeletedDate}'
+
+   # ── CloudWatch 로그 그룹 (Stage 5d에서 추가) ──
+   # 🔴 클러스터 쪽이 **스스로 만든** 그룹은 tofu state 밖이라 destroy 가 못 지우고, 보존이 기본 무기한이다.
+   #    후보: EKS 컨트롤플레인 로깅(`/aws/eks/…`) · Container Insights · aws-for-fluent-bit 차트 기본 이름.
+   #    5d 수집기는 IRSA 에 CreateLogGroup 이 없어 만들 수 없게 해 뒀다 — 이 검사는 그 장치가 맞는지 재는 것이다.
+   #    합격 기준 = **0건**. 학습용 그룹 2개(`/devquest/eks-learning/…`)는 영속이라 여기 아니라 9b 에서 본다.
+   aws logs describe-log-groups --region $R \
+     --query "logGroups[?starts_with(logGroupName, '/aws/eks/') || starts_with(logGroupName, '/aws/containerinsights/')].logGroupName"
    ```
 
    > ✅ **실측 완료(07-28)**: RDS가 `manage_master_user_password`로 만든 마스터 시크릿(`rds!db-...`)은
@@ -341,6 +349,9 @@
    ```bash
    aws ec2 describe-volumes --region $R --filters Name=tag:Persistent,Values=true \
      --query 'Volumes[].[VolumeId,Size,AvailabilityZone,State]' --output table
+   # Stage 5d — 학습용 로그 그룹: 정확히 2개(containers · events), 둘 다 보존 30
+   aws logs describe-log-groups --region $R --log-group-name-prefix /devquest/eks-learning/ \
+     --query 'logGroups[].[logGroupName,retentionInDays,storedBytes]' --output table
    ```
    > 📖 기대값은 **`infra/aws-eks/PERSISTENT-RESOURCES.md`** 의 표다. 개수·크기·AZ가 어긋나면
    > ①모르는 사이 볼륨이 늘었거나 ②원장 갱신을 빠뜨린 것 — **둘 다 즉시 확인 대상**이다.

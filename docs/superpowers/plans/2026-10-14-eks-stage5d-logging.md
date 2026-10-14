@@ -45,12 +45,12 @@ CloudWatch 에서 찾아 읽을 수 있다는 것을 실클러스터로 확인�
 ```
 기본 앱 requests   core 480 + daily 512 + ai 320 + postgres 256        = 1568Mi
 시스템 Deployment  ebs-csi-controller 232 + coredns 70                 =  302Mi
-ESO                (5c 와 같은 손 설치분 — §9 에서 requests 확인)        =    ?Mi 🟡
+ESO                차트 2.8.0 기본 requests **없음**(§9 결과)               =    0Mi
 fluent-bit-events  64Mi (D7, Deployment 1개)                           =   64Mi
-                                                                 합계  ≈ 1934Mi + ESO
+                                                                 합계  ≈ 1934Mi
 
 노드당 DaemonSet  104 + fluent-bit 64 = 168Mi
-3대 × (1365 − 168) = 3591Mi  →  남는 양 ≈ 1657Mi − ESO
+3대 × (1365 − 168) = 3591Mi  →  남는 양 ≈ 1657Mi
 ```
 
 파드 자리: 노드당 DaemonSet 4개(aws-node · kube-proxy · ebs-csi-node · fluent-bit) → 노드당 7칸 남음 × 3 = 21칸.
@@ -168,3 +168,18 @@ SOP 의 시작·종료 체크리스트는 그대로 따른다. 🔴 **과금 구
 - `tofu plan`(0-bootstrap) 이 **로그 그룹 2개 add 만** 내는가. 로컬 `tfsec` 이 통과하는가(U-8).
 - `tofu validate`(2-cluster) — IRSA `sub` 두 개가 helm 의 SA 이름과 글자 단위로 같은가.
 - ESO 의 requests(§3 의 빈칸).
+
+### 결과 (2026-10-14, 전부 로컬 · $0)
+
+| 확인 | 결과 |
+|---|---|
+| 이미지 | `docker manifest inspect cr.fluentbit.io/fluent/fluent-bit:5.1.3` → `amd64` · `arm` · **`arm64`** ✅. arm64 로 띄운 `-h` 에 `kubernetes_events` · `tail` · `kubernetes` · `cloudwatch_logs` 4개 모두 있음 ✅ (`Fluent Bit v5.1.3`) |
+| 플러그인 옵션 | `cloudwatch_logs` 에 `region` · `auto_create_group` · `log_stream_template` 존재, `kubernetes_events` 에 `kube_retention_time` 존재 — 설정에 쓴 키가 전부 실재 ✅ |
+| `helm template` DaemonSet 쪽 | DaemonSet 1 · ClusterRole(이벤트 권한 없음) · requests `50m/64Mi` ✅. 설정에 `kubernetes_events` **0건** ✅, `region ap-northeast-2` · `auto_create_group Off` · `Exclude_Path` ✅, 차트 기본의 `elasticsearch` · `systemd` 0건 ✅ |
+| `helm template` 이벤트 쪽 | Deployment 1 · ClusterRole 에 `events` `get/list/watch` ✅ · hostPath 볼륨 **없음**(설정 ConfigMap 만) ✅ · requests `20m/64Mi` |
+| `Exclude_Path` | `fluent-bit*.log` 는 이벤트 수집기 파드(`fluent-bit-events-…`)의 로그도 함께 뺀다 — 같은 루프 위험이라 의도와 맞다 |
+| ESO requests | 차트 2.8.0 기본값에 `resources` 없음 → 0Mi (§3 반영) |
+| tfsec | 0 문제 ✅. **실패 주입**: 사본에서 ignore 2줄을 지우면 정확히 `2 potential problem(s)` — ignore 가 실제로 그 둘을 덮는다 ✅ |
+| `tofu validate` (2-cluster) | `Success! The configuration is valid.` ✅ |
+| `tofu plan` (0-bootstrap) | `Plan: 2 to add, 0 to change, 0 to destroy.` — 로그 그룹 2개(`retention_in_days = 30`)만 ✅ |
+| 🟡 남은 것 | 2-cluster `plan` 은 0-bootstrap apply 뒤에만 된다(output `learning_log_groups` 를 원격 상태에서 읽음). IRSA 가 실제로 붙는지는 세션에서(P1) |
