@@ -182,4 +182,6 @@ SOP 의 시작·종료 체크리스트는 그대로 따른다. 🔴 **과금 구
 | tfsec | 0 문제 ✅. **실패 주입**: 사본에서 ignore 2줄을 지우면 정확히 `2 potential problem(s)` — ignore 가 실제로 그 둘을 덮는다 ✅ |
 | `tofu validate` (2-cluster) | `Success! The configuration is valid.` ✅ |
 | `tofu plan` (0-bootstrap) | `Plan: 2 to add, 0 to change, 0 to destroy.` — 로그 그룹 2개(`retention_in_days = 30`)만 ✅ |
-| 🟡 남은 것 | 2-cluster `plan` 은 0-bootstrap apply 뒤에만 된다(output `learning_log_groups` 를 원격 상태에서 읽음). IRSA 가 실제로 붙는지는 세션에서(P1) |
+| 0-bootstrap apply | 사용자 승인 후 저장한 계획 그대로 apply. 그룹 2개 `retentionInDays 30` · `storedBytes 0` ✅. 계정 전체 그룹 수 3 (= 학습용 2 + 기존 고아 1) ✅ |
+| `tofu plan` (2-cluster) | `Plan: 45 to add` (클러스터 전체 — 이번 추가분은 3). 쓰기 정책 문서가 plan 시점에 풀림 = 원격 상태 참조 정상 ✅. Action 3개 · Resource 는 두 그룹 `:*` 만 · `CreateLogGroup` 없음 ✅. 신뢰 `sub` 2개가 values 의 SA 이름과 일치 ✅ |
+| 🟡 남은 것 | IRSA 가 실제로 붙는지는 세션에서(P1) |

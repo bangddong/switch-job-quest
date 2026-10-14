@@ -5115,3 +5115,19 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   사본에서 ignore 2줄을 지우면 정확히 2건이 뜨는 것으로 ignore 가 실제로 듣는 것을 확인. `tofu plan`(0-bootstrap) → `Plan: 2 to add, 0 to change, 0 to destroy.`
 - `[막힘]` → 계획 수정: ESO 차트 2.8.0 은 requests 가 **없다** → 스케줄러 계산에서 0Mi(계획서 §3 빈칸을 채움).
 - `[결정]` 원장 고아 판정식 *"로그 그룹 + Lambda 0 = 고아"* 폐기 → "`/devquest/eks-learning/` 2개 · `/aws/lambda/test` 1개 · 그 밖 0개". SOP §9 에 `/aws/eks/` · `/aws/containerinsights/` 0건 검사, §9b 에 학습용 그룹 2개 대조 추가.
+- `[비용]` 0-bootstrap 로컬 apply (사용자 승인) — `plan -out` 으로 저장한 계획을 그대로 apply. 로그 그룹 2개 생성, 빈 그룹이라 $0.
+  ```
+  $ aws logs describe-log-groups --log-group-name-prefix /devquest/eks-learning/ --query 'logGroups[].[logGroupName,retentionInDays,storedBytes]'
+  /devquest/eks-learning/containers  30  0
+  /devquest/eks-learning/events      30  0
+  $ aws logs describe-log-groups --query 'length(logGroups)'
+  3        ← 학습용 2 + 기존 고아 /aws/lambda/test 1 (원장 판정식과 일치)
+  ```
+- `[메모]` 2-cluster `plan` → `Plan: 45 to add, 0 to change, 0 to destroy.` (클러스터 전체가 destroy 상태라 전부 add — 이번 단계 추가분은 IAM 정책·역할·연결 3개).
+  `fluent_bit_write_logs` 정책 문서가 plan 시점에 `Read complete` — 0-bootstrap 원격 상태의 `learning_log_groups` 가 실제로 풀린다. 정책(계정 ID 가림):
+  ```
+  Action   = ["logs:PutLogEvents", "logs:DescribeLogStreams", "logs:CreateLogStream"]
+  Resource = ["arn:aws:logs:ap-northeast-2:<account>:log-group:/devquest/eks-learning/events:*",
+              "arn:aws:logs:ap-northeast-2:<account>:log-group:/devquest/eks-learning/containers:*"]
+  ```
+  신뢰 정책 `sub` = `system:serviceaccount:logging:fluent-bit` · `system:serviceaccount:logging:fluent-bit-events` (helm values 의 SA 이름과 일치).
