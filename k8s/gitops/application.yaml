@@ -1,33 +1,89 @@
-# ArgoCD Application (Stage 5c) — "이 git 폴더를 이 클러스터에 맞춰 놓아라"는 주문서.
+# ArgoCD Application (Stage 5c → 5e) — "이 git 폴더와 이 helm 차트를 이 클러스터에 맞춰 놓아라"는 주문서.
 #
-# 이것만 손으로 한 번 넣는다. 그 뒤로 앱 배포에 kubectl apply 를 쓰지 않는다.
+# 이것만 손으로 한 번 넣는다. 그 뒤로 ESO 설치 · 시크릿 참조 · postgres · 앱 배포에 kubectl apply 를 쓰지 않는다.
+# 순서(sync wave)는 k8s/gitops/apps/kustomization.yaml 에 적혀 있다.
 #
-# 적용 (자리표시자 2개를 치환한다):
+# 적용 (자리표시자 6개를 치환한다 — 2-cluster apply 뒤, 저장소 루트에서):
+#   cd infra/aws-eks/2-cluster
+#   ESO_ROLE=$(tofu output -raw eso_role_arn)
+#   APP_SECRET=$(tofu output -raw app_secret_name)
+#   VOL=$(tofu output -raw postgres_data_volume_id)
+#   AZ=$(tofu output -raw persistent_az)
+#   cd "$(git rev-parse --show-toplevel)"
 #   REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-northeast-2.amazonaws.com
 #   REVISION=main          # 세션 중에는 작업 브랜치 이름
 #   sed -e "s|REGISTRY_PLACEHOLDER|$REGISTRY|g" -e "s|REVISION_PLACEHOLDER|$REVISION|" \
+#       -e "s|ESO_ROLE_ARN_PLACEHOLDER|$ESO_ROLE|" -e "s|APP_SECRET_NAME_PLACEHOLDER|$APP_SECRET|" \
+#       -e "s|EBS_VOLUME_ID_PLACEHOLDER|$VOL|" -e "s|PERSISTENT_AZ_PLACEHOLDER|$AZ|" \
 #     k8s/gitops/application.yaml | kubectl apply -f -
 #
-# 🔴 치환한 결과를 파일로 저장하지 마라 — 계정 ID 가 들어간다.
+# 🔴 치환한 결과를 파일로 저장하지 마라 — 계정 ID 가 들어간다(REGISTRY · ESO_ROLE).
+# ℹ️ 치환을 하나 빠뜨리면 자리표시자 글자가 그대로 들어가 **시끄럽게 실패한다**:
+#    ESO_ROLE → AssumeRole 실패 · APP_SECRET → SecretSyncError · VOL → 볼륨 attach 실패 · AZ → 파드 Pending.
+#
+# ── 왜 출처가 둘(sources)인가 (Stage 5e) ──────────────────────────────────────
+#   sync wave 는 **Application 하나 안에서만** 순서를 보장한다. ESO 를 별도 Application 으로 두면
+#   "ESO 가 먼저 뜬다"를 보장할 수 없다. 그래서 ESO helm 차트와 git 폴더를 한 Application 에 묶었다.
+#   기각: app-of-apps — 자식 Application 이 git 에서 렌더되므로 계정 ID 가 든 IRSA ARN 을 sed 로 넣을 수 없다.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: devquest-apps
   namespace: argocd
+  annotations:
+    # 🔑 비교를 서버에 맡긴다 (Stage 5e 세션에서 추가).
+    #   ExternalSecret 은 API 서버가 기본값 4개(conversionStrategy · decodingStrategy · metadataPolicy ·
+    #   target.deletionPolicy)를 채워 넣는다. git 에는 없으므로 기본 비교로는 **영원히 OutOfSync** 이고,
+    #   selfHeal 이 10분에 14번 다시 sync 했다(백오프 4m58s 까지). 5c 의 replicas 싸움과 같은 모양이다.
+    #   ServerSideDiff 는 git 내용을 서버에 dry-run 으로 보내 **기본값이 채워진 결과끼리** 비교한다 → 6초 만에 Synced.
+    #   기각: ignoreDifferences 로 필드를 나열(5c D10 — 무엇을 무시하는지 목록을 계속 관리해야 한다).
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
 spec:
   project: default
-  source:
-    # 공개 레포라 인증 정보가 필요 없다. 비공개면 여기에 자격 증명을 따로 등록해야 한다.
-    repoURL: https://github.com/bangddong/switch-job-quest.git
-    targetRevision: REVISION_PLACEHOLDER
-    path: k8s/gitops/apps
-    kustomize:
-      # "이름이 왼쪽인 이미지를 오른쪽 주소로 바꿔라." 태그는 적지 않았으므로 git 의 것이 유지된다.
-      images:
-        - devquest/core-api=REGISTRY_PLACEHOLDER/devquest/core-api
-        - devquest/ai-api=REGISTRY_PLACEHOLDER/devquest/ai-api
-        - devquest/daily-api=REGISTRY_PLACEHOLDER/devquest/daily-api
+  sources:
+    # ① ESO — 손 경로의 `helm install external-secrets …`(k8s/README.md §2)와 같은 값.
+    #    차트 리소스에는 wave 를 붙일 수 없어 기본값 0 이다. 우리 것을 1 부터 둔 이유.
+    - repoURL: https://charts.external-secrets.io
+      chart: external-secrets
+      targetRevision: 2.8.0
+      helm:
+        # 🔴 releaseName 을 빼지 마라. 기본값이 **Application 이름**(devquest-apps)이라 ServiceAccount 이름이
+        #    바뀌고, IRSA 신뢰정책(`…:external-secrets:external-secrets`)이 AssumeRole 을 거부한다.
+        releaseName: external-secrets
+        valuesObject:
+          installCRDs: true
+          # Application 의 destination 은 default 다. 차트만 external-secrets 네임스페이스로 보낸다.
+          # 네임스페이스 자체는 git 쪽 namespace-external-secrets.yaml(wave -1)이 만든다.
+          namespaceOverride: external-secrets
+          serviceAccount:
+            annotations:
+              eks.amazonaws.com/role-arn: ESO_ROLE_ARN_PLACEHOLDER
+    # ② git — 시크릿 참조 · postgres · 앱 · HPA
+    - repoURL: https://github.com/bangddong/switch-job-quest.git # 공개 레포라 인증 정보가 필요 없다
+      targetRevision: REVISION_PLACEHOLDER
+      path: k8s/gitops/apps
+      kustomize:
+        # "이름이 왼쪽인 이미지를 오른쪽 주소로 바꿔라." 태그는 적지 않았으므로 git 의 것이 유지된다.
+        images:
+          - devquest/core-api=REGISTRY_PLACEHOLDER/devquest/core-api
+          - devquest/ai-api=REGISTRY_PLACEHOLDER/devquest/ai-api
+          - devquest/daily-api=REGISTRY_PLACEHOLDER/devquest/daily-api
+        # 매니페스트에 남겨 둔 자리표시자를 덮는다. 파일은 손 경로(sed)와 verify 마커 때문에 그대로 둔다.
+        patches:
+          - target: { kind: PersistentVolume, name: postgres-data }
+            patch: |-
+              - op: replace
+                path: /spec/csi/volumeHandle
+                value: EBS_VOLUME_ID_PLACEHOLDER
+              - op: replace
+                path: /spec/nodeAffinity/required/nodeSelectorTerms/0/matchExpressions/0/values/0
+                value: PERSISTENT_AZ_PLACEHOLDER
+          - target: { kind: ExternalSecret, name: core-api-app }
+            patch: |-
+              - op: replace
+                path: /spec/dataFrom/0/extract/key
+                value: APP_SECRET_NAME_PLACEHOLDER
   destination:
     server: https://kubernetes.default.svc # ArgoCD 가 설치된 바로 그 클러스터
     namespace: default
@@ -36,5 +92,20 @@ spec:
       # selfHeal: 누가 클러스터를 손으로 바꾸면 git 상태로 되돌린다. 끄면 "다르다"고 표시만 한다.
       selfHeal: true
       # prune: git 에서 지운 것을 클러스터에서도 지운다. 끄면 고아가 남는다.
-      # ⚠️ 그래서 DB 처럼 지워지면 안 되는 것은 이 Application 에 넣지 않았다.
+      # ⚠️ Stage 5e 부터 DB 도 이 Application 안에 있다. postgres 5종에만 리소스 단위로
+      #    `Prune=false,Delete=false` 를 걸었다(k8s/gitops/apps/kustomization.yaml).
+      #    (5c 까지 이 자리의 주석은 "DB 는 이 Application 에 넣지 않았다"였다.)
       prune: true
+    syncOptions:
+      # 🔴 ESO CRD 가 687KB 다(helm template 실측). 기본 방식(client-side apply)은 리소스 전체를
+      #    `last-applied-configuration` annotation 에 복사하는데 그 한도가 256KB 라 CRD 를 못 만든다.
+      #    서버 측 적용은 그 annotation 을 안 쓴다.
+      - ServerSideApply=true
+    # 자동 sync 는 **같은 커밋에서 실패한 sync 를 다시 하지 않는다.** ESO 웹훅(failurePolicy: Fail)이
+    # 인증서를 막 받는 순간에 ExternalSecret 을 만들다 실패하면 거기서 멈춘다. 그래서 재시도를 건다.
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
