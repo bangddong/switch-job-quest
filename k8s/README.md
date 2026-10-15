@@ -39,6 +39,13 @@ k8s/
 
 > 전체 세션 흐름은 `docs/eks-session-sop.md`가 단일 출처. 여기는 **앱 배포 부분만** 다룬다.
 
+> 🔀 **두 경로가 있다 (Stage 5e~).** 아래 §2 ~ §3.5 는 **손 경로**(sed | kubectl apply)이고 모든 Stage 를 재현한다.
+> **ArgoCD 경로**는 §2 ~ §3.5 전부를 Application 하나로 대신한다 — ArgoCD helm 설치(`k8s/argocd/values.yaml`) 뒤
+> `k8s/gitops/application.yaml` 머리 주석의 치환 6개로 한 번 apply 하면, sync wave 순서(ESO → 시크릿 → postgres →
+> core-api → 나머지 → HPA)는 `k8s/gitops/apps/kustomization.yaml` 이 정한다.
+> ⚠️ ArgoCD 경로는 **3b(in-cluster · static PV) 전용**이다 — RDS(Stage 2) · 동적 PVC(3a)는 손 경로로만.
+> ⚠️ 정리할 때는 **Application 을 먼저 지운다**(SOP §8 ⓪) — selfHeal 이 손으로 지운 것을 되살린다.
+
 ### 1. 이미지 준비 (클러스터 없어도 가능, $0)
 
 GitHub Actions → **ECR Push** 워크플로 수동 실행(`workflow_dispatch`) → service 선택(`core-api`).

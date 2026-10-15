@@ -1,0 +1,16 @@
+# ArgoCD(Stage 5e)가 읽는 목록. 이 폴더의 파일 중 **여기 적힌 것만** 배포된다.
+#
+# 🔴 폴더를 통째로 읽히지 않는 이유 — 같이 올리면 안 되는 쌍이 있다.
+#   externalsecret-db.yaml(Stage 2, RDS) ↔ externalsecret-db-incluster.yaml(Stage 3, 클러스터 안 postgres)
+#   둘 다 `core-api-db` Secret 을 만든다. ArgoCD 경로는 **in-cluster(3b) 전용**이다 —
+#   postgres-tls 시크릿도 in-cluster 모드에서만 존재한다(2-cluster/irsa-eso.tf).
+#
+# ℹ️ 손 경로(k8s/README.md §2 의 `kubectl apply -f <파일>`)는 이 파일을 읽지 않는다. 그대로 돈다.
+#    `APP_SECRET_NAME_PLACEHOLDER` 도 파일에 그대로 두고, ArgoCD 경로에서는 Application 이 덮어쓴다.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - secretstore.yaml
+  - externalsecret-db-incluster.yaml
+  - externalsecret-app.yaml
+  - externalsecret-postgres-tls.yaml

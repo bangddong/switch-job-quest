@@ -184,6 +184,11 @@
    없으면 손으로 만든다(형식은 `eks-session-marker.sh` 참조). **마커 없이 세션을 진행하지 마라.**
 6. `aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2` → `kubectl get nodes` 검증.
 6b. 🔴 **in-cluster 모드라면 — postgres 파드가 Ready된 직후 비밀번호를 동기화한다.**
+   > **Stage 5e 부터는 사람이 치지 않는다** — `postgres-static.yaml` 의 **postStart 훅**이 컨테이너가 뜰 때마다
+   > 같은 `ALTER USER` 를 한다(손 경로 · ArgoCD 경로 공통). *"항상 한다"* 는 아래 성질은 그대로이고, 하는 주체가
+   > 사람에서 kubelet 으로 바뀌었다. 실패하면 이벤트 `FailedPostStartHook` + 컨테이너 재시작으로 **시끄럽게** 드러난다.
+   > ⚠️ **아래 파드 IP 검증은 계속 한다** — 동기화를 자동화한 것이지, 확인을 자동화한 것이 아니다.
+   > 아래 수동 명령은 postStart 가 없던 이미지·매니페스트로 되돌아갔을 때의 예비 경로로 남긴다.
    ```bash
    PW=$(kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)
    kubectl exec postgres-0 -- psql -U devquest -d devquest \
@@ -237,6 +242,14 @@
 
 8. **teardown 순서 엄수** (Stage 1+ ALB/PVC 생기면 필수):
    ```bash
+   # ⓪ 🔴 ArgoCD Application 이 있으면 **그것부터** 지운다 (Stage 5e~)
+   #    selfHeal 이 켜져 있어서 아래 ①을 먼저 치면 ArgoCD 가 **1~2초 만에 되살린다**
+   #    (5c 실측: 손으로 지운 Deployment 가 그 시간에 부활). 5e 부터 ExternalSecret 도 ArgoCD 소유다.
+   #    Application 에는 finalizer 가 없으므로, 지우면 **리소스는 그대로 남고 관리만 끊긴다** —
+   #    그 뒤로는 기존 절차가 그대로 통한다. postgres 5종은 `Delete=false` 라 어차피 안 지워진다.
+   kubectl -n argocd delete application devquest-apps --ignore-not-found
+   kubectl -n argocd get application        # → "No resources found" 여야 한다
+
    # ① ESO가 관리하는 Secret부터 (Stage 2~)
    #    ⚠️ `kubectl delete secret core-api-db`만 하면 ESO가 **즉시 재생성**한다.
    #       소유자인 ExternalSecret을 먼저 지워야 한다(creationPolicy: Owner).
