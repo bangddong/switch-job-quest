@@ -3229,7 +3229,7 @@ aws logs describe-log-groups --region ap-northeast-2 --log-group-name-prefix /de
 cd infra/aws-eks/2-cluster
 tofu plan  -var node_desired_size=3      # Plan: 45 to add (2026-10-15 실측. 5c 대비 + Fluent Bit IAM 3개)
 tofu apply -var node_desired_size=3
-ls ../../../.claude/eks-session/          # 🔴 active 가 있어야 한다 — 없으면 SOP §5 대로 손으로 만든다
+cat ../../../.claude/eks-session/active  # 🔴 applied_at_h 가 **방금 시각**이어야 한다 — 없거나 옛 시각이면 SOP §5 대로 손으로 만든다
 aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2
 kubectl get nodes                        # 3대 Ready
 ```
@@ -3350,7 +3350,10 @@ Warning  Failed     Error: ImagePullBackOff
 ```
 
 > 🔎 `kubectl get events` 는 같은 이벤트를 `count` 로 합쳐 6줄로 보여주지만, CloudWatch 에는 **갱신될 때마다 한 건씩** 쌓여 18건이었다.
-> 이벤트 수집기는 API 를 watch 하므로 변경 하나하나를 받는다.
+> 이벤트 수집기는 API 를 watch 하므로 변경 하나하나를 받는다. 실측: 객체(`metadata.uid`)는 6개, 같은 uid 가 `count` 1→2→3… 으로 다시 들어온다.
+> ⇒ **"몇 번 시도했나"는 행 수가 아니라 uid 별 `max(count)` 로 센다.** 수집기가 재시작하면 최근 5분치(`kube_retention_time`)를 다시 보내
+> 행이 중복되는데, `max` 는 중복에 영향받지 않는다(멱등).
+> `filter involvedObject.name="<파드명>" | stats max(count) as tries by reason, metadata.uid`
 
 🔑 **로그는 "앱이 말한 것", 이벤트는 "클러스터가 앱에게 한 것"이다.** 앱이 아예 못 뜨는 장애는 이벤트에만 흔적이 있다.
 
