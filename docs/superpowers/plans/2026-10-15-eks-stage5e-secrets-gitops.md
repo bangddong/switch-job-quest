@@ -161,3 +161,28 @@ ArgoCD 가 클러스터 openapi 를 못 읽어 **sync 0건** — P1~P5 미실행
 | 범인은 EKS 관리형 APIService `v1.metrics.eks.amazonaws.com` | ⚪ (지워서 확인하려다 분류기 거부) |
 
 5e 매니페스트(wave · postStart · Prune=false)는 **한 번도 클러스터에 닿지 않았다** — 설계의 옳고 그름은 미확인이다.
+
+#### 원인 조사 (세션 뒤, $0)
+
+| 확인한 것 | 확도 |
+|---|---|
+| CloudTrail `CreateAddon` — metrics-server 가 10-08 · 10-12 · **10-13(5c, 정상)** 은 `v0.9.0-eksbuild.11`, **10-14 · 10-15 ×2 는 `.12`**. `addons.tf` 가 버전을 고정하지 않아 그날 기본값이 깔렸다 | 🔴 |
+| 업스트림 metrics-server **#1868** 의 증상이 똑같다: `/openapi/v2` JSON 200 · protobuf **503, 0바이트**. Go 1.27 로 다시 빌드하면 kube-openapi 의 `json:",inline"` 이 무시돼 집계 스키마가 깨진다. ArgoCD 가 그 피해자로 언급된다 | 🔴 (이슈 본문) |
+| `.12` 가 그런 재빌드다 | 🟡 (정황 — 이미지의 Go 버전은 안 봤다) |
+| 용의자였던 `v1.metrics.eks.amazonaws.com` | ⚪ → 우선순위 내림 |
+
+**처치**: `addons.tf` 에 `addon_version = "v0.9.0-eksbuild.11"` 고정(plan 확인: 45 add, `.11`). 회피이지 해결이 아니다 — 카탈로그에서 `.11` 이 내려가면 plan 이 실패하고, 그때 업스트림 수정이 들어간 빌드로 올린다.
+
+**2차 세션 첫 관문** (ArgoCD 설치 **전**, 실패하면 그 자리에서 destroy):
+```bash
+kubectl proxy --port=8771 &
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H 'Accept: application/com.github.proto-openapi.spec.v2@v1.0+protobuf' localhost:8771/openapi/v2   # → 200
+```
+200 이 아니면 범인은 metrics-server 가 아니다 → 다음 후보(`v1.metrics.eks.amazonaws.com`)는 지워서 확인해야 하는데 **분류기가 거부한 동작**이라 사용자 결정 사항이다.
+
+#### 이번에 하지 않는 것 (추가)
+
+| 항목 | 왜 지금 못 하나 |
+|---|---|
+| 다른 애드온(vpc-cni · coredns · kube-proxy · ebs-csi)도 버전 미고정 — 같은 종류의 조용한 변화가 생길 수 있다 | 지금 깨진 것은 metrics-server 하나다. 전부 고정하면 보안 수정도 함께 멈춘다. 고정할지는 별도 판단 — 이번엔 **세션마다 CloudTrail 로 실제 버전을 남기는 것**이 더 싸다 |

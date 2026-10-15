@@ -168,4 +168,17 @@ resource "aws_eks_addon" "metrics_server" {
   depends_on = [aws_eks_node_group.main]
 
   configuration_values = jsonencode({ replicas = 1 })
+
+  # 🔴 버전을 고정한다 (2026-10-15, Stage 5e 1차 세션 중단 원인).
+  #   고정하지 않으면 그날의 기본 빌드가 깔린다. 10-14 부터 기본값이 eksbuild.11 → **.12** 로 바뀌었고
+  #   (CloudTrail CreateAddon 대조: 10-08·10-12·10-13 = .11, 10-14·10-15 ×2 = .12), .12 클러스터에서
+  #     GET /openapi/v2  Accept: application/json      → 200
+  #     GET /openapi/v2  Accept: …proto-openapi…protobuf → 503 (본문 0바이트)
+  #   이었다. ArgoCD 는 protobuf 로 받으므로 클러스터를 아예 못 읽었다(sync 0건, 일지 2026-10-15).
+  #   같은 증상이 metrics-server 업스트림 이슈 #1868 에 있다 — Go 1.27 로 다시 빌드하면 kube-openapi 의
+  #   `json:",inline"` 이 무시돼 집계된 openapi v2 가 깨진다(🟡 .12 가 그런 재빌드라는 것은 정황).
+  #   ⚠️ 이 고정은 해결이 아니라 회피다. 카탈로그에서 .11 이 내려가면 plan 이 실패한다 —
+  #      그때는 업스트림 수정(kube-openapi 2026-07-21 이후)이 들어간 빌드인지 확인하고 올린다.
+  #   확인 방법(세션 첫 단계, ArgoCD 설치 전): `kubectl proxy` 후 protobuf Accept 로 /openapi/v2 → 200.
+  addon_version = "v0.9.0-eksbuild.11"
 }

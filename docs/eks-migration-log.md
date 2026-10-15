@@ -5209,3 +5209,7 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ⇒ ArgoCD 가 클러스터를 못 읽으면 P1~P5 전부 불가 → **질문 대신 즉시 정리**(SOP 과금 구간 원칙).
 - `[비용]` 14:05 Application 삭제(SOP §8 ⓪ 첫 실사용) · ingress/pvc 0 · LB 0 → `cd … && tofu destroy` — `Destroy complete! Resources: 45 destroyed.`(노드그룹 4m17s · 클러스터 1m59s). 14:17 확인: EC2 0 · EKS 0 · NAT 0 · LB 0 · EIP 0 · 영속 EBS `available` · 로그 그룹 학습용 2 + `/aws/lambda/test`. **과금 종료.**
 - `[비용]` 13:29~14:16 ≈ 47분 × $0.1865/h ≈ **$0.15**. 검증 0건. ArgoCD 컨트롤러 로그는 5d 수집기 덕에 CloudWatch containers 그룹에 남았다(5d 의 존재 이유가 바로 작동).
+- `[해결]` (세션 뒤, $0) **원인 특정** — CloudTrail `CreateAddon` 대조: metrics-server `v0.9.0-eksbuild.11`(10-08 · 10-12 · **10-13 5c 정상**) → **`.12`**(10-14 · 10-15 ×2). `addons.tf` 가 버전을 안 고정해 그날 기본값이 깔렸다.
+  업스트림 metrics-server #1868 과 증상 동일(JSON 200 · protobuf 503 0바이트, Go 1.27 재빌드에서 kube-openapi `inline` 태그 무시). `.12` 가 그런 재빌드라는 것은 🟡.
+  → `addon_version = "v0.9.0-eksbuild.11"` 고정, plan 45 add 확인. 2차 세션은 ArgoCD 설치 전에 protobuf `/openapi/v2` 200 을 먼저 본다.
+  ⚠️ 교훈: 5d(10-14 · 10-15)도 `.12` 였지만 ArgoCD 가 없어서 아무도 몰랐다 — **깨진 것을 쓰는 소비자가 생겨야 드러나는** 종류다.
