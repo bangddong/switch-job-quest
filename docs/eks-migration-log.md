@@ -5184,3 +5184,28 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 비밀번호 동기화 → postgres 컨테이너 **postStart 훅**(사용자 선택, 추천안 A). 기각: 단계 삭제(SOP §6b *"항상 한다"* 반전) · exec Job(RBAC·이미지 증가).
 - `[결정]` Application 구조 → 기존 `devquest-apps` 하나를 **multi-source**(ESO helm + git). 기각: app-of-apps(자식이 git 에서 렌더돼 계정 ID 든 IRSA ARN 을 sed 로 못 넣는다) · kustomize `helmCharts`(`--enable-helm` 설정 추가).
 - `[메모]` 로컬 실측 3건: ① `kubectl kustomize` 는 상위 폴더 **파일** 참조 거부 — `security; file '…/a/x.yaml' is not in or below '…/b'` → 디렉토리 단위 kustomization 신설 ② ESO 차트 2.8.0 `namespaceOverride=external-secrets` 렌더 → 리소스가 그 네임스페이스로, SA 이름 `external-secrets`(IRSA 신뢰정책과 일치) ③ **ESO CRD 크기 687,287 B**(`clustersecretstores`) — client-side apply 의 annotation 한도 256KB 초과 → `ServerSideApply=true` 필요.
+
+## 2026-10-15 — Stage 5e 세션 (시크릿·DB 까지 ArgoCD)
+
+- `[메모]` 13:29 KST 세션 시작(사용자 승인). 사전 점검: 도구 OK · 자격증명 OK · 표준지원 1.34~1.37 · 이미지 태그 core `1a8a9aac…` · ai/daily `14cb335e…` 2b 검사 ✅ · ECR 에 존재. 크레딧 사용 $7.127.
+- `[비용]` 13:29 KST `cd … && tofu apply <저장한 plan>` — 과금 시작. `aws_eks_cluster.main: Creation complete after 6m40s` · 노드그룹 `1m47s` · `Apply complete! Resources: 45 added`.
+  마커 `applied_at_h=2026-10-15 13:29:44 KST` **정상 생성** — 이번엔 plan 을 `tofu -chdir=… plan` 으로 돌려 셸 작업 폴더가 루트에 남아 있었다. 5d 2차(직전 호출이 `cd … && tofu plan`)와 대조되는 정황 → 원장 L-70 의 "상대경로 + cwd" 가설과 일치(🟡 → 정황 1건 추가).
+  반대로 destroy 뒤 **청소 훅은 또 안 돌아** 마커를 손으로 지웠다(destroy 는 `cd … &&` 형태라 실행 후 cwd 가 2-cluster).
+- `[메모]` 13:52 Fluent Bit 2벌 · ArgoCD 3.5.4(차트 10.10.2) helm 설치 정상. 04:52:22Z Application apply(치환 6개) → `application.argoproj.io/devquest-apps created`.
+- `[막힘]` 🔴 **ArgoCD 가 클러스터를 아예 못 읽었다 — sync 0건.** Application `Unknown/Healthy`, conditions 원문:
+  ```
+  ComparisonError: Failed to load live state: failed to get cluster info for "https://kubernetes.default.svc": error synchronizing cache state : failed to load open api schema while syncing cluster cache: error getting openapi resources: the server is currently unable to handle the request
+  ```
+  hard refresh · controller 재시작(05:04Z) 후에도 동일 → 일시 오류가 아니다.
+- `[해결]` 원인 좁히기(실측):
+  ```
+  kubectl get apiservices            → 전부 Available=True (v1.metrics.eks.amazonaws.com · v1beta1.metrics.k8s.io 포함)
+  GET /openapi/v2  Accept: application/json                                          → 200
+  GET /openapi/v2  Accept: application/com.github.proto-openapi.spec.v2@v1.0+protobuf → 503 (본문 없음)
+  ```
+  ArgoCD 3.5.4 소스(`gitops-engine/pkg/utils/kube/ctl.go:129` `LoadOpenAPISchema`)는 discovery 클라이언트로 openapi v2 를 **protobuf 로** 받고, 실패하면 클러스터 캐시 전체가 실패한다. 끄는 스위치 없음(소스 `OPEN_API` 검색 0건 — 웹 검색 요약이 말한 `ARGOCD_CLUSTER_CACHE_LOAD_OPEN_API_SCHEMA` 는 이 버전에 **없다**).
+  클러스터 `v1.36.4-eks-b9510e3`. 5c(10-13, 같은 1.36 · 같은 ArgoCD)는 정상이었다 → **EKS 쪽 변화로 추정**(🟡). 클러스터와 같은 시각에 생긴 EKS 관리형 APIService `v1.metrics.eks.amazonaws.com`(kube-system/eks-extension-metrics-api)이 1순위 용의자(⚪ — 지워서 확인하려 했다).
+- `[막힘]` 용의자 APIService 를 지우고 protobuf 요청을 재시험하려 하자 **auto mode 분류기가 거부**(사유 미제시). 규칙대로 다른 경로로 재시도하지 않았다.
+  ⇒ ArgoCD 가 클러스터를 못 읽으면 P1~P5 전부 불가 → **질문 대신 즉시 정리**(SOP 과금 구간 원칙).
+- `[비용]` 14:05 Application 삭제(SOP §8 ⓪ 첫 실사용) · ingress/pvc 0 · LB 0 → `cd … && tofu destroy` — `Destroy complete! Resources: 45 destroyed.`(노드그룹 4m17s · 클러스터 1m59s). 14:17 확인: EC2 0 · EKS 0 · NAT 0 · LB 0 · EIP 0 · 영속 EBS `available` · 로그 그룹 학습용 2 + `/aws/lambda/test`. **과금 종료.**
+- `[비용]` 13:29~14:16 ≈ 47분 × $0.1865/h ≈ **$0.15**. 검증 0건. ArgoCD 컨트롤러 로그는 5d 수집기 덕에 CloudWatch containers 그룹에 남았다(5d 의 존재 이유가 바로 작동).
