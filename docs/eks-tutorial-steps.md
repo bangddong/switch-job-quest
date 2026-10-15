@@ -2985,6 +2985,7 @@ kubectl get nodes                        # 3대 Ready
 ```
 
 이어서 `k8s/README.md` §2 · §2.5 와 SOP §6b 대로 **ESO · 시크릿 참조 · postgres · 비밀번호 동기화까지만** 올린다.
+> 🔁 Stage 5e 부터는 이 단계도 ArgoCD 가 한다(아래 Stage 5e). 여기서는 5c 의 범위를 그대로 남긴다.
 
 🔴 **앱 3종(§3)은 올리지 않는다.** ArgoCD 가 올리는 것을 보려는 것이다.
 metrics-server 는 EKS 애드온이라 이미 깔려 있다.
@@ -3135,7 +3136,8 @@ kubectl scale sts argocd-application-controller -n argocd --replicas=1    # 4초
 
 ### 5c-10. 정리 — 과금 종료
 
-SOP §8 그대로다. Application 이나 ArgoCD 를 따로 지울 필요는 없다. 클러스터와 함께 사라진다.
+SOP §8 그대로다. 5c 범위에서는 Application 이나 ArgoCD 를 따로 지울 필요가 없다. 클러스터와 함께 사라진다.
+> 🔁 **Stage 5e 부터는 Application 을 먼저 지운다**(SOP §8 ⓪) — ExternalSecret 까지 ArgoCD 소유라 selfHeal 이 되살린다.
 
 ```bash
 kubectl delete externalsecret --all -A && kubectl delete secretstore --all -A
@@ -3239,6 +3241,7 @@ kubectl get nodes                        # 3대 Ready
 > **시작하는** 명령만 알아본다. 2026-10-14 에 이 형태 때문에 승인 창 없이 apply 되고 destroy 는 막혀 세션을 접었다(SOP §5).
 
 이어서 `k8s/README.md` §2 · §2.5 와 SOP §6b 대로 **ESO · 시크릿 참조 · postgres · 비밀번호 동기화**까지 올린다.
+> 🔁 Stage 5e 이후라면 이 단계는 Application 하나로 대신한다(Stage 5e). 비밀번호 동기화는 postStart 가 한다.
 
 🟡 **앱 3종(§3)은 수집기 다음에 올린다** (권장). 수집기가 기동할 때 이미 있던 파일은 **끝에서부터** 읽는다
 (tail 입력 `Read_from_Head` 기본 Off). 앱을 먼저 띄우면 기동 로그(Flyway 마이그레이션 등)를 놓칠 수 있다.
@@ -3402,6 +3405,173 @@ aws cloudwatch get-metric-statistics --region ap-northeast-2 --namespace AWS/Log
 - **메트릭·트레이스는 다루지 않았다.** 로그만이다.
 - 로그 그룹 하나를 모든 네임스페이스가 함께 쓴다. 팀·환경별 권한 분리는 다루지 않았다.
 - 수집기 requests(64Mi)는 실사용(6~7Mi)의 10배다. 자리가 남아 그대로 뒀다.
+
+---
+
+## Stage 5e — 시크릿·DB 까지 ArgoCD 로 (sync wave)
+
+5c 에서는 앱만 ArgoCD 에 맡기고, 그 앞 단계(ESO 설치 → 시크릿 참조 → postgres → 비밀번호 동기화)는 손으로 했다.
+이 Stage 는 그것까지 **Application 하나**로 옮긴다. 끝나면 사람이 치는 것은 ArgoCD 설치와 Application 적용뿐이다.
+
+### 개념
+
+| 개념 | 한 줄 | 이 Stage 에서 |
+|---|---|---|
+| **sync wave** | 리소스에 번호를 붙이면 작은 번호부터 적용하고, **그 번호가 전부 Healthy 가 된 뒤** 다음 번호로 간다 | ESO → 시크릿 → postgres → core-api → 나머지 → HPA |
+| Synced ↔ Healthy | Synced = git 대로 적용했다 · Healthy = 실제로 쓸 수 있다 | wave 는 **Healthy** 를 기다린다. 그래서 "postgres 가 떠야 core-api" 가 지켜진다 |
+| 리소스 단위 `Prune=false` | Application 의 prune 이 켜져 있어도 그 리소스만은 git 에서 빠져도 안 지운다 | postgres 5종(StorageClass · PV · PVC · Service · StatefulSet) |
+| multi-source | Application 하나가 여러 출처(helm 차트 + git)를 함께 읽는다 | wave 순서는 **Application 하나 안에서만** 보장되므로 ESO 차트도 같은 Application 에 넣었다 |
+| ServerSideDiff | git 내용을 API 서버에 dry-run 으로 보내 **서버가 기본값을 채운 결과끼리** 비교한다 | ExternalSecret 이 영원히 OutOfSync 로 보이던 것을 없앤다 |
+| postStart 훅 | 컨테이너가 뜰 때 kubelet 이 그 컨테이너 **안에서** 명령을 실행한다 | `ALTER USER` 비밀번호 동기화를 사람 대신 한다 |
+
+```
+-1  Namespace external-secrets
+ 0  ESO 차트 (CRD · Deployment 3 · 웹훅)      ← 차트 리소스는 번호를 못 붙여 기본값 0
+ 1  SecretStore · ExternalSecret 3종           ← CRD 가 있어야 만들 수 있다
+ 2  postgres 5종 — 반드시 같은 번호             ← Secret 이 있어야 뜬다
+ 3  core-api                                   ← Flyway 를 돌리는 유일한 앱
+ 4  daily-api · ai-api · NetworkPolicy
+ 5  HPA                                        ← 지표를 읽기 전 15초쯤 Degraded 로 보인다
+```
+
+> 🔑 **postgres 5종을 같은 번호에 두는 이유**: `gp3-static` 은 `WaitForFirstConsumer` 라 파드가 노드에 배치돼야
+> PVC 가 묶인다. PVC 를 앞 번호에 두면 PVC 는 파드를, 파드는 다음 번호를 기다려 영원히 멈춘다.
+
+<!-- verify: k8s/gitops/apps/kustomization.yaml ~ Prune=false,Delete=false -->
+
+### 5e-0. 사전 조건
+
+- Stage 5c(ArgoCD) · 5d(로그 수집)까지의 산출물. 0-bootstrap 의 영속 EBS · 비밀번호 · 로그 그룹.
+- 🔴 **metrics-server 애드온 버전이 `v0.9.0-eksbuild.11` 로 고정돼 있어야 한다**(`infra/aws-eks/2-cluster/addons.tf`).
+  `.12` 는 API 서버의 `/openapi/v2` 를 protobuf 로 요청하면 **503** 을 내게 만들고, ArgoCD 는 protobuf 로만 읽으므로
+  클러스터를 아예 못 읽는다(`failed to load open api schema … the server is currently unable to handle the request`).
+  업스트림 metrics-server #1868 과 같은 증상이다. 고정하지 않으면 그날 AWS 기본값이 깔린다.
+
+<!-- verify: infra/aws-eks/2-cluster/addons.tf ~ v0\.9\.0-eksbuild\.11 -->
+
+### 5e-1. 클러스터를 올린다 — 💰 과금 시작
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+tofu -chdir=infra/aws-eks/2-cluster plan -var node_desired_size=3 -out=/tmp/5e.tfplan   # Plan: 45 to add
+cd infra/aws-eks/2-cluster && tofu apply /tmp/5e.tfplan      # ~9분
+cd "$(git rev-parse --show-toplevel)" && cat .claude/eks-session/active   # applied_at_h 가 방금 시각
+aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2
+```
+
+> plan 은 `-chdir` 로 쳐서 셸 작업 폴더를 루트에 두고, apply 만 `cd … &&` 형태로 친다(SOP §5).
+
+### 5e-2. 🔴 관문 — ArgoCD 를 깔기 전에 openapi 를 확인한다
+
+```bash
+kubectl wait --for=condition=Available apiservice/v1beta1.metrics.k8s.io --timeout=180s
+kubectl proxy --port=8771 &
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H 'Accept: application/com.github.proto-openapi.spec.v2@v1.0+protobuf' localhost:8771/openapi/v2
+kill %1
+```
+```
+200
+```
+
+503 이면 **여기서 destroy 한다** — ArgoCD 를 깔아도 아무것도 sync 되지 않는다(5e-0).
+
+### 5e-3. ArgoCD 와 수집기를 설치한다
+
+5d-3 의 Fluent Bit 두 벌 + 5c 의 ArgoCD helm 설치를 그대로 한다. **앱 · ESO · 시크릿 · postgres 는 손으로 올리지 않는다.**
+
+### 5e-4. Application 을 한 번 넣는다 — 손 명령은 이것뿐
+
+`k8s/gitops/application.yaml` 머리 주석의 명령(tofu output 4개 + 계정 레지스트리 + 브랜치, 치환 6개)을 그대로 친다.
+
+```bash
+kubectl -n argocd get application devquest-apps -w
+```
+
+실측 흐름(2026-10-15, 전체 **3분**):
+```
+OutOfSync/Healthy/Running      waiting for healthy state of /Namespace/external-secrets
+OutOfSync/Progressing/Running  waiting for healthy state of …CustomResourceDefinition/… and 25 more
+OutOfSync/Progressing/Running  waiting for healthy state of apps/Deployment/external-secrets-cert-controller …
+OutOfSync/Progressing/Running  waiting for healthy state of external-secrets.io/SecretStore/aws-secretsmanager and 3 more
+OutOfSync/Progressing/Running  waiting for healthy state of apps/StatefulSet/postgres
+OutOfSync/Progressing/Running  waiting for healthy state of apps/Deployment/core-api
+OutOfSync/Progressing/Running  waiting for healthy state of apps/Deployment/ai-api and 1 more
+Synced/Healthy/Succeeded       successfully synced (all tasks run)
+```
+
+순서가 지켜졌는지는 생성 시각으로 본다:
+```bash
+kubectl get pod postgres-0 -o jsonpath='{.status.conditions[?(@.type=="Ready")].lastTransitionTime}{"\n"}'
+kubectl get deploy core-api -o jsonpath='{.metadata.creationTimestamp}{"\n"}'
+```
+→ core-api 가 postgres Ready **1초 뒤**에 생겼다(실측 05:56:10 → 05:56:11).
+
+`kubectl exec deploy/core-api -- sh -c 'wget -qO- http://localhost:8080/health'` → `{"result":"SUCCESS",…}`
+
+> ⚠️ `ServerSideDiff=true` annotation(`application.yaml`)이 없으면 ExternalSecret 3개가 **영원히 OutOfSync** 다.
+> API 서버가 기본값 4개(`conversionStrategy` · `decodingStrategy` · `metadataPolicy` · `target.deletionPolicy`)를 채워 넣고,
+> git 에는 그 필드가 없어서다. 실측: 10분에 자동 sync 14번, 백오프 4m58s. annotation 을 붙이자 6초 만에 Synced.
+
+<!-- verify: k8s/gitops/application.yaml ~ ServerSideDiff=true -->
+
+### 5e-5. 비밀번호 동기화가 저절로 되는지 본다 (postStart)
+
+```bash
+# 파드 IP(scram)로 실제 인증을 검사하는 함수 — 127.0.0.1 은 trust 라 항상 통과하므로 쓰지 않는다(SOP §6b)
+chk() { PODIP=$(kubectl get pod postgres-0 -o jsonpath='{.status.podIP}')
+  kubectl get secret core-api-db -o jsonpath='{.data.DB_PASSWORD}' | base64 -d | \
+  kubectl exec -i postgres-0 -- sh -c "read -r PW; PGPASSWORD=\"\$PW\" psql -h $PODIP -U devquest -d devquest -tAc 'select 1'"; }
+
+chk                                                        # → 1
+kubectl exec postgres-0 -- psql -U devquest -d devquest -qc "ALTER USER devquest PASSWORD 'wrong';"
+chk                                                        # → FATAL: password authentication failed
+kubectl delete pod postgres-0 && kubectl wait --for=condition=Ready pod/postgres-0 --timeout=180s
+chk                                                        # → 1   ← postStart 가 고쳤다
+```
+
+postStart 가 **컨테이너 안에서** 도는 이유: `ALTER USER` 가 옛 비밀번호 없이 통하는 것은 컨테이너 안 소켓이 trust 라서다.
+다른 파드(Job)는 TCP 라 현재 비밀번호를 알아야 하고, 어긋났을 때 고치려는 바로 그 순간 자기도 실패한다.
+
+### 5e-6. prune 은 지우고, DB 는 안 지운다
+
+작업 브랜치에서 `k8s/base/kustomization.yaml` 의 `networkpolicy-ai-api.yaml` 과 `postgres-static.yaml` 두 줄을 지우고 commit · push.
+
+```bash
+kubectl get networkpolicy                  # 최대 3분(폴링) 뒤 → No resources found
+kubectl get pv,pvc,sts,svc | grep postgres # 그대로 있다. PV 는 Bound
+kubectl -n argocd get application devquest-apps \
+  -o jsonpath='{range .status.resources[?(@.requiresPruning==true)]}{.kind}/{.name}{"\n"}{end}'
+```
+```
+PersistentVolume/postgres-data
+PersistentVolumeClaim/postgres-data
+Service/postgres
+StatefulSet/postgres
+StorageClass/gp3-static            ← "지워야 하지만 안 지웠다" 표시만
+```
+
+되돌리는 커밋을 push 하면 NetworkPolicy 가 다시 생긴다. postgres 파드는 그동안 재생성되지 않는다.
+
+### 5e-7. 정리 — 💰 과금 종료
+
+🔴 **Application 부터 지운다**(SOP §8 ⓪). selfHeal 이 켜져 있어서 ExternalSecret 을 먼저 지우면 1~2초 만에 되살린다.
+
+```bash
+kubectl -n argocd delete application devquest-apps
+kubectl get pods                           # 그대로 있다 — finalizer 가 없어 관리만 끊긴다
+```
+이후는 SOP §8 ①부터 그대로(ExternalSecret → SecretStore, PVC 는 남긴다) → `cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=3`.
+
+> 💰 2차 세션 46분 ≈ $0.14. (1차는 metrics-server `.12` 로 ArgoCD 가 클러스터를 못 읽어 $0.15 를 쓰고 중단했다.)
+
+### 이 Stage 에서 알아 둘 한계
+
+- ArgoCD 경로는 **Stage 3b(in-cluster · static PV) 전용**이다. RDS(Stage 2) · 동적 PVC(3a)는 손 경로(`k8s/README.md`)로만 재현된다.
+- **빈 DB 에서의 기동 순서는 실측하지 않았다.** 영속 볼륨에 스키마가 이미 있다. wave 는 core-api 를 먼저 띄우지만,
+  "core-api 가 늦으면 daily-api 가 죽는다"는 실패 자체는 재현하지 않았다.
+- ArgoCD 자체 · Fluent Bit · Karpenter 는 여전히 손으로 설치한다.
+- metrics-server 고정은 **회피**다. 카탈로그에서 `.11` 이 내려가면 plan 이 실패한다.
 
 ---
 

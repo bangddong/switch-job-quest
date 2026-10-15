@@ -134,6 +134,7 @@ apply 전에 사용자에게 알리고 확답받을 것(D15): 승인 창 횟수(
 ```
 1. apply (-var node_desired_size=3)                      ← 과금 시작
 2. 손으로 올린다: ESO → 시크릿 → postgres → 비밀번호 동기화 → metrics-server
+   > 🔁 2026-10-15 정정(5e Blindspot U-19): metrics-server 는 손으로 올리지 않는다 — EKS 애드온(`2-cluster/addons.tf`)이라 apply 때 함께 뜬다. 5e 부터는 앞의 넷도 ArgoCD 가 한다.
    (앱 3종은 올리지 않는다 — ArgoCD 가 올리는 것을 보려는 것이다)
 3. ArgoCD 설치 (helm, k8s/argocd/values.yaml)             → P1
 4. Application 등록 (sed 치환 후 kubectl apply 한 번)       → P2
