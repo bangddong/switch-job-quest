@@ -31,6 +31,14 @@ kind: Application
 metadata:
   name: devquest-apps
   namespace: argocd
+  annotations:
+    # 🔑 비교를 서버에 맡긴다 (Stage 5e 세션에서 추가).
+    #   ExternalSecret 은 API 서버가 기본값 4개(conversionStrategy · decodingStrategy · metadataPolicy ·
+    #   target.deletionPolicy)를 채워 넣는다. git 에는 없으므로 기본 비교로는 **영원히 OutOfSync** 이고,
+    #   selfHeal 이 10분에 14번 다시 sync 했다(백오프 4m58s 까지). 5c 의 replicas 싸움과 같은 모양이다.
+    #   ServerSideDiff 는 git 내용을 서버에 dry-run 으로 보내 **기본값이 채워진 결과끼리** 비교한다 → 6초 만에 Synced.
+    #   기각: ignoreDifferences 로 필드를 나열(5c D10 — 무엇을 무시하는지 목록을 계속 관리해야 한다).
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
 spec:
   project: default
   sources:

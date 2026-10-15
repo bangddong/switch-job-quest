@@ -5213,3 +5213,22 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   업스트림 metrics-server #1868 과 증상 동일(JSON 200 · protobuf 503 0바이트, Go 1.27 재빌드에서 kube-openapi `inline` 태그 무시). `.12` 가 그런 재빌드라는 것은 🟡.
   → `addon_version = "v0.9.0-eksbuild.11"` 고정, plan 45 add 확인. 2차 세션은 ArgoCD 설치 전에 protobuf `/openapi/v2` 200 을 먼저 본다.
   ⚠️ 교훈: 5d(10-14 · 10-15)도 `.12` 였지만 ArgoCD 가 없어서 아무도 몰랐다 — **깨진 것을 쓰는 소비자가 생겨야 드러나는** 종류다.
+- `[메모]` 14:42 KST **2차 세션 시작**(사용자 승인). 변경점: metrics-server `v0.9.0-eksbuild.11` 고정.
+- `[비용]` 14:42 KST apply — `aws_eks_cluster.main: Creation complete after 6m11s` · 노드그룹 1m48s · `aws_eks_addon.metrics_server: Creation complete after 45s` · 45 added. 마커 `applied_at_h=14:42:35` 정상(plan 은 `-chdir` 로, cwd 루트 유지).
+- `[해결]` 🔴 **관문 통과** — metrics-server `.11` 클러스터에서 `GET /openapi/v2` JSON `200 2578814B` · **protobuf `200 2241466B`**. 바꾼 것은 애드온 빌드 하나 → **`.12` 가 원인 확정**.
+- `[메모]` Fluent Bit 2벌 · ArgoCD 정상. 05:54:07Z Application apply(치환 6개) — **손 명령은 이것 하나.**
+- `[메모]` **P2 ✅ wave 순서** (creationTimestamp · Ready 시각, UTC):
+  ```
+  05:54:16  -1 Namespace/external-secrets
+  05:54:19   0 CRD externalsecrets   05:54:22  0 Deployment ×3 (ESO · cert-controller · webhook)
+  05:55:50   1 SecretStore · ExternalSecret ×3          ← ESO 웹훅이 Ready 될 때까지 88초
+  05:55:53   2 StorageClass · PV (+PVC · StatefulSet)   05:56:10 postgres-0 Ready
+  05:56:11   3 Deployment/core-api                     ← postgres Ready 1초 뒤   05:56:42 core-api Ready
+  05:56:43   4 ai-api · daily-api · NetworkPolicy      ← core-api Ready 1초 뒤
+  05:57:04   5 HPA
+  ```
+  Application 상태 흐름: `waiting for healthy state of /Namespace/external-secrets` → `…CustomResourceDefinition/… and 25 more` → `…Deployment/external-secrets-cert-controller` → `…SecretStore/aws-secretsmanager and 3 more` → `…StatefulSet/postgres` → `…Deployment/core-api` → `…Deployment/ai-api and 1 more` → `successfully synced (all tasks run)` 05:57:07. **전체 3분.** 그 뒤 `Degraded` 1회(05:57:28) → `Healthy`(05:57:39).
+- `[메모]` **P1 ✅** ExternalSecret 3개 `SecretSynced`, 앱 4파드 1/1, core-api `/health` → `{"result":"SUCCESS",…}`.
+- `[막힘]` U-11 실현 — ExternalSecret 3개만 **영구 `OutOfSync`**. 실물 spec 에 서버 기본값 4개(`conversionStrategy: Default` · `decodingStrategy: None` · `metadataPolicy: None` · `target.deletionPolicy: Retain`)가 붙고 git 에는 없다.
+  10분간 `Initiated automated sync` **14회**, `Skipping auto-sync: already attempted sync … retrying in 4m58s` 까지 백오프 — 5c 의 replicas 싸움과 같은 모양.
+- `[해결]` `ignoreDifferences`(5c D10 기각)가 아니라 **`argocd.argoproj.io/compare-options: ServerSideDiff=true`** 를 Application 에 annotation 으로 → 06:04:13 적용, **06:04:19 `Synced/Healthy`(6초)**. 서버가 기본값을 채운 결과끼리 비교하니 차이가 사라졌다. → `application.yaml` 에 반영할 것.
