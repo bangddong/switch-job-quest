@@ -5146,3 +5146,31 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   `cd … && tofu destroy` 는 ① 의 ask 경로를 타서 통과. 0-bootstrap apply(오늘 오전)도 같은 형태였다 — $0 리소스라 피해 없음.
 - `[비용]` 세션 손실: 17:20(apply 시작)~17:42 ≈ 22분 × $0.1865/h ≈ **$0.07**, 검증 0건. 수집 0B.
 - `[결정]` 가드는 고치지 않는다(하네스 동결) — SOP §5 에 "`tofu -chdir` 금지, `cd … && tofu <하위명령>`" 함정을 문서로 추가. 세션은 다음 기회에 재시도.
+
+## 2026-10-15 — Stage 5d 로그 수집 2차 세션 (성공)
+
+- `[비용]` 09:43 KST `cd infra/aws-eks/2-cluster && tofu apply <저장한 plan>` — 과금 시작. `aws_eks_cluster.main: Creation complete after 6m30s` · 노드그룹 `1m48s` · `Apply complete! Resources: 45 added` (09:51:58).
+- `[막힘]` 🔴 **`cd … && tofu apply` 형태였는데도 세션 마커가 안 생겼다.** 정규식은 매칭된다(`eks-session-marker.sh:39` 직접 확인).
+  원인(🟡 강한 정황): 훅이 `.claude/settings.json:62` 에 **상대경로** `.claude/scripts/eks-session-marker.sh` 로 등록돼 있고, 직전 `cd infra/aws-eks/2-cluster && tofu plan …` 호출로
+  **셸 작업 폴더가 2-cluster 로 남아** 있었다(하네스가 "Primary working directory → 2-cluster" 로 표시). 훅이 그 폴더에서 상대경로를 못 찾았다고 본다.
+  destroy 뒤 마커 청소도 같은 이유로 안 돌았다(`reaper.log` 마지막 줄이 09-06). → SOP §5 대로 **마커를 손으로 만들었다**(형식은 훅 46~51행 그대로). 세션 끝에 손으로 지움.
+  ⇒ 10-14 의 `-chdir` 함정과 합치면: **`tofu -chdir` 는 정규식을, `cd … &&` 는 훅 경로를 비껴간다.** 어느 쪽이든 apply 직후 `ls .claude/eks-session/` 확인이 유일한 방어선이다(SOP §5 "육안 확인"이 실제로 일을 했다).
+- `[메모]` ESO 2.8.0 · 시크릿 3종 `SecretSynced` · postgres-static · 비밀번호 동기화 `ALTER ROLE` → 파드 IP 접속 `1`. 앱 3종 rollout 성공(core-api `1a8a9aac…`, ai/daily `14cb335e…`).
+- `[결정]` 계획(앱 → 수집기)과 달리 **수집기를 postgres 와 함께 먼저** 깔았다 — 앱 기동 로그부터 거두려고. 결과적으로 맞았다(아래 Read_from_Head 메모).
+- `[메모]` **P1 ✅** `fluent-bit` DaemonSet 3 + `fluent-bit-events` 1 모두 `1/1 Running`. SA 어노테이션에 역할 ARN, 로그에 에러 0 —
+  `Created log stream k8s-events` · `Created log stream kube-system.kube-proxy-jrvrk.kube-proxy` → IRSA 가 실제로 붙었다(AccessDenied 분기 불필요).
+- `[메모]` **P2 ✅** Logs Insights `stats count(*) by namespace, container` → core-api 262 · daily-api 201 · ai-api 140 · kube-proxy 108 · csi-snapshotter 15 · postgres 9 (735건, 760KB 스캔).
+  `Merge_Log On` 동작: core-api 레코드에 `level` · `message` 가 필드로 풀려 있다.
+- `[메모]` ai-api·daily-api 스트림이 파드 기동 **약 65초 뒤**에야 생겼다(00:56:16Z 기동 → 09:57:23 확인). tail 입력의 새 파일 탐지 주기 `Refresh_Interval` 기본 60초와 맞는다(🟡 설정값 기준 추론).
+  → **짧게 살다 죽는 파드(<60초)는 로그가 안 거둬질 수 있다.**
+- `[메모]` 수집기보다 먼저 떠 있던 파드(aws-node · coredns · ESO)는 P2 집계에 없다. tail 의 `Read_from_Head` 기본값 Off → **설치 시점 이후 줄만** 읽는다(🟡). 수집기를 앱보다 먼저 깐 결정이 그래서 맞았다.
+- `[메모]` **P3 ✅** `kubectl delete pod core-api-675757c5f8-86qfp` → `kubectl logs` 는 `NotFound`. Logs Insights `filter kubernetes.pod_name="core-api-675757c5f8-86qfp"` → **268건**, 마지막 00:57:46(종료 로그까지).
+- `[메모]` **P4 ✅** `kubectl run p4-nosuch --image=public.ecr.aws/devquest/does-not-exist:0` → `ErrImagePull`. events 그룹 `filter involvedObject.name="p4-nosuch"` → 18건
+  (Scheduled → Pulling → `Failed to pull image … code = NotFound` → `Error: ErrImagePull` → BackOff → `Error: ImagePullBackOff` 반복). containers 그룹의 같은 파드 → **0건**. 컨테이너가 뜬 적이 없으니 흔적은 이벤트에만 있다.
+  ⚠️ `kubectl get events` 는 같은 이벤트를 `count` 로 합쳐 6줄로 보여주지만, watch 는 **갱신마다 한 건씩** 받아서 18건이 된다.
+- `[비용]` **P6** IncomingBytes(세션 전체) containers **1,104,042 B** · events **377,496 B** = 약 1.48MB → 수집 $0.76/GB × 0.0015 ≈ **$0.001**. 300MB 분기와는 200배 거리.
+  수집기 실사용 메모리 6~7Mi (requests 64Mi) — 요청이 10배 과하다. 이번엔 자리가 남아 고치지 않음.
+- `[비용]` 10:00 정리(ExternalSecret → SecretStore → 앱·postgres → `helm uninstall` 수집기 2벌) → 10:07:45 `cd … && tofu destroy` — `Destroy complete! Resources: 45 destroyed.` (노드그룹 4m17s · 클러스터 2m3s). **과금 종료.**
+- `[메모]` **P7 ✅** EKS 0 · EC2 0 · NAT 0 · LB 0 · EIP 0. 볼륨 = 영속 EBS 1개 `available`(정상). 로그 그룹 = 학습용 2(30일) + `/aws/lambda/test` — 원장과 일치.
+- `[메모]` **P5 ✅** destroy **뒤** 같은 질의 재실행: 지운 core-api 파드 268건 · p4-nosuch 이벤트 20건(마지막 정리 전 이벤트까지) — 클러스터가 없어도 읽힌다.
+- `[비용]` 2차 세션 ≈ 09:43~10:08 25분 × $0.1865/h ≈ **$0.08** + 로그 $0.001. 1차(10-14, 중단) $0.07 포함 Stage 5d 합계 **≈ $0.15** (계획 예상 $0.26 · 상한 $0.53 이내).

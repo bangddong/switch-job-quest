@@ -189,3 +189,26 @@ SOP 의 시작·종료 체크리스트는 그대로 따른다. 🔴 **과금 구
 ### 1차 세션 (2026-10-14 17:20~17:42, 중단)
 
 apply 후 kubectl·destroy 가 auto mode 분류기에 거부돼 검증 0건으로 destroy. 원인은 `tofu -chdir=…` 형태가 settings `ask` 와 세션 마커 훅을 둘 다 비껴간 것 — 일지 2026-10-14 · SOP §5. 재시도 시 `cd infra/aws-eks/2-cluster && tofu apply …` 형태로만 친다. kubectl 이 분류기에 다시 막히면 즉시 destroy(같은 형태).
+
+### 2차 세션 결과 (2026-10-15 09:43~10:08, 성공)
+
+| 기준 | 결과 |
+|---|---|
+| P1 수집기 동작 | ✅ DaemonSet 3 + Deployment 1 Running, IRSA 로 스트림 생성, 에러 0 |
+| P2 앱 로그 | ✅ core 262 · daily 201 · ai 140 (Insights). core-api JSON 이 `level`·`message` 필드로 풀림 |
+| P3 지운 파드 | ✅ `kubectl logs` NotFound, CloudWatch 268건 |
+| P4 이벤트 | ✅ events 18건(ErrImagePull·ImagePullBackOff), containers 0건 |
+| P5 destroy 뒤 | ✅ 268건 · 20건 그대로 |
+| P6 수집량 | 1.10MB + 0.38MB ≈ $0.001 |
+| P7 정리 | ✅ 과금 리소스 0, 로그 그룹 2 + 기존 고아 1 |
+
+비용: 2차 ≈ $0.08, 1차 포함 ≈ $0.15. 계획과 달리 수집기를 앱보다 먼저 깔았다(기동 로그 확보 — `Read_from_Head` 기본 Off).
+
+#### 이번에 하지 않는 것 (세션에서 새로 나온 것)
+
+| 항목 | 왜 지금 안 하나 |
+|---|---|
+| 수집기 requests 64Mi → 실측 6~7Mi 에 맞추기 | 노드 자리가 남아 손해가 없다. 다음에 values 를 만질 때 함께 |
+| tail `Refresh_Interval` 60s(새 파드 ~65초 지연) · `Read_from_Head` Off | 단명 파드 로그 유실 가능성. 지금 앱은 오래 살아 영향 없음. 배치 Job 을 올릴 때 재검토 |
+| 세션 마커 훅이 상대경로라 작업 폴더가 바뀌면 안 돈다 | 하네스 동결. SOP §5 의 "apply 직후 마커 육안 확인"으로 막았다(실제로 막았다) |
+
