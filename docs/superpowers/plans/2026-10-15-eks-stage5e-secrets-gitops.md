@@ -186,3 +186,25 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 | 항목 | 왜 지금 못 하나 |
 |---|---|
 | 다른 애드온(vpc-cni · coredns · kube-proxy · ebs-csi)도 버전 미고정 — 같은 종류의 조용한 변화가 생길 수 있다 | 지금 깨진 것은 metrics-server 하나다. 전부 고정하면 보안 수정도 함께 멈춘다. 고정할지는 별도 판단 — 이번엔 **세션마다 CloudTrail 로 실제 버전을 남기는 것**이 더 싸다 |
+
+### 2차 세션 결과 (2026-10-15 14:42~15:28 · ≈ $0.14 · 합계 ≈ $0.29)
+
+관문: metrics-server `.11` 에서 protobuf `/openapi/v2` **200** → 1차 원인 확정.
+
+| # | 결과 | 근거 (일지 2026-10-15) |
+|---|---|---|
+| P1 | ✅ 손 명령은 Application apply 하나. `successfully synced` 까지 **3분**, ExternalSecret 3 `SecretSynced`, `/health` SUCCESS | |
+| P2 | ✅ wave 순서대로. postgres Ready **1초 뒤** core-api 생성, core-api Ready **1초 뒤** wave 4 — "Healthy 를 기다린다"가 실측 | creationTimestamp · Ready 시각 |
+| P2' | ⚠️ U-11 실현 → **ServerSideDiff** 로 해소(6초). ignoreDifferences 안 씀 | `application.yaml` annotation |
+| P3 | ✅ 일부러 어긋난 비밀번호를 postStart 가 재기동 시 복구(scram `1`), 앱 무중단 | |
+| P4 | ✅ prune 은 NetworkPolicy 를 지우고(3분 13초), postgres 5종은 `requiresPruning` 표시만. 되돌림으로 복귀, postgres 파드 재생성 없음 | 5c E1 해소 |
+| P5 | ✅ `Degraded` 15초 = HPA `FailedGetResourceMetric` 과 1초 차이 | 5c 미해결 해소 |
+| P6 | ✅ 고아 0 · 영속 원장 일치 | |
+
+#### 이번에 하지 않는 것 (세션 뒤 추가)
+
+| 항목 | 왜 지금 못 하나 |
+|---|---|
+| ESO 웹훅 Ready 까지 88초 동안 `retry` 가 실제로 쓰였는지 | ArgoCD 가 wave 0 의 Deployment Healthy 를 기다려 준 것으로 보인다(재시도 흔적 미확인). `operationState.retryCount` 를 안 찍었다. 다음 세션에서 한 줄 |
+| 세션 마커 **청소** 훅이 `cd … && tofu destroy` 뒤 3번 연속 안 돌았다 | 원장 L-70(훅 상대경로) 범위. 하네스 동결 — 사용자가 꺼내지 않는 한 SOP 의 손 정리로 막는다 |
+| `tofu destroy` 가 600초 도구 제한에 걸렸다(승인 대기 포함) | SOP §1 표("destroy 2번으로 나눠 친다")대로 안 나눴다. 노드그룹 8m20s 는 이례적으로 길었다 — 원인 미확인 |
