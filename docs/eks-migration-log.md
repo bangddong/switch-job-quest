@@ -5176,3 +5176,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` **P7 ✅** EKS 0 · EC2 0 · NAT 0 · LB 0 · EIP 0. 볼륨 = 영속 EBS 1개 `available`(정상). 로그 그룹 = 학습용 2(30일) + `/aws/lambda/test` — 원장과 일치.
 - `[메모]` **P5 ✅** destroy **뒤** 같은 질의 재실행: 지운 core-api 파드 268건 · p4-nosuch 이벤트 20건(마지막 정리 전 이벤트까지) — 클러스터가 없어도 읽힌다.
 - `[비용]` 2차 세션 ≈ 09:43~10:08 25분 × $0.1865/h ≈ **$0.08** + 로그 $0.001. 1차(10-14, 중단) $0.07 포함 Stage 5d 합계 **≈ $0.15** (계획 예상 $0.26 · 상한 $0.53 이내).
+
+## 2026-10-15 — Stage 5e 착수: 시크릿·DB 까지 ArgoCD 로 (계획)
+
+- `[결정]` 범위 = **전부**(ESO 설치 → 시크릿 참조 → postgres → 비밀번호 동기화 → 앱 → HPA). 사용자 선택. 남는 손 단계 = ArgoCD helm 설치 + Application 1회. 계획서 `docs/superpowers/plans/2026-10-15-eks-stage5e-secrets-gitops.md`.
+- `[메모]` Blindspot 23건. 계획을 바꾼 것: ① **비밀번호 동기화는 Job 으로 못 옮긴다** — `ALTER USER` 가 통하는 건 컨테이너 안 trust(소켓·127.0.0.1)라서다. 별도 파드는 scram 이라 비밀번호가 어긋났을 때 자신도 실패한다. ② sync wave 는 **Application 하나 안에서만** 순서를 보장한다.
+- `[결정]` 비밀번호 동기화 → postgres 컨테이너 **postStart 훅**(사용자 선택, 추천안 A). 기각: 단계 삭제(SOP §6b *"항상 한다"* 반전) · exec Job(RBAC·이미지 증가).
+- `[결정]` Application 구조 → 기존 `devquest-apps` 하나를 **multi-source**(ESO helm + git). 기각: app-of-apps(자식이 git 에서 렌더돼 계정 ID 든 IRSA ARN 을 sed 로 못 넣는다) · kustomize `helmCharts`(`--enable-helm` 설정 추가).
+- `[메모]` 로컬 실측 3건: ① `kubectl kustomize` 는 상위 폴더 **파일** 참조 거부 — `security; file '…/a/x.yaml' is not in or below '…/b'` → 디렉토리 단위 kustomization 신설 ② ESO 차트 2.8.0 `namespaceOverride=external-secrets` 렌더 → 리소스가 그 네임스페이스로, SA 이름 `external-secrets`(IRSA 신뢰정책과 일치) ③ **ESO CRD 크기 687,287 B**(`clustersecretstores`) — client-side apply 의 annotation 한도 256KB 초과 → `ServerSideApply=true` 필요.
