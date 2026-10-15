@@ -5168,7 +5168,8 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` **P3 ✅** `kubectl delete pod core-api-675757c5f8-86qfp` → `kubectl logs` 는 `NotFound`. Logs Insights `filter kubernetes.pod_name="core-api-675757c5f8-86qfp"` → **268건**, 마지막 00:57:46(종료 로그까지).
 - `[메모]` **P4 ✅** `kubectl run p4-nosuch --image=public.ecr.aws/devquest/does-not-exist:0` → `ErrImagePull`. events 그룹 `filter involvedObject.name="p4-nosuch"` → 18건
   (Scheduled → Pulling → `Failed to pull image … code = NotFound` → `Error: ErrImagePull` → BackOff → `Error: ImagePullBackOff` 반복). containers 그룹의 같은 파드 → **0건**. 컨테이너가 뜬 적이 없으니 흔적은 이벤트에만 있다.
-  ⚠️ `kubectl get events` 는 같은 이벤트를 `count` 로 합쳐 6줄로 보여주지만, watch 는 **갱신마다 한 건씩** 받아서 18건이 된다.
+  ⚠️ 반복된 이벤트는 API 객체 하나의 `count` 가 올라간다(객체 6개 = `kubectl get events` 6줄). watch 는 **갱신마다 한 건씩** 받아서 18건이 된다.
+  (QA F-5 로 문장 정정 — 원래 "kubectl 이 count 로 합친다"고 썼으나 합치는 쪽은 API 객체다.)
 - `[비용]` **P6** IncomingBytes(세션 전체) containers **1,104,042 B** · events **377,496 B** = 약 1.48MB → 수집 $0.76/GB × 0.0015 ≈ **$0.001**. 300MB 분기와는 200배 거리.
   수집기 실사용 메모리 6~7Mi (requests 64Mi) — 요청이 10배 과하다. 이번엔 자리가 남아 고치지 않음.
 - `[비용]` 10:00 정리(ExternalSecret → SecretStore → 앱·postgres → `helm uninstall` 수집기 2벌) → 10:07:45 `cd … && tofu destroy` — `Destroy complete! Resources: 45 destroyed.` (노드그룹 4m17s · 클러스터 2m3s). **과금 종료.**

@@ -3206,7 +3206,7 @@ CI 는 main 에 머지될 때만 0-bootstrap 을 apply 한다. 브랜치에서 �
 상태는 S3 원격 백엔드에 공유되므로 나중에 머지돼도 CI 는 `No changes` 로 끝난다.
 
 ```bash
-cd infra/aws-eks/0-bootstrap
+cd "$(git rev-parse --show-toplevel)/infra/aws-eks/0-bootstrap"
 tofu plan                 # Plan: 2 to add — aws_cloudwatch_log_group.learning["containers"] · ["events"]
 tofu apply
 aws logs describe-log-groups --region ap-northeast-2 --log-group-name-prefix /devquest/eks-learning/ \
@@ -3226,10 +3226,11 @@ aws logs describe-log-groups --region ap-northeast-2 --log-group-name-prefix /de
 ### 5d-2. 클러스터와 바탕을 올린다 — 🔴 과금 시작
 
 ```bash
-cd infra/aws-eks/2-cluster
+cd "$(git rev-parse --show-toplevel)/infra/aws-eks/2-cluster"
 tofu plan  -var node_desired_size=3      # Plan: 45 to add (2026-10-15 실측. 5c 대비 + Fluent Bit IAM 3개)
 tofu apply -var node_desired_size=3
-cat ../../../.claude/eks-session/active  # 🔴 applied_at_h 가 **방금 시각**이어야 한다 — 없거나 옛 시각이면 SOP §5 대로 손으로 만든다
+cd "$(git rev-parse --show-toplevel)"    # ← 레포 루트로 돌아온다. 이후 명령은 전부 루트 기준
+cat .claude/eks-session/active           # 🔴 applied_at_h 가 **방금 시각**이어야 한다 — 없거나 옛 시각이면 SOP §5 대로 손으로 만든다
 aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2
 kubectl get nodes                        # 3대 Ready
 ```
@@ -3239,14 +3240,16 @@ kubectl get nodes                        # 3대 Ready
 
 이어서 `k8s/README.md` §2 · §2.5 와 SOP §6b 대로 **ESO · 시크릿 참조 · postgres · 비밀번호 동기화**까지 올린다.
 
-🔴 **앱 3종(§3)은 수집기 다음에 올린다.** 수집기는 설치된 **뒤에** 쓰인 줄만 읽는다(tail 입력 `Read_from_Head` 기본 Off).
-앱을 먼저 띄우면 기동 로그(Flyway 마이그레이션 등)를 놓친다.
+🟡 **앱 3종(§3)은 수집기 다음에 올린다** (권장). 수집기가 기동할 때 이미 있던 파일은 **끝에서부터** 읽는다
+(tail 입력 `Read_from_Head` 기본 Off). 앱을 먼저 띄우면 기동 로그(Flyway 마이그레이션 등)를 놓칠 수 있다.
 > 🟡 이 동작은 플러그인 기본값을 근거로 한 것이고, "설치 전 줄이 빠졌다"를 직접 대조하지는 않았다.
+> 수집기 기동 **뒤에** 생긴 파일(새 파드)을 처음부터 읽는지도 대조하지 않았다 — 확인법: 수집기 설치 후 파드를 띄우고 CloudWatch 에 첫 줄이 있는지 본다.
 > 수집기보다 먼저 떠 있던 `kube-proxy` 도 108건이 들어왔는데, 설치 **뒤에** 계속 찍은 줄들이다.
 
 ### 5d-3. 수집기 두 벌을 설치한다
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"    # 레포 루트 기준 (-chdir · -f 경로)
 helm repo add fluent https://fluent.github.io/helm-charts && helm repo update
 FB=$(tofu -chdir=infra/aws-eks/2-cluster output -raw fluent_bit_role_arn)
 
@@ -3349,7 +3352,8 @@ Warning  Failed     Error: ImagePullBackOff
 … (반복)
 ```
 
-> 🔎 `kubectl get events` 는 같은 이벤트를 `count` 로 합쳐 6줄로 보여주지만, CloudWatch 에는 **갱신될 때마다 한 건씩** 쌓여 18건이었다.
+> 🔎 같은 일이 반복되면 K8s 는 이벤트 객체를 새로 만들지 않고 **기존 객체의 `count` 를 올린다**(이벤트 기록기·API 서버 쪽 동작).
+> `kubectl get events` 는 그 객체 목록이라 6줄, CloudWatch 에는 **갱신될 때마다 한 건씩** 쌓여 18건이었다.
 > 이벤트 수집기는 API 를 watch 하므로 변경 하나하나를 받는다. 실측: 객체(`metadata.uid`)는 6개, 같은 uid 가 `count` 1→2→3… 으로 다시 들어온다.
 > ⇒ **"몇 번 시도했나"는 행 수가 아니라 uid 별 `max(count)` 로 센다.** 수집기가 재시작하면 최근 5분치(`kube_retention_time`)를 다시 보내
 > 행이 중복되는데, `max` 는 중복에 영향받지 않는다(멱등).
@@ -3369,6 +3373,8 @@ kubectl delete -f k8s/base/core-api.yaml -f k8s/base/ai-api.yaml -f k8s/base/dai
   -f k8s/base/postgres-static.yaml --ignore-not-found
 helm uninstall fluent-bit fluent-bit-events -n logging
 cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=3      # 45 destroyed
+cd "$(git rev-parse --show-toplevel)"
+cat .claude/eks-session/active 2>/dev/null   # 남아 있으면 지운다 — 옛 마커는 다음 세션의 확인을 속인다(SOP §5)
 ```
 
 끝난 뒤 SOP §9 · §9b 로 EKS 0 · EC2 0 · 고아 0, 그리고 **로그 그룹이 학습용 2개만 남았는지**(자동 생성된

@@ -6,7 +6,7 @@
 ## Q1. `p4-nosuch` 이벤트가 `kubectl get events` 로는 6줄인데 CloudWatch 에는 18건이다. 왜 다른가, 시도 횟수를 셀 때 주의점은?
 - 사용자 답: "CloudWatch 이벤트와 kubectl 이벤트랑 수집하는 게 달라서?"
 - 정오: △ (방향만) — 근거: 2026-10-15 events 그룹 질의로 실측. `metadata.uid` 6개, 같은 uid 가 `count` 1→2→3… 으로 재수신
-  (Pulling `025f7665…` count 1·2·3, BackOff `00219efa…` 1~5). kubectl = 객체 목록, watch = 갱신마다 1건.
+  (Pulling `025f7665…` count 1·2·3, BackOff `00219efa…` 1~5). 반복 시 API 객체의 `count` 가 올라가고(kubectl 은 그 객체 목록), watch 는 갱신마다 1건.
 - 설명: 시도 횟수는 행 수가 아니라 uid 별 `max(count)`.
 
 ### Q1-2. 이벤트 수집기가 재시작하면 `count(*) by reason` / `max(count) by uid` 는?
