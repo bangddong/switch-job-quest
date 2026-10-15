@@ -163,9 +163,10 @@
 | 영속 EBS | 0-bootstrap | ✅ 유지 (D-004) |
 | ECR 이미지 | 0-bootstrap | ✅ 유지 (lifecycle 10개) |
 | 학습 클러스터 컨테이너 로그 · K8s 이벤트 (Stage 5d) | CloudWatch Logs — 0-bootstrap | ✅ 유지 (보존 30일). 클러스터 안에서는 노드 디스크에만 있어 destroy 와 함께 사라졌다 |
+| EKS 컨트롤플레인 로그 (Stage 5f, **켠 세션만**) | CloudWatch Logs `/aws/eks/devquest-eks/cluster` — 0-bootstrap | ✅ 유지 (보존 30일). 그룹을 미리 만들어 두지 않으면 EKS 가 보존 무기한 그룹을 스스로 만든다 |
 
-- **NAT·EIP 가 코드 어디에도 없다**(전수 확인) + 컨트롤플레인 로깅 OFF → **destroy 후 잔존 비용 ≈ $0.**
-  (Stage 5d 의 학습용 로그 그룹은 남지만 저장 $0.0314/GB-월 · 보존 30일이라 ≈ $0 — 컨트롤플레인 로깅은 5d 에서도 **켜지 않았다**)
+- **NAT·EIP 가 코드 어디에도 없다**(전수 확인) + 컨트롤플레인 로깅 **기본** OFF → **destroy 후 잔존 비용 ≈ $0.**
+  (Stage 5d 의 학습용 로그 그룹은 남지만 저장 $0.0314/GB-월 · 보존 30일이라 ≈ $0 — 컨트롤플레인 로깅은 5f 부터 **변수 토글**(`control_plane_log_types`, 기본 끔). 켠 세션의 수집 요금은 세션 비용이다)
   NAT 회피 설계가 여기서 값을 한다(있었으면 월 $32 계속).
 - 🔴 **destroy-after-use 가 실패하는 진짜 경로**: `tofu destroy` 는 **state 에 있는 것만** 지운다.
   K8s 가 만든 **ALB(Ingress)·EBS(PVC)·NLB 는 state 에 없어 고아로 남아 계속 과금**된다.
@@ -201,7 +202,7 @@ ArgoCD 기본 설치도 PVC 미사용(상태는 CRD, repo-server 는 emptyDir), 
 | # | 현재(학습) | prod 전환 | 비용 영향 |
 |---|-----------|----------|----------|
 | 1 | `endpoint_public_access=true`, `0.0.0.0/0` | CIDR 제한 / private | $0 |
-| 2 | 컨트롤플레인 로깅 생략 | `enabled_cluster_log_types` | CloudWatch 요금 |
+| 2 | 컨트롤플레인 로깅 **기본 끔**(5f 부터 변수 토글) | `control_plane_log_types` 기본값을 켬으로 | CloudWatch 수집 요금(감사 로그가 대부분 — 5f 실측) |
 | 3 | secret KMS 암호화 생략 | KMS 암호화 | KMS $1/월+ |
 | 4 | `capacity_type` **변수화 완료**(기본 `ON_DEMAND`) | tfvars 로 SPOT 주입(쿼터 증액 후) | 노드비 2.2배 |
 | 5 | 노드가 **퍼블릭 서브넷**+공인IP | 프라이빗 서브넷+NAT | **+$32/월** |

@@ -305,3 +305,22 @@ variable "environment" {
     error_message = "환경 이름은 소문자·숫자·하이픈 1~20자여야 하고 소문자/숫자로 시작해야 합니다."
   }
 }
+
+variable "control_plane_log_types" {
+  description = <<-EOT
+    EKS 컨트롤플레인 로그 종류 (Stage 5f). 기본 **빈 목록 = 끔**.
+    켤 때: tofu apply -var 'control_plane_log_types=["api","audit","authenticator","controllerManager","scheduler"]'
+    기본을 끔으로 둔 이유: 켜면 세션마다 CloudWatch 수집 요금이 붙는다($0.76/GB). 필요한 세션에서만 켠다(db_mode 와 같은 토글 관례).
+    받는 그룹은 0-bootstrap 이 미리 만든 /aws/eks/<cluster_name>/cluster 다 — 없으면 EKS 가 보존 무기한 그룹을 스스로 만든다.
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for t in var.control_plane_log_types :
+      contains(["api", "audit", "authenticator", "controllerManager", "scheduler"], t)
+    ])
+    error_message = "control_plane_log_types 는 api · audit · authenticator · controllerManager · scheduler 중에서만 고른다."
+  }
+}

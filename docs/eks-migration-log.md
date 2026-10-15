@@ -5241,3 +5241,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[비용]` 15:17 KST `cd … && tofu destroy` — 도구 600초 제한에 걸려 배경으로 넘어갔다(**승인 대기 포함**). SOP §8b 대로 AWS 에 직접 물어 15:28 EC2 0 · EKS 0 확인 → 배경 프로세스 `Destroy complete! Resources: 45 destroyed.` exit 0. 노드그룹 **8m20s**(1차 4m17s 의 2배) · 클러스터 1m43s.
 - `[메모]` **P6 ✅** EC2 0 · EKS 0 · NAT 0 · LB 0 · EIP 0 · state 0. 영속 EBS 1개 `available` · 로그 그룹 학습용 2(30일) + `/aws/lambda/test` — 원장과 일치. 마커는 청소 훅 미동작으로 손으로 삭제(destroy 가 `cd … &&` 형태).
 - `[비용]` 2차 세션 14:42~15:28 ≈ 46분 × $0.1865/h ≈ **$0.14**. 1차(중단) $0.15 포함 Stage 5e 합계 **≈ $0.29**.
+
+## 2026-10-15 — Stage 5f 착수: EKS 컨트롤플레인 로그 (계획)
+
+- `[결정]` 사용자: *"작업 먼저 다 끝내놓고 제품 백로그나 원고 작업하자"* → EKS 마지막 선택 과제 5f 착수. 계획서 `docs/superpowers/plans/2026-10-15-eks-stage5f-control-plane-logs.md`.
+- `[결정]` `cluster.tf` 의 *"control-plane 로깅은 CloudWatch 비용 회피로 생략"* **반전 → 변수 토글 `control_plane_log_types`, 기본 빈 목록(끔)**. 상시 끄는 이유(비용)는 유효하다.
+- `[결정]` 받는 그룹 `/aws/eks/devquest-eks/cluster` 를 0-bootstrap 에 미리(보존 30일). 🔴 수집기용 `learning_log_groups` 맵에 넣지 않았다 — `irsa-fluent-bit.tf:20` 이 그 맵 **전체**에 쓰기 권한을 준다.
+- `[메모]` 실패 주입 2건 🔴: ① 0-bootstrap 미적용 상태로 로그를 켜면 `Error: Resource precondition failed`(EKS 가 무기한 고아 그룹을 만드는 경로를 plan 에서 차단) ② `control_plane_log_types=["audits"]` → `Invalid value for variable`.
+  SOP §9 고아 쿼리를 `/aws/eks/devquest-eks/cluster` 제외로 개정 — 실데이터로 `!=` 필터 동작 확인(`/aws/lambda/test` 만 남음).

@@ -118,3 +118,8 @@ output "learning_log_groups" {
   description = "학습 클러스터 로그 그룹 이름 (containers · events). 수집기 설정 k8s/logging/*.yaml 의 log_group_name 과 같아야 한다"
   value       = { for k, g in aws_cloudwatch_log_group.learning : k => g.name }
 }
+
+output "eks_control_plane_log_group" {
+  description = "EKS 컨트롤플레인 로그 그룹 이름. 2-cluster 가 로그를 켤 때 /aws/eks/<cluster_name>/cluster 와 같은지 검사한다"
+  value       = aws_cloudwatch_log_group.eks_control_plane.name
+}

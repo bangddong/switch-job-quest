@@ -368,8 +368,10 @@
    #    후보: EKS 컨트롤플레인 로깅(`/aws/eks/…`) · Container Insights · aws-for-fluent-bit 차트 기본 이름.
    #    5d 수집기는 IRSA 에 CreateLogGroup 이 없어 만들 수 없게 해 뒀다 — 이 검사는 그 장치가 맞는지 재는 것이다.
    #    합격 기준 = **0건**. 학습용 그룹 2개(`/devquest/eks-learning/…`)는 영속이라 여기 아니라 9b 에서 본다.
+   #    Stage 5f: `/aws/eks/devquest-eks/cluster` 는 0-bootstrap 이 **미리 만든** 영속 그룹이라 쿼리에서 뺀다(9b 에서 본다).
+   #    그 밖의 `/aws/eks/…` 가 나오면 클러스터 이름이 어긋난 채 로깅이 켜져 EKS 가 스스로 만든 고아다.
    aws logs describe-log-groups --region $R \
-     --query "logGroups[?starts_with(logGroupName, '/aws/eks/') || starts_with(logGroupName, '/aws/containerinsights/')].logGroupName"
+     --query "logGroups[?(starts_with(logGroupName, '/aws/eks/') && logGroupName != '/aws/eks/devquest-eks/cluster') || starts_with(logGroupName, '/aws/containerinsights/')].logGroupName"
    ```
 
    > ✅ **실측 완료(07-28)**: RDS가 `manage_master_user_password`로 만든 마스터 시크릿(`rds!db-...`)은
