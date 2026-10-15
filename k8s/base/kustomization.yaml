@@ -21,5 +21,3 @@ resources:
   - core-api.yaml
   - ai-api.yaml
   - daily-api.yaml
-  - networkpolicy-ai-api.yaml
-  - postgres-static.yaml
