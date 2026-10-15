@@ -61,7 +61,11 @@ patches:
   #      PV 는 Retain 이라 데이터는 남지만, PVC 가 지워지면 PV 가 claimRef 를 쥔 채 Released 로 남아
   #      다음 PVC 가 영원히 Pending 이다(실패 6종 ④). 그래서 5종 전부에 건다.
   #   🔴 Delete=false — Application 을 지워도(teardown) 남긴다. 지우는 것은 SOP 절차가 한다.
-  - target: { name: "^(postgres|postgres-data|gp3-static)$" }
+  #   target 은 kind 와 이름을 **둘 다** 좁힌다 — 이름만 쓰면 나중에 같은 이름의 다른 종류(예: ConfigMap postgres)에도
+  #   wave 2 와 Prune=false 가 조용히 붙는다(QA F-3).
+  - target:
+      kind: "^(StorageClass|PersistentVolume|PersistentVolumeClaim|Service|StatefulSet)$"
+      name: "^(postgres|postgres-data|gp3-static)$"
     patch: |-
       apiVersion: v1
       kind: not-important
