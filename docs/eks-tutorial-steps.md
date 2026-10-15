@@ -3158,6 +3158,251 @@ cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=3      # 42 de
 - `core-api` 를 먼저 띄워야 한다는 순서(마이그레이션 실행자)를 ArgoCD 에 알려 주지 않았다. 영속 볼륨에 스키마가
   이미 있어서 문제가 없었을 뿐이다. 빈 DB 에서는 `daily-api` 가 먼저 떠서 실패할 수 있다.
 
+## Stage 5d — 로그 수집 (CloudWatch Logs)
+
+> 2026-10-15 실클러스터 확인. 과금 25분 ≈ **$0.08**, 로그 수집 1.48MB ≈ $0.001.
+> 지금까지 로그는 `kubectl logs` 로만 봤다. 그건 **파드가 살아 있는 동안만** 된다. 여기서는 로그를 클러스터 밖에 쌓는다.
+
+### 무엇이 달라지는가
+
+`kubectl logs` 는 노드 디스크의 파일(`/var/log/containers/*.log`)을 읽어 온다. 파드가 지워지면 그 파일도 지워지고,
+노드가 사라지면 전부 사라진다. *"어젯밤 죽은 파드가 왜 죽었나"* 에 답할 수 없다.
+
+| 용어 | 뜻 |
+|---|---|
+| **수집기 (Fluent Bit)** | 노드의 로그 파일을 읽어 파드 정보를 붙인 뒤 외부 저장소로 보내는 작은 프로그램 |
+| **DaemonSet** | 노드마다 파드를 하나씩 띄우는 워크로드. 로그 파일이 노드마다 있으니 수집기도 노드마다 있어야 한다 |
+| **K8s 이벤트** | `Scheduled` · `Pulling` · `BackOff` 같은 "클러스터가 한 일" 기록. 파일이 아니라 **API 서버 안에 약 1시간** 머문다 |
+| **로그 그룹 / 스트림** | CloudWatch 의 폴더 / 파일. 이 문서는 그룹 = 종류(containers·events), 스트림 = `네임스페이스.파드.컨테이너` |
+| **Logs Insights** | CloudWatch 의 질의 언어. 스캔한 양만큼 과금된다(서울 GB 당 $0.0076) |
+
+그래서 수집기를 **두 벌** 띄운다.
+
+| | `fluent-bit` (DaemonSet) | `fluent-bit-events` (Deployment ×1) |
+|---|---|---|
+| 읽는 것 | 노드의 컨테이너 로그 파일 | API 서버의 이벤트(watch) |
+| 왜 이 형태 | 파일이 노드마다 있다 | 이벤트는 클러스터에 한 벌. DaemonSet 에 넣으면 **노드 수만큼 중복** 수집된다 |
+| 보내는 곳 | `/devquest/eks-learning/containers` | `/devquest/eks-learning/events` |
+
+🔑 **로그 그룹은 `0-bootstrap`(영속 레이어)에 있다.** 2-cluster 에 두면 destroy 가 그룹째 지운다 —
+로그의 목적이 *"사라진 뒤에 읽는 것"* 인데 그게 안 된다. 보존은 30일이라 저장량이 무한히 늘지 않는다.
+
+> 기각한 대안: S3 원본 파일(검색 화면이 없다) · 학습 전용 Grafana Cloud(외부 계정·자격증명 추가) ·
+> 클러스터 안 Loki(클러스터와 함께 사라진다). EKS 컨트롤플레인 로그(API 서버 감사 로그 등)는 이번에 켜지 않았다.
+
+### 사전 조건
+
+| 무엇 | 확인 |
+|---|---|
+| Stage 5c 까지의 레포 상태 | `k8s/logging/fluent-bit.yaml` · `fluent-bit-events.yaml` 이 있다 |
+| 차트 | `fluent/fluent-bit` **0.58.3** (Fluent Bit 5.1.3, arm64 이미지 있음) |
+| 0-bootstrap 에 로그 그룹 | 아래 5d-1 |
+
+<!-- verify: k8s/logging/fluent-bit.yaml ~ auto_create_group Off -->
+
+### 5d-1. 로그 그룹을 먼저 만든다 ($0)
+
+CI 는 main 에 머지될 때만 0-bootstrap 을 apply 한다. 브랜치에서 실습한다면 **세션 전에 로컬에서** 만든다.
+상태는 S3 원격 백엔드에 공유되므로 나중에 머지돼도 CI 는 `No changes` 로 끝난다.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/infra/aws-eks/0-bootstrap"
+tofu plan                 # Plan: 2 to add — aws_cloudwatch_log_group.learning["containers"] · ["events"]
+tofu apply
+aws logs describe-log-groups --region ap-northeast-2 --log-group-name-prefix /devquest/eks-learning/ \
+  --query 'logGroups[].[logGroupName,retentionInDays,storedBytes]' --output text
+```
+
+```
+/devquest/eks-learning/containers  30  0
+/devquest/eks-learning/events      30  0
+```
+
+빈 그룹은 과금되지 않는다. 돈은 로그가 **들어올 때**(서울 GB 당 $0.76) 든다.
+
+🔴 **그룹은 여기서만 만든다.** 수집기 설정에 `auto_create_group Off`, IAM 정책에 `CreateLogGroup` 이 없다.
+이름이 어긋나면 수집기는 **실패한다.** 조용히 새 그룹(보존 무기한, tofu 가 모르는)을 만드는 것보다 낫다.
+
+### 5d-2. 클러스터와 바탕을 올린다 — 🔴 과금 시작
+
+```bash
+cd "$(git rev-parse --show-toplevel)/infra/aws-eks/2-cluster"
+tofu plan  -var node_desired_size=3      # Plan: 45 to add (2026-10-15 실측. 5c 대비 + Fluent Bit IAM 3개)
+tofu apply -var node_desired_size=3
+cd "$(git rev-parse --show-toplevel)"    # ← 레포 루트로 돌아온다. 이후 명령은 전부 루트 기준
+cat .claude/eks-session/active           # 🔴 applied_at_h 가 **방금 시각**이어야 한다 — 없거나 옛 시각이면 SOP §5 대로 손으로 만든다
+aws eks update-kubeconfig --name devquest-eks --region ap-northeast-2
+kubectl get nodes                        # 3대 Ready
+```
+
+> 🔴 **`tofu -chdir=… apply` 로 치지 마라.** 승인 게이트(settings `ask`)와 세션 마커 훅이 둘 다 `tofu apply` 로
+> **시작하는** 명령만 알아본다. 2026-10-14 에 이 형태 때문에 승인 창 없이 apply 되고 destroy 는 막혀 세션을 접었다(SOP §5).
+
+이어서 `k8s/README.md` §2 · §2.5 와 SOP §6b 대로 **ESO · 시크릿 참조 · postgres · 비밀번호 동기화**까지 올린다.
+
+🟡 **앱 3종(§3)은 수집기 다음에 올린다** (권장). 수집기가 기동할 때 이미 있던 파일은 **끝에서부터** 읽는다
+(tail 입력 `Read_from_Head` 기본 Off). 앱을 먼저 띄우면 기동 로그(Flyway 마이그레이션 등)를 놓칠 수 있다.
+> 🟡 이 동작은 플러그인 기본값을 근거로 한 것이고, "설치 전 줄이 빠졌다"를 직접 대조하지는 않았다.
+> 수집기 기동 **뒤에** 생긴 파일(새 파드)을 처음부터 읽는지도 대조하지 않았다 — 확인법: 수집기 설치 후 파드를 띄우고 CloudWatch 에 첫 줄이 있는지 본다.
+> 수집기보다 먼저 떠 있던 `kube-proxy` 도 108건이 들어왔는데, 설치 **뒤에** 계속 찍은 줄들이다.
+
+### 5d-3. 수집기 두 벌을 설치한다
+
+```bash
+cd "$(git rev-parse --show-toplevel)"    # 레포 루트 기준 (-chdir · -f 경로)
+helm repo add fluent https://fluent.github.io/helm-charts && helm repo update
+FB=$(tofu -chdir=infra/aws-eks/2-cluster output -raw fluent_bit_role_arn)
+
+helm install fluent-bit fluent/fluent-bit --version 0.58.3 -n logging --create-namespace \
+  -f k8s/logging/fluent-bit.yaml \
+  --set-string serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$FB"
+helm install fluent-bit-events fluent/fluent-bit --version 0.58.3 -n logging \
+  -f k8s/logging/fluent-bit-events.yaml \
+  --set-string serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$FB"
+
+kubectl get pods -n logging          # fluent-bit-xxxxx 3개(노드마다) + fluent-bit-events-… 1개, 전부 1/1 Running
+kubectl logs -n logging deploy/fluent-bit-events | grep -i 'log stream'
+```
+
+```
+Created log stream k8s-events          ← IRSA 로 CloudWatch 에 쓰기 성공
+```
+
+> ⚠️ 역할 ARN 에는 계정 ID 가 있다. values 파일에 적지 말고 이렇게 설치 시점에 넣는다. annotation 키의 점은 `\.` 로 이스케이프한다.
+>
+> 🔎 `AccessDenied` 나 `Not authorized to perform sts:AssumeRoleWithWebIdentity` 가 보이면 ServiceAccount 이름·네임스페이스가
+> `2-cluster/irsa-fluent-bit.tf` 의 `system:serviceaccount:logging:fluent-bit(-events)` 와 글자 단위로 같은지 본다.
+
+차트 기본값을 그대로 쓰면 안 되는 것 — values 파일이 덮어쓴다:
+
+| 기본값 | 문제 |
+|---|---|
+| 출력이 `elasticsearch-master` | 없는 곳으로 보낸다 |
+| `resources` 없음 | 스케줄러가 메모리를 0 으로 계산한다. 64Mi 를 준다(실사용 6~7Mi — 넉넉하다) |
+
+그다음 `k8s/README.md` §3 대로 앱 3종을 올린다.
+
+### 5d-4. 로그를 본다 — 세 가지 방법
+
+**① CLI — Logs Insights 질의** (이 문서의 기본)
+
+```bash
+Q=$(aws logs start-query --region ap-northeast-2 \
+  --log-group-name /devquest/eks-learning/containers \
+  --start-time $(( $(date +%s) - 1800 )) --end-time $(date +%s) \
+  --query-string 'stats count(*) as n by kubernetes.namespace_name, kubernetes.container_name | sort n desc' \
+  --query queryId --output text)
+aws logs get-query-results --region ap-northeast-2 --query-id $Q     # status 가 Complete 될 때까지 반복
+```
+
+```
+default  core-api    262
+default  daily-api   201
+default  ai-api      140
+...
+```
+
+질의는 비동기다. `start-query` 가 ID 를 주고, `get-query-results` 를 `Complete` 가 될 때까지 다시 부른다.
+
+자주 쓰는 질의:
+
+| 알고 싶은 것 | 질의 |
+|---|---|
+| 특정 파드의 로그 | `filter kubernetes.pod_name="<파드명>" \| fields @timestamp, log, message \| sort @timestamp asc` |
+| core-api 의 에러 | `filter kubernetes.container_name="core-api" and level="ERROR" \| fields @timestamp, message` |
+| 특정 파드에 일어난 일(이벤트 그룹) | `filter involvedObject.name="<파드명>" \| fields @timestamp, type, reason, message` |
+
+core-api 는 JSON 으로 로그를 찍어서 `level` · `message` 가 **필드로** 풀려 들어온다(수집기의 `Merge_Log On`).
+ai-api · daily-api 는 평문이라 한 줄 전체가 `log` 필드에 있다.
+
+**② 콘솔** — CloudWatch → Logs → Logs Insights → 로그 그룹 선택 → 같은 질의 입력.
+스트림을 직접 보려면 CloudWatch → Logs → Log groups → 그룹 → 스트림(`default.core-api-….core-api`).
+Live Tail(실시간 흐름)은 **분당 $0.01** 이 따로 붙는다.
+
+**③ Claude 에게 묻기** — 위 CLI 를 대신 돌려 달라고 하면 된다.
+
+> ⚠️ 결과를 문서·블로그에 옮길 때 로그 그룹 **ARN** 에 들어간 계정 ID 를 지운다.
+
+### 5d-5. 파드를 지워도 로그가 남는다
+
+```bash
+kubectl delete pod <core-api 파드명>
+kubectl logs <core-api 파드명>          # Error from server (NotFound)
+```
+
+같은 파드명으로 ① 의 "특정 파드의 로그" 질의를 돌리면 종료 직전까지의 로그가 나온다(실측 268건).
+
+### 5d-6. 앱 로그가 없는 장애 — 이벤트로만 보인다
+
+```bash
+kubectl run p4-nosuch --image=public.ecr.aws/devquest/does-not-exist:0 --restart=Never
+kubectl get pod p4-nosuch               # ErrImagePull → ImagePullBackOff
+```
+
+이 파드는 컨테이너가 **한 번도 뜨지 않았다.** 그래서 containers 그룹에는 아무것도 없다(실측 0건).
+events 그룹에서 `filter involvedObject.name="p4-nosuch"` 로 보면 이렇게 나온다:
+
+```
+Normal   Scheduled  Successfully assigned default/p4-nosuch to ip-10-0-4-34…
+Normal   Pulling    Pulling image "public.ecr.aws/devquest/does-not-exist:0"
+Warning  Failed     Failed to pull image "…": rpc error: code = NotFound …
+Warning  Failed     Error: ErrImagePull
+Normal   BackOff    Back-off pulling image "…"
+Warning  Failed     Error: ImagePullBackOff
+… (반복)
+```
+
+> 🔎 같은 일이 반복되면 K8s 는 이벤트 객체를 새로 만들지 않고 **기존 객체의 `count` 를 올린다**(이벤트 기록기·API 서버 쪽 동작).
+> `kubectl get events` 는 그 객체 목록이라 6줄, CloudWatch 에는 **갱신될 때마다 한 건씩** 쌓여 18건이었다.
+> 이벤트 수집기는 API 를 watch 하므로 변경 하나하나를 받는다. 실측: 객체(`metadata.uid`)는 6개, 같은 uid 가 `count` 1→2→3… 으로 다시 들어온다.
+> ⇒ **"몇 번 시도했나"는 행 수가 아니라 uid 별 `max(count)` 로 센다.** 수집기가 재시작하면 최근 5분치(`kube_retention_time`)를 다시 보내
+> 행이 중복되는데, `max` 는 중복에 영향받지 않는다(멱등).
+> `filter involvedObject.name="<파드명>" | stats max(count) as tries by reason, metadata.uid`
+
+🔑 **로그는 "앱이 말한 것", 이벤트는 "클러스터가 앱에게 한 것"이다.** 앱이 아예 못 뜨는 장애는 이벤트에만 흔적이 있다.
+
+```bash
+kubectl delete pod p4-nosuch
+```
+
+### 5d-7. 정리 — 과금 종료, 그리고 로그는 남는다
+
+```bash
+kubectl delete externalsecret --all -A && kubectl delete secretstore --all -A
+kubectl delete -f k8s/base/core-api.yaml -f k8s/base/ai-api.yaml -f k8s/base/daily-api.yaml \
+  -f k8s/base/postgres-static.yaml --ignore-not-found
+helm uninstall fluent-bit fluent-bit-events -n logging
+cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=3      # 45 destroyed
+cd "$(git rev-parse --show-toplevel)"
+cat .claude/eks-session/active 2>/dev/null   # 남아 있으면 지운다 — 옛 마커는 다음 세션의 확인을 속인다(SOP §5)
+```
+
+끝난 뒤 SOP §9 · §9b 로 EKS 0 · EC2 0 · 고아 0, 그리고 **로그 그룹이 학습용 2개만 남았는지**(자동 생성된
+`/aws/eks/` · `/aws/containerinsights/` 그룹이 0인지) 확인한다.
+
+클러스터가 없는 지금 5d-5 · 5d-6 의 질의를 다시 돌려 본다. 같은 결과가 나온다(실측 268건 · 20건).
+**이것이 이 Stage 의 목적이다.**
+
+수집량은 이렇게 본다(5분 단위 집계라 수 분 늦게 반영된다):
+
+```bash
+aws cloudwatch get-metric-statistics --region ap-northeast-2 --namespace AWS/Logs --metric-name IncomingBytes \
+  --dimensions Name=LogGroupName,Value=/devquest/eks-learning/containers \
+  --start-time $(date -u -v-60M +%FT%TZ) --end-time $(date -u +%FT%TZ) --period 3600 --statistics Sum
+```
+
+> 💰 앱 3종 + 시스템 파드 25분: containers 1.10MB + events 0.38MB ≈ **$0.001**. 클러스터 비용($0.08)에 비하면 반올림 오차다.
+> ⚠️ `date -v-60M` 은 macOS 문법이다. Linux 는 `date -u -d '-60 min' +%FT%TZ`.
+
+### 이 Stage 에서 알아 둘 한계
+
+- **새 파드의 로그는 약 1분 뒤부터 거둔다.** tail 입력이 새 파일을 찾는 주기(`Refresh_Interval` 기본 60초)라서다.
+  1분 안에 죽는 파드는 로그를 놓칠 수 있다(실측: 파드 기동 ~65초 뒤 스트림 생성).
+- **EKS 컨트롤플레인 로그(API 서버·감사·스케줄러)는 없다.** 켜면 vended log 로 같은 단가가 붙는다.
+- **메트릭·트레이스는 다루지 않았다.** 로그만이다.
+- 로그 그룹 하나를 모든 네임스페이스가 함께 쓴다. 팀·환경별 권한 분리는 다루지 않았다.
+- 수집기 requests(64Mi)는 실사용(6~7Mi)의 10배다. 자리가 남아 그대로 뒀다.
+
 ---
 
 # 운영 편 1 — 백업·복구 리허설 (Stage 와 별개, 상시 운영 준비)

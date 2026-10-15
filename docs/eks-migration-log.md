@@ -18,8 +18,9 @@
 |--------|--------|--------|----------|------------|
 | 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **노드 1대 $0.1299/h · 2대 $0.1582/h · 3대 $0.1865/h**<br>  (노드 1대 = t4g.small `$0.0208` + 공인 IPv4 `$0.005` + **루트 EBS 20GiB `$0.0025`** = `$0.0283/h`;<br>   + 컨트롤플레인 `$0.100` + Secrets Manager 3종 일할 `$0.0016`)<br>  ~~노드 1대 $0.128/h · 2대 $0.154/h · 3대 $0.180/h~~ — 🔴 **루트 EBS 누락이었다 (09-04 정정)**<br>▸ ~~$0.149/h (t4g.medium 상향 후)~~ — **medium 은 이 계정에서 launch 불가**(D-010)<br>▸ 🔴 **Stage C 재개 = 3대** (D-011) → 50분 세션 ≈ ~~$0.150~~ **$0.1554** | |
 | ECR `devquest/daily-api` (영속, 빈 레포) | 2026-08-30 | 없음 | **$0** (저장분만 $0.10/GB-월) | |
-| 🔴 **영속 EBS** `vol-041e5a6705f7b4975` 10GiB gp3 | **2026-09-13** (재생성) | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$6.903 소진 / $200 (3.45%)** — 2026-10-13 08:16 `budgets describe-budgets` 조회(무료). 5b 세션 직전 $6.50 에서 +$0.40 — 반영이 최대 24시간 늦으므로 5b 몫(산정 $0.53)이 아직 다 잡히지 않았을 수 있다<br>~~$5.8693 소진 (2.93%)~~ — 2026-10-06 `ce get-cost-and-usage` **실측** (서비스별 분해는 10-06 엔트리)<br>🔴 ~~$2.936 (2026-09-15)~~ — **09-16 밤샘 사고($2.77~3.14)를 반영하지 않은 스냅샷이었다.** 사고 엔트리에 *"누적을 한 세션이 거의 두 배로 만들었다"* 고 적고도 **이 표를 안 고쳤다**<br>▸ EKS 컨트롤플레인 `$2.5750` = **가동 25.75시간** (그중 **17.34h 가 사고 한 번**)<br>~~$2.823 (2026-09-13)~~ |
+| 🔴 **영속 EBS** `vol-041e5a6705f7b4975` 10GiB gp3 | **2026-09-13** (재생성) | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$7.127 소진 / $200 (3.56%)** — 2026-10-15 10:14 `budgets describe-budgets` 조회(무료). 반영이 최대 24시간 늦어 5d 2차 몫($0.08)은 아직 안 잡혔을 수 있다<br>~~$6.903 소진 (3.45%)~~ — 2026-10-13 08:16 `budgets describe-budgets` 조회(무료). 5b 세션 직전 $6.50 에서 +$0.40 — 반영이 최대 24시간 늦으므로 5b 몫(산정 $0.53)이 아직 다 잡히지 않았을 수 있다<br>~~$5.8693 소진 (2.93%)~~ — 2026-10-06 `ce get-cost-and-usage` **실측** (서비스별 분해는 10-06 엔트리)<br>🔴 ~~$2.936 (2026-09-15)~~ — **09-16 밤샘 사고($2.77~3.14)를 반영하지 않은 스냅샷이었다.** 사고 엔트리에 *"누적을 한 세션이 거의 두 배로 만들었다"* 고 적고도 **이 표를 안 고쳤다**<br>▸ EKS 컨트롤플레인 `$2.5750` = **가동 25.75시간** (그중 **17.34h 가 사고 한 번**)<br>~~$2.823 (2026-09-13)~~ |
 | | | | | ⚠️ **볼륨 ID 가 바뀌었다** — 09-13 백업·복구 리허설에서 `vol-0518b6d0dcd2b0d70`(07-31~09-13)을 **의도적으로 파괴**하고 재생성했다. 시작일은 데이터 수명이 아니라 **이 볼륨의** 수명이다 |
+| **CloudWatch 로그 그룹** `/devquest/eks-learning/{containers,events}` (보존 30일) | **2026-10-14** | 없음 (영속) | 빈 그룹 $0. 수집 $0.76/GB · 저장 $0.0314/GB-월 · 5d 세션 1.48MB ≈ **$0.001** | 위 합계에 포함 |
 | **S3** `devquest-eks-backups-seoul` (DB 논리 백업) | **2026-09-13** | 없음 (영속) | **≈ $0.00/월** (덤프 KB 단위, lifecycle 30일) | 위 합계에 포함 |
 | 🔴 **`AWS Cost Explorer` API 호출** (리소스가 아니라 **행위**) | 2026-07 | — | **$0.01 / `get-cost-and-usage` 요청** | **누적 $0.190 = 전체의 6.5%** — #417 세션 전체($0.0848)의 2배. 2026-09-15 등재 |
 
@@ -5086,3 +5087,92 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 퀴즈 종료. 기록 `docs/eks-quizzes/stage-eks-14-argocd.md`. 1차 온전한 정답 0/5(부분 2), 재확인 핵심 질문은 모두 정답.
   가장 크게 어긋난 직관: **"prune 은 git 에 없는 것을 지운다"** — 실제로는 ArgoCD 가 표식을 붙인 것만 지운다(Q5-2).
   퀴즈 중 사용자 질문으로 "백오프 대 서킷 브레이커"를 정리했다(Q2).
+
+## 2026-10-14 — Stage 5d 로그 수집 $0 준비
+
+- `[결정]` **다음 Stage = 로그 수집** (사용자 선택, 시크릿-ArgoCD 단계보다 먼저). 계기는 5c 퀴즈 — 파드·노드와 함께 로그가 사라져 실제 로그로 복기할 수 없었다.
+  브랜치 `stage/eks-15-logging`.
+- `[결정]` **저장소 = CloudWatch Logs** (사용자 선택). 기각: S3 원본 파일(검색 화면이 없어 "로그를 찾아보며" 경험이 약함) · 학습 전용 Grafana Cloud
+  (외부 계정·자격증명 하나 더, 분리 규칙을 새로 설계해야 함) · 클러스터 안 Loki(클러스터와 함께 사라져 목표를 못 채움, 파드 자리 부족).
+- `[비용]` CloudWatch Logs 단가 — `aws pricing get-products`(서울, 무료 API) 실측:
+  ```
+  APN2-DataProcessing-Bytes   $0.76 per GB custom log data ingested in Standard log class
+  APN2-DataProcessingIA-Bytes $0.38 per GB custom log data ingested in Infrequent Access log class
+  APN2-VendedLog-Bytes        $0.76 per GB of vended logs ingested (첫 10TB) ← EKS 컨트롤플레인 로그가 여기
+  APN2-TimedStorage-ByteHrs   $0.0314 per GB-mo of log storage
+  APN2-DataScanned-Bytes      $0.0076 per GB log data scanned by CloudWatch Logs Insights queries
+  APN2-Logs-LiveTail          $0.01 per minute of CloudWatch Logs Live Tail session
+  ```
+  돈이 되는 것은 **수집(GB당 $0.76)** 이다. 저장·조회는 세션 규모(수십 MB)에선 ~$0. 🟡 세션당 로그량은 아직 모른다 — 계획서에서 상한을 정한다.
+- `[결정]` **범위 = 파드 로그 + K8s 이벤트. EKS 컨트롤플레인 로그는 뺀다** (사용자 선택). 켜려면 `cluster.tf:5` 의 "비용 회피로 생략"을 뒤집는 결정 블록 ·
+  비용 모델 · `cluster_name` 단일화까지 따라온다. 계획서 「이번에 하지 않는 것」에 등재.
+- `[메모]` Blindspot 21건. 큰 것: ① 로그 그룹을 0-bootstrap 에 두면 세션 중엔 아직 없다(CI 는 머지 때만 apply) → 세션 전 로컬 apply
+  ② `eks/aws-for-fluent-bit` 차트 기본값이 `region: us-east-1` · `autoCreateGroup: true` (`helm show values` 실측) — 빠뜨리면 다른 리전에 무기한 그룹
+  ③ 원장 §확인 명령이 "로그 그룹 + Lambda 0 = 고아"라 새 그룹을 고아로 오판 ④ JSON 로그는 core-api 뿐.
+- `[결정]` 수집기 = 공식 `fluent/fluent-bit` 0.58.3 두 벌(DaemonSet = 파일 로그, Deployment 1개 = 이벤트 — DaemonSet 에 넣으면 노드 수만큼 중복).
+  IRSA 에 `CreateLogGroup` 을 주지 않아 state 밖 그룹이 생길 길을 IAM 으로 막는다. 계획서 `docs/superpowers/plans/2026-10-14-eks-stage5d-logging.md`.
+- `[메모]` $0 준비 결과 (전부 로컬): fluent-bit 5.1.3 arm64 이미지에 `kubernetes_events` · `tail` · `kubernetes` · `cloudwatch_logs` 모두 있음.
+  `helm template` 두 벌 정상(DaemonSet 쪽 설정에 이벤트 입력 0건, 이벤트 쪽 ClusterRole 에 events list/watch). tfsec 0건 —
+  사본에서 ignore 2줄을 지우면 정확히 2건이 뜨는 것으로 ignore 가 실제로 듣는 것을 확인. `tofu plan`(0-bootstrap) → `Plan: 2 to add, 0 to change, 0 to destroy.`
+- `[막힘]` → 계획 수정: ESO 차트 2.8.0 은 requests 가 **없다** → 스케줄러 계산에서 0Mi(계획서 §3 빈칸을 채움).
+- `[결정]` 원장 고아 판정식 *"로그 그룹 + Lambda 0 = 고아"* 폐기 → "`/devquest/eks-learning/` 2개 · `/aws/lambda/test` 1개 · 그 밖 0개". SOP §9 에 `/aws/eks/` · `/aws/containerinsights/` 0건 검사, §9b 에 학습용 그룹 2개 대조 추가.
+- `[비용]` 0-bootstrap 로컬 apply (사용자 승인) — `plan -out` 으로 저장한 계획을 그대로 apply. 로그 그룹 2개 생성, 빈 그룹이라 $0.
+  ```
+  $ aws logs describe-log-groups --log-group-name-prefix /devquest/eks-learning/ --query 'logGroups[].[logGroupName,retentionInDays,storedBytes]'
+  /devquest/eks-learning/containers  30  0
+  /devquest/eks-learning/events      30  0
+  $ aws logs describe-log-groups --query 'length(logGroups)'
+  3        ← 학습용 2 + 기존 고아 /aws/lambda/test 1 (원장 판정식과 일치)
+  ```
+- `[메모]` 2-cluster `plan` → `Plan: 45 to add, 0 to change, 0 to destroy.` (클러스터 전체가 destroy 상태라 전부 add — 이번 단계 추가분은 IAM 정책·역할·연결 3개).
+  `fluent_bit_write_logs` 정책 문서가 plan 시점에 `Read complete` — 0-bootstrap 원격 상태의 `learning_log_groups` 가 실제로 풀린다. 정책(계정 ID 가림):
+  ```
+  Action   = ["logs:PutLogEvents", "logs:DescribeLogStreams", "logs:CreateLogStream"]
+  Resource = ["arn:aws:logs:ap-northeast-2:<account>:log-group:/devquest/eks-learning/events:*",
+              "arn:aws:logs:ap-northeast-2:<account>:log-group:/devquest/eks-learning/containers:*"]
+  ```
+  신뢰 정책 `sub` = `system:serviceaccount:logging:fluent-bit` · `system:serviceaccount:logging:fluent-bit-events` (helm values 의 SA 이름과 일치).
+- `[메모]` 17:20 KST Stage 5d 과금 세션 사전 점검 ($0): 도구 4종 · 자격증명(`bootstrap-admin`) ✅. 표준 지원 1.37/1.36/1.35/1.34 — 변수 기본 1.36 유지(지원 중, 트랙 중간 업그레이드는 범위 밖).
+  ECR 최신 태그 core-api `1a8a9aac…` · ai/daily `14cb335e…` — 셋 다 로컬에 커밋 존재, SOP 2b 검사 `✅ OK`. 세션 마커 없음(미가동).
+- `[비용]` 17:28 KST 2-cluster apply 완료 — 과금 시작. `aws_eks_cluster.main: Creation complete after 6m10s` · `aws_eks_node_group.main: Creation complete after 1m48s` · `Apply complete! Resources: 45 added, 0 changed, 0 destroyed.`
+- `[막힘]` apply 직후 "세션 마커 확인 + `update-kubeconfig` + `kubectl get nodes`" 를 한 번에 보낸 Bash 호출이 auto mode 분류기에 거부됨(사유 미표시). 우회 재시도하지 않고 사용자에게 보고.
+- `[막힘]` 사용자 B(즉시 destroy) 선택 → `tofu destroy -auto-approve` 가 분류기에 거부됨: `Reason: [Protected-Scope IaC Apply]`. 같은 세션에서 apply 는 통과했다. 재시도 금지 → 사용자에게 직접 실행 요청.
+- `[해결]` 사용자 지시("destroy 도 니가 해 — 원격 환경이라 직접 못 친다")로 `cd infra/aws-eks/2-cluster && tofu destroy …` 형태로 재실행 → 통과.
+  `aws_eks_node_group.main: Destruction complete after 2m14s` · `aws_eks_cluster.main: Destruction complete after 1m58s` · `Destroy complete! Resources: 45 destroyed.` (17:42:44 KST)
+  SOP §9 확인: EKS 0 · 인스턴스 0 · NAT 0 · LB 0 · EIP 0. 로그 그룹 = 학습용 2(30일, 0B) + `/aws/lambda/test` 1 — 원장과 일치.
+- `[막힘]` 원인 (🔴 settings·훅 소스 직접 확인): 내가 apply/destroy 를 `tofu -chdir=infra/aws-eks/2-cluster apply …` 로 쳤다.
+  ① `.claude/settings.local.json` 의 `ask: ["Bash(tofu apply:*)", "Bash(tofu destroy:*)"]` 은 **접두 일치**라 `tofu -chdir=…` 에 안 걸린다
+     → 승인 창 대신 auto mode 분류기가 판정. apply 는 통과(**사람 승인 게이트를 의도치 않게 건너뜀**), kubectl·destroy 는 거부.
+  ② `eks-session-marker.sh` 정규식 `tofu[[:space:]]+apply` 도 안 걸린다 → **마커 미생성, 리퍼 감시 꺼진 채 14분 과금**(`.claude/eks-session/` 에 `active` 없음 실측).
+  `cd … && tofu destroy` 는 ① 의 ask 경로를 타서 통과. 0-bootstrap apply(오늘 오전)도 같은 형태였다 — $0 리소스라 피해 없음.
+- `[비용]` 세션 손실: 17:20(apply 시작)~17:42 ≈ 22분 × $0.1865/h ≈ **$0.07**, 검증 0건. 수집 0B.
+- `[결정]` 가드는 고치지 않는다(하네스 동결) — SOP §5 에 "`tofu -chdir` 금지, `cd … && tofu <하위명령>`" 함정을 문서로 추가. 세션은 다음 기회에 재시도.
+
+## 2026-10-15 — Stage 5d 로그 수집 2차 세션 (성공)
+
+- `[비용]` 09:43 KST `cd infra/aws-eks/2-cluster && tofu apply <저장한 plan>` — 과금 시작. `aws_eks_cluster.main: Creation complete after 6m30s` · 노드그룹 `1m48s` · `Apply complete! Resources: 45 added` (09:51:58).
+- `[막힘]` 🔴 **`cd … && tofu apply` 형태였는데도 세션 마커가 안 생겼다.** 정규식은 매칭된다(`eks-session-marker.sh:39` 직접 확인).
+  원인(🟡 강한 정황): 훅이 `.claude/settings.json:62` 에 **상대경로** `.claude/scripts/eks-session-marker.sh` 로 등록돼 있고, 직전 `cd infra/aws-eks/2-cluster && tofu plan …` 호출로
+  **셸 작업 폴더가 2-cluster 로 남아** 있었다(하네스가 "Primary working directory → 2-cluster" 로 표시). 훅이 그 폴더에서 상대경로를 못 찾았다고 본다.
+  destroy 뒤 마커 청소도 같은 이유로 안 돌았다(`reaper.log` 마지막 줄이 09-06). → SOP §5 대로 **마커를 손으로 만들었다**(형식은 훅 46~51행 그대로). 세션 끝에 손으로 지움.
+  ⇒ 10-14 의 `-chdir` 함정과 합치면: **`tofu -chdir` 는 정규식을, `cd … &&` 는 훅 경로를 비껴간다.** 어느 쪽이든 apply 직후 `ls .claude/eks-session/` 확인이 유일한 방어선이다(SOP §5 "육안 확인"이 실제로 일을 했다).
+- `[메모]` ESO 2.8.0 · 시크릿 3종 `SecretSynced` · postgres-static · 비밀번호 동기화 `ALTER ROLE` → 파드 IP 접속 `1`. 앱 3종 rollout 성공(core-api `1a8a9aac…`, ai/daily `14cb335e…`).
+- `[결정]` 계획(앱 → 수집기)과 달리 **수집기를 postgres 와 함께 먼저** 깔았다 — 앱 기동 로그부터 거두려고. 결과적으로 맞았다(아래 Read_from_Head 메모).
+- `[메모]` **P1 ✅** `fluent-bit` DaemonSet 3 + `fluent-bit-events` 1 모두 `1/1 Running`. SA 어노테이션에 역할 ARN, 로그에 에러 0 —
+  `Created log stream k8s-events` · `Created log stream kube-system.kube-proxy-jrvrk.kube-proxy` → IRSA 가 실제로 붙었다(AccessDenied 분기 불필요).
+- `[메모]` **P2 ✅** Logs Insights `stats count(*) by namespace, container` → core-api 262 · daily-api 201 · ai-api 140 · kube-proxy 108 · csi-snapshotter 15 · postgres 9 (735건, 760KB 스캔).
+  `Merge_Log On` 동작: core-api 레코드에 `level` · `message` 가 필드로 풀려 있다.
+- `[메모]` ai-api·daily-api 스트림이 파드 기동 **약 65초 뒤**에야 생겼다(00:56:16Z 기동 → 09:57:23 확인). tail 입력의 새 파일 탐지 주기 `Refresh_Interval` 기본 60초와 맞는다(🟡 설정값 기준 추론).
+  → **짧게 살다 죽는 파드(<60초)는 로그가 안 거둬질 수 있다.**
+- `[메모]` 수집기보다 먼저 떠 있던 파드(aws-node · coredns · ESO)는 P2 집계에 없다. tail 의 `Read_from_Head` 기본값 Off → **설치 시점 이후 줄만** 읽는다(🟡). 수집기를 앱보다 먼저 깐 결정이 그래서 맞았다.
+- `[메모]` **P3 ✅** `kubectl delete pod core-api-675757c5f8-86qfp` → `kubectl logs` 는 `NotFound`. Logs Insights `filter kubernetes.pod_name="core-api-675757c5f8-86qfp"` → **268건**, 마지막 00:57:46(종료 로그까지).
+- `[메모]` **P4 ✅** `kubectl run p4-nosuch --image=public.ecr.aws/devquest/does-not-exist:0` → `ErrImagePull`. events 그룹 `filter involvedObject.name="p4-nosuch"` → 18건
+  (Scheduled → Pulling → `Failed to pull image … code = NotFound` → `Error: ErrImagePull` → BackOff → `Error: ImagePullBackOff` 반복). containers 그룹의 같은 파드 → **0건**. 컨테이너가 뜬 적이 없으니 흔적은 이벤트에만 있다.
+  ⚠️ 반복된 이벤트는 API 객체 하나의 `count` 가 올라간다(객체 6개 = `kubectl get events` 6줄). watch 는 **갱신마다 한 건씩** 받아서 18건이 된다.
+  (QA F-5 로 문장 정정 — 원래 "kubectl 이 count 로 합친다"고 썼으나 합치는 쪽은 API 객체다.)
+- `[비용]` **P6** IncomingBytes(세션 전체) containers **1,104,042 B** · events **377,496 B** = 약 1.48MB → 수집 $0.76/GB × 0.0015 ≈ **$0.001**. 300MB 분기와는 200배 거리.
+  수집기 실사용 메모리 6~7Mi (requests 64Mi) — 요청이 10배 과하다. 이번엔 자리가 남아 고치지 않음.
+- `[비용]` 10:00 정리(ExternalSecret → SecretStore → 앱·postgres → `helm uninstall` 수집기 2벌) → 10:07:45 `cd … && tofu destroy` — `Destroy complete! Resources: 45 destroyed.` (노드그룹 4m17s · 클러스터 2m3s). **과금 종료.**
+- `[메모]` **P7 ✅** EKS 0 · EC2 0 · NAT 0 · LB 0 · EIP 0. 볼륨 = 영속 EBS 1개 `available`(정상). 로그 그룹 = 학습용 2(30일) + `/aws/lambda/test` — 원장과 일치.
+- `[메모]` **P5 ✅** destroy **뒤** 같은 질의 재실행: 지운 core-api 파드 268건 · p4-nosuch 이벤트 20건(마지막 정리 전 이벤트까지) — 클러스터가 없어도 읽힌다.
+- `[비용]` 2차 세션 ≈ 09:43~10:08 25분 × $0.1865/h ≈ **$0.08** + 로그 $0.001. 1차(10-14, 중단) $0.07 포함 Stage 5d 합계 **≈ $0.15** (계획 예상 $0.26 · 상한 $0.53 이내).

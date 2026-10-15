@@ -162,8 +162,10 @@
 | Grafana 대시보드·메트릭 | Grafana Cloud | ✅ 유지 |
 | 영속 EBS | 0-bootstrap | ✅ 유지 (D-004) |
 | ECR 이미지 | 0-bootstrap | ✅ 유지 (lifecycle 10개) |
+| 학습 클러스터 컨테이너 로그 · K8s 이벤트 (Stage 5d) | CloudWatch Logs — 0-bootstrap | ✅ 유지 (보존 30일). 클러스터 안에서는 노드 디스크에만 있어 destroy 와 함께 사라졌다 |
 
 - **NAT·EIP 가 코드 어디에도 없다**(전수 확인) + 컨트롤플레인 로깅 OFF → **destroy 후 잔존 비용 ≈ $0.**
+  (Stage 5d 의 학습용 로그 그룹은 남지만 저장 $0.0314/GB-월 · 보존 30일이라 ≈ $0 — 컨트롤플레인 로깅은 5d 에서도 **켜지 않았다**)
   NAT 회피 설계가 여기서 값을 한다(있었으면 월 $32 계속).
 - 🔴 **destroy-after-use 가 실패하는 진짜 경로**: `tofu destroy` 는 **state 에 있는 것만** 지운다.
   K8s 가 만든 **ALB(Ingress)·EBS(PVC)·NLB 는 state 에 없어 고아로 남아 계속 과금**된다.
@@ -180,7 +182,8 @@ S3 클라이언트·로컬 디스크 경로 설정 **전부 0건** — 파일을
 | 앱 DB (사용자·퀘스트·진행도·AI 평가·`ai_call_log`) | Neon (AWS 밖) | ❌ |
 | 컨테이너 이미지 | ECR | ❌ |
 | K8s 매니페스트·ArgoCD 설정 | git (GitOps) | ❌ |
-| 메트릭·로그 | Grafana Cloud (OTLP push) | ❌ |
+| 메트릭·로그 (prod) | Grafana Cloud (OTLP push) | ❌ |
+| 로그 (학습 클러스터, Stage 5d) | CloudWatch Logs (Fluent Bit 수집) | ❌ |
 | 프롬프트 `.st`·`conference-references.json` | jar 내부 리소스(읽기 전용) | ❌ |
 | 이력서 PDF | **FE 에서 pdfjs 파싱** → 텍스트만 전송, 파일 저장 없음 | ❌ |
 | Terraform state | S3 | ❌ |

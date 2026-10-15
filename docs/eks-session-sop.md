@@ -146,6 +146,27 @@
 
 5. `tofu apply` ← **과금 시작.** (`eks-session-marker.sh` 훅이 세션 마커 생성 → 리퍼 감시 개시)
 
+   🔴 **`tofu -chdir=… apply` / `tofu -chdir=… destroy` 형태로 치지 마라 (2026-10-14, Stage 5d 실측).**
+   반드시 `cd infra/aws-eks/2-cluster && tofu apply …` 처럼 **`tofu` 바로 뒤에 하위 명령**이 오게 친다.
+   | 무엇이 걸리는가 | 패턴 | `-chdir` 를 끼우면 |
+   |---|---|---|
+   | 사람 승인 게이트 | settings `ask`: `Bash(tofu apply:*)` · `Bash(tofu destroy:*)` — 접두 일치 | **안 걸린다** → 승인 창 없이 auto mode 분류기가 판정 |
+   | 세션 마커(dead man's switch) | `eks-session-marker.sh`: `tofu[[:space:]]+apply` | **안 걸린다** → 마커 없이 과금 |
+
+   실제로 일어난 일: apply 는 분류기가 통과시켜 **승인 창 없이** 돌았고 마커도 안 생겼다. 이어서 kubectl 과
+   destroy 를 분류기가 거부(`[Protected-Scope IaC Apply]`)해서 **켠 쪽은 끄지 못하는** 상태가 됐다.
+   `cd … && tofu destroy` 로 다시 치자 정상 경로(ask)로 돌았다. 22분 · 약 $0.07 소모, 검증 0건.
+   ⚠️ 가드는 고치지 않는다(하네스 동결) — **명령 형태를 지키는 것**으로 막는다. `tofu plan` 은 어느 쪽이든 무방.
+
+   🔴 **`cd … && tofu apply` 로 쳐도 마커가 안 생겼다 (2026-10-15 실측 — 현상은 확정, 원인은 🟡 추정).**
+   마커 훅은 settings 에 **상대경로**(`.claude/scripts/eks-session-marker.sh`)로 등록돼 있고, 앞선 호출의 `cd` 로
+   셸 작업 폴더가 `2-cluster` 에 남아 있었다. 정규식은 매칭되므로 *"훅 파일을 못 찾아 아예 안 돌았다"* 고 본다
+   (훅 stderr 로 대조하지 않았다). destroy 뒤 마커 청소도 안 돌았다.
+   ⚠️ **범위 미확인**: 이 원인이 맞다면 같은 방식으로 등록된 **다른 가드 훅도 `cd` 뒤 꺼질 수 있다** — 원장 L-70.
+   → **아래 `cat` 확인이 유일한 방어선이다 — 파일 존재(`ls`)가 아니라 `applied_at_h` 가 방금 시각인지 본다.**
+   destroy 뒤 청소 훅도 같은 이유로 안 돌 수 있어 **옛 마커가 남으면 다음 세션의 `ls` 확인이 거짓 통과한다**
+   (5d 퀴즈 Q3-2). 없거나 옛 시각이면 손으로 만들고, destroy 뒤엔 손으로 지운다.
+
    🔴 **`apply` 도 `destroy` 도 배경 프로세스로 보내지 마라 (2026-09-16 추가).**
    | | |
    |---|---|
@@ -328,6 +349,14 @@
    #    (그래서 코드에서 recovery_window_in_days = 0 으로 둔다 — secrets.tf ⑨)
    aws secretsmanager list-secrets --region $R --include-planned-deletion \
      --query 'SecretList[].{Name:Name,DeletedDate:DeletedDate}'
+
+   # ── CloudWatch 로그 그룹 (Stage 5d에서 추가) ──
+   # 🔴 클러스터 쪽이 **스스로 만든** 그룹은 tofu state 밖이라 destroy 가 못 지우고, 보존이 기본 무기한이다.
+   #    후보: EKS 컨트롤플레인 로깅(`/aws/eks/…`) · Container Insights · aws-for-fluent-bit 차트 기본 이름.
+   #    5d 수집기는 IRSA 에 CreateLogGroup 이 없어 만들 수 없게 해 뒀다 — 이 검사는 그 장치가 맞는지 재는 것이다.
+   #    합격 기준 = **0건**. 학습용 그룹 2개(`/devquest/eks-learning/…`)는 영속이라 여기 아니라 9b 에서 본다.
+   aws logs describe-log-groups --region $R \
+     --query "logGroups[?starts_with(logGroupName, '/aws/eks/') || starts_with(logGroupName, '/aws/containerinsights/')].logGroupName"
    ```
 
    > ✅ **실측 완료(07-28)**: RDS가 `manage_master_user_password`로 만든 마스터 시크릿(`rds!db-...`)은
@@ -341,6 +370,9 @@
    ```bash
    aws ec2 describe-volumes --region $R --filters Name=tag:Persistent,Values=true \
      --query 'Volumes[].[VolumeId,Size,AvailabilityZone,State]' --output table
+   # Stage 5d — 학습용 로그 그룹: 정확히 2개(containers · events), 둘 다 보존 30
+   aws logs describe-log-groups --region $R --log-group-name-prefix /devquest/eks-learning/ \
+     --query 'logGroups[].[logGroupName,retentionInDays,storedBytes]' --output table
    ```
    > 📖 기대값은 **`infra/aws-eks/PERSISTENT-RESOURCES.md`** 의 표다. 개수·크기·AZ가 어긋나면
    > ①모르는 사이 볼륨이 늘었거나 ②원장 갱신을 빠뜨린 것 — **둘 다 즉시 확인 대상**이다.

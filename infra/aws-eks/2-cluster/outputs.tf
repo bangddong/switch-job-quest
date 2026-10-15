@@ -60,6 +60,15 @@ output "eso_role_arn" {
   value       = aws_iam_role.eso.arn
 }
 
+output "fluent_bit_role_arn" {
+  description = <<-EOT
+    Fluent Bit 두 벌(fluent-bit · fluent-bit-events)의 ServiceAccount 에 달 IRSA 역할 ARN (Stage 5d).
+    계정 ID 가 들어 있어 k8s/logging/*.yaml 에 적지 않는다. helm install 시:
+      --set-string serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=<이 값>
+  EOT
+  value       = aws_iam_role.fluent_bit.arn
+}
+
 # ── Stage 3b: static PV 매니페스트에 주입할 값 ────────────────────
 #
 # K8s 매니페스트는 terraform을 모른다. 이 레포의 확립된 전달 방식은 **sed 치환**이다

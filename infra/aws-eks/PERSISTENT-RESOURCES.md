@@ -40,7 +40,9 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 
 ## 현재 영속 리소스
 
-**합계 ≈ $1.14/월** (ECR **$0.23** + EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00**). 6개월 ≈ $6.8 = 크레딧의 3.5%
+**합계 ≈ $1.14/월** (ECR **$0.23** + EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00** + **로그 그룹 ~$0.00**). 6개월 ≈ $6.8 = 크레딧의 3.5%
+
+> ℹ️ **2026-10-14 로그 그룹 행 추가 시 재검산함 — 값은 그대로다.** 저장 단가 $0.0314/GB-월에 세션당 수십 MB(🟡 5d P6 실측 전)라 반올림하면 $0 다. 돈은 저장이 아니라 **수집**($0.76/GB)에서 나고, 그건 세션 비용이라 이 합계에 들어가지 않는다. QA F-6 규칙대로 *변화 없음* 을 명시한다.
 
 > 🔴 **$1.08 → $1.14 재검산 (2026-09-28 실측).** 금액이 아니라 **표가 틀려 있던 것**이 문제다 —
 > `ai-api`·`daily-api` 가 *"현재 0개"* 로 적혀 있었는데 실제로는 각각 **2개**가 올라가 있었다.
@@ -71,6 +73,7 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
 | **Cost Anomaly** `devquest-eks-service-monitor` | 0-bootstrap | 이상 지출 감지(DAILY, $5) | 계정당 DIMENSIONAL 1개 | $0 | 2026-07-29 | — |
 | **ACM** 인증서 `eks.quest.dhbang.co.kr` | 0-bootstrap | 검증이 **Cloudflare 수동 CNAME** 이라 세션마다 재발급하면 사람이 매번 DNS 를 넣어야 한다. 수명이 클러스터가 아니라 **도메인**에 묶인다(D-004·L-14 5번째 적용 — **레이어만**, 래치는 아님) | 🔒 **리소스 1개 · `for_each` 없음.** 환경 축을 복사하면 prod 인증서가 검증 불가로 `VALIDATION_TIMED_OUT` 된다(`acm.tf` 「차이 ②」) | **$0** ※ | 2026-09-15 | **2027-04-02 만료** |
+| **CloudWatch 로그 그룹** ×2 `/devquest/eks-learning/containers` · `/devquest/eks-learning/events` | 0-bootstrap | 학습 클러스터의 컨테이너 로그·K8s 이벤트를 **클러스터가 destroy 된 뒤에도** 읽기 위한 통(Stage 5d). 2-cluster 에 두면 destroy 가 그룹째 지운다(D-004·L-14 6번째 적용) | 🔒 **보존 30일** — 세션이 멈추면 30일 뒤 0 으로 수렴. 🔒 그룹은 **이 2개뿐**: 수집기 IRSA 에 `CreateLogGroup` 없음 + 설정 `auto_create_group Off` | ~$0 (저장 $0.0314/GB-월 · 세션당 수십 MB 🟡 5d P6 실측 전) ※ 수집은 세션 비용($0.76/GB) | 5d 세션 전 apply | 2027-01-15 |
 
 > ※ **퍼블릭 ACM 인증서는 발급·갱신·보관 전부 무료다**(유료인 것은 ACM Private CA 뿐).
 > **그래도 등재한다** — 원장은 금액이 아니라 *존재*를 기준으로 삼는다(S3 백업 버킷 행과 같은 근거).
@@ -272,9 +275,14 @@ done
 # 🔴 계정 전역 고아 — 이 문서의 표에 없는데 과금 가능한 것이 있는지 묻는다.
 #    §9(SOP)도 이 문서의 표도 **CloudWatch 로그 그룹을 보지 않는다.**
 #    실측(2026-09-28): `/aws/lambda/test` 가 Lambda 함수 없이 홀로 남아 있었다.
-aws logs describe-log-groups --region $R --query 'logGroups[].[logGroupName,storedBytes]' --output table
+aws logs describe-log-groups --region $R --query 'logGroups[].[logGroupName,retentionInDays,storedBytes]' --output table
 aws lambda list-functions --region $R --query 'length(Functions)' --output text   # 기대: 0
-# 로그 그룹이 나오는데 함수가 0이면 = 고아. 비용은 $0 에 가깝지만 **표에 없는 리소스**다.
+# 합격 기준 (2026-10-14 개정 — Stage 5d 로 로그 그룹이 **표 안에** 생겼다):
+#   ① `/devquest/eks-learning/` 아래는 **containers · events 2개뿐**, 둘 다 retention **30**  ← 표의 행
+#   ② `/aws/lambda/test` 1개 ← 「표 밖에서 발견된 것」 등재분
+#   ③ 그 밖의 그룹 **0개** — 특히 `/aws/eks/…`(컨트롤플레인 로깅이 켜졌다) · `/aws/containerinsights/…`
+#      · `/aws/eks/fluentbit-cloudwatch/…`(aws-for-fluent-bit 차트 기본값)이 보이면 state 밖에서 자동 생성된 것이다
+# ⚠️ 옛 판정식 *"로그 그룹이 나오는데 Lambda 함수가 0이면 = 고아"* 는 **폐기** — ①을 매번 고아로 오판한다.
 
 # 🔴 S3 는 SOP §9 고아 검사 대상이 **아니다**(세션과 함께 사라지는 물건이 아니므로).
 #    그래서 여기 안 적으면 신설 버킷은 원장 대조에서 **영원히 안 보인다.**
