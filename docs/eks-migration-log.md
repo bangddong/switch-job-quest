@@ -5328,3 +5328,30 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 🔴 **내 계산 정정 2건 (같은 날)**: ① 처음 RDS 상시를 $62 로 말했다 — **퍼블릭 IPv4 $0.005/h 를 빠뜨렸다**(RDS·EC2 둘 다 Fly 가 붙으려면 필요).
   ② *"EC2 DB 면 평일 8h 풀 구성 가능"* 이라 했다 — IPv4 를 넣으면 $175 로 초과. 6h 로 정정.
 - `[메모]` Free Plan 종료 = 크레딧 소진·6개월 중 먼저 → 유료 전환 없으면 90일 유예 뒤 **계정 폐쇄 + 리소스 삭제**. prod DB 가 이 계정에 살게 되므로 **01-15 전 탈출 경로**가 필수 항목이 됐다.
+
+## 2026-10-16 — 튜토리얼 재현 검증 R1 (Stage 0→3b 도달 → Stage 4·4b)
+
+- `[메모]` 계획서 `docs/superpowers/plans/2026-10-16-eks-tutorial-repro-stage4-5f.md`. 📌D-016 Q-1 선행 조건(학습 문서 정리 후 prod 전환).
+- `[메모]` 사전 점검 14:0x KST ($0): 도구 OK · 자격증명 bootstrap-admin · 1.36 표준지원 ~2027-08-02 · ECR 3종 이미지 ✅(core-api `1a8a9aac…`, ai/daily `14cb335e…`) · ACM `ISSUED`(만료 2027-04-02) · 2-cluster state 0건.
+- `[메모]` plan: **45 to add, 0 to change, 0 to destroy** · in-cluster 모드 · `ON_DEMAND` · t4g.small desired 1 / max 4. 튜토리얼 0-1 의 "29" 는 08-11 값(문서도 개수를 기준으로 삼지 말라고 적어둠 — 결함 아님).
+- `[막힘]` **정적 결함 R1-1 🔴 (세션 전 발견)**: 튜토리얼 0-2·0-4 가 `tofu -chdir=infra/aws-eks/2-cluster apply|destroy -auto-approve` 를 가르친다.
+  SOP §5(10-14 실측)는 이 형태가 **승인 게이트와 세션 마커를 둘 다 비껴간다**고 금지했다. 문서만 따르는 사람은 dead man's switch 없이 과금을 시작한다. → destroy 뒤 수정.
+- `[막힘]` **정적 결함 R1-2 🔴**: 튜토리얼 어디에도 `k8s/base/daily-api.yaml`·`ai-api.yaml` **배포 단계가 없다**(teardown 1128·1408·3375행에만 등장). 그런데 Stage 4 Ingress 규칙 ①은 `daily-api` 로 보내고 4-5 기대 출력은 `daily-api` 타겟 healthy 다. → 세션에서 실제로 어디서 막히는지 확인 후 수정.
+- `[메모]` 정적 관찰 R1-3 ⚪: Stage 5 개요 표가 5c 를 `⬜` 로 적는다(완료 10-13). 오판 유발은 아니라 문체급.
+- `[비용]` apply 승인 대기 → 마커 `applied_at_h=14:53:07` (훅은 명령 제출 시각에 찍힌다 — 실제 생성은 승인 후). `Apply complete! Resources: 45 added` · EKS 6m20s · 노드그룹 1m48s. metrics-server `v0.9.0-eksbuild.11` 확인.
+- `[메모]` 0→3b 도달: ESO 2.8.0 deployed · IRSA env OK · SecretStore `Ready=True` · ExternalSecret 3종 SecretSynced · static PV Bound · 파드 IP 경유 `select 1` → `1` · core-api `Successfully validated 13 migrations` · `Started … 18.833 seconds` · readiness `{"status":"UP"}`. **문서대로 막힘 없음.**
+- `[막힘]` 🔴 **R1-4 (세션 중 발견) — LBC 설치가 core-api 를 선점했다.** helm `STATUS: deployed`, LBC 1/1 Running 으로 끝나 성공처럼 보였는데
+  ALB `active` 이후 5분간 타겟 0. 원인:
+  ```
+  Normal  Preempted  pod/core-api-…-675wd  Preempted by pod 75e45ca6-… on node ip-10-0-11-190…
+  Warning FailedScheduling pod/core-api-…-2dfgk  0/1 nodes are available: 1 Insufficient memory, 1 Too many pods … No preemption victims found
+  ```
+  `helm show values eks/aws-load-balancer-controller --version 3.5.0` → `priorityClassName: system-cluster-critical`(🔴 확인). 튜토리얼 4-3 은 *"requests 를 주면 evict 대신 Pending"* 이라 적었는데 **우선순위가 높으면 Pending 이 아니라 선점**이다.
+- `[해결]` `aws eks update-nodegroup-config … desiredSize=2` (15:28:47) → 2노드 Ready 15:29:50(63초) → core-api 2번 노드에 스케줄.
+- `[막힘]` **R1-2 확인** — `kubectl describe ingress devquest` → `daily-api:8082 (<error: services "daily-api" not found>)`, Events 는 `SuccessfullyReconciled` 뿐. **조용하다.**
+- `[해결]` `k8s/base/daily-api.yaml` 을 core-api 와 같은 관례로 배포 → 두 타겟 healthy 15:30:49 (`10.0.11.17:8080`, `10.0.2.104:8082`).
+- `[메모]` Stage 4 검증 — 기대 출력과 일치: HTTPS 두 IP 모두 `200/403/404/404/404` · HTTP `301 → https://eks.quest.dhbang.co.kr:443/…` · 443 규칙 `1 /api/v1/daily-question · 2 /api/v1 · default` · TLSv1.2 h2 `CN=eks.quest.dhbang.co.kr` Amazon RSA 2048 M04.
+- `[막힘]` **R1-5** — 4-5 반증 실험을 문서대로(`http://$ALB/...`) 치면 `dq=301 co=301` — 판정 불가. HTTPS(`--resolve`)로 치면 `503 / 403` → 복원 후 200 (15:31:51). 09-16 ssl-redirect 도입 때 응답 표만 고치고 이 블록을 안 고쳤다.
+- `[메모]` teardown: Ingress 삭제 → ALB 0 (15:32:17, 26초) · ExternalSecret/SecretStore/Deployment/StatefulSet 삭제 → 볼륨 `available` 15:32:34 · `cd … && tofu destroy` → **45 destroyed**(노드그룹 4m17s · 클러스터 1m43s) · 15:39 고아 검사: state 0 · EKS 0 · ALB 0 · TG 0 · running 0 · NAT 0 · RDS 0 · LB SG 0 · ENI 0 · available 볼륨 = 영속 EBS 1개(정상).
+- `[메모]` 마커 청소 훅 또 미동작(L-70, 4번째) → 손으로 삭제.
+- `[비용]` 과금 ≈ 15:06~15:39 (약 33분 — 승인 시각은 미기록이라 🟡). 컨트롤플레인 $0.055 + 노드1 33분·노드2 10분 ≈ $0.019 + ALB 11분 ≈ $0.006 → **≈ $0.08~0.10**. 계획 $0.35 의 약 1/4 — ACM 대기 0, 디버깅 2건이 각 1~2분.
