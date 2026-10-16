@@ -18,9 +18,10 @@
 |--------|--------|--------|----------|------------|
 | 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **노드 1대 $0.1299/h · 2대 $0.1582/h · 3대 $0.1865/h**<br>  (노드 1대 = t4g.small `$0.0208` + 공인 IPv4 `$0.005` + **루트 EBS 20GiB `$0.0025`** = `$0.0283/h`;<br>   + 컨트롤플레인 `$0.100` + Secrets Manager 3종 일할 `$0.0016`)<br>  ~~노드 1대 $0.128/h · 2대 $0.154/h · 3대 $0.180/h~~ — 🔴 **루트 EBS 누락이었다 (09-04 정정)**<br>▸ ~~$0.149/h (t4g.medium 상향 후)~~ — **medium 은 이 계정에서 launch 불가**(D-010)<br>▸ 🔴 **Stage C 재개 = 3대** (D-011) → 50분 세션 ≈ ~~$0.150~~ **$0.1554** | |
 | ECR `devquest/daily-api` (영속, 빈 레포) | 2026-08-30 | 없음 | **$0** (저장분만 $0.10/GB-월) | |
-| 🔴 **영속 EBS** `vol-041e5a6705f7b4975` 10GiB gp3 | **2026-09-13** (재생성) | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$7.127 소진 / $200 (3.56%)** — 2026-10-15 10:14 `budgets describe-budgets` 조회(무료). 반영이 최대 24시간 늦어 5d 2차 몫($0.08)은 아직 안 잡혔을 수 있다<br>~~$6.903 소진 (3.45%)~~ — 2026-10-13 08:16 `budgets describe-budgets` 조회(무료). 5b 세션 직전 $6.50 에서 +$0.40 — 반영이 최대 24시간 늦으므로 5b 몫(산정 $0.53)이 아직 다 잡히지 않았을 수 있다<br>~~$5.8693 소진 (2.93%)~~ — 2026-10-06 `ce get-cost-and-usage` **실측** (서비스별 분해는 10-06 엔트리)<br>🔴 ~~$2.936 (2026-09-15)~~ — **09-16 밤샘 사고($2.77~3.14)를 반영하지 않은 스냅샷이었다.** 사고 엔트리에 *"누적을 한 세션이 거의 두 배로 만들었다"* 고 적고도 **이 표를 안 고쳤다**<br>▸ EKS 컨트롤플레인 `$2.5750` = **가동 25.75시간** (그중 **17.34h 가 사고 한 번**)<br>~~$2.823 (2026-09-13)~~ |
+| 🔴 **영속 EBS** `vol-041e5a6705f7b4975` 10GiB gp3 | **2026-09-13** (재생성) | **없음 (destroy해도 남음)** | **≈ $0.91/월** | **$7.329 소진 / $200 (3.66%)** — 2026-10-16 09:52 `budgets describe-budgets` 조회(무료). 두 예산이 $7.181 · $7.329 로 달랐다(갱신 시점 차로 보고 큰 값). 5e 2차 · 5f 몫은 아직 덜 잡혔을 수 있다<br>~~$7.127 소진 / $200 (3.56%)~~ — 2026-10-15 10:14 `budgets describe-budgets` 조회(무료). 반영이 최대 24시간 늦어 5d 2차 몫($0.08)은 아직 안 잡혔을 수 있다<br>~~$6.903 소진 (3.45%)~~ — 2026-10-13 08:16 `budgets describe-budgets` 조회(무료). 5b 세션 직전 $6.50 에서 +$0.40 — 반영이 최대 24시간 늦으므로 5b 몫(산정 $0.53)이 아직 다 잡히지 않았을 수 있다<br>~~$5.8693 소진 (2.93%)~~ — 2026-10-06 `ce get-cost-and-usage` **실측** (서비스별 분해는 10-06 엔트리)<br>🔴 ~~$2.936 (2026-09-15)~~ — **09-16 밤샘 사고($2.77~3.14)를 반영하지 않은 스냅샷이었다.** 사고 엔트리에 *"누적을 한 세션이 거의 두 배로 만들었다"* 고 적고도 **이 표를 안 고쳤다**<br>▸ EKS 컨트롤플레인 `$2.5750` = **가동 25.75시간** (그중 **17.34h 가 사고 한 번**)<br>~~$2.823 (2026-09-13)~~ |
 | | | | | ⚠️ **볼륨 ID 가 바뀌었다** — 09-13 백업·복구 리허설에서 `vol-0518b6d0dcd2b0d70`(07-31~09-13)을 **의도적으로 파괴**하고 재생성했다. 시작일은 데이터 수명이 아니라 **이 볼륨의** 수명이다 |
 | **CloudWatch 로그 그룹** `/devquest/eks-learning/{containers,events}` (보존 30일) | **2026-10-14** | 없음 (영속) | 빈 그룹 $0. 수집 $0.76/GB · 저장 $0.0314/GB-월 · 5d 세션 1.48MB ≈ **$0.001** | 위 합계에 포함 |
+| **CloudWatch 로그 그룹** `/aws/eks/devquest-eks/cluster` (컨트롤플레인 로그, 보존 30일) | **2026-10-16** | 없음 (영속) | 빈 그룹 $0. 켠 세션만 수집 — 5f 세션 ~61MB ≈ **$0.046**(audit 98%). 평상시 audit ≈ $0.067/시간 | 위 합계에 포함 |
 | **S3** `devquest-eks-backups-seoul` (DB 논리 백업) | **2026-09-13** | 없음 (영속) | **≈ $0.00/월** (덤프 KB 단위, lifecycle 30일) | 위 합계에 포함 |
 | 🔴 **`AWS Cost Explorer` API 호출** (리소스가 아니라 **행위**) | 2026-07 | — | **$0.01 / `get-cost-and-usage` 요청** | **누적 $0.190 = 전체의 6.5%** — #417 세션 전체($0.0848)의 2배. 2026-09-15 등재 |
 
@@ -5241,3 +5242,66 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[비용]` 15:17 KST `cd … && tofu destroy` — 도구 600초 제한에 걸려 배경으로 넘어갔다(**승인 대기 포함**). SOP §8b 대로 AWS 에 직접 물어 15:28 EC2 0 · EKS 0 확인 → 배경 프로세스 `Destroy complete! Resources: 45 destroyed.` exit 0. 노드그룹 **8m20s**(1차 4m17s 의 2배) · 클러스터 1m43s.
 - `[메모]` **P6 ✅** EC2 0 · EKS 0 · NAT 0 · LB 0 · EIP 0 · state 0. 영속 EBS 1개 `available` · 로그 그룹 학습용 2(30일) + `/aws/lambda/test` — 원장과 일치. 마커는 청소 훅 미동작으로 손으로 삭제(destroy 가 `cd … &&` 형태).
 - `[비용]` 2차 세션 14:42~15:28 ≈ 46분 × $0.1865/h ≈ **$0.14**. 1차(중단) $0.15 포함 Stage 5e 합계 **≈ $0.29**.
+
+## 2026-10-15 — Stage 5f 착수: EKS 컨트롤플레인 로그 (계획)
+
+- `[결정]` 사용자: *"작업 먼저 다 끝내놓고 제품 백로그나 원고 작업하자"* → EKS 마지막 선택 과제 5f 착수. 계획서 `docs/superpowers/plans/2026-10-15-eks-stage5f-control-plane-logs.md`.
+- `[결정]` `cluster.tf` 의 *"control-plane 로깅은 CloudWatch 비용 회피로 생략"* **반전 → 변수 토글 `control_plane_log_types`, 기본 빈 목록(끔)**. 상시 끄는 이유(비용)는 유효하다.
+- `[결정]` 받는 그룹 `/aws/eks/devquest-eks/cluster` 를 0-bootstrap 에 미리(보존 30일). 🔴 수집기용 `learning_log_groups` 맵에 넣지 않았다 — `irsa-fluent-bit.tf:20` 이 그 맵 **전체**에 쓰기 권한을 준다.
+- `[메모]` 실패 주입 2건 🔴: ① 0-bootstrap 미적용 상태로 로그를 켜면 `Error: Resource precondition failed`(EKS 가 무기한 고아 그룹을 만드는 경로를 plan 에서 차단) ② `control_plane_log_types=["audits"]` → `Invalid value for variable`.
+  SOP §9 고아 쿼리를 `/aws/eks/devquest-eks/cluster` 제외로 개정 — 실데이터로 `!=` 필터 동작 확인(`/aws/lambda/test` 만 남음).
+
+## 2026-10-16 — Stage 5f 세션 (컨트롤플레인 로그)
+
+- `[비용]` 09:21 KST 0-bootstrap 로컬 apply → `aws_cloudwatch_log_group.eks_control_plane` 생성. `describe-log-groups --log-group-name-prefix /aws/eks/` → `/aws/eks/devquest-eks/cluster  30`. $0(빈 그룹).
+- `[메모]` 2-cluster plan(`node_desired_size=3` + 5종) → precondition 통과, `Plan: 45 to add`. `enabled_cluster_log_types` 가 plan 에 보인다.
+- `[비용]` 세션 시작 09:2x KST. 예상 60~70분 ≈ $0.20 + 로그 수집. destroy 승인 예상 10:25~10:35 KST.
+- `[비용]` 09:21:24 KST `cd … && tofu apply` (마커 생성 확인 — 직전 cwd 가 루트였다. L-70 가설과 부합). 클러스터 6m41s · 노드그룹 1m48s · 전체 ~10분.
+- `[메모]` 관문 protobuf `/openapi/v2` → `200 2241466` (metrics-server `.11`). Fluent Bit 2벌 + ArgoCD 설치 → 09:33:39 Application → **09:36:50 Synced/Healthy**(3분 11초).
+- `[메모]` **P1 ✅** 스트림 **6종**(계획 5종 + 예상 밖 `cloud-controller-manager`), 종류마다 2개(컨트롤플레인 인스턴스 2대).
+  ```
+  authenticator · cloud-controller-manager · kube-apiserver · kube-apiserver-audit · kube-controller-manager · kube-scheduler  (각 ×2)
+  ```
+- `[메모]` **P2 ✅** 00:36:57Z `kubectl delete pod core-api-…` → audit 에 delete **2건**:
+  ```
+  00:36:57.454Z  arn:aws:iam::<account>:user/bootstrap-admin                         delete pods 200  sourceIP=<집 공인 IP>
+  00:36:58.582Z  system:node:ip-10-0-1-165.ap-northeast-2.compute.internal             delete pods 200
+  ```
+  사람 요청은 "유예 삭제 시작"이고, 1.1초 뒤 kubelet(노드)이 컨테이너 종료 후 실제 제거를 마무리한다. 🔴 `sourceIPs` 에 **집 공인 IP** 가 찍힌다 — D7 확장(문서에 옮길 때 가림).
+- `[막힘]` P3 첫 질의 `user.username = "system:serviceaccount:default:default"` → **matched 0**.
+- `[해결]` 사칭(`--as`)은 `user.username` 을 바꾸지 않는다 — **진짜 요청자는 그대로, 사칭 대상은 `impersonatedUser`** 에 따로 찍힌다:
+  ```
+  00:36:57.691Z  user=arn:aws:iam::<account>:user/bootstrap-admin  impersonatedUser=system:serviceaccount:default:default  list secrets 403  decision=forbid
+  ```
+  **P3 ✅** — 거부도 남고, 사칭해도 실제 요청자가 지워지지 않는다.
+- `[막힘]` P4 질의 `verb in ["delete","create"]` → 내 delete 1건만, ArgoCD 의 create **0건**.
+- `[해결]` ArgoCD 는 `ServerSideApply=true` 라 **생성도 `patch`** 로 보낸다. 새로 만든 것인지는 응답 코드 **201** 로 구분한다:
+  ```
+  00:36:57.919Z  arn:aws:iam::<account>:user/bootstrap-admin                       delete 200
+  00:36:58.817Z  system:serviceaccount:argocd:argocd-application-controller        patch  201   ← 0.9초 뒤 되살림
+  00:36:58.843~.909Z  deployment-controller  update status 200/409 ×6  (낙관적 동시성 충돌 재시도)
+  ```
+  **P4 ✅** — 두 주체가 0.9초 간격으로.
+- `[메모]` **P5 ✅** authenticator: `msg="access granted" … groups="[]" … username="arn:aws:iam::<account>:user/bootstrap-admin"` — IAM ARN 이 그대로 K8s 사용자 이름, 그룹 없음(권한은 Access Entry 정책 연결로). `uid` 에 IAM 고유 ID(AIDA…)도 찍힌다 — 가림.
+- `[비용]` **P6** 종류별(클러스터 생성 ~10분 + 세션 ~10분, 09:38 KST 기준):
+  ```
+  kube-apiserver-audit      n=12458  45.4MB   ← ~~98.4%~~ 98.0% (45.4 / 46.31 — QA F-1 정정)
+  kube-apiserver            n=2466    0.44MB
+  authenticator             n=727     0.21MB
+  kube-controller-manager   n=896     0.13MB
+  kube-scheduler            n=372     0.08MB
+  cloud-controller-manager  n=378     0.05MB
+  IncomingBytes(그룹)        45,442,839 B
+  ```
+  audit 분당: 평상시 0.7~3.4MB, **00:33~34Z(ArgoCD + ESO 설치) 14.3 + 15.5MB** 폭주. 주체별 1위 `argocd-application-controller` 15.8MB · 2위 `system:apiserver` 10.9MB. 🟡 대형 CRD(ESO 687KB) 본문이 요청마다 audit 에 실리는 것으로 추정(미확인).
+- `[메모]` teardown(SOP §8 ⓪→①→②): Application 삭제 → ExternalSecret 3 · SecretStore 1 삭제 → ingress 0 · LB 0 · PVC `postgres-data` 유지.
+- `[비용]` 09:38 KST `cd … && tofu destroy` (전경, 도구 제한 안에 끝남) → `Destroy complete! Resources: 45 destroyed.` 노드그룹 **8m11s**(5e 8m20s 와 비슷 — 4분대였던 1차보다 2배가 이제 보통) · 클러스터 1m29s.
+- `[메모]` **P7 ✅** 09:51:56 KST — EC2 0 · EKS 0 · LB 0 · NAT 0 · state 0 · 고아 EBS 0 · **고아 로그 그룹 0**. `/aws/eks/` 는 `devquest-eks/cluster  30` **하나** — EKS 가 따로 만든 그룹 없음(D3 · D5 장치가 의도대로).
+- `[메모]` **P8 ✅** destroy 후 P4 질의 재실행 → 같은 3행(delete 200 → patch 201 → patch 200). 감사 기록은 클러스터보다 오래 산다(보존 30일).
+- `[메모]` audit 5분 구간(UTC): `00:25 4.0MB · 00:30 36.5MB(ArgoCD+ESO 설치) · 00:35 6.9MB · 00:40 7.8MB · 00:45 3.6MB(destroy 중) · 00:50 0.5MB`, 합계 21,982건 · ~59.4MB.
+  평상시(00:35~00:45) **1.47MB/분 ≈ 88MB/시간 ≈ $0.067/시간**(vended $0.76/GB). 3노드 클러스터 $0.1865/시간의 **+36%**. 나머지 5종은 30분에 ~1MB → 사실상 $0.
+  → **P6 답**: 평소 켤 만한 것은 audit 를 뺀 4~5종(거의 공짜). audit 는 클러스터 비용의 1/3 을 더하므로 "필요한 세션에서만".
+- `[막힘]` 세션 마커 `applied_at_h` 가 09:21:24 → **09:38:29** 로 바뀌어 있었다. 그 시각에 친 명령은 일지 append(heredoc) 하나였고, 본문에 apply 명령 글자가 들어 있었다.
+  🟡 마커 훅 정규식이 **명령 본문 속 문자열**에 매칭해 마커를 다시 썼다고 본다(L-69 와 같은 종류 — 그때는 커밋 메시지 속 PR 생성 명령). 영향: 리퍼 기준 시각이 17분 늦춰짐(보호가 약해지는 방향). 하네스 동결 — 고치지 않고 기록만. 이후 일지 쓰기는 Edit 도구로.
+- `[메모]` 마커 청소 훅은 또 안 돌았다(destroy 가 `cd … &&` 형태) → 손으로 삭제.
+- `[비용]` **결산** 과금 09:21~09:51 ≈ 30분 × $0.1865/h ≈ **$0.093** + 로그 수집 ~61MB × $0.76/GB ≈ **$0.046** → Stage 5f 합계 **≈ $0.14**. Insights 스캔 합 ~0.35GB × $0.0076/GB ≈ $0.003.
