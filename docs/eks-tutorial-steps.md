@@ -20,6 +20,7 @@
 | **2026-08-12** | **유료 부분 실행** (29분) — Stage 0→3b 경로를 실제로 apply→앱기동→destroy. 단 **목적이 L-14/L-15 검증**이라 문서를 그대로 따라간 게 아니고, Stage 4·ALB는 미실행 | **결함 2건 추가 발견·수정** + 08-11 수정분 4개 실물 확인 ✅ |
 | **2026-09-09** | **유료 완전 재현** (31분 34초, $0.0716) — 이 문서**만** 보고 Stage 0→3b 최종 상태까지. 막혀도 코드를 열지 않는다는 규칙을 지켰다 | **조건부 통과 — 결함 2건 발견·수정.** 도달했고 코드를 열어야 했던 지점은 **없었다.** 다만 그대로 따랐을 때 **오판을 유발하는** 결함이 2건 있었다: ①`db_mode` 확인이 거짓 양성(→ RDS 실수 기동 유도) ②3b-7 기대 출력이 이 설정에서 나올 수 없음. 둘 다 같은 세션에서 수정 |
 | **2026-10-16 (R1)** | **유료 재현** (약 33분, ≈ $0.09) — 0→3b 도달 + **Stage 4(HTTPS 포함)** | **조건부 통과 — 결함 4건 수정.** ①0-2·0-4 가 SOP 금지 형태 `tofu -chdir=… apply/destroy`(승인·마커 우회) ②daily-api 배포 단계 부재 ③LBC 가 1노드에서 core-api 를 **선점**(타겟 0) ④반증 실험이 HTTP 라 전부 301. ②③은 문서만으로는 진행 불가 — 4-0b 신설. 응답 표·TLS·규칙 우선순위·ALB 0 은 기대 출력과 일치. Stage 5a~5f 는 R2 |
+| **2026-10-16 (R2)** | **유료 재현 2세션** (R2a 손 경로 5a·5b ≈ 40분 · R2b GitOps 경로 5c~5f ≈ 30분, 합 ≈ $0.3) — Stage 별 왕복 6회 대신 경로별 2회 | **통과 — 결함 4건 수정.** 5c-4 가 현재 `application.yaml`(자리표시자 6개)과 안 맞음 → 5e-4 경로로 안내(R2-1) · Karpenter 설치 직후 ERROR 안내(R2-2) · 스트림 수 누적(R2-3) · 감사 질의 ③ 행 수(R2-4). 나머지 기대 출력 일치(HPA Pending 문구 · NodeClaim 69초 · 통합 35초 · wave 3분 · postStart · 로그 266건 · 이벤트 uid 6 · 감사 3종 · destroy 뒤 같은 결과). 🔑 **5b-7 의 EC2 종료 경로 첫 실물 확인** · 5b-4 최종 NodePool 첫 실클러스터 적용. 미재현: 5c-6·5c-8·5e-6(커밋 왕복 — 이미 실측) · 운영 편 백업·복구(📌D-016 이 바꿈) |
 
 > 🔎 **08-12를 "재현 검증"으로 세지 않는 이유**: 나는 이 문서를 *참조*했지 *따라가지* 않았다.
 > 막히면 코드를 직접 읽어 해결했는데, 처음 하는 사람에겐 그 선택지가 없다. 문서만으로 완주
@@ -2450,7 +2451,10 @@ aws elbv2 describe-load-balancers --region ap-northeast-2 \
 |:--:|---|---|:--:|
 | **5a** | metrics-server · HPA | 지표 수집, 파드 수 자동 조절 | ✅ 2026-10-08 |
 | **5b** | Karpenter | 노드 자동 조절 | ✅ 2026-10-12 |
-| **5c** | ArgoCD | GitOps | ⬜ |
+| **5c** | ArgoCD | GitOps | ✅ 2026-10-13 |
+| **5d** | Fluent Bit → CloudWatch Logs | 클러스터 밖에 남는 로그 | ✅ 2026-10-15 |
+| **5e** | ArgoCD sync wave | 시크릿·DB 까지 git 으로 | ✅ 2026-10-15 |
+| **5f** | 컨트롤플레인 로그 | 감사 로그 — 누가 그랬나 | ✅ 2026-10-16 |
 
 > `infra/aws-eks/README.md`가 **"선택"** 으로 표시해 둔 단계다. EKS 이관 완료의 필수 조건이 아니다.
 
@@ -2765,6 +2769,9 @@ kubectl -n kube-system logs deploy/karpenter | grep -i -E 'denied|WebIdentity'  
 
 설치는 20초 걸렸다. 버전은 호환표를 보고 고른다 — K8s 1.36 은 Karpenter **1.13 이상**이 필요하다.
 
+> ℹ️ 5b-3 을 적용하기 **전**에 로그를 보면 `failed listing instance types … no subnets found` ERROR 가 여럿 보인다(2026-10-16 재현 R2-2).
+> EC2NodeClass 가 아직 없어서다 — 5b-3 적용 뒤로는 0건이다. 위 `denied|WebIdentity` 검사는 이것과 무관하게 비어야 한다.
+
 🔴 **차트 기본값으로는 이 클러스터에서 뜨지 않는다.** `values.yaml` 이 세 가지를 바꾼다.
 
 | 기본값 | 문제 | 바꾼 값 |
@@ -2935,6 +2942,10 @@ aws ec2 describe-instances --region $R --filters "Name=tag-key,Values=karpenter.
 aws ec2 describe-launch-templates --region $R --query 'length(LaunchTemplates)' --output text   # → 0
 ```
 
+> ✅ **2026-10-16 재현 R2a 에서 EC2 종료 경로를 실물로 확인했다** — Karpenter 노드를 살려 둔 채 destroy:
+> `[karpenter-cleanup] EC2 종료: i-…` → `✅ 잔존 EC2 0 · 프로파일 정리 완료` → `45 destroyed`, 이후 Karpenter EC2 0 · 시작 템플릿 0 · 프로파일 0.
+> 아래는 10-12 당시의 기록이다.
+>
 > ⚠️ **이 세션에서 정리 스크립트가 실물로 지운 것은 인스턴스 프로파일뿐이다.** Karpenter 노드 한 대를 일부러 살려 둔 채
 > destroy 했는데, 시작 35초 뒤 Karpenter 가 그 노드를 스스로 종료했다(CloudTrail 로 확인, 이유는 확인하지 못했다).
 > EC2 를 종료하는 경로는 가짜 `aws` 를 주입한 시험으로만 검증돼 있다. 정리 뒤 위 조회가 0 인지 반드시 확인한다.
@@ -3071,6 +3082,13 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443     # https://localhos
 > 이 세션은 화면 없이 `kubectl` 로만 진행했다. 아래 확인은 전부 명령으로 된다.
 
 ### 5c-4. Application 을 등록한다 — 손으로 치는 마지막 `kubectl apply`
+
+> 🔴 **지금 레포에서는 이 절의 명령을 그대로 치지 마라 — 5e-4 의 명령을 쓴다 (2026-10-16 재현 R2-1).**
+> `k8s/gitops/application.yaml` 은 Stage 5e 에서 **ESO 차트 · 시크릿 참조 · postgres 까지 품는 multi-source** 로 바뀌었고
+> 자리표시자가 **6개**다. 아래 `sed` 는 2개만 치환하므로 ESO 역할 · 볼륨 · AZ 자리에 글자가 그대로 들어가 실패한다.
+> 5c-2 처럼 ESO · postgres 를 손으로 먼저 올렸다면 Application 의 ESO 차트와 **같은 리소스를 두고 충돌**한다.
+> ⇒ 5c 는 *"ArgoCD 가 무엇인가"* 의 기록으로 읽고, 실습은 **5e-1 → 5e-4** 경로(빈 클러스터 + ArgoCD + Application 하나)로 한다.
+> 5c-5 · 5c-9 의 관찰(selfHeal · 컨트롤러 정지)은 그 Application 위에서 그대로 재현된다(R2b 실측: replicas 2→1 **2초**, Service UID 교체).
 
 ```bash
 REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-northeast-2.amazonaws.com
@@ -3692,6 +3710,9 @@ aws logs describe-log-streams --log-group-name /aws/eks/devquest-eks/cluster --r
 ```
 종류마다 2개인 것은 컨트롤플레인(API 서버 등)이 인스턴스 2대로 돌기 때문이다.
 
+> ⚠️ **두 번째 세션부터는 4 · 6 · … 으로 보인다** (2026-10-16 재현 R2-3 — 실측 4). 그룹은 0-bootstrap 소유라 보존 30일 동안
+> 이전 세션의 스트림이 남는다. 이번 세션 몫만 보려면 `--order-by LastEventTime --descending` 으로 최근 것만 본다.
+
 ### 5f-2. 세 가지 일을 저지른다
 
 ```bash
@@ -3725,6 +3746,11 @@ aws logs get-query-results --region ap-northeast-2 --query-id $ID     # status �
 00:36:57.919Z  arn:aws:iam::<account>:user/bootstrap-admin                   delete 200
 00:36:58.817Z  system:serviceaccount:argocd:argocd-application-controller    patch  201   ← 0.9초 뒤, 201 = 새로 만들었다
 ```
+
+> ⚠️ **③ 은 위 두 줄만 나오지 않는다** (2026-10-16 재현 R2-4 — 실측 31행). 30분 창에는 Application 이 처음 만든 기록,
+> `deployment-controller` 의 `update`(상태 갱신 — `409` 충돌 재시도 포함), selfHeal 시험 기록이 함께 걸린다.
+> **사람의 `delete 200` 바로 다음의 `argocd-application-controller patch 201`** 쌍을 찾는다(R2b: 08:00:35.418 → 08:00:36.279, 0.86초).
+> 줄이려면 `and user.username not like /deployment-controller/` 를 더한다.
 
 읽는 법 — 실측에서 틀리게 짚었던 세 곳:
 

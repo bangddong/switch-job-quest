@@ -264,6 +264,8 @@ tofu state list                         # ③ 비었는지 확인
 5. **gitops** — ArgoCD로 워크로드 배포 (Deployment → Secret/IRSA → StatefulSet+EBS → ALB Ingress).
 6. **재현 검증 (완료 조건)** — 전체 destroy → `docs/eks-tutorial-steps.md`만 보고 처음부터 재현.
    막히면 문서 수정 후 재시도, 통과해야 완료 (블로그 공개 전 정확성 검증).
+   ✅ **완료 2026-10-16** — 0→3b(09-09) + Stage 4·5a~5f(R1·R2, 3세션 ≈ $0.35). 결함 8건 수정, 문서만으로 진행 불가였던 2건(daily-api 배포 · LBC 선점)은 4-0b 로 메움.
+   상세: `docs/eks-tutorial-steps.md` 「재현 검증 이력」 · 일지 2026-10-16. 미재현: 운영 편 백업·복구(📌D-016 이 EC2 DB 용으로 바꾼다).
 
 ## 참조
 
