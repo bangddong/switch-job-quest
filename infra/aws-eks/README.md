@@ -333,8 +333,21 @@ README에서 "월 $35 = 5.7개월이라 절벽"이라며 기각한 안보다 **3
   ⚠️ D-002 의 경고 — *"크레딧 잔액이 남아 보일 때 특히 흔들린다"* — 가 **이 불릿을 통해** 발화했다.
   D-002 본문은 흔들리지 않았고, **그 옆의 예외 조항이 흔들렸다.** 상세: 아래 D-015.
 
-#### prod 이관을 하지 않는다 — 간헐 세션형 EKS 유지
-> 📌 **D-015** · 상태 `✅유효` · 영향 `docs/eks-cost-model.md`, `docs/superpowers/plans/2026-09-27-prod-eks-timeboxed-migration.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`, Stage 5
+#### ~~prod 이관을 하지 않는다 — 간헐 세션형 EKS 유지~~
+> 📌 **D-015** · 상태 `❌폐기` · 영향 `docs/eks-cost-model.md`, `docs/superpowers/plans/2026-09-27-prod-eks-timeboxed-migration.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`, Stage 5 · 재판정 `아래 📌D-016 (2026-10-16, 사용자) — 평일 창 동안 EKS 가 prod 를 서빙한다`
+
+> 🔴 **폐기 (2026-10-16) — 아래 📌D-016 으로 대체.** 사유 단위 재판정:
+>
+> | 사유 | 10-16 판정 |
+> |---|---|
+> | ① 자금 | 🔄 **조건부 무효.** 남은 기간이 줄어(91일 · 평일 65일) **평일 6h 는 들어간다**(D-016 산술). 8h 는 여전히 안 들어간다 |
+> | ② 콜드스타트 | ❌ **무효.** *요청* 이 깨우는 형태의 문제였다. **스케줄로 미리 켜면** 그동안 Fly 가 서빙하므로 사용자 대기 0 |
+> | ③ EKS 전용 학습 소진 | ❌ **사용자 판단으로 대체.** *"실제 돌리면서 EKS 의 실무 경험을 해보고 싶다"* — 실트래픽 운영은 간헐 세션과 종류가 다르다. 이 사유는 내 논거였다 |
+> | ④ prod 영구 사망 | 🔴 **유효 — 그대로 산다.** DB 가 Neon→EC2 로 바뀌어도 **Fly·EKS 가 한 DB 를 공유**하는 한 `repair()` 경로는 같다. D-016 의 1순위 블로커 |
+>
+> ⚠️ **기록 오류도 있었다.** 09-29 사용자 발화 *"이제와서 다 뒤집기는 어려우니 간헐적 사용으로 EKS로 가자"* 를
+> 나는 *"prod 는 안 옮긴다"* 로 읽어 이 블록을 썼다. 바로 앞 대화가 *"하루에 몇 시간을 언제 띄울지"* 였으므로
+> **"일정 시간만 EKS 가 서빙"** 으로 읽혔어야 할 수 있다. **해석을 사용자에게 확인하지 않고 결정으로 적었다**(10-16 사용자 지적으로 발견).
 
 **결정 (2026-09-29, 사용자)**: prod 를 EKS 로 옮기지 않는다. 지금의 **간헐 세션형**(apply → 작업 → destroy)을
 유지하고, 남는 크레딧은 **Stage 5 + 면접 데모 며칠**에 쓴다. prod 는 Fly+Neon 그대로.
@@ -408,6 +421,53 @@ Fly·EKS 두 core-api 가 `migrate-on-startup: true`(`application-prod.yml:37`)�
 > ⚠️ **`kind` 07-16 폐기 사유가 *"돈이 제약이 아니다"* 였다 — 상시 운영에서는 그 전제가 뒤집힌다.**
 > 위 k3s 행은 그 지점을 등재해둔 것이다. 되살릴 때는 `design-change-procedure.md` 전 단계를 밟을 것.
 
+#### 평일 창 동안 EKS 가 prod 를 서빙한다 — DB 는 EC2 자가 운영 Postgres
+> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`
+
+**결정 (2026-10-16, 사용자)**: *"실제 돌리면서 EKS 의 실무 경험을 해보고 싶다."* D-015 의 기각 대안 **B**(prod + Fly 폴백 왕복)를
+DB 를 바꿔 다시 채택한다.
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 형태 | **평일 창(6h)만 EKS 가 prod 서빙, 그 외 Fly** — 매일 왕복 | 사용자. 시각은 미정(기본안 12~18 KST — cron 한 줄이라 바꾸기 싸다) |
+| on/off | **GitHub Actions 스케줄 자동 + `workflow_dispatch` 수동(on/off 입력)** | 사용자 — *"수동 on/off 도 비교적 쉽게 (학습 목적)"* |
+| DB | **Neon 이탈 → EC2 t4g.micro 위 자가 운영 Postgres**, 상시 가동, **Fly·EKS 공유** | 사용자. RDS 대비 총액 약 절반 + DB 운영 실습. 아래 산술 |
+| DB 위치 | `1-network` VPC 퍼블릭 서브넷 (세션마다 지우지 않는 층, NAT 없음) | 클러스터는 매일 destroy, 밤에도 Fly 가 DB 를 쓴다 → 클러스터 밖이어야 한다 |
+| 📌D-002 | `✅유효` 유지 — **24/7 기각은 그대로.** 단 파생물(`guard-local-layers` · 리퍼 · SOP)은 D-016 이 개정한다 | 창은 하루 6h 다 |
+
+##### 산술 — 단가는 `aws pricing get-products` 실측 (서울, 2026-10-16)
+
+```
+t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IPv4 $0.005/h
+가용 = 크레딧 $199.81 − 누적 $7.329(Budgets 실측) − 예비 $30 ≈ $162     기간 91일 · 평일 65일
+```
+
+| 항목 | 계산 | 금액 |
+|---|---|---:|
+| EKS 풀 토폴로지, 평일 6h | 65일 × 6h × $0.25 | $97.5 |
+| 매일 켜고 끄는 오버헤드 | 하루 약 20분 | ~$5 |
+| DB EC2 t4g.micro 상시 | 2,184h × $0.0104 | $22.7 |
+| DB EBS gp3 8GB | 3개월 | $2.2 |
+| DB 퍼블릭 IPv4 | 2,184h × $0.005 | $10.9 |
+| 기존 영속 레이어 | ~$1.14/월 | $3.4 |
+| **합계** | | **≈ $142 → 여유 ≈ $20** |
+
+> 🟡 **같은 날 Blindspot N-12**: $0.25/h 의 근거(t4g.medium ×2)는 이 계정에서 launch 불가 — 실제 t4g.small ×3 ≈ $0.218/h 라 보수값으로는 유효하다.
+> 단 **ALB LCU 변동분(실측 0건) 최악 +$0.096/h 면 합계 ≈ $167 → 가용 초과.** 창 길이는 첫 주 LCU 실측 뒤 확정(계획서 Q-3).
+
+| 기각한 대안 | 사유 |
+|---|---|
+| RDS db.t4g.micro 상시 | $55 + 스토리지 최소 20GB $8 + IPv4 $11 = **$74**. 창을 평일 4h 로 줄여야 들어간다. **우리 계정은 Free Plan(2025-07-15 이후)이라 750h 무료가 없고 크레딧에서 차감된다** |
+| 평일 8h | EC2 DB 로도 $175 🔴 |
+| 창 동안만 DB | 밤에 Fly 가 DB 를 못 쓴다. 매일 양방향 데이터 이전은 비현실 |
+| Aurora Serverless v2 (0 ACU) | Fly 스케줄러가 계속 DB 를 깨워 0 으로 내려가지 않는다 |
+
+> ⚠️ **리스크**: 백업·패치·디스크 감시·장애 복구가 전부 우리 몫이다. 실패하면 **prod 사용자 데이터 손실**.
+> → 매일 S3 백업 + **복구 리허설 통과가 첫 창 오픈의 선행 조건**이다.
+> 🔴 **탈출 경로 필수**: Free Plan 은 크레딧 소진·6개월 중 먼저 오는 시점에 끝나고, 유료 전환이 없으면
+> 90일 유예 뒤 **계정 폐쇄 + 리소스 삭제**다. **01-15 전에** 유료 전환(DB 만 월 ~$12) 또는 데이터 반출을 정해야 한다.
+> 🔴 **D-015 사유 ④는 살아 있다** — 착수 순서·블로커는 계획서 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`.
+
 #### 영속 레이어 — 싸다, 반드시 분리할 것
 > 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
 
@@ -468,6 +528,15 @@ Fly·EKS 두 core-api 가 `migrate-on-startup: true`(`application-prod.yml:37`)�
 > 실제로 사용됐다(#339). 이 블록만 읽으면 "RDS는 기각됨"으로 오독하게 되므로 여기 명시한다.
 > **07-29에 실제로 그 오독이 발생했다** — 이 역참조가 없어서였다.
 > 단, **최종 목표가 in-cluster라는 결론 자체는 유지**된다(사유 ③이 살아남음). 아래 표 참조.
+
+> 🔄 **10-16 재판정 — 아래 표의 prod 행이 무효가 된다 (📌D-016).** prod DB 가 Neon 을 떠나
+> **EC2 자가 운영 Postgres** 로 간다. *"왜 Neon을 못 걷어내나"* 5개 사유를 사유 단위로:
+> ① 비용 동기 없음 — 🔴 **여전히 참이다.** 걷어내면 절감이 아니라 **+$36**. 동기는 돈이 아니라 학습(사용자 결정)
+> ② 가동률 충돌 — ✅ 해소. DB 를 클러스터 **밖** 상시 EC2 에 둔다
+> ③ in-cluster 최고가 — ✅ 해당 없음(in-cluster 아님)
+> ④ 관리형 기능 자작 — 🔴 **그대로 비용으로 받는다.** 백업·복구 리허설이 D-016 선행 조건
+> ⑤ 스팟 노드 — ✅ 해당 없음(온디맨드 EC2)
+> 학습 클러스터 행(in-cluster + EBS)은 세션형 실습용으로 **그대로 유효**하다.
 
 | 환경 | DB | 근거 |
 |------|-----|------|
