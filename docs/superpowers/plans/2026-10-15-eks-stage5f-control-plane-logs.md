@@ -63,7 +63,7 @@
 | P3 | ✅ `list secrets 403 decision=forbid` | 🔴 `user.username` 은 **나**, SA 는 `impersonatedUser` — 계획의 질의(`user.username = SA`)는 0건이었다 |
 | P4 | ✅ delete(나) → **0.9초 뒤** ArgoCD | 🔴 ArgoCD 는 `create` 가 아니라 **`patch` 201**(ServerSideApply). 계획의 `verb=create` 질의는 0건 |
 | P5 | ✅ `access granted … groups="[]" username=<IAM ARN>` | `uid` 에 IAM 고유 ID(AIDA…)도 → 가림 |
-| P6 | ✅ audit **98.4%**, 평상시 1.47MB/분 ≈ $0.067/h(클러스터의 +36%), 나머지 합 ~$0 | 설치 직후 2분 30MB 폭주(🟡 대형 CRD 본문 추정) |
+| P6 | ✅ audit **98.0%**, 평상시 1.47MB/분 ≈ $0.067/h(클러스터의 +36%), 나머지 합 ~$0 | 설치 직후 2분 30MB 폭주(🟡 대형 CRD 본문 추정) |
 | P7 | ✅ 고아 0, `/aws/eks/` 는 미리 만든 그룹 1개 · 보존 30 | — |
 | P8 | ✅ destroy 후 P4 질의 같은 3행 | — |
 

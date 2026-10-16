@@ -163,7 +163,7 @@
 | 영속 EBS | 0-bootstrap | ✅ 유지 (D-004) |
 | ECR 이미지 | 0-bootstrap | ✅ 유지 (lifecycle 10개) |
 | 학습 클러스터 컨테이너 로그 · K8s 이벤트 (Stage 5d) | CloudWatch Logs — 0-bootstrap | ✅ 유지 (보존 30일). 클러스터 안에서는 노드 디스크에만 있어 destroy 와 함께 사라졌다 |
-| EKS 컨트롤플레인 로그 (Stage 5f, **켠 세션만**) | CloudWatch Logs `/aws/eks/devquest-eks/cluster` — 0-bootstrap | ✅ 유지 (보존 30일). 그룹을 미리 만들어 두지 않으면 EKS 가 보존 무기한 그룹을 스스로 만든다. 켠 세션 실측(10-16): audit 98.4% · 평상시 ≈ $0.067/h(3노드 클러스터의 +36%), 나머지 종류 합 ≈ $0 |
+| EKS 컨트롤플레인 로그 (Stage 5f, **켠 세션만**) | CloudWatch Logs `/aws/eks/devquest-eks/cluster` — 0-bootstrap | ✅ 유지 (보존 30일). 그룹을 미리 만들어 두지 않으면 EKS 가 보존 무기한 그룹을 스스로 만든다. 켠 세션 실측(10-16): audit 98.0% · 평상시 ≈ $0.067/h(3노드 클러스터의 +36%), 나머지 종류 합 ≈ $0 |
 
 - **NAT·EIP 가 코드 어디에도 없다**(전수 확인) + 컨트롤플레인 로깅 **기본** OFF → **destroy 후 잔존 비용 ≈ $0.**
   (Stage 5d 의 학습용 로그 그룹은 남지만 저장 $0.0314/GB-월 · 보존 30일이라 ≈ $0 — 컨트롤플레인 로깅은 5f 부터 **변수 토글**(`control_plane_log_types`, 기본 끔). 켠 세션의 수집 요금은 세션 비용이다)

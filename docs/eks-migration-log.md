@@ -5285,7 +5285,7 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` **P5 ✅** authenticator: `msg="access granted" … groups="[]" … username="arn:aws:iam::<account>:user/bootstrap-admin"` — IAM ARN 이 그대로 K8s 사용자 이름, 그룹 없음(권한은 Access Entry 정책 연결로). `uid` 에 IAM 고유 ID(AIDA…)도 찍힌다 — 가림.
 - `[비용]` **P6** 종류별(클러스터 생성 ~10분 + 세션 ~10분, 09:38 KST 기준):
   ```
-  kube-apiserver-audit      n=12458  45.4MB   ← 98.4%
+  kube-apiserver-audit      n=12458  45.4MB   ← ~~98.4%~~ 98.0% (45.4 / 46.31 — QA F-1 정정)
   kube-apiserver            n=2466    0.44MB
   authenticator             n=727     0.21MB
   kube-controller-manager   n=896     0.13MB

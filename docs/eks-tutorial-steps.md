@@ -3697,13 +3697,14 @@ msg="access granted" arn="arn:aws:iam::<account>:user/bootstrap-admin" groups="[
 parse @logStream /^(?<kind>[a-z-]+?)-[0-9a-f]{32}$/ | stats count(*) as n, sum(strlen(@message)) as bytes by kind
 ```
 ```
-kube-apiserver-audit      n=12458  45.4MB   ← 98.4%
+kube-apiserver-audit      n=12458  45.4MB   ← 98.0%
 kube-apiserver            n=2466    0.44MB
 authenticator             n=727     0.21MB
 kube-controller-manager   n=896     0.13MB
 kube-scheduler            n=372     0.08MB
 cloud-controller-manager  n=378     0.05MB
 ```
+> 위 표는 **클러스터 생성부터 5f-3 까지(약 20분)** 를 잰 것이다. 아래 💰 의 ~61MB 는 **destroy 까지 세션 전체**라 더 크다.
 
 | | 양 | 수집 요금($0.76/GB) |
 |---|---|---|
@@ -3721,6 +3722,8 @@ cloud-controller-manager  n=378     0.05MB
 cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=3 \
   -var 'control_plane_log_types=["api","audit","authenticator","controllerManager","scheduler"]'
 ```
+> 로그 `-var` 는 destroy 에 **필수가 아니다**(지울 리소스의 precondition 은 평가되지 않는다). apply 와 같은 값을 넣어 두면
+> destroy plan 에 설정 차이가 섞이지 않아 읽기 쉬울 뿐이다. `node_desired_size` 도 마찬가지.
 
 SOP §9 의 고아 질의가 비어야 하고, `/aws/eks/` 아래에는 미리 만든 그룹 **하나**만 있어야 한다:
 ```

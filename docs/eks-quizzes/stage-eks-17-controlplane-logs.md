@@ -1,7 +1,7 @@
 # EKS 학습 퀴즈 — Stage 5f 컨트롤플레인 로그 (감사 로그)
 - 브랜치: stage/eks-17-controlplane-logs   · 날짜: 2026-10-16   · HEAD: 88c9a41
 
-> 퀴즈 전에 개념 5개를 먼저 설명했다(삭제 2줄 · 사칭 · patch 201 · audit 98.4% · 그룹 선생성 이유). 재료: 일지 2026-10-16.
+> 퀴즈 전에 개념 5개를 먼저 설명했다(삭제 2줄 · 사칭 · patch 201 · audit 98.0%(설명 당시 98.4% 로 잘못 말함 — QA F-1) · 그룹 선생성 이유). 재료: 일지 2026-10-16.
 
 ## Q1. 감사 로그에 `user.username = system:serviceaccount:argocd:argocd-application-controller` 로 Secret `delete` 가 찍혔다. "ArgoCD 가 범인" 이라고 결론 내도 되나?
 - 사용자 답: 맞을 것 같다. `user.username` 은 IAM 이 그대로 들어가는데 거기 ArgoCD 컨트롤러라고 적혀 있다.
