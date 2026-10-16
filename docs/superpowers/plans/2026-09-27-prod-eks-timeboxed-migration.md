@@ -2,6 +2,10 @@
 
 > 📌 **D-014** · 상태 `❌폐기` · 영향 `infra/aws-eks/README.md`, `docs/eks-cost-model.md` · 재판정 `infra/aws-eks/README.md 📌D-015 (2026-09-29) — prod 이관을 하지 않기로 확정. 사유 4건은 아래 「폐기 사유」`
 
+> 🔄 **2026-10-16 — 형태 B 가 DB 를 바꿔 재채택됐다 → 📌D-016** (`infra/aws-eks/README.md`, 계획서
+> `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`). **이 문서는 폐기 상태 그대로 두고**
+> 아래 Blindspot U-1~U-22 만 새 계획서가 재판정해 재사용한다.
+
 > **원 영향 목록(참고용 — 위 메타 줄은 검사기가 한 줄만 읽으므로 분리했다)**:
 > `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.claude/scripts/eks-heartbeat-reminder.sh`,
 > `reaper/com.devquest.eks-reaper.plist`, `infra/aws-eks/scripts/db-backup.sh`,
