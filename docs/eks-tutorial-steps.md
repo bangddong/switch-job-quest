@@ -3575,6 +3575,169 @@ kubectl get pods                           # 그대로 있다 — finalizer 가 
 
 ---
 
+## Stage 5f — 컨트롤플레인 로그: "누가 그랬나"를 클러스터가 사라진 뒤에도 답한다
+
+5d 의 로그는 **앱이 무엇을 말했나**, 이벤트는 **쿠버네티스가 무엇을 했나** 다. 둘 다 **누가 요청했는지**는 모른다.
+EKS 는 API 서버를 AWS 가 운영하므로 그 로그를 직접 볼 수 없다. 대신 켜면 CloudWatch 로 보내 준다.
+
+### 개념
+
+| 개념 | 한 줄 | 이 Stage 에서 |
+|---|---|---|
+| **감사(audit) 로그** | API 서버에 들어온 요청마다 *누가(user) · 무엇을(verb · resource) · 결과(code)* 를 한 줄 JSON 으로 | 파드 삭제 · 권한 거부 · ArgoCD 의 되살림을 주체별로 구분한다 |
+| authenticator 로그 | IAM 자격증명이 **어떤 K8s 사용자**로 바뀌었는지 | IAM ARN 이 그대로 사용자 이름이 되고 그룹은 비어 있다(권한은 Access Entry) |
+| 로그 종류 | `api` · `audit` · `authenticator` · `controllerManager` · `scheduler` 중 골라 켠다 | 감사 정책 자체(얼마나 자세히)는 **바꿀 수 없다**. 양을 줄이는 수단은 종류를 끄는 것뿐 |
+| 받는 그룹 이름 | EKS 가 `/aws/eks/<클러스터>/cluster` 로 **정해 둔다** | 없으면 EKS 가 **보존 무기한 · tofu state 밖** 으로 스스로 만든다 → 0-bootstrap 이 미리 만든다 |
+| 사칭(`--as`) | 관리자가 다른 주체인 척 요청 | `user` 는 **진짜 요청자 그대로**, 사칭 대상은 `impersonatedUser` 에 따로 찍힌다 |
+
+> 🔴 감사 로그 · authenticator 로그에는 **IAM ARN(계정 ID) · IAM 고유 ID · 요청한 곳의 공인 IP** 가 찍힌다. 글 · 문서로 옮길 때 가린다.
+
+### 5f-0. 사전 조건 ($0)
+
+- 5e 까지의 산출물(같은 세션 구성: 노드 3 · Fluent Bit · ArgoCD · Application).
+- 0-bootstrap 에 받는 그룹이 있어야 한다:
+  ```bash
+  cd "$(git rev-parse --show-toplevel)"
+  tofu -chdir=infra/aws-eks/0-bootstrap plan -out=/tmp/5f-boot.tfplan     # 처음 한 번만: Plan: 1 to add
+  cd infra/aws-eks/0-bootstrap && tofu apply /tmp/5f-boot.tfplan && cd -
+  aws logs describe-log-groups --log-group-name-prefix /aws/eks/ --region ap-northeast-2 \
+    --query 'logGroups[].[logGroupName,retentionInDays]' --output text
+  ```
+  ```
+  /aws/eks/devquest-eks/cluster	30
+  ```
+
+<!-- verify: infra/aws-eks/0-bootstrap/log-groups.tf ~ eks_control_plane -->
+
+> 이 그룹은 **수집기용 `learning_log_groups` 맵에 넣지 않는다.** `irsa-fluent-bit.tf` 가 그 맵의 모든 그룹에 쓰기 권한을 주므로,
+> 넣으면 Fluent Bit 이 감사 로그에 쓸 수 있게 된다.
+
+### 5f-1. 로그를 켠 채 올린다 — 💰 과금 시작
+
+로그는 변수로만 켠다. 기본값은 빈 목록(끔)이라 평소 세션은 그대로다.
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+tofu -chdir=infra/aws-eks/2-cluster plan -var node_desired_size=3 \
+  -var 'control_plane_log_types=["api","audit","authenticator","controllerManager","scheduler"]' \
+  -out=/tmp/5f.tfplan                                         # Plan: 45 to add
+cd infra/aws-eks/2-cluster && tofu apply /tmp/5f.tfplan        # ~10분
+```
+
+<!-- verify: infra/aws-eks/2-cluster/cluster.tf ~ enabled_cluster_log_types = var.control_plane_log_types -->
+
+> 🔒 0-bootstrap 을 건너뛰었거나 `cluster_name` 을 바꿨으면 plan 이 `Resource precondition failed` 로 **멈춘다.**
+> 그대로 켜면 EKS 가 무기한 그룹을 만들기 때문이다. 철자가 틀린 종류(`audits`)는 `Invalid value for variable` 로 막힌다.
+
+그 뒤는 5e-1 의 마커 확인 · 5e-2 관문 · 5e-3 설치 · 5e-4 Application 그대로다.
+
+```bash
+aws logs describe-log-streams --log-group-name /aws/eks/devquest-eks/cluster --region ap-northeast-2 \
+  --query 'logStreams[].logStreamName' --output text | tr '\t' '\n' | sed 's/-[0-9a-f]\{32\}$//' | sort | uniq -c
+```
+```
+   2 authenticator
+   2 cloud-controller-manager        ← 고르지 않았는데 함께 온다
+   2 kube-apiserver
+   2 kube-apiserver-audit
+   2 kube-controller-manager
+   2 kube-scheduler
+```
+종류마다 2개인 것은 컨트롤플레인(API 서버 등)이 인스턴스 2대로 돌기 때문이다.
+
+### 5f-2. 세 가지 일을 저지른다
+
+```bash
+P=$(kubectl get pod -l app=core-api -o jsonpath='{.items[0].metadata.name}')
+kubectl delete pod $P --wait=false                                   # ① 사람이 파드를 지운다
+kubectl --as=system:serviceaccount:default:default get secrets       # ② 권한 없는 주체로 시크릿을 본다 → Forbidden
+kubectl delete deploy ai-api --wait=false                            # ③ 지우면 ArgoCD 가 되살린다
+```
+
+### 5f-3. Logs Insights 로 묻는다
+
+감사 로그는 1~2분 늦게 도착한다. 질의 하나는 이렇게 돌린다(스캔 GB 당 $0.0076 — 이 Stage 전체 $0.003):
+
+```bash
+G=/aws/eks/devquest-eks/cluster
+Q='filter @logStream like /audit/ and objectRef.resource = "deployments" and objectRef.name = "ai-api"
+   and verb not in ["get","watch","list"] | sort requestReceivedTimestamp asc
+   | fields requestReceivedTimestamp, user.username, verb, responseStatus.code'
+ID=$(aws logs start-query --region ap-northeast-2 --log-group-name $G \
+  --start-time $(( $(date +%s) - 1800 )) --end-time $(date +%s) --query-string "$Q" --query queryId --output text)
+aws logs get-query-results --region ap-northeast-2 --query-id $ID     # status 가 Complete 가 될 때까지 다시
+```
+
+| 무엇을 | 질의 핵심 | 실측(2026-10-16, 계정 ID 가림) |
+|---|---|---|
+| ① 누가 지웠나 | `objectRef.name = "<파드>" and verb = "delete"` | `arn:aws:iam::<account>:user/bootstrap-admin delete 200` → **1.1초 뒤** `system:node:ip-10-0-1-165… delete 200` |
+| ② 거부도 남나 | `impersonatedUser.username = "system:serviceaccount:default:default"` | `user=…bootstrap-admin impersonatedUser=…default:default list secrets 403 decision=forbid` |
+| ③ 두 주체 | 위 `Q` | 아래 |
+
+```
+00:36:57.919Z  arn:aws:iam::<account>:user/bootstrap-admin                   delete 200
+00:36:58.817Z  system:serviceaccount:argocd:argocd-application-controller    patch  201   ← 0.9초 뒤, 201 = 새로 만들었다
+```
+
+읽는 법 — 실측에서 틀리게 짚었던 세 곳:
+
+- ① 삭제가 **두 줄**이다. 사람의 delete 는 "유예 삭제를 시작해라"이고, 컨테이너가 끝난 뒤 **kubelet(노드)** 이 실제 제거를 마무리한다.
+- ② `user.username = "<SA>"` 로 찾으면 **0건**이다. 사칭은 요청자를 바꾸지 않는다 — 감사 로그가 사칭으로 지워지지 않는다는 뜻이기도 하다.
+- ③ `verb = "create"` 로 찾으면 ArgoCD 가 **안 보인다.** ServerSideApply 는 생성도 `patch` 로 보낸다. 새로 만든 것인지는 응답 코드 **201** 로 구분한다.
+
+authenticator 로그(`filter @logStream like /authenticator/ and @message like /bootstrap-admin/`):
+```
+msg="access granted" arn="arn:aws:iam::<account>:user/bootstrap-admin" groups="[]" … username="arn:aws:iam::<account>:user/bootstrap-admin"
+```
+→ IAM ARN 이 그대로 K8s 사용자 이름이고 그룹은 없다. 권한은 그룹이 아니라 Access Entry 정책 연결(`access.tf`)에서 온다.
+
+### 5f-4. 얼마나 쌓이나 — "평소엔 무엇만 켤까"
+
+```
+parse @logStream /^(?<kind>[a-z-]+?)-[0-9a-f]{32}$/ | stats count(*) as n, sum(strlen(@message)) as bytes by kind
+```
+```
+kube-apiserver-audit      n=12458  45.4MB   ← 98.4%
+kube-apiserver            n=2466    0.44MB
+authenticator             n=727     0.21MB
+kube-controller-manager   n=896     0.13MB
+kube-scheduler            n=372     0.08MB
+cloud-controller-manager  n=378     0.05MB
+```
+
+| | 양 | 수집 요금($0.76/GB) |
+|---|---|---|
+| audit 평상시 | 1.47MB/분 ≈ 88MB/시간 | **≈ $0.067/시간 = 3노드 클러스터($0.1865/h)의 +36%** |
+| audit 설치 직후 2분(ArgoCD · ESO) | 30MB | 일회성 폭주 |
+| 나머지 5종 합 | 30분에 ~1MB | ≈ $0 |
+
+→ 평소 켜 둘 만한 것은 audit 를 **뺀** 종류다. audit 는 "누가 그랬나"를 물을 일이 있는 세션에서만 켠다.
+
+### 5f-5. 정리 — 💰 과금 종료, 그리고 사라진 뒤에 묻기
+
+5e-7 과 같다(Application 먼저 → ExternalSecret → SecretStore, PVC 는 남긴다).
+
+```bash
+cd infra/aws-eks/2-cluster && tofu destroy -var node_desired_size=3 \
+  -var 'control_plane_log_types=["api","audit","authenticator","controllerManager","scheduler"]'
+```
+
+SOP §9 의 고아 질의가 비어야 하고, `/aws/eks/` 아래에는 미리 만든 그룹 **하나**만 있어야 한다:
+```
+/aws/eks/devquest-eks/cluster	30
+```
+클러스터가 없어진 뒤 5f-3 의 질의를 다시 돌리면 **같은 줄이 나온다**(보존 30일). 이것이 이 Stage 의 결론이다.
+
+> 💰 세션 30분 ≈ $0.093 + 로그 수집 ~61MB ≈ $0.046 → **≈ $0.14**.
+
+### 이 Stage 에서 알아 둘 한계
+
+- 감사 정책은 EKS 관리형이라 **조정할 수 없다** — 큰 요청 본문이 그대로 실린다(🟡 설치 직후 폭주의 원인으로 추정, 확인하지 않음).
+- 감사 로그 기반 **알람**(403 급증 등)은 만들지 않았다.
+- 질의는 Logs Insights 로만 했다. 30일이 지나면 사라진다 — 더 오래 둘 일이 생기면 S3 내보내기가 별도 작업이다.
+
+---
+
 # 운영 편 1 — 백업·복구 리허설 (Stage 와 별개, 상시 운영 준비)
 
 > 2026-09-13 실행·검증 완료. 과금 **32분 10초 ≈ $0.0848**, 고아 0.

@@ -101,7 +101,7 @@ Blindspot 21건(2026-10-14). 처리 방식만 적는다.
 
 | 항목 | 왜 지금 안 하나 |
 |---|---|
-| **EKS 컨트롤플레인 로그**(api · audit · authenticator 등) | 2026-10-14 사용자 결정(D2). 하려면: `cluster.tf:5` 결정을 뒤집는 결정 블록(D-016, 감시 문서 안) · `eks-cost-model.md:166·201` 수정 · `/aws/eks/<cluster>/cluster` 그룹을 미리 만들기 위한 `cluster_name` 단일화(U-2) · 변수 토글 기본 꺼짐(U-17, `db_mode` 선례). audit 양은 미측정 |
+| **EKS 컨트롤플레인 로그**(api · audit · authenticator 등) | 2026-10-14 사용자 결정(D2). 하려면: `cluster.tf:5` 결정을 뒤집는 결정 블록(D-016, 감시 문서 안) · `eks-cost-model.md:166·201` 수정 · `/aws/eks/<cluster>/cluster` 그룹을 미리 만들기 위한 `cluster_name` 단일화(U-2) · 변수 토글 기본 꺼짐(U-17, `db_mode` 선례). audit 양은 미측정<br>→ ✅ **Stage 5f 에서 처리(2026-10-16)** — `2026-10-15-eks-stage5f-control-plane-logs.md`. 차이 2가지: ① 원 결정이 📌 블록이 아니라 `cluster.tf` 주석뿐이라 D-016 대신 **그 주석에 취소선 + 반전 표시** ② `cluster_name` 단일화 대신 **plan 단계 precondition**. audit 실측 98.4% · ≈ $0.067/h |
 | 앱 로그 레벨 정리(U-15) · ai-api · daily-api JSON 로깅(U-6) | `be/` 변경 — EKS 학습 Stage 범위가 아니다. P6 실측이 근거 자료가 된다 |
 | 리퍼가 로그 그룹을 검사(U-13) | 하네스 동결. D8 이 같은 위험을 IAM 으로 막는다 |
 | 지표 필터 · 알람(에러 줄 수로 알림) | 수집이 먼저다. 알람은 SNS · 비용이 따로 붙는다 |
