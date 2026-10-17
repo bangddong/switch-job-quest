@@ -5413,6 +5413,12 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 고아 0(state · EKS · ALB · EC2 · 시작 템플릿 · ENI). `/aws/` 로그 그룹: `/aws/eks/devquest-eks/cluster 30` + **`/aws/lambda/test`(보존 None, 600B, 2026-07-16 생성 — 이 트랙 이전, Lambda 함수 0개)** ⚪ 무관하나 보존 무기한이라 기록.
 - `[해결]` **destroy 뒤 ① 질의 재실행 → 같은 2행.** 5f 의 결론 재현.
 - `[비용]` ≈ 27분 × $0.1865/h ≈ $0.084 + 컨트롤플레인 로그(audit 포함 ~27분, ≈ $0.03) + Insights 스캔 ~45MB ≈ $0.0003 → **≈ $0.11**. R1+R2 합계 ≈ **$0.35**(계획 $1.2 의 약 30%).
-- `[막힘]` 🔴 **내가 작업 브랜치를 force push 했다 (17:2x).** PR #456 머지 뒤 이 브랜치를 `origin/main` 위로 **rebase** 했고(일지 append 충돌 1건 해소),
+- `[막힘]` 🔴 **내가 작업 브랜치를 force push 했다 (2026-10-16 17:2x KST).** PR #456 머지 뒤 이 브랜치를 `origin/main` 위로 **rebase** 했고(일지 append 충돌 1건 해소),
   이미 push 된 커밋 2개의 해시가 바뀌어 `git push --force-with-lease` 를 쳤다. CLAUDE.md 는 *"히스토리 재작성(force push)도 금지된 우회로 취급"* 이다.
   main 이 아니고 이 브랜치를 보는 사람은 없었지만 **규칙 위반이다.** 맞는 길은 `git merge origin/main`(히스토리 보존)이었다. 되돌리려면 또 force push 가 필요해 그대로 둔다.
+
+## 2026-10-17 — force push 후속: 훅 차단 (#457)
+
+- `[해결]` 사용자 질문 *"훅으로 막았잖아"* → 확인 결과 **막는 훅이 없었다.** `assert-no-main-push.sh` 는 push 대상이 main 인지만 봤고, settings deny 에 force 규칙 0건. 10-16 의 위반은 **산문 규칙만 있던 자리**에서 났다.
+  사용자 지시 *"그거부터 훅으로 막자"* → PR #457(squash `20cdcdf`): 전 브랜치 `--force*`·묶음 `-f`·`+refspec` 차단, push 판정을 `git -C/-c/--opt push` 로 확장(main 차단의 `git -C x push origin main` 구멍도 같이). 케이스 173 → 200, 라이브 훅으로 `--dry-run --force-with-lease` 차단 확인. 잔여 갭 원장 L-72.
+- `[메모]` 이 브랜치는 **되돌리지 않았다**(되돌림 = 또 force push). #457 머지 뒤 main 반영은 `git merge origin/main`(`36bcd9d`) → 일반 push 통과. 이후 같은 상황의 정답 경로다.

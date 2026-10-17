@@ -349,10 +349,10 @@ aws ce get-anomaly-subscriptions \
 이 둘은 닭-달걀이 없어 평범하다 — backend가 이미 있으므로 `init` → `plan` → `apply`가 전부다.
 
 ```bash
-tofu -chdir=infra/aws-eks/1-network init && tofu -chdir=infra/aws-eks/1-network apply
+cd infra/aws-eks/1-network && tofu init && tofu apply
 ```
-> ⚠️ 이 줄은 `-chdir` 형태라 **승인 게이트를 비껴간다**(0-2 경고와 같은 이유). `1-network` 는 비용 $0 이고 main 머지 시 CI(`infra-deploy`)가 적용하므로
-> 손으로 칠 일이 드물다. 손으로 친다면 `cd infra/aws-eks/1-network && tofu apply` 로 치되, **세션 마커 훅이 이 레이어에도 반응해
+> ⚠️ **`tofu -chdir=… apply` 로 치지 마라** — 그 형태는 승인 게이트를 비껴간다(0-2 경고와 같은 이유). `1-network` 는 비용 $0 이고
+> main 머지 시 CI(`infra-deploy`)가 적용하므로 손으로 칠 일이 드물다. 손으로 쳤다면 **세션 마커 훅이 이 레이어에도 반응해
 > 2-cluster 리퍼를 무장시킨다** — 끝나면 `.claude/eks-session/active` 를 지운다(2026-10-16 Blindspot N-4b).
 
 `1-network`(VPC·서브넷·IGW)도 **$0**이다 — NAT 게이트웨이를 쓰지 않기 때문이다(퍼블릭 서브넷 + 노드에
@@ -2075,7 +2075,7 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 |---|---|
 | `region` · `vpcId` | 🔴 **생략하면 IMDS로 알아내려 한다.** hop limit이 1이면 파드에서 도달 못 해 `failed to introspect vpcID from EC2Metadata`로 CrashLoop. ESO·EBS CSI는 IRSA(projected token)만 써서 IMDS를 안 건드렸다 — **그 선례가 이 실패를 덮어주지 않는다** |
 | `replicaCount=1` | 기본값 **2**. 노드가 적어 HA가 성립하지 않는다. `addons.tf`가 coredns에 같은 조치를 한 전례 |
-| `resources.requests.*` | 🔴 **차트 기본값이 `resources: {}`** = BestEffort. 그러면 `Pending`이 아니라 **그냥 스케줄되고**, 여유 없는 노드에 얹혀 **앱을 evict시킨다.** Pending은 시끄러운 실패지만 evict는 조용하다 |
+| `resources.requests.*` | 🔴 **차트 기본값이 `resources: {}`** = BestEffort. 그러면 여유 없는 노드에도 **그냥 스케줄된다.** requests 를 주면 스케줄러가 자리를 계산한다 — ⚠️ **그래도 `Pending` 이 보장되지는 않는다.** 차트 기본 `priorityClassName: system-cluster-critical` 이라, 자리가 없으면 줄을 서는 대신 **우선순위 0 인 앱 파드를 선점(preempt)해 쫓아낸다**(2026-10-16 재현 R1 실측, 노드 1대에서 core-api 가 밀려남). requests 는 *"자리가 있나"* 를, 우선순위는 *"누가 비키나"* 를 정한다 → 그래서 4-0b 에서 노드를 2대로 늘린다 |
 | `serviceAccount.annotations` | 점을 **이스케이프**해야 한다. 안 하면 helm이 `eks → amazonaws → com/role-arn` 중첩 맵을 만들어 **에러 없이** 엉뚱한 구조를 넣는다 |
 
 > 🔴 **형식 검사를 지우지 마라.** apply가 안 끝난 상태에서 `tofu output`을 읽으면 tofu가
