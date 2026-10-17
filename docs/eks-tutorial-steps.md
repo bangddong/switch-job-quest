@@ -19,6 +19,8 @@
 | **2026-08-11** | **무과금 정적 대조** — 도구 버전 · 참조 파일 경로 14개 · `tofu plan` 실측 · 의존 그래프 · 마이그레이션 개수 · 시크릿 키 개수 | **결함 6건 발견·수정** (아래) |
 | **2026-08-12** | **유료 부분 실행** (29분) — Stage 0→3b 경로를 실제로 apply→앱기동→destroy. 단 **목적이 L-14/L-15 검증**이라 문서를 그대로 따라간 게 아니고, Stage 4·ALB는 미실행 | **결함 2건 추가 발견·수정** + 08-11 수정분 4개 실물 확인 ✅ |
 | **2026-09-09** | **유료 완전 재현** (31분 34초, $0.0716) — 이 문서**만** 보고 Stage 0→3b 최종 상태까지. 막혀도 코드를 열지 않는다는 규칙을 지켰다 | **조건부 통과 — 결함 2건 발견·수정.** 도달했고 코드를 열어야 했던 지점은 **없었다.** 다만 그대로 따랐을 때 **오판을 유발하는** 결함이 2건 있었다: ①`db_mode` 확인이 거짓 양성(→ RDS 실수 기동 유도) ②3b-7 기대 출력이 이 설정에서 나올 수 없음. 둘 다 같은 세션에서 수정 |
+| **2026-10-16 (R1)** | **유료 재현** (약 33분, ≈ $0.09) — 0→3b 도달 + **Stage 4(HTTPS 포함)** | **조건부 통과 — 결함 4건 수정.** ①0-2·0-4 가 SOP 금지 형태 `tofu -chdir=… apply/destroy`(승인·마커 우회) ②daily-api 배포 단계 부재 ③LBC 가 1노드에서 core-api 를 **선점**(타겟 0) ④반증 실험이 HTTP 라 전부 301. ②③은 문서만으로는 진행 불가 — 4-0b 신설. 응답 표·TLS·규칙 우선순위·ALB 0 은 기대 출력과 일치. Stage 5a~5f 는 R2 |
+| **2026-10-16 (R2)** | **유료 재현 2세션** (R2a 손 경로 5a·5b ≈ 40분 · R2b GitOps 경로 5c~5f ≈ 30분, 합 ≈ $0.3) — Stage 별 왕복 6회 대신 경로별 2회 | **통과 — 결함 4건 수정.** 5c-4 가 현재 `application.yaml`(자리표시자 6개)과 안 맞음 → 5e-4 경로로 안내(R2-1) · Karpenter 설치 직후 ERROR 안내(R2-2) · 스트림 수 누적(R2-3) · 감사 질의 ③ 행 수(R2-4). 나머지 기대 출력 일치(HPA Pending 문구 · NodeClaim 69초 · 통합 35초 · wave 3분 · postStart · 로그 266건 · 이벤트 uid 6 · 감사 3종 · destroy 뒤 같은 결과). 🔑 **5b-7 의 EC2 종료 경로 첫 실물 확인** · 5b-4 최종 NodePool 첫 실클러스터 적용. 미재현: 5c-6·5c-8·5e-6(커밋 왕복 — 이미 실측) · 운영 편 백업·복구(📌D-016 이 바꿈) |
 
 > 🔎 **08-12를 "재현 검증"으로 세지 않는 이유**: 나는 이 문서를 *참조*했지 *따라가지* 않았다.
 > 막히면 코드를 직접 읽어 해결했는데, 처음 하는 사람에겐 그 선택지가 없다. 문서만으로 완주
@@ -347,8 +349,11 @@ aws ce get-anomaly-subscriptions \
 이 둘은 닭-달걀이 없어 평범하다 — backend가 이미 있으므로 `init` → `plan` → `apply`가 전부다.
 
 ```bash
-tofu -chdir=infra/aws-eks/1-network init && tofu -chdir=infra/aws-eks/1-network apply
+cd infra/aws-eks/1-network && tofu init && tofu apply
 ```
+> ⚠️ **`tofu -chdir=… apply` 로 치지 마라** — 그 형태는 승인 게이트를 비껴간다(0-2 경고와 같은 이유). `1-network` 는 비용 $0 이고
+> main 머지 시 CI(`infra-deploy`)가 적용하므로 손으로 칠 일이 드물다. 손으로 쳤다면 **세션 마커 훅이 이 레이어에도 반응해
+> 2-cluster 리퍼를 무장시킨다** — 끝나면 `.claude/eks-session/active` 를 지운다(2026-10-16 Blindspot N-4b).
 
 `1-network`(VPC·서브넷·IGW)도 **$0**이다 — NAT 게이트웨이를 쓰지 않기 때문이다(퍼블릭 서브넷 + 노드에
 퍼블릭 IP 부여로 대체). NAT는 시간당 $0.045 + 데이터 처리 요금이라 켜 두면 학습 계정에서 가장 조용히
@@ -507,8 +512,14 @@ variable "db_mode" {
 
 ### 0-2. apply (★ 과금 시작)
 ```bash
-tofu -chdir=infra/aws-eks/2-cluster apply -auto-approve /tmp/stage.tfplan
+cd infra/aws-eks/2-cluster && tofu apply -auto-approve /tmp/stage.tfplan
+cd -
+cat .claude/eks-session/active     # applied_at_h 가 방금 시각이어야 한다
 ```
+> 🔴 **`tofu -chdir=… apply` 로 치지 마라 — 이 자리에 그렇게 적혀 있었다 (2026-10-16 재현 검증 R1-1).**
+> 승인 게이트(settings `ask`: `Bash(tofu apply:*)`)와 세션 마커 훅(`tofu[[:space:]]+apply`)이 **둘 다 `tofu` 바로 뒤의 하위 명령**을 본다.
+> `-chdir` 를 끼우면 둘 다 비껴가 **승인 창 없이, dead man's switch 없이** 과금이 시작된다(SOP §5, 10-14 실측).
+> 마커가 없거나 옛 시각이면 SOP §5 대로 손으로 만든다. `plan`·`output`·`state` 는 `-chdir` 로 쳐도 무방하다.
 확인: `Apply complete! Resources: <N> added.` — plan에서 본 `N`과 같아야 한다. **약 9~15분.**
 
 단계별 실측 소요:
@@ -619,7 +630,8 @@ kubectl get node -o jsonpath='{.items[0].status.allocatable.pods}'
 Stage 1·2로 이어갈 게 아니면 **바로 부순다.**
 
 ```bash
-tofu -chdir=infra/aws-eks/2-cluster destroy -auto-approve
+cd infra/aws-eks/2-cluster && tofu destroy -auto-approve   # 🔴 -chdir 금지 (0-2 참조)
+cd -
 ```
 확인: `Destroy complete! Resources: <N> destroyed.` — **apply한 개수와 같아야 한다.**
 소요는 **약 4분 30초**(07-28, rds) ~ **6분 21초**(08-07, in-cluster).
@@ -1129,8 +1141,8 @@ kubectl delete -f k8s/base/core-api.yaml -f k8s/base/ai-api.yaml -f k8s/base/dai
   -f k8s/base/networkpolicy-ai-api.yaml -f k8s/base/ingress.yaml \
   -f k8s/base/postgres.yaml -f k8s/base/postgres-static.yaml --ignore-not-found
 
-# ③ 인프라 (Stage 0-4·0-5와 동일)
-tofu -chdir=infra/aws-eks/2-cluster destroy -auto-approve
+# ③ 인프라 (Stage 0-4·0-5와 동일) — 🔴 -chdir 금지 (0-2 참조)
+cd infra/aws-eks/2-cluster && tofu destroy -auto-approve && cd -
 ```
 
 > 🔴 **`kubectl delete secret core-api-db`로 지우면 안 된다.** ExternalSecret이
@@ -1927,6 +1939,36 @@ K8s에는 `Ingress`라는 오브젝트가 있는데, **그 자체로는 아무 �
 | **ALB** | AWS Application Load Balancer. 실제로 트래픽을 받는 물건 |
 | **타겟그룹** | ALB가 트래픽을 보낼 대상 묶음. 여기엔 **파드 IP**가 등록된다 |
 
+### 4-0b. 🔴 사전 조건 — 노드 2대 · daily-api 배포 (2026-10-16 재현 검증에서 빠져 있던 것)
+
+3b 최종 상태(노드 1대 · ESO 3 · postgres · core-api)에서 그대로 4-3 으로 가면 **두 군데서 막힌다.**
+
+| 결함 | 실측 (R1, 2026-10-16) |
+|---|---|
+| **R1-4 — LBC 가 core-api 를 밀어낸다** | t4g.small 파드 상한 11 이 3b 에서 이미 찬다. LBC 차트 기본값이 `priorityClassName: system-cluster-critical` 이라 **Pending 이 아니라 선점(preempt)** 한다: `Preempted by pod … on node …` → core-api 재생성 → `0/1 nodes are available: 1 Insufficient memory, 1 Too many pods`. 4-3 의 *"requests 를 주면 Pending 이 된다"* 는 **우선순위가 같을 때만** 참이다. ALB 는 생기지만 **타겟이 0개**로 남는다 |
+| **R1-2 — daily-api 배포 단계가 없었다** | Ingress 규칙 ①이 `daily-api` 로 보내는데 이 문서 어디에도 배포 명령이 없었다(teardown 에만 등장). `kubectl describe ingress` → `daily-api:8082 (<error: services "daily-api" not found>)` — **apply 는 성공하고 Events 는 `SuccessfullyReconciled`** 라 조용하다 |
+
+그래서 4-3 **전에**:
+
+```bash
+# ① 노드 2대 — 노드그룹 상한(max 4) 안에서 늘린다. tofu destroy 가 노드그룹째 지우므로 고아가 남지 않는다
+aws eks update-nodegroup-config --cluster-name devquest-eks --nodegroup-name devquest-eks-ng \
+  --scaling-config minSize=1,maxSize=4,desiredSize=2 --region ap-northeast-2
+kubectl get nodes          # → Ready 2개 (실측 약 1분)
+
+# ② daily-api — core-api 와 같은 관례(40자리 sha 태그, IMAGE_PLACEHOLDER 치환)
+SHA=$(aws ecr describe-images --repository-name devquest/daily-api --region ap-northeast-2 \
+  --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \
+  | ruby -rjson -e 'puts JSON.parse(STDIN.read).find{|t| t =~ /\A[0-9a-f]{40}\z/}')
+REPO=$(aws ecr describe-repositories --repository-names devquest/daily-api \
+  --region ap-northeast-2 --query 'repositories[0].repositoryUri' --output text)
+sed "s|IMAGE_PLACEHOLDER|$REPO:$SHA|" k8s/base/daily-api.yaml | kubectl apply -f -
+kubectl wait --for=condition=Ready pod -l 'app in (core-api,daily-api)' --timeout=300s
+```
+
+> ⚠️ `update-nodegroup-config` 는 **tofu 밖 변경**이다(state 의 `desired_size` 는 1 그대로). 다음 apply 가 1 로 되돌리려 할 수 있으나
+> 이 문서는 세션마다 destroy 하므로 문제가 되지 않는다. 상시 운영이라면 변수로 올려야 한다.
+
 ### 4-1. 왜 helm인가 — 애드온이 아니다 (착수 전 무료 확인)
 
 이 레포는 애드온을 `aws_eks_addon`으로 관리한다(`2-cluster/addons.tf`: vpc-cni·kube-proxy·
@@ -2033,7 +2075,7 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 |---|---|
 | `region` · `vpcId` | 🔴 **생략하면 IMDS로 알아내려 한다.** hop limit이 1이면 파드에서 도달 못 해 `failed to introspect vpcID from EC2Metadata`로 CrashLoop. ESO·EBS CSI는 IRSA(projected token)만 써서 IMDS를 안 건드렸다 — **그 선례가 이 실패를 덮어주지 않는다** |
 | `replicaCount=1` | 기본값 **2**. 노드가 적어 HA가 성립하지 않는다. `addons.tf`가 coredns에 같은 조치를 한 전례 |
-| `resources.requests.*` | 🔴 **차트 기본값이 `resources: {}`** = BestEffort. 그러면 `Pending`이 아니라 **그냥 스케줄되고**, 여유 없는 노드에 얹혀 **앱을 evict시킨다.** Pending은 시끄러운 실패지만 evict는 조용하다 |
+| `resources.requests.*` | 🔴 **차트 기본값이 `resources: {}`** = BestEffort. 그러면 여유 없는 노드에도 **그냥 스케줄된다.** requests 를 주면 스케줄러가 자리를 계산한다 — ⚠️ **그래도 `Pending` 이 보장되지는 않는다.** 차트 기본 `priorityClassName: system-cluster-critical` 이라, 자리가 없으면 줄을 서는 대신 **우선순위 0 인 앱 파드를 선점(preempt)해 쫓아낸다**(2026-10-16 재현 R1 실측, 노드 1대에서 core-api 가 밀려남). requests 는 *"자리가 있나"* 를, 우선순위는 *"누가 비키나"* 를 정한다 → 그래서 4-0b 에서 노드를 2대로 늘린다 |
 | `serviceAccount.annotations` | 점을 **이스케이프**해야 한다. 안 하면 helm이 `eks → amazonaws → com/role-arn` 중첩 맵을 만들어 **에러 없이** 엉뚱한 구조를 넣는다 |
 
 > 🔴 **형식 검사를 지우지 마라.** apply가 안 끝난 상태에서 `tofu output`을 읽으면 tofu가
@@ -2338,12 +2380,18 @@ kubectl logs -l app=daily-api --since=60s | grep daily-question    # (매치 없
 #### ✅ 반증 실험으로 판정한다 — "없으면 실패하나"를 본다
 
 ```bash
+IP=$(dig +short "$ALB" | head -1)
 kubectl scale deploy/daily-api --replicas=0
 sleep 45
-curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB/api/v1/daily-question"   # → 503
-curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB/api/v1/companies"        # → 403
+curl -s -o /dev/null -w '%{http_code}\n' --resolve "$HOST:443:$IP" "https://$HOST/api/v1/daily-question"   # → 503
+curl -s -o /dev/null -w '%{http_code}\n' --resolve "$HOST:443:$IP" "https://$HOST/api/v1/companies"        # → 403
 kubectl scale deploy/daily-api --replicas=1     # 복원 → 다시 200
 ```
+
+> 🔴 **이 자리는 `http://$ALB/...` 였고, 그대로 치면 둘 다 `301` 이 나온다 (2026-10-16 재현 R1-5).**
+> 09-11 에 쓴 명령인데 09-16 에 `ssl-redirect` 가 들어오면서 **HTTP 로는 판정이 불가능**해졌다 — 위 응답 코드 표에는
+> *"HTTPS 로 찍어야 한다"* 를 반영했지만 **이 반증 실험은 갱신되지 않았다.** 같은 절 안의 국소 수정 반쪽이다.
+> 실측(R1): HTTP `301/301` · HTTPS `503/403` → 복원 후 200.
 
 | | 관측 | 뜻 |
 |---|:--:|---|
@@ -2403,7 +2451,10 @@ aws elbv2 describe-load-balancers --region ap-northeast-2 \
 |:--:|---|---|:--:|
 | **5a** | metrics-server · HPA | 지표 수집, 파드 수 자동 조절 | ✅ 2026-10-08 |
 | **5b** | Karpenter | 노드 자동 조절 | ✅ 2026-10-12 |
-| **5c** | ArgoCD | GitOps | ⬜ |
+| **5c** | ArgoCD | GitOps | ✅ 2026-10-13 |
+| **5d** | Fluent Bit → CloudWatch Logs | 클러스터 밖에 남는 로그 | ✅ 2026-10-15 |
+| **5e** | ArgoCD sync wave | 시크릿·DB 까지 git 으로 | ✅ 2026-10-15 |
+| **5f** | 컨트롤플레인 로그 | 감사 로그 — 누가 그랬나 | ✅ 2026-10-16 |
 
 > `infra/aws-eks/README.md`가 **"선택"** 으로 표시해 둔 단계다. EKS 이관 완료의 필수 조건이 아니다.
 
@@ -2718,6 +2769,9 @@ kubectl -n kube-system logs deploy/karpenter | grep -i -E 'denied|WebIdentity'  
 
 설치는 20초 걸렸다. 버전은 호환표를 보고 고른다 — K8s 1.36 은 Karpenter **1.13 이상**이 필요하다.
 
+> ℹ️ 5b-3 을 적용하기 **전**에 로그를 보면 `failed listing instance types … no subnets found` ERROR 가 여럿 보인다(2026-10-16 재현 R2-2).
+> EC2NodeClass 가 아직 없어서다 — 5b-3 적용 뒤로는 0건이다. 위 `denied|WebIdentity` 검사는 이것과 무관하게 비어야 한다.
+
 🔴 **차트 기본값으로는 이 클러스터에서 뜨지 않는다.** `values.yaml` 이 세 가지를 바꾼다.
 
 | 기본값 | 문제 | 바꾼 값 |
@@ -2888,6 +2942,10 @@ aws ec2 describe-instances --region $R --filters "Name=tag-key,Values=karpenter.
 aws ec2 describe-launch-templates --region $R --query 'length(LaunchTemplates)' --output text   # → 0
 ```
 
+> ✅ **2026-10-16 재현 R2a 에서 EC2 종료 경로를 실물로 확인했다** — Karpenter 노드를 살려 둔 채 destroy:
+> `[karpenter-cleanup] EC2 종료: i-…` → `✅ 잔존 EC2 0 · 프로파일 정리 완료` → `45 destroyed`, 이후 Karpenter EC2 0 · 시작 템플릿 0 · 프로파일 0.
+> 아래는 10-12 당시의 기록이다.
+>
 > ⚠️ **이 세션에서 정리 스크립트가 실물로 지운 것은 인스턴스 프로파일뿐이다.** Karpenter 노드 한 대를 일부러 살려 둔 채
 > destroy 했는데, 시작 35초 뒤 Karpenter 가 그 노드를 스스로 종료했다(CloudTrail 로 확인, 이유는 확인하지 못했다).
 > EC2 를 종료하는 경로는 가짜 `aws` 를 주입한 시험으로만 검증돼 있다. 정리 뒤 위 조회가 0 인지 반드시 확인한다.
@@ -3024,6 +3082,13 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443     # https://localhos
 > 이 세션은 화면 없이 `kubectl` 로만 진행했다. 아래 확인은 전부 명령으로 된다.
 
 ### 5c-4. Application 을 등록한다 — 손으로 치는 마지막 `kubectl apply`
+
+> 🔴 **지금 레포에서는 이 절의 명령을 그대로 치지 마라 — 5e-4 의 명령을 쓴다 (2026-10-16 재현 R2-1).**
+> `k8s/gitops/application.yaml` 은 Stage 5e 에서 **ESO 차트 · 시크릿 참조 · postgres 까지 품는 multi-source** 로 바뀌었고
+> 자리표시자가 **6개**다. 아래 `sed` 는 2개만 치환하므로 ESO 역할 · 볼륨 · AZ 자리에 글자가 그대로 들어가 실패한다.
+> 5c-2 처럼 ESO · postgres 를 손으로 먼저 올렸다면 Application 의 ESO 차트와 **같은 리소스를 두고 충돌**한다.
+> ⇒ 5c 는 *"ArgoCD 가 무엇인가"* 의 기록으로 읽고, 실습은 **5e-1 → 5e-4** 경로(빈 클러스터 + ArgoCD + Application 하나)로 한다.
+> 5c-5 · 5c-9 의 관찰(selfHeal · 컨트롤러 정지)은 그 Application 위에서 그대로 재현된다(R2b 실측: replicas 2→1 **2초**, Service UID 교체).
 
 ```bash
 REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-northeast-2.amazonaws.com
@@ -3645,6 +3710,9 @@ aws logs describe-log-streams --log-group-name /aws/eks/devquest-eks/cluster --r
 ```
 종류마다 2개인 것은 컨트롤플레인(API 서버 등)이 인스턴스 2대로 돌기 때문이다.
 
+> ⚠️ **두 번째 세션부터는 4 · 6 · … 으로 보인다** (2026-10-16 재현 R2-3 — 실측 4). 그룹은 0-bootstrap 소유라 보존 30일 동안
+> 이전 세션의 스트림이 남는다. 이번 세션 몫만 보려면 `--order-by LastEventTime --descending` 으로 최근 것만 본다.
+
 ### 5f-2. 세 가지 일을 저지른다
 
 ```bash
@@ -3678,6 +3746,11 @@ aws logs get-query-results --region ap-northeast-2 --query-id $ID     # status �
 00:36:57.919Z  arn:aws:iam::<account>:user/bootstrap-admin                   delete 200
 00:36:58.817Z  system:serviceaccount:argocd:argocd-application-controller    patch  201   ← 0.9초 뒤, 201 = 새로 만들었다
 ```
+
+> ⚠️ **③ 은 위 두 줄만 나오지 않는다** (2026-10-16 재현 R2-4 — 실측 31행). 30분 창에는 Application 이 처음 만든 기록,
+> `deployment-controller` 의 `update`(상태 갱신 — `409` 충돌 재시도 포함), selfHeal 시험 기록이 함께 걸린다.
+> **사람의 `delete 200` 바로 다음의 `argocd-application-controller patch 201`** 쌍을 찾는다(R2b: 08:00:35.418 → 08:00:36.279, 0.86초).
+> 줄이려면 `and user.username not like /deployment-controller/` 를 더한다.
 
 읽는 법 — 실측에서 틀리게 짚었던 세 곳:
 
