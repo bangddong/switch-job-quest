@@ -17,3 +17,30 @@
 0	git push && echo done | grep origin/main	파이프 뒤 origin/main 문자열
 2	git push origin main && git log origin/main..HEAD	진짜 차단은 유지 — 세그먼트 안에 origin main
 2	git log origin/main..HEAD && git push origin main	뒤쪽 세그먼트가 진짜 push
+2	git push --force-with-lease	작업 브랜치 force-with-lease → 차단 (10-16 실제 발생)
+2	git push --force origin feat/x	작업 브랜치 --force → 차단
+2	git push -f	인자 없는 -f → 차단
+2	git push -uf origin feat/x	묶음 플래그 안의 f → 차단
+2	git push --force-if-includes --force-with-lease origin fix/x	if-includes 조합 → 차단
+2	git push origin +feat/x	+refspec 강제 갱신 → 차단
+2	git push origin +HEAD:feat/x	+HEAD:ref → 차단
+2	git -C ../study-log push -f origin docs/x	-C 경로 지정 형태 → 차단
+2	git status && git push --force-with-lease	뒤 세그먼트의 force → 차단
+0	git push --follow-tags origin feat/x	--follow-tags 는 force 아님 (오탐 방지)
+0	git push -u origin fix/force-guard	브랜치명에 force 문자열 (오탐 방지)
+0	git push origin feat/a-f	브랜치명 안의 -f (오탐 방지)
+0	git push -o ci.skip origin feat/x	push option (오탐 방지)
+0	git push && git log --force-x	force 는 다른 세그먼트 (오탐 방지)
+0	git -C ../study-log push -u origin docs/x	study-log 발행 경로 (오탐 방지)
+0	git commit -F - <<'MSG'\ndocs: 금지\n\ngit push --force-with-lease 는 막힌다\nMSG	heredoc 본문의 force 는 데이터 (오탐 방지)
+0	git fetch --force origin	push 아님 → 관심 밖
+2	git -C ../other push origin main	-C 형태의 main push → 차단
+2	git -C "a b" push -f	QA F-1: 따옴표 경로 -C + force → 차단
+2	git -C "a b" push origin main	QA F-1: 따옴표 경로 -C + main → 차단
+2	git --git-dir=x push -f	QA F-1: 긴 전역 옵션(=값) + force → 차단
+2	git --git-dir=x push origin main	QA F-1: 긴 전역 옵션(=값) + main → 차단
+2	git push origin "+feat/x"	QA F-2: 따옴표 친 +refspec → 차단
+2	git push 'origin' '+x'	QA F-2: 홑따옴표 +refspec → 차단
+2	git push --force-w origin x	QA F-2: 긴 옵션 축약형 → 차단
+0	git stash push -f	stash push 는 원격 push 아님 (오탐 방지)
+0	git --no-pager log origin/main	긴 전역 옵션 뒤 push 아님 (오탐 방지)
