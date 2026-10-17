@@ -23,9 +23,35 @@ if ! declare -f strip_heredoc >/dev/null 2>&1; then
 fi
 COMMAND=$(strip_heredoc "$COMMAND")
 
-# git push 명령인지 확인
-if ! echo "$COMMAND" | grep -q "git push"; then
+# git push 명령인지 확인 — `git -C <dir> push` · `git -c k=v push` 형태도 포함한다
+# (study-log 발행 절차가 `git -C` 를 쓴다. 리터럴 "git push" 만 보면 그 형태가 통째로 빠진다).
+PUSH_RE='git([[:space:]]+-[cC][[:space:]]+[^[:space:];&|]+)*[[:space:]]+push'
+if ! echo "$COMMAND" | grep -qE "$PUSH_RE"; then
   exit 0
+fi
+
+# ── 히스토리 재작성(force push) 차단 — **모든 브랜치** (2026-10-17) ──
+#
+# 🔴 그전엔 이 가드가 *"push 대상이 main 인가"* 만 봤다. `--force` 는 main 패턴의 일부로만
+#    나왔고, 작업 브랜치 force push 는 **어떤 훅에도 걸리지 않았다.** CLAUDE.md 의
+#    *"히스토리 재작성(force push)도 금지된 우회로 취급"* 은 산문 규칙뿐이었다.
+#    2026-10-16 실제 발생: 머지 뒤 작업 브랜치를 rebase → `--force-with-lease` 로 push.
+#    맞는 길은 `git merge origin/main`(히스토리 보존)이었다. 레포 반복 실패 형태
+#    *"산문 규칙은 밀리고 기계가 강제한 것만 지켜진다"* 의 또 한 사례.
+#
+# 잡는 형태 (한 세그먼트 `[^;&|]*` 안에서만 — L-29 오탐 교훈):
+#   --force · --force-with-lease[=…] · --force-if-includes
+#   -f 와 그것이 묶인 단축 플래그(-uf, -fu …)
+#   +refspec (`origin +feat/x`, `+HEAD:feat/x`) — 플래그 없이 강제 갱신하는 문법
+# ⚠️ `--follow-tags` 처럼 f 로 시작하는 긴 옵션, 브랜치명 안의 `-f`·`force` 는 오탐 케이스로 고정.
+FORCE_RE="${PUSH_RE}[^;&|]*[[:space:]](--force(-with-lease|-if-includes)?(=[^[:space:]]*)?([[:space:]]|\$)|-[a-zA-Z]*f[a-zA-Z]*([[:space:]]|\$)|\+[^[:space:]])"
+if echo "$COMMAND" | grep -qE "$FORCE_RE"; then
+  echo "⛔ force push(히스토리 재작성)는 브랜치와 무관하게 금지입니다." >&2
+  echo "" >&2
+  echo "main 을 따라잡아야 하면 rebase 대신 merge 하세요:" >&2
+  echo "  git fetch origin main && git merge origin/main && git push" >&2
+  echo "이미 rebase 했다면: git reset --keep origin/<branch> 후 merge 로 다시 맞추세요." >&2
+  exit 2
 fi
 
 # main 브랜치로 push 시도 감지
@@ -42,7 +68,7 @@ fi
 # ⚠️ 오탐이 잦은 가드는 우회당하고, 우회는 가드를 침식한다(L-21 에서 실제로 발생).
 #    `[^;&|]*` 는 `;` `&&` `||` `|` 를 만나면 멈추므로 **한 세그먼트 안의 인자만** 본다.
 #    차단력은 그대로다 — `git push origin main && ...` 는 첫 세그먼트에서 잡힌다(테스트로 고정).
-if echo "$COMMAND" | grep -qE "git push[^;&|]*(origin[[:space:]]+main|origin/main|[[:space:]]+main\$)"; then
+if echo "$COMMAND" | grep -qE "${PUSH_RE}[^;&|]*(origin[[:space:]]+main|origin/main|[[:space:]]+main\$)"; then
   echo "⛔ main 브랜치에 직접 push할 수 없습니다." >&2
   echo "" >&2
   echo "feature 브랜치에서 PR을 통해 머지하세요:" >&2

@@ -189,7 +189,8 @@ echo
 #    ⚠️ 낮출 때는 반드시 **무엇을 지웠는지** 근거를 남긴다.
 #       08-17: qa-effect-guard.sh 삭제(배선된 적 없는 죽은 코드) → 9건 제거, 152 → 143.
 #       08-18: assert-no-main-push 오탐 회귀 케이스 6건 추가(L-29), 143 → 149.
-MIN_CASES=173   # 149 + eks-marker-cases 24건 (2026-09-04)
+#       10-17: assert-no-main-push force push(전 브랜치)·`git -C` 케이스 18건 추가, 173 → 191.
+MIN_CASES=191   # 173 + push-guard force·-C 18건 (2026-10-17)
 if [ "$((PASS+FAIL))" -lt "$MIN_CASES" ]; then
   echo "❌ 케이스 수가 줄었다: $((PASS+FAIL)) < ${MIN_CASES}"
   echo "   케이스 파일이 비었거나 러너 배선이 끊겼을 가능성이 높다."
