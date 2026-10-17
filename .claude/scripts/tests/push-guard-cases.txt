@@ -35,3 +35,12 @@
 0	git commit -F - <<'MSG'\ndocs: 금지\n\ngit push --force-with-lease 는 막힌다\nMSG	heredoc 본문의 force 는 데이터 (오탐 방지)
 0	git fetch --force origin	push 아님 → 관심 밖
 2	git -C ../other push origin main	-C 형태의 main push → 차단
+2	git -C "a b" push -f	QA F-1: 따옴표 경로 -C + force → 차단
+2	git -C "a b" push origin main	QA F-1: 따옴표 경로 -C + main → 차단
+2	git --git-dir=x push -f	QA F-1: 긴 전역 옵션(=값) + force → 차단
+2	git --git-dir=x push origin main	QA F-1: 긴 전역 옵션(=값) + main → 차단
+2	git push origin "+feat/x"	QA F-2: 따옴표 친 +refspec → 차단
+2	git push 'origin' '+x'	QA F-2: 홑따옴표 +refspec → 차단
+2	git push --force-w origin x	QA F-2: 긴 옵션 축약형 → 차단
+0	git stash push -f	stash push 는 원격 push 아님 (오탐 방지)
+0	git --no-pager log origin/main	긴 전역 옵션 뒤 push 아님 (오탐 방지)

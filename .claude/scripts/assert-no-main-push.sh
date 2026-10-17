@@ -25,7 +25,10 @@ COMMAND=$(strip_heredoc "$COMMAND")
 
 # git push 명령인지 확인 — `git -C <dir> push` · `git -c k=v push` 형태도 포함한다
 # (study-log 발행 절차가 `git -C` 를 쓴다. 리터럴 "git push" 만 보면 그 형태가 통째로 빠진다).
-PUSH_RE='git([[:space:]]+-[cC][[:space:]]+[^[:space:];&|]+)*[[:space:]]+push'
+# 전역 옵션: `-C/-c <값>`(값은 따옴표 가능) 또는 `--긴옵션[=값]`. QA F-1(10-17): 초판은
+# `git -C "a b" push -f` · `git --git-dir=x push -f` 를 놓쳤다.
+# ⚠️ `--git-dir x`(공백 구분 값)는 여전히 못 잡는다 — 원장 L-72.
+PUSH_RE="git([[:space:]]+(-[cC][[:space:]]+(\"[^\"]*\"|'[^']*'|[^[:space:];&|]+)|--[a-z-]+(=[^[:space:];&|]+)?))*[[:space:]]+push"
 if ! echo "$COMMAND" | grep -qE "$PUSH_RE"; then
   exit 0
 fi
@@ -44,7 +47,8 @@ fi
 #   -f 와 그것이 묶인 단축 플래그(-uf, -fu …)
 #   +refspec (`origin +feat/x`, `+HEAD:feat/x`) — 플래그 없이 강제 갱신하는 문법
 # ⚠️ `--follow-tags` 처럼 f 로 시작하는 긴 옵션, 브랜치명 안의 `-f`·`force` 는 오탐 케이스로 고정.
-FORCE_RE="${PUSH_RE}[^;&|]*[[:space:]](--force(-with-lease|-if-includes)?(=[^[:space:]]*)?([[:space:]]|\$)|-[a-zA-Z]*f[a-zA-Z]*([[:space:]]|\$)|\+[^[:space:]])"
+FORCE_RE="${PUSH_RE}[^;&|]*[[:space:]](--force(-[a-z-]*)?(=[^[:space:]]*)?([[:space:]]|\$)|-[a-zA-Z]*f[a-zA-Z]*([[:space:]]|\$)|[\"']?\+[^[:space:]])"
+# QA F-2(10-17): `--force(-[a-z-]*)?` 로 git 이 받는 축약형(`--force-w`)까지, `["']?\+` 로 따옴표 친 +refspec 까지.
 if echo "$COMMAND" | grep -qE "$FORCE_RE"; then
   echo "⛔ force push(히스토리 재작성)는 브랜치와 무관하게 금지입니다." >&2
   echo "" >&2

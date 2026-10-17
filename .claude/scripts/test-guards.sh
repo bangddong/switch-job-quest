@@ -190,7 +190,8 @@ echo
 #       08-17: qa-effect-guard.sh 삭제(배선된 적 없는 죽은 코드) → 9건 제거, 152 → 143.
 #       08-18: assert-no-main-push 오탐 회귀 케이스 6건 추가(L-29), 143 → 149.
 #       10-17: assert-no-main-push force push(전 브랜치)·`git -C` 케이스 18건 추가, 173 → 191.
-MIN_CASES=191   # 173 + push-guard force·-C 18건 (2026-10-17)
+#       10-17: 같은 PR QA F-1·F-2 케이스 9건 추가, 191 → 200.
+MIN_CASES=200   # 173 + push-guard force·-C·전역옵션 27건 (2026-10-17)
 if [ "$((PASS+FAIL))" -lt "$MIN_CASES" ]; then
   echo "❌ 케이스 수가 줄었다: $((PASS+FAIL)) < ${MIN_CASES}"
   echo "   케이스 파일이 비었거나 러너 배선이 끊겼을 가능성이 높다."
