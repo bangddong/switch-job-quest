@@ -11,6 +11,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.core.env.MapPropertySource
+import org.springframework.core.env.SystemEnvironmentPropertySource
 
 /**
  * FlywayConfig가 `devquest.flyway.migrate-on-startup` 프로퍼티로만 활성화되는지 검증한다.
@@ -22,10 +24,10 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner
  * 켜진 경우(ON) "게이트를 통과해 실제로 실행을 시도했는지"까지 확인하기 위해, 진짜 DB 대신
  * `getConnection()` 호출 시 즉시 `SQLException`을 던지는 mock DataSource를 쓴다.
  * - OFF: `@ConditionalOnProperty`가 빈 정의 자체를 등록하지 않으므로 DataSource는 전혀 건드리지 않는다.
- * - ON: 빈 생성이 시도되어 `flyway.repair()`가 실제로 `DataSource.getConnection()`을 호출한다
+ * - ON: 빈 생성이 시도되어 `flyway.migrate()`가 실제로 `DataSource.getConnection()`을 호출한다
  *   (연결이 실패해 컨텍스트 기동 자체는 실패하지만, "게이트를 통과해서 실행까지 갔다"는
  *   사실 자체가 이 테스트가 검증하려는 것이다 — 실제 마이그레이션 성공 여부는
- *   `FlywayMigrationIntegrationTest`가 진짜 Postgres로 검증한다).
+ *   `FlywayMigrationIntegrationTest`가 진짜 Postgres로 검증하며, 기동 경로에 repair 가 없다는 것도 거기서 고정한다).
  */
 class FlywayConfigTest {
 
@@ -65,6 +67,33 @@ class FlywayConfigTest {
                 // 여기서 검증하려는 건 "게이트를 통과해 DataSource까지 실제로 도달했는가"이다.
                 assertThat(context.startupFailure).isNotNull()
                 verify(dataSource, atLeastOnce()).connection
+            }
+    }
+
+    @Test
+    fun `fly toml 의 환경변수 DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP=false 가 yml 의 true 를 이겨 기동 마이그레이션이 꺼진다`() {
+        // be/fly.toml [env] 가 쓰는 이름이 실제로 `devquest.flyway.migrate-on-startup` 에 바인딩되는지(하이픈↔언더스코어)
+        // 고정한다. 오타·바인딩 실패면 Fly 앱이 기동 시 또 마이그레이션을 돌린다.
+        val dataSource: DataSource = mock()
+
+        runnerWithDataSource(dataSource)
+            .withInitializer { context ->
+                // application-prod.yml 의 기본값(true)을 흉내 — 낮은 우선순위
+                context.environment.propertySources.addLast(
+                    MapPropertySource("yml", mapOf("devquest.flyway.migrate-on-startup" to "true")),
+                )
+                // OS 환경변수 — 실제 환경과 같은 SystemEnvironmentPropertySource, 높은 우선순위
+                context.environment.propertySources.addFirst(
+                    SystemEnvironmentPropertySource(
+                        "systemEnvironment",
+                        mapOf("DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP" to "false"),
+                    ),
+                )
+            }
+            .run { context ->
+                assertThat(context.startupFailure).isNull()
+                assertThat(context).doesNotHaveBean(Flyway::class.java)
+                verifyNoInteractions(dataSource)
             }
     }
 }

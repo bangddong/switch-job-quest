@@ -148,10 +148,10 @@ class FlywayMigrationIntegrationTest {
     @Test
     fun `동일 마이그레이션을 재실행해도 아무 것도 다시 적용되지 않는다`() {
         // ⚠️ 신호가 약한 테스트다(QA 지적 F-2) — migrationsExecuted == 0, validate() 통과는
-        // 사실상 Flyway 자체의 내장 idempotency 보장을 재확인하는 것에 가깝다. 이 테스트가 실질적으로
-        // 지키는 전제는 "프로덕션 FlywayConfig가 repair() → migrate()를 반복 호출해도 안전하다"는
-        // 쪽이다 — 그 전제가 깨지면(예: repair()가 실패하거나 재적용을 유발하면) 여기서 잡힌다는
-        // 목적으로 남겨둔다.
+        // 사실상 Flyway 자체의 내장 idempotency 보장을 재확인하는 것에 가깝다. 실제로 지키는 전제는
+        // "프로덕션 FlywayConfig가 매 기동마다 migrate()를 반복 호출해도 안전하다"(재기동 = 재호출)이다.
+        // 참고: repair()는 이 기동 경로에서 제거됐다(D-016 1a) — 이 테스트는 repair()를 호출하지 않으며,
+        // repair 부재와 수동 repair 모드의 동작은 MigrationLauncherIntegrationTest가 고정한다.
         val flyway = newFlyway()
         flyway.migrate()
 

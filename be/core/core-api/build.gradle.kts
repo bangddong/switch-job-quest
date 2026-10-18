@@ -76,11 +76,15 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
     implementation("com.bucket4j:bucket4j-core:8.10.1")
 
+    // 마이그레이션 모드(`java -jar app.jar migrate|validate|repair`, com.devquest.migration)가 Flyway API 를
+    // 직접 쓴다. db-core 가 flyway-core 를 implementation 으로만 갖고 있어 compileClasspath 로 새지 않으므로
+    // 여기서 선언한다. 버전은 Spring Boot BOM 관리. 아래 테스트용 선언과 중복이 아니라 승격이다.
+    implementation("org.flywaydb:flyway-core")
+
     // 실제 Postgres + Flyway 마이그레이션 통합 테스트 전용.
     // db-core가 flyway-core/flyway-database-postgresql을 `implementation`으로 갖고 있어
     // core-api의 compileClasspath로는 새지 않는다 — 여기서 직접 선언해야 FlywayMigrationIntegrationTest가
     // Flyway 클래스를 컴파일 타임에 볼 수 있다. 버전은 Spring Boot BOM(spring-boot-dependencies)이 관리.
-    testImplementation("org.flywaydb:flyway-core")
     testImplementation("org.flywaydb:flyway-database-postgresql")
     // Testcontainers 2.x부터 아티팩트명이 `testcontainers-` 접두어로 바뀌었다(예전 `junit-jupiter`,
     // `postgresql`은 존재하지 않음 — 실측: Spring Boot BOM이 임포트하는 testcontainers-bom:2.0.3 확인).
