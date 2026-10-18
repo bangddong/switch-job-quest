@@ -28,11 +28,11 @@ server:
   port: 8082
 
 # ⚠️ 의도적으로 `devquest.flyway.migrate-on-startup`을 켜지 않는다(기본값 false 유지).
-# db-core의 FlywayConfig KDoc 참고 — daily-api가 db-core만 의존한 상태로 repair()+migrate()를
-# 돌리면, daily-api 클래스패스에 없는 core-api 소유 마이그레이션 버전(V1~V6, V8, V9)이
-# flyway_schema_history에서 DELETED로 마킹되어 core-api가 다음 기동 시 그 버전을 재실행하며
-# 영구 부팅 불가에 빠진다(2026-07-01 V8 사고 재발 경로). 마이그레이션 실행 주체는 core-api
-# 하나로 유지한다.
+# db-core의 FlywayConfig KDoc 참고 — daily-api는 db-core만 의존해 클래스패스에 core-api 소유 마이그레이션
+# 버전(V1~V6, V8, V9)이 없다. 클래스패스가 다른 앱이 마이그레이션(특히 repair)을 돌리면 그 버전들이
+# flyway_schema_history에서 DELETED로 마킹되어 core-api가 재실행하며 영구 부팅 불가에 빠진다(2026-07-01 V8 사고).
+# 마이그레이션 실행 주체는 core-api 이미지 하나다 — Fly는 release_command("migrate"), EKS는 당분간 core-api 기동 시.
+# (repair()는 자동 경로에서 제거됐다. 수동 모드 `java -jar app.jar repair`는 core-api 이미지에만 있다.)
 
 # ⚠️ 함정 ⑦ 기록: 이 프로필은 db-core에 정의된 **모든** JPA 엔티티(daily-api가 실제로 쓰는
 # DailyQuestionContentEntity·TechQuestionBankEntity 외 나머지 13개 포함)를 `@EntityScan`으로

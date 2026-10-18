@@ -15,17 +15,13 @@ import javax.sql.DataSource
  * ⚠️ 왜 `@Profile("prod")`만으로는 부족한가:
  * 이 클래스는 `db-core` 모듈에 있다. `db-core`를 의존하는 앱은 그 사실만으로 이 `@Configuration`이
  * 컴포넌트 스캔 대상이 되고, prod 프로파일로 뜨는 순간 자동으로 [flyway]가 생성되어
- * `repair()` + `migrate()`가 돈다 — "db-core를 의존한다"가 실행 조건이 되어버린다.
+ * `migrate()`가 돈다 — "db-core를 의존한다"가 실행 조건이 되어버린다.
  *
  * 문제는 마이그레이션 파일이 `core-api`(V1~V6, V8, V9)와 `db-core`(V7, V10~V13) 두 모듈에
- * 나뉘어 있다는 점이다. `repair()`는 "실행 시점 클래스패스의 마이그레이션 파일 집합"과 DB의
- * `flyway_schema_history`를 대조해, 없는 버전을 `DELETED`로 마킹한다(flyway-core 문서:
- * "Repair must be given the same locations as migrate"). `db-core`만 의존하는 앱(예: 계획 중인
- * daily-api)의 클래스패스에는 `core-api` 쪽 파일이 없으므로, 그 앱이 한 번이라도 `repair()`를
- * 돌리면 core-api 버전들이 공유 이력에서 `DELETED`로 마킹된다. 그 다음 core-api가 기동하면
- * 그 버전들을 "미적용"으로 보고 V1부터 재실행 → `CREATE TABLE`이 기존 테이블에 부딪혀
- * 영구 부팅 불가에 빠진다(2026-07-01 V8 사고, PR #231→#233과 동일한 실패 모드).
- * 즉 daily-api의 단순 기동 1회가 core-api를 영구 사망시킬 수 있다.
+ * 나뉘어 있다는 점이다. `db-core`만 의존하는 앱(예: daily-api)의 클래스패스에는 `core-api` 쪽 파일이
+ * 없다. 그런 앱이 `repair()`를 돌리면 "실행 시점 클래스패스의 파일 집합"과 DB의 `flyway_schema_history`를
+ * 대조해 core-api 버전들이 `DELETED`로 마킹되고, 다음 core-api 기동이 그 버전을 V1부터 재실행 →
+ * `CREATE TABLE` 충돌로 영구 부팅 불가에 빠진다(2026-07-01 V8 사고, PR #231→#233과 동일한 실패 모드).
  *
  * 그래서 "db-core를 의존한다"가 아니라 `devquest.flyway.migrate-on-startup=true`를 명시적으로
  * 켠 앱만 마이그레이션을 실행하게 한다. 기본값은 반드시 false(off) — 새 앱이 아무 설정도 안 해도
@@ -33,8 +29,15 @@ import javax.sql.DataSource
  * `application-prod.yml`에서 이 값을 true로 켜서 기존 동작(prod 기동 시 자동 마이그레이션)을
  * 그대로 유지한다.
  *
- * `repair()` 호출 자체는 이번 게이트 작업의 범위가 아니다 — "누가 실행하는가"만 다루고
- * "무엇을 하는가"는 그대로 둔다. core-api 단독으로 도는 지금은 안전하다.
+ * `repair()`는 이 기동 경로에서 **제거**됐다(D-016 순서 1a). `repair()`는 체크섬 불일치를 조용히 덮고, 클래스패스가
+ * 다른 이미지(중간 버전이 빠진 이미지, PR 이미지의 다른 V14, 재번호 핫픽스)가 돌리면 적용된 버전을
+ * DELETED 로 마킹하기 때문이다. 이제 기동 경로는 `migrate()`만 호출한다 — Flyway 기본 `validateOnMigrate`가
+ * 먼저 검증하므로 체크섬 불일치는 **조용히 고쳐지지 않고 기동 실패**로 드러난다. repair 는 사람이 명시적으로
+ * 치는 `java -jar app.jar repair`(com.devquest.migration, core-api)로만 가능하다.
+ *
+ * 환경별 실행 주체: Fly 는 배포 단계(`release_command = "migrate"`)에서 마이그레이션하고 앱 기동에서는
+ * `DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP=false`로 끈다. EKS 는 당분간 `application-prod.yml`의 기본값(true)대로
+ * 기동 시 `migrate()`를 쓴다(EKS Job 으로의 분리는 후속 작업).
  */
 @Configuration
 @Profile("prod")
@@ -52,7 +55,6 @@ class FlywayConfig {
             .dataSource(dataSource)
             .locations("classpath:db/migration")
             .load()
-        flyway.repair()
         flyway.migrate()
         return flyway
     }

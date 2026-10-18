@@ -5422,3 +5422,17 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` 사용자 질문 *"훅으로 막았잖아"* → 확인 결과 **막는 훅이 없었다.** `assert-no-main-push.sh` 는 push 대상이 main 인지만 봤고, settings deny 에 force 규칙 0건. 10-16 의 위반은 **산문 규칙만 있던 자리**에서 났다.
   사용자 지시 *"그거부터 훅으로 막자"* → PR #457(squash `20cdcdf`): 전 브랜치 `--force*`·묶음 `-f`·`+refspec` 차단, push 판정을 `git -C/-c/--opt push` 로 확장(main 차단의 `git -C x push origin main` 구멍도 같이). 케이스 173 → 200, 라이브 훅으로 `--dry-run --force-with-lease` 차단 확인. 잔여 갭 원장 L-72.
 - `[메모]` 이 브랜치는 **되돌리지 않았다**(되돌림 = 또 force push). #457 머지 뒤 main 반영은 `git merge origin/main`(`36bcd9d`) → 일반 push 통과. 이후 같은 상황의 정답 경로다.
+
+## 2026-10-18 — 📌D-016 순서표 1a: 마이그레이션을 앱 기동에서 분리 (Flyway 공유 DB 안전)
+
+- `[결정]` 사용자 *"애초에 C로 가자"* — A(Fly 만 migrate)·B(양쪽 migrate·repair 제거) 대신 **C: 마이그레이션을 별도 배포 단계로**. 하위 결정: `repair()` **수동 모드 격리**, 실행기 = **core-api jar 전용 모드**(`java -jar app.jar migrate|validate|repair`). 둘 다 추천안 채택.
+- `[메모]` Blindspot(Explore) 17건 → 1a 에서 안 하는 10건은 계획서 「1번 Blindspot」 절에 목적지와 함께 등재. 🔴 핵심 3: ①분리만으론 부족 — 새 단계도 `repair()` 를 돌리면 위험 그대로 ②이미지에 마이그레이션 전용 진입점 없음(전체 컨텍스트 → 스케줄러가 프로세스를 안 끝냄, 시크릿 전부 필요) ③ArgoCD **PreSync 훅은 매일 첫 sync 실패**(ESO wave 0·`core-api-db` wave 1 전에 돈다) → EKS 는 1b.
+- `[메모]` 🟡 **내 앞선 설명 보정** — *"오래된 이미지가 repair 하면 최신 버전이 DELETED"* 는 단순 구버전엔 성립 안 할 가능성(Flyway 기본 `ignoreMigrationPatterns=*:future`). 실제 경로는 중간 버전 누락 클래스패스·PR 이미지의 다른 V14·재번호 핫픽스. jar 상수 풀 근거, 실행 미확인.
+- `[결정]` Fly `release_command` 사실 확인(공식 문서): *CMD 를 대체, ENTRYPOINT 는 유지* → 실제 실행 `java … -jar app.jar migrate`. 임시 머신은 앱과 같은 크기·secrets 접근, 기본 5분, **non-zero → 배포 중단(옛 버전 계속 서빙)**.
+- `[해결]` 구현(be-feature-builder, `c75858d`): `WebApplicationType.NONE` 최소 컨텍스트(`CoreDataSourceConfig` 만 import — JPA·메일·AI·OTLP·시큐리티·스케줄러 없음, `GITHUB_*`/`JWT_*` 불요). 기동 경로 `FlywayConfig` 에서 `repair()` 제거. `fly.toml` `[deploy] release_command="migrate"` + `[env] DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP="false"`. EKS 는 `application-prod.yml` 기본 true 유지(1b 까지).
+- `[메모]` 실측(로컬 Docker Postgres, 실제 bootJar): 빈 DB `migrate` ≈ 2초 exit 0(13건) · 체크섬 조작 후 `migrate` **exit 1** `Validate failed: Migrations have failed validation` · `repair` 후 `migrate` exit 0 · 오타 `migrat` exit 1(웹 서버로 새지 않음). `./gradlew test` 546건 실패 0.
+- `[막힘]` `e: ...MigrationExecutor.kt:3:12 Unresolved reference 'flywaydb'` — core-api main 에 `flyway-core` 가 test 전용이었다 → `implementation` 승격.
+- `[막힘]` 로컬에 시스템 JDK 없음(`Unable to locate a Java Runtime`) → `JAVA_HOME=/opt/homebrew/opt/openjdk@21/...` 로 Gradle 9.0.0 기동 확인.
+- `[메모]` ⚠️ 위임 커밋 `c75858d` 메시지에 `Co-Authored-By` 줄이 들어갔다(프로젝트 컨벤션 위반). 이미 push 됐고 고치려면 히스토리 재작성(force push)이 필요해 **그대로 둔다**. 이후 위임 프롬프트에 금지를 명시.
+- `[메모]` 미검증: Fly 첫 `release_command` 실행(임시 머신의 `DB_*` secrets 접근·실제 소요). 배포 로그의 `[migration] migrate 성공` 으로 확인한다.
+

@@ -8,6 +8,16 @@ swap_size_mb = 256
 
 [build]
 
+# 배포 시 임시 머신이 `java ... -jar app.jar migrate` 를 실행한다(release_command 는 CMD 를 대체하고
+# be/Dockerfile 의 ENTRYPOINT 는 유지 — "migrate" 가 프로그램 인자로 붙는다. Dockerfile 에 CMD 없음).
+# 같은 이미지라 클래스패스 스큐가 구조적으로 없다. non-zero exit 면 배포가 중단되고 옛 버전이 계속 서빙한다.
+# 타임아웃: 기본 5분(300초)은 JVM 기동 + Flyway 에 충분하다 — 임시 머신도 앱과 같은 1 shared CPU/512MB 이고,
+# 최소 컨텍스트(DB 설정만, 웹·JPA·메일·AI 없음)라 수 초~수십 초면 끝난다. 앱의 health grace 180s 가 풀 컨텍스트
+# 기동 기준이므로 그 이하다. 줄일 이유도 늘릴 근거도 없어 명시적으로 고정만 한다.
+[deploy]
+  release_command = "migrate"
+  release_command_timeout = "5m"
+
 [env]
   SPRING_PROFILES_ACTIVE = "prod"
   CORS_ALLOWED_ORIGINS = "https://quest.dhbang.co.kr"
@@ -16,6 +26,9 @@ swap_size_mb = 256
   # be/Dockerfile의 `-Duser.timezone=Asia/Seoul`은 배포 설정이 유실돼도 버티게 하는 이중 안전장치일 뿐,
   # 이 줄을 대체하려고 넣은 게 아니다. 둘 다 유지한다. (#336의 "TZ는 무효" 서술은 #337에서 정정됨)
   TZ = "Asia/Seoul"
+  # 마이그레이션은 배포 단계([deploy] release_command)에서 하고 앱 기동에서는 하지 않는다(D-016 1a).
+  # application-prod.yml 의 기본값(true)은 EKS 용이라 바꾸지 않고 여기서만 끈다(Spring relaxed binding).
+  DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP = "false"
 
 # 민감 정보는 fly secrets set 으로 주입:
 #   fly secrets set ANTHROPIC_API_KEY=sk-...
