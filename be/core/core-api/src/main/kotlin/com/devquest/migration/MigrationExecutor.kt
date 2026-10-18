@@ -43,7 +43,7 @@ object MigrationExecutor {
                 }
                 MigrationMode.REPAIR -> {
                     log.warn("=".repeat(78))
-                    log.warn("[migration] !!! REPAIR 모드 — flyway_schema_history 를 수정합니다 (수동 전용) !!!")
+                    log.warn("[migration] *** REPAIR 모드 — flyway_schema_history 를 수정합니다 (수동 전용) ***")
                     log.warn("[migration] 체크섬 불일치를 덮고 클래스패스에 없는 버전을 DELETED 로 마킹할 수 있습니다.")
                     log.warn("=".repeat(78))
                     val result = flyway.repair()
