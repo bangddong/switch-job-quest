@@ -407,7 +407,16 @@ FlywayConfig.kt:55-56  flyway.repair() → migrate()
         → 영구 부팅 불가 (2026-07-01 V8 사고 · PR #231→#233 과 동일 실패 모드)
   KDoc 마지막 줄: "core-api 단독으로 도는 지금은 안전하다."   ← 이관이 없애는 전제가 정확히 이것
 ```
-<!-- verify: be/storage/db-core/src/main/kotlin/com/devquest/storage/db/core/config/FlywayConfig.kt ~ flyway\.repair\(\) -->
+> ✅ **해소 (2026-10-18, D-016 순서표 1a `fix/flyway-migration-step`).** 마이그레이션을 앱 기동에서 떼어냈다 —
+> Fly 는 `release_command = "migrate"`(같은 core-api jar 의 전용 모드), 앱 기동 시 OFF. **자동 경로에서 `repair()` 제거**,
+> 사람이 치는 `java -jar app.jar repair` 로만 남았다. 체크섬이 어긋나면 이제 덮지 않고 **release 가 실패**한다(옛 버전 계속 서빙).
+> EKS 는 1b(마이그레이션 Job)까지 기동 시 `migrate` 유지 — repair 는 빠졌다.
+> 🟡 **메커니즘 보정**(1번 Blindspot B-2, 바이트코드 문자열 근거·미실행): 단순히 *오래된* 이미지는 Flyway 기본
+> `ignoreMigrationPatterns=*:future` 로 자기가 모르는 최신 버전을 FUTURE 로 보고 건드리지 않는다. 위 블록의 DELETED 마킹이 실제로 나는 것은
+> ⓐ중간 버전이 빠진 클래스패스(daily-api 이미지) ⓑPR 이미지가 다른 V14 를 가질 때 ⓒ재번호 핫픽스다. 셋 다 자동 repair 제거로 닫힌다.
+<!-- verify: be/storage/db-core/src/main/kotlin/com/devquest/storage/db/core/config/FlywayConfig.kt ~ flyway\.migrate\(\) -->
+<!-- verify: be/core/core-api/src/main/kotlin/com/devquest/migration/MigrationExecutor.kt ~ REPAIR -->
+<!-- verify: be/fly.toml ~ release_command *= *"migrate" -->
 Fly·EKS 두 core-api 가 `migrate-on-startup: true`(`application-prod.yml:37`)로 **같은 Neon 이력을 공유**하고,
 `be-cd.yml` 은 창 중에도 main push 마다 Fly 를 재배포하는데 **EKS 는 CD 가 0** 이라 손으로 고정한 태그로 돈다
 ⇒ 이미지 스큐가 **개연적**이다. 확도 🔴(메커니즘) · 🟡(발생 확률).
