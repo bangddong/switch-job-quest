@@ -93,8 +93,9 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 
 | # | 항목 | 다루는 것 | 선행 |
 |:-:|---|---|---|
-| 0 | **학습 문서 정리** — 범위는 사용자 확인 대기(재현 검증 포함 여부) | Q-1 | — |
-| 1 | **Flyway 공유 DB 안전** (BE) — 창 쪽은 `migrate` 안 함·`repair()` 제거 또는 한 쪽만, 이미지 동일성 강제 | U-2 · N-11 | 0 |
+| 0 | ✅ **학습 문서 정리** — 재현 검증 포함, 완료 2026-10-17 (#458) | Q-1 | — |
+| 1a | **Flyway 공유 DB 안전 — BE + Fly** (`fix/flyway-migration-step`): 마이그레이션을 앱 기동에서 분리(C안), `repair()` 자동 경로 제거·수동 모드 격리, core-api jar 전용 모드 + Fly `release_command` | U-2 · N-11 · 아래 「1번 Blindspot」 | 0 |
+| 1b | **Flyway — EKS 쪽 마이그레이션 Job** (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
 | 2 | **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존 | N-10 | 0 |
 | 3 | **CI 역할** — main 전용 역할(0-bootstrap) + access entry 2개(로컬 admin + CI) + 가드 재정의 | N-1 · N-2 · N-3 · N-18 | 0 |
 | 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
@@ -104,6 +105,24 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크 | U-7 · U-20 · U-22 · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
+
+## 1번 Blindspot (2026-10-18, Explore 읽기 전용) — 1a 에서 안 하는 것
+
+결정(사용자 10-18): **C안**(마이그레이션 분리) · `repair()` **수동 모드로 격리** · 실행기 = **core-api jar 전용 모드**.
+1a 가 처리하는 것: 실행기·`repair` 격리·Fly `release_command`·verify 마커 2곳·`FlywayConfigTest`. 아래는 **1a 에서 안 하고 목적지가 정해진 것**.
+
+| ID | 확도 | 내용 | 왜 지금 못 하나 → 어디서 |
+|---|:-:|---|---|
+| B-2 | 🟡 | D-015 ④ 의 메커니즘 서술 보정 — 단순히 *오래된* 이미지는 Flyway 기본 `ignoreMigrationPatterns=*:future` 로 최신 버전을 건드리지 않는다. 실제 발화 경로는 ⓐ중간 버전이 빠진 클래스패스(daily-api) ⓑPR 이미지의 다른 V14 ⓒ재번호 핫픽스 | 바이트코드 문자열 근거뿐(실행 미확인). 1a 에서 `repair` 가 자동 경로를 떠나면 셋 다 닫히므로 **서술 보정만 남는다** → 1a PR 에서 README D-015 재판정 표에 한 줄 |
+| B-3 | 🔴 | ArgoCD **PreSync 훅은 매일 첫 sync 에 실패** — ESO(wave 0)·`core-api-db`(wave 1) 전에 돈다 | 클러스터 필요 → **1b** (Sync 훅 wave 2.5, `BeforeHookCreation`) |
+| B-6 | 🟡 | daily-api(wave 4)도 `ddl-auto: validate` → 마이그레이션 뒤여야 | → **1b** |
+| B-7 | 🔴 | 이미지 태그 패치가 `Deployment/core-api` 만 겨냥 → Job 태그를 따로 적으면 클러스터 안 스큐 재발 | → **1b** + 순서표 2(이미지 공급망) |
+| B-9 | ⚪ | Fly release 머신의 이그레스 IP 가 앱 머신 고정 IP 와 다를 수 있음 → EC2 DB SG(N-6) 허용 목록에 영향 | DB 가 아직 Neon → **5번**(SG 설계 시 실측) |
+| B-12 | 🟡 | *"core-api 가 유일한 마이그레이션 실행자"* 서술이 `k8s/README.md`·`kustomization.yaml` wave 3 주석·`daily-api.yaml`·양 `application-prod.yml` 에 박혀 있음. 손 경로에 Job 단계 없음 | EKS 는 1a 에서 동작이 안 바뀐다(기동 시 migrate 유지, repair 만 빠짐) → **1b** 에서 함께 |
+| B-13 | 🟡 | 복구 절차(`eks-tutorial-steps.md` 백업 절, `db-restore.sh`, `PERSISTENT-RESOURCES.md`)가 *앱 기동 시 Flyway* 를 판정 도구로 씀. `selfHeal` 이 복구 중 Job 을 다시 띄워 `pg_restore` 와 경쟁 가능 | → **1b** + **6번**(복구 리허설) |
+| B-14 | 🟡 | 새 코드가 `be-cd.yml` 의 `./gradlew test` 에 자동 편입(L-36 쟁점 재부상) | 실행기를 core-api 안에 두므로 **새 모듈 없음** — 1a 에서 쟁점 아님. 전용 모듈로 바꾸면 재검토 |
+| B-16 | 🟡 | Neon 콜드 스탠바이(Q-2) 전환 시 누가 migrate 하는지 미정의 | → **6번**(복구·전환 리허설) |
+| B-17 | ⚪ | 실행기를 db-core 에 두면 *storage 모듈에 main* — 선례 없음 | core-api 에 두므로 해당 없음 |
 
 ## 이번 범위에서 하지 않는 것
 
