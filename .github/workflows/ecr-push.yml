@@ -19,9 +19,15 @@ name: ECR Push
 #      있어야 하고, 그 10건은 각자 자기 이미지를 갖는다.
 #
 #   ⚠️ **main HEAD 에 항상 이미지가 있는 것은 아니다.** `paths` 필터 때문에 문서만 바뀐 머지는
-#      빌드하지 않는다. 배포할 태그는 *"`be/**`·이 파일을 마지막으로 바꾼 main 커밋"* 이다:
-#        git log -1 --format=%H origin/main -- be .github/workflows/ecr-push.yml
-#      (전환 워크플로 = 순서표 8 이 이 규칙으로 태그를 고른다.)
+#      빌드하지 않는다. 배포할 태그(정본 규칙 — 전환 워크플로 = 순서표 8 이 이것으로 고른다):
+#        ① main HEAD 에 이미지가 있으면 HEAD
+#        ② 없으면 `git log -1 --first-parent --format=%H origin/main -- be .github/workflows/ecr-push.yml`
+#      🔴 `--first-parent` 를 빼지 마라 (QA F-1). 머지 커밋 병합이면 push 이벤트의 sha(=태그)는
+#         머지 커밋 M 인데, 이 옵션 없는 `git log -- <path>` 는 history simplification 으로 M 을
+#         건너뛰고 **브랜치 쪽 커밋**을 돌려준다 — 이미지가 없는 sha 다(실측: 3633b96 → b7a0835).
+#      ⚠️ 한 번에 여러 커밋이 push 되면 태그는 head 하나뿐이다 → 규칙 ②가 그 사이 커밋을 가리키면 없음.
+#         squash 운영(PR 1건 = 커밋 1개)에선 생기지 않는다. 생기면 ①(HEAD)로 해결되도록 HEAD 를 굽는다.
+#      `sort_by(imagePushedAt)[-1]` 로 고르지 마라 — sha 별로 병렬 빌드하므로 푸시 완료 순서 ≠ 커밋 순서.
 #
 #   ⚠️ Fly(`be-cd.yml`)는 같은 커밋을 **따로** 빌드한다 — 바이트가 같은 이미지는 아니지만 소스·
 #      마이그레이션 집합은 같다. 이미지 하나로 합치는 것은 이 범위 밖이다.
@@ -35,7 +41,10 @@ on:
     paths:
       - "be/**"
       - ".github/workflows/ecr-push.yml"
-  # 수동 재빌드 — lifecycle 로 만료된 main 이미지를 다시 굽거나, 푸시가 실패한 run 을 대신할 때.
+  # 수동 빌드 — 🔴 **main HEAD 만 굽는다**(`github.sha` = HEAD). 옛 커밋을 다시 굽는 수단이 아니다 (QA F-2).
+  #   · 푸시가 실패한 run 의 복구 = 그 run 의 **"Re-run failed jobs"** (같은 sha 로 재실행)
+  #   · 이미지가 만료됐거나 re-run 할 수 없으면 = 이걸로 HEAD 를 굽는다 → 위 규칙 ①이 HEAD 를 고른다
+  #     (HEAD 와 규칙 ② sha 사이엔 `be/` 변경이 없으므로 내용이 같다)
   # 이미 있는 태그면 아무것도 하지 않는다(IMMUTABLE — 아래 「태그 존재 확인」).
   workflow_dispatch:
     inputs:
@@ -59,6 +68,17 @@ env:
   AWS_REGION: ap-northeast-2
 
 jobs:
+  # main 이 아닌 ref 로 dispatch 하면 아래 `build-push` 는 `if:` 로 skipped 된다 → run 이 **초록인데
+  # 아무것도 안 만든다**(QA F-3). 전엔 OIDC 거부로 시끄럽게 죽었다. 부재가 성공처럼 보이지 않게 실패시킨다.
+  ref-guard:
+    name: Ref guard (main 전용)
+    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::ECR 푸시는 main 에서만 한다 — 지금 ref: ${{ github.ref }}. 브랜치 변경은 머지 후 main push 가 굽는다."
+          exit 1
+
   build-check:
     name: Build check (${{ matrix.service }})
     if: github.event_name == 'pull_request'

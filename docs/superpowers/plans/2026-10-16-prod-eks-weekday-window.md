@@ -130,7 +130,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 
 | 항목 | 왜 지금 못 하나 → 어디서 |
 |---|---|
-| **배포할 태그 고르는 규칙**을 기계로 — `git log -1 --format=%H origin/main -- be .github/workflows/ecr-push.yml` 이 ECR 에 **있는지** 확인 후 사용, 없으면 on 실패(Fly 유지) | `paths` 필터 때문에 main HEAD 에 이미지가 없을 수 있다. 소비자(on 잡)가 아직 없다 → **8번** |
+| **배포할 태그 고르는 규칙**을 기계로 — ① main HEAD 에 이미지가 있으면 HEAD ② 없으면 `git log -1 --first-parent --format=%H origin/main -- be .github/workflows/ecr-push.yml`(🔴 `--first-parent` 필수 — 머지 커밋 병합 시 옵션 없으면 이미지 없는 브랜치 커밋을 돌려준다, QA F-1). 둘 다 ECR 에 없으면 on 실패(Fly 유지). `sort_by(imagePushedAt)` 금지(병렬 빌드라 푸시 순서 ≠ 커밋 순서, F-4) | `paths` 필터 때문에 main HEAD 에 이미지가 없을 수 있다. 소비자(on 잡)가 아직 없다 → **8번** |
 | 푸시 실패 감지 — main push 의 ECR Push 가 빨개도 Fly 배포(`be-cd`)는 성공할 수 있다 → 그날 on 잡이 옛 이미지 또는 ImagePullBackOff | 위 규칙이 "없으면 on 실패"로 막는다 → **8번** |
 | Fly·EKS 이미지 **하나로** — 지금은 같은 커밋을 각자 빌드(소스·마이그레이션 집합은 같음) | Fly 원격 빌더 → ECR 이미지 사용으로 바꾸면 `be-cd` 구조 변경. 스큐 위험(U-2)은 커밋 단위로 이미 닫혔다 → 필요해지면 별도 |
 | OIDC 신뢰정책의 `pull_request` 제거 — 이 워크플로는 더 이상 PR 에서 assume 하지 않는다 | `infra-deploy.yml` 의 PR plan 이 같은 역할을 쓴다 → **3번**(main 전용 역할) |

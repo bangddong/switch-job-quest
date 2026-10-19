@@ -49,8 +49,9 @@ k8s/
 ### 1. 이미지 준비 (클러스터 없어도 가능, $0)
 
 `be/**` 를 바꾼 커밋이 main 에 들어가면 **ECR Push** 워크플로가 세 서비스를 자동으로 빌드·푸시한다
-(📌D-016 순서표 2 — PR 은 빌드만, ECR 엔 main 커밋만). 없으면 GitHub Actions → **ECR Push** 수동 실행
-(`workflow_dispatch`) → service 선택. 완료되면 Step Summary에 이미지 주소가 찍힌다:
+(📌D-016 순서표 2 — PR 은 빌드만, ECR 엔 main 커밋만). 없으면 실패한 run 의 "Re-run failed jobs",
+그것도 안 되면 GitHub Actions → **ECR Push** 수동 실행(`workflow_dispatch`, **main HEAD 만 굽는다**) → service 선택.
+배포할 태그 고르는 정본 규칙은 `eks-tutorial-steps.md` 1-1절(`--first-parent`). 완료되면 Step Summary에 이미지 주소가 찍힌다:
 
 ```
 <account>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<git-sha>
