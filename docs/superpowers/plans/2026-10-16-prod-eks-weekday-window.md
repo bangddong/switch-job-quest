@@ -51,7 +51,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 |---|:-:|---|---|
 | N-1 | 🔴 | CI 로 2-cluster apply 하면 `access.tf` 의 `principal_arn = caller arn` 이 **STS 세션 ARN** → access entry 불가. 역할 ARN 으로 바꾸면 entry 1개라 **로컬 admin 이 kubectl 권한 상실** | `2-cluster/access.tf:6,12` · `cluster.tf:27` · `plans/2026-07-19-eks-2-cluster.md:468` |
 | N-2 | 🔴 | 현 OIDC 역할은 신뢰정책에 `pull_request` 포함 + `AdministratorAccess` → access entry 추가 = **PR 로 prod 클러스터 admin**. 기존 금지(`prereqs.md:263`)와 정면 충돌. ⇒ **main 전용(sub=`ref:refs/heads/main`) 별도 역할 신설** 선행. `environment:` 를 붙이면 sub 가 바뀌어 assume 실패(⚪) | `0-bootstrap/iam-github-oidc.tf:37-54` |
-| N-3 | 🟡 | `guard-local-layers` 는 `infra-deploy.yml` matrix 만 본다 → **새 워크플로가 2-cluster 를 apply 해도 초록** = 조용한 보호 소실. 의미 재정의 필요(D-002 파생물) | `infra-ci.yml:53-60` |
+| N-3 | 🟡 | `guard-local-layers` 는 `infra-deploy.yml` matrix 만 본다 → **새 워크플로가 2-cluster 를 apply 해도 초록** = 조용한 보호 소실. 의미 재정의 필요(D-002 파생물) | `infra-ci.yml:53-60` · → **8번으로 이관**(2026-10-19, 3번 B3-13) |
 | N-4 | 🔴 | 리퍼·마커 ↔ CI 양방향 충돌. (a) CI 클러스터엔 마커 없음 → **off 실패 시 dead man's switch 0개**, 주말 방치 60h ≈ $15. (b) 마커 훅은 **아무 레이어** 로컬 apply 에 반응, cluster_dir 은 늘 2-cluster → DB 작업으로 1-network 를 apply 하면 2h 뒤 **리퍼가 prod 클러스터를 destroy**. (c) 학습·prod 가 같은 state key → **공존 불가** | `eks-reaper.sh:17,83,105,174` · `eks-session-marker.sh:39,48` · `2-cluster/backend.tf` |
 | N-5 | 🟡 | `1-network` 는 `infra-deploy` matrix 에 있어 **머지 시 `apply -auto-approve`**. 여기 DB EC2 를 두면 인프라 PR 하나가 **prod DB 를 무인 replace** 가능(루트 EBS `delete_on_termination` 기본 true). PERSISTENT-RESOURCES 원장에 VPC 행도 없다 | `infra-deploy.yml:36,120` · `README.md:115` |
 | N-6 | 🟡 | `1-network` 에 SG 0개·IPv6 0. DB SG 가 클러스터 SG 를 **ID 로 참조하면 매일 destroy 가 DependencyViolation** → `vpc_cidr` 로 허용. **Fly 이그레스 고정 IP 근거 0건** — 없으면 허용목록이 `0.0.0.0/0:5432` 로 무너진다 | `1-network/network.tf` · `outputs.tf:37-40` |
@@ -102,7 +102,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 5 | **DB 층** — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** | N-9 · U-3 · N-15 | 5 |
 | 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1 · 6 |
-| 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크 | U-7 · U-20 · U-22 · N-13 · N-14 | 2 · 3 · 4 |
+| 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크 | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
 
@@ -170,7 +170,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B3-6 | 🟡 | 5번이 0-bootstrap 에 Secrets Manager version 을 두면 PR plan 이 `GetSecretValue` 필요 → 실패 or PR 이 prod DB 비밀번호를 읽음 | **5번** — 0-bootstrap 에 secret **값**을 두지 않는 설계(값 주입은 별도 경로) |
 | B3-7 | 🔴 | `access.tf` 의 `data.aws_caller_identity.current` 는 `irsa-fluent-bit.tf`·`irsa-karpenter.tf` 가 공유 — 지우면 깨진다 | **C** |
 | B3-8 | 🔴 | 로컬 admin = IAM 사용자 `bootstrap-admin`(장기 키). 일지엔 *"OIDC 전환 후 키 폐기 예정"* — prod admin entry 로 박으면 그 계획과 반대로 굳는다 | **C** 는 이 사용자로. 키 폐기 시 entry 교체 — 그때 break-glass 경로(B3-11)도 함께 재설계 |
-| B3-9 | 🟡 | `sub=main` 은 schedule·dispatch 도 포함 → 경계 = main 워크플로 정의 + 브랜치 보호 | 감수(위 결정). `id-token: write` 는 infra-deploy·ecr-push 뿐 |
+| B3-9 | 🟡 | `sub=main` 은 schedule·dispatch 도 포함 → 경계 = main 워크플로 정의 + 머지 권한(본인 1명) + 필수 체크. 리뷰 강제 없음(`required_pull_request_reviews: null` 실측, 1인 레포라 걸 수 없음 — QA F-1) | 감수(위 결정). `id-token: write` 는 infra-deploy·ecr-push 뿐 |
 | B3-10 | 🟡 | `environment:` 를 붙이면 sub 변경 → assume 실패 | **A** 주석에 명시. 8번이 environment 를 쓰려면 신뢰정책도 함께 |
 | B3-11 | 🟡 | main 역할 최소권한은 실질 불가(`iam:*` 필요) | 위 결정 |
 | B3-12 | 🟡 | `github_actions_role_arn` 출력이 non-sensitive(같은 성질의 `acm_certificate_arn` 은 sensitive) | 새 출력은 sensitive(A). 옛 출력 정정은 **B** |

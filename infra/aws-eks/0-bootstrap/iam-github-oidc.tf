@@ -58,7 +58,11 @@ resource "aws_iam_role_policy_attachment" "github_actions_admin" {
 # 왜: EKS 가 평일 창 동안 prod 를 서빙하면 CI 가 클러스터를 켜고 끈다(순서표 8).
 #   위 역할은 신뢰정책에 `pull_request` 가 있고 Admin 이라 **PR 코드가 리뷰 전에 Admin 으로
 #   돈다**(PR 이 워크플로 파일을 고치면 그대로 실행된다). 학습 계정이라 감수했던 위험이다(N-2·N-18).
-#   ⇒ 쓰기는 **main 에 들어간(= 리뷰를 거친) 워크플로만** 하도록 역할을 둘로 나눈다.
+#   ⇒ 쓰기는 **main 에 들어간 워크플로만** 하도록 역할을 둘로 나눈다.
+#   ⚠️ "main 에 들어감" ≠ "사람 리뷰" (QA F-1, 실측 2026-10-19): main 보호는 필수 체크 6개뿐이고
+#      `required_pull_request_reviews: null`·`enforce_admins: false`. 실제 경계 = **머지 권한(본인 1명) +
+#      필수 체크 통과**. 1인 레포라 리뷰 강제는 걸 수 없다(자기 PR 승인 불가). 목적은 *머지 권한 없는
+#      PR 코드가 Admin 으로 도는 것* 을 막는 것이고, 그건 이걸로 달성된다.
 #
 #   | 역할 | sub | 권한 | 쓰는 곳 |
 #   |---|---|---|---|
@@ -80,7 +84,7 @@ resource "aws_iam_role_policy_attachment" "github_actions_admin" {
 # sub 를 `StringEquals` 로 정확히 맞춘다(와일드카드 없음). ⚠️ 워크플로에 `environment:` 를 붙이면
 #   sub 가 `repo:<repo>:environment:<name>` 으로 **바뀌어 assume 이 실패한다**(B3-10). 쓰지 않는다.
 # ⚠️ `ref:refs/heads/main` 은 "머지 apply 전용"이 아니다 — main 의 워크플로가 `schedule`·
-#   `workflow_dispatch` 로 돌아도 같은 sub 다(B3-9). 경계 = **main 의 워크플로 정의 + 브랜치 보호**.
+#   `workflow_dispatch` 로 돌아도 같은 sub 다(B3-9). 경계 = **main 의 워크플로 정의 + 머지 권한 + 필수 체크**.
 resource "aws_iam_role" "github_actions_main" {
   name = "devquest-eks-github-actions-main"
 
