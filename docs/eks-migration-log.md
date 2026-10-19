@@ -5472,3 +5472,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
   PR 단계 실측: `Build check` 3잡 pass(core-api·ai-api·daily-api), tfsec 는 immutable ignore 없이 pass.
 - `[해결]` 옛 `latest` 태그 제거 — `aws ecr batch-delete-image --image-ids imageTag=latest` 세 레포 각 `{"deleted":["latest"],"failures":[]}`, 이후 `latest` 보유 이미지 0. core-api 의 그 이미지는 `c89af6a017bd781e7215644756e8cacb61241aa8` 태그로 남아 있음(태그만 뗐다). ⚠️ IMMUTABLE 레포에서도 태그 삭제는 된다 — 막히는 것은 **덮어쓰기**뿐.
+
+## 2026-10-19 — 📌D-016 순서표 3: CI 역할 (A — main 전용 역할 생성)
+
+- `[메모]` Blindspot(Explore) 17건(B3-1~17) → 계획서 「3번」 절에 목적지와 함께 등재. 🔴 계획을 바꾼 것 2: ①**옛 역할이 Admin 인 동안 main 전용 역할의 보호 효과는 0**(PR 이 `eks:CreateAccessEntry`·`iam:UpdateAssumeRolePolicy` 를 직접 호출 가능) → 옛 역할 축소가 *후속* 이 아니라 핵심 ②**읽기 전용 PR 역할도 0-bootstrap state 의 `random_password` 평문을 읽는다**(JWT prod 키·postgres 비밀번호).
+- `[결정]` 사용자: PR 경로 = **좁힌 읽기 전용**(기각: PR 에 AWS 없음 — 머지 = 자동 apply 인 레이어의 plan 미리보기를 잃음 / 현상 유지 — 3번의 의미가 없어짐). 근거 실측: `gh api …/collaborators` = 본인 1명(admin), 포크 PR 은 OIDC 토큰을 못 받는다.
+- `[결정]` 기본값(되돌리기 싼 것): main 역할 Admin(B3-11 — 자기 신뢰정책 관리 주체라 `iam:*` 필수) · sub `StringEquals ref:refs/heads/main`, `environment:` 안 씀(B3-10) · 로컬 admin entry = `bootstrap-admin` ARN 을 `account_id` 로 조립(B3-8).
+- `[결정]` PR 3단계: **A** 역할 생성 → 시크릿 `AWS_ROLE_ARN_MAIN` 등록 → **B** 워크플로 전환 + 옛 역할 축소(머지 apply 는 새 역할이 수행 — push 이벤트는 머지된 워크플로 정의로 돈다) → **C** access entry 2개. 가드 재정의(N-3)는 8번으로 — 2-cluster 를 apply 하는 워크플로가 아직 없어 허용 경로를 반증할 대상이 없다(B3-13).
+- `[메모]` A 의 `tofu -chdir=infra/aws-eks/0-bootstrap plan`: `aws_iam_role.github_actions_main will be created` · `aws_iam_role_policy_attachment.github_actions_main_admin will be created` · `Plan: 2 to add, 0 to change, 0 to destroy.`
