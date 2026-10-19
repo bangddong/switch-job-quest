@@ -438,7 +438,7 @@ Fly·EKS 두 core-api 가 `migrate-on-startup: true`(`application-prod.yml:37`)�
 > 위 k3s 행은 그 지점을 등재해둔 것이다. 되살릴 때는 `design-change-procedure.md` 전 단계를 밟을 것.
 
 #### 평일 창 동안 EKS 가 prod 를 서빙한다 — DB 는 EC2 자가 운영 Postgres
-> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`
+> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/infra-deploy.yml`, `.github/workflows/ecr-push.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`
 
 **결정 (2026-10-16, 사용자)**: *"실제 돌리면서 EKS 의 실무 경험을 해보고 싶다."* D-015 의 기각 대안 **B**(prod + Fly 폴백 왕복)를
 DB 를 바꿔 다시 채택한다.

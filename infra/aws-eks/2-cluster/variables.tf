@@ -324,3 +324,10 @@ variable "control_plane_log_types" {
     error_message = "control_plane_log_types 는 api · audit · authenticator · controllerManager · scheduler 중에서만 고른다."
   }
 }
+
+# 📌D-016 순서표 3-C — access.tf 의 로컬 admin entry. 장기 키 폐기 시 다른 사람 주체로 바꾼다(B3-8).
+variable "local_admin_iam_user" {
+  type        = string
+  description = "클러스터 admin entry 를 받을 로컬 IAM 사용자 이름 (ARN 은 계정 ID 로 조립)"
+  default     = "bootstrap-admin"
+}
