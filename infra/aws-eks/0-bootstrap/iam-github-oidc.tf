@@ -18,8 +18,9 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 # 2) PR plan 용 역할. 신뢰정책 —
-#    이 레포의 main 브랜치 + pull_request(plan)에서 온 토큰만 허용. (main 이 남아 있는 것은 이름·sub 를
-#    바꾸면 replace 라 그대로 둔 것이다 — 쓰기 권한이 없으므로 main 에서 assume 해도 읽기뿐이다.)
+#    이 레포의 main 브랜치 + pull_request(plan)에서 온 토큰만 허용. (sub 에 main 이 남아 있어도 쓰기 권한이
+#    없으므로 main 에서 assume 해도 읽기뿐이다. 굳이 빼지 않은 것은 변경 최소화 — sub 변경은 in-place,
+#    역할 **이름** 변경만 replace 다. QA F-4)
 #    sub 조건이 없으면 임의의 GitHub 레포가 이 역할을 훔쳐 쓸 수 있다.
 resource "aws_iam_role" "github_actions" {
   name = "devquest-eks-github-actions"
@@ -53,8 +54,13 @@ resource "aws_iam_role" "github_actions" {
 #      Allow 락 테이블 쓰기 — `plan` 도 DynamoDB 락을 잡는다(PutItem/DeleteItem). 없으면 plan 이 실패(B3-4)
 #      Deny  state 객체 읽기는 `0-bootstrap/*`·`1-network/*` 만 — 2-cluster state(Secrets Manager 값·TLS
 #            개인키)와 백업 버킷(pg_dump = prod 데이터)을 막는다. ReadOnlyAccess 는 **전 버킷** GetObject 다(B3-5)
-#      Deny  시크릿 값·파라미터·KMS 복호화·로그 본문 — ReadOnlyAccess 가 열어 두는 "내용" 읽기
+#      Allow KMS — DynamoDB 경유만(락 테이블 SSE). Deny 그 외 경로의 kms:Decrypt
+#      Deny  시크릿 값·파라미터·로그 본문 — ReadOnlyAccess 가 열어 두는 "내용" 읽기
 #      Deny  락 테이블 밖 DynamoDB 아이템 읽기 — 미래 테이블 대비
+#    ⚠️ ReadOnlyAccess + 거부 목록은 **열린 구조**다 — 목록 밖 내용 읽기(예: ECR 이미지 pull,
+#       `cloudtrail:LookupEvents`)는 남는다. 위협 주체 = 브랜치를 만들 수 있는 사람(1명)이라 감수(QA F-2).
+#    🔴 이 역할을 EKS access entry 에 넣지 마라 — ReadOnlyAccess 는 `eks:AccessKubernetesApi` 를 포함할 수
+#       있다. 3-C 에서 entry 는 **main 역할만**.
 #    🔴 **남는 노출 (감수 — 사용자 결정 2026-10-19)**: 0-bootstrap state 에는 `random_password` 평문
 #       (JWT prod 키·postgres 비밀번호)이 있고 plan 은 그걸 읽어야 한다. 노출 대상 = 이 레포에 브랜치를
 #       만들 수 있는 사람(쓰기 권한자 1명 실측). 포크 PR 은 OIDC 토큰을 받지 못한다.
@@ -74,10 +80,32 @@ resource "aws_iam_role_policy" "github_actions_plan_scope" {
     Version = "2012-10-17"
     Statement = [
       {
+        # 락 행은 이 두 레이어 것만 (QA F-3). 테이블 전체면 PR 이 진행 중인 main apply 의 락을 지우거나
+        # `-md5` digest 행을 오염시켜 apply 를 막을 수 있다. LockID = "<버킷>/<레이어>/terraform.tfstate[-md5]".
         Sid      = "StateLock"
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
         Resource = aws_dynamodb_table.tflock.arn
+        Condition = {
+          "ForAllValues:StringLike" = {
+            "dynamodb:LeadingKeys" = [
+              "${var.state_bucket_name}/0-bootstrap/*",
+              "${var.state_bucket_name}/1-network/*",
+            ]
+          }
+        }
+      },
+      {
+        # 락 테이블은 SSE(KMS `aws/dynamodb`)라 Get/PutItem 이 **호출자 신원으로** kms 를 부른다.
+        # ReadOnlyAccess 엔 kms:Decrypt 가 없다 → 이게 없으면 plan 이 락 단계에서 죽는다(QA F-1, 실측 2026-10-19:
+        # `Error acquiring the state lock … not authorized to perform: kms:Decrypt`). DynamoDB 경유만 연다.
+        Sid      = "StateLockKms"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*", "kms:DescribeKey"]
+        Resource = "*"
+        Condition = {
+          StringEquals = { "kms:ViaService" = "dynamodb.${var.region}.amazonaws.com" }
+        }
       },
       {
         Sid    = "DenyObjectReadOutsidePlanState"
@@ -96,7 +124,9 @@ resource "aws_iam_role_policy" "github_actions_plan_scope" {
           "ssm:GetParameter",
           "ssm:GetParameters",
           "ssm:GetParametersByPath",
-          "kms:Decrypt",
+          "ssm:GetParameterHistory", # String 타입은 평문 반환 (QA F-2)
+          "dynamodb:GetRecords",     # 스트림 본문 (QA F-2)
+          "ec2:GetConsoleOutput",    # 인스턴스 콘솔 (QA F-2)
           "logs:GetLogEvents",
           "logs:FilterLogEvents",
           "logs:StartQuery",
@@ -104,6 +134,16 @@ resource "aws_iam_role_policy" "github_actions_plan_scope" {
           "logs:StartLiveTail",
         ]
         Resource = "*"
+      },
+      {
+        # kms:Decrypt 는 위 StateLockKms(DynamoDB 경유)만 — 그 외 경로의 복호화는 막는다.
+        Sid      = "DenyKmsDecryptOutsideDynamo"
+        Effect   = "Deny"
+        Action   = "kms:Decrypt"
+        Resource = "*"
+        Condition = {
+          StringNotEquals = { "kms:ViaService" = "dynamodb.${var.region}.amazonaws.com" }
+        }
       },
       {
         Sid         = "DenyTableReadOutsideLock"

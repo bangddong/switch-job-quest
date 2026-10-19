@@ -5489,3 +5489,22 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 머지 apply 주체 = **새 역할** — push 이벤트는 머지된 커밋의 워크플로 정의로 돈다. 이 PR 자체의 plan 은 아직 Admin 인 옛 역할로 돈다.
 - `[메모]` `tofu -chdir=infra/aws-eks/0-bootstrap plan`: `aws_iam_role_policy.github_actions_plan_scope will be created` · `aws_iam_role_policy_attachment.github_actions_admin will be destroyed` · `aws_iam_role_policy_attachment.github_actions_readonly will be created` · `Plan: 2 to add, 0 to change, 1 to destroy.`
 - `[메모]` ⚪ 미검증: 좁힌 역할로 PR plan 이 실제로 통과하는가(ReadOnlyAccess 가 refresh 에 필요한 `ce:GetAnomaly*`·`budgets:ViewBudget` 등을 덮는지). 머지 후 `simulate-principal-policy` + 다음 인프라 PR(3-C)의 plan 으로 확인.
+- `[막힘]` QA F-1(MEDIUM, "좁힌 역할 plan 미검증") 실측 — PR 정책과 **같은 정책**(plan 출력 JSON 에서 추출)을 붙인 임시 역할 `devquest-plan-verify-tmp`(신뢰 = `bootstrap-admin`)로 로컬 `tofu plan`(락 포함):
+  ```
+  == tofu plan 0-bootstrap (락 포함)   rc=1
+  Error: Error acquiring the state lock
+  AccessDeniedException: KMS key access denied error: … not authorized to perform: kms:Decrypt on resource: …
+  == tofu plan 1-network (락 포함)     rc=1   (같은 에러)
+  ```
+  원인: 락 테이블이 SSE(`aws/dynamodb`)라 Get/PutItem 이 **호출자 신원으로** KMS 를 부른다. `ReadOnlyAccess` 엔 `kms:Decrypt` 가 없고, 인라인 Deny 에도 `kms:Decrypt` 가 있었다. ⇒ **그대로 머지했으면 이후 모든 인프라 PR 의 plan 이 락 단계에서 죽었다.** 이 PR 자신의 plan 은 아직 Admin 인 옛 역할로 돌아 CI 는 초록이었다.
+- `[해결]` `StateLockKms` Allow(`kms:Decrypt/Encrypt/GenerateDataKey*/DescribeKey`, `kms:ViaService = dynamodb.<region>.amazonaws.com`) + Deny 를 `DenyKmsDecryptOutsideDynamo`(ViaService ≠ dynamodb)로 교체. 재실측:
+  ```
+  tofu plan 0-bootstrap  rc=0  Plan: 2 to add, 0 to change, 1 to destroy.
+  tofu plan 1-network    rc=0  No changes.
+  2-cluster state GetObject → AccessDenied … with an explicit deny in an identity-based policy
+  0-bootstrap state HeadObject → 43204 (허용)
+  남의 LockID(2-cluster/…) PutItem → AccessDeniedException … no identity-based policy allows   (F-3 LeadingKeys)
+  iam:UpdateAssumeRolePolicy → AccessDenied … no identity-based policy allows   (1차 실행)
+  [cleanup] 임시 역할 삭제 · 확인: 역할 없음
+  ```
+  같은 커밋에서 F-2(Deny 에 `ssm:GetParameterHistory`·`dynamodb:GetRecords`·`ec2:GetConsoleOutput`)·F-3(락 Allow 를 `dynamodb:LeadingKeys` 로 두 레이어 한정)·F-4(낡은 서술 2곳) 수정.
