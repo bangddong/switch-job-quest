@@ -5480,3 +5480,12 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 기본값(되돌리기 싼 것): main 역할 Admin(B3-11 — 자기 신뢰정책 관리 주체라 `iam:*` 필수) · sub `StringEquals ref:refs/heads/main`, `environment:` 안 씀(B3-10) · 로컬 admin entry = `bootstrap-admin` ARN 을 `account_id` 로 조립(B3-8).
 - `[결정]` PR 3단계: **A** 역할 생성 → 시크릿 `AWS_ROLE_ARN_MAIN` 등록 → **B** 워크플로 전환 + 옛 역할 축소(머지 apply 는 새 역할이 수행 — push 이벤트는 머지된 워크플로 정의로 돈다) → **C** access entry 2개. 가드 재정의(N-3)는 8번으로 — 2-cluster 를 apply 하는 워크플로가 아직 없어 허용 경로를 반증할 대상이 없다(B3-13).
 - `[메모]` A 의 `tofu -chdir=infra/aws-eks/0-bootstrap plan`: `aws_iam_role.github_actions_main will be created` · `aws_iam_role_policy_attachment.github_actions_main_admin will be created` · `Plan: 2 to add, 0 to change, 0 to destroy.`
+- `[해결]` **3-A 머지(#464, squash `19a390d767c314278aaae3713a176a79e6f96689`)** → Infra Deploy success. `aws iam get-role --role-name devquest-eks-github-actions-main` 신뢰정책 Condition = `StringEquals` `sub: repo:bangddong/switch-job-quest:ref:refs/heads/main` · `aud: sts.amazonaws.com`, 부착 정책 `AdministratorAccess`. 시크릿 `AWS_ROLE_ARN_MAIN` 등록 — `tofu output -raw` 값을 정규식(`^arn:aws:iam::[0-9]{12}:role/devquest-eks-github-actions-main$`)으로 확인한 뒤 `gh secret set` 에 파이프(화면 비출력). QA LOW 3(경계 서술을 실측으로 정정 — main 보호는 필수 체크 6개뿐 `required_pull_request_reviews: null`·`enforce_admins: false` / N-3 8번 행 등재 / 원장 시제) 전부 fixed.
+
+## 2026-10-19 — 📌D-016 순서표 3-B: 워크플로 전환 + 옛 역할 축소
+
+- `[결정]` 옛 역할 `devquest-eks-github-actions` = 관리형 `ReadOnlyAccess` + 인라인 `tofu-plan-scope`: Allow 락 테이블 Get/Put/DeleteItem(B3-4) · Deny `s3:GetObject*` NotResource `0-bootstrap/*`·`1-network/*`(B3-5 — 2-cluster state·백업 덤프) · Deny 시크릿 값·SSM·`kms:Decrypt`·로그 본문 · Deny 락 테이블 밖 DynamoDB 아이템 읽기. 출력 `github_actions_role_arn` sensitive(B3-12).
+- `[결정]` `infra-deploy`: `role-to-assume = push ? AWS_ROLE_ARN_MAIN : AWS_ROLE_ARN`(B3-3 — plan·apply 가 한 잡). MAIN 이 비면 `||` 우변(읽기 전용)으로 **조용히 떨어지므로** push 에선 먼저 비었는지 검사해 실패. `ecr-push` build-push → `AWS_ROLE_ARN_MAIN`.
+- `[메모]` 머지 apply 주체 = **새 역할** — push 이벤트는 머지된 커밋의 워크플로 정의로 돈다. 이 PR 자체의 plan 은 아직 Admin 인 옛 역할로 돈다.
+- `[메모]` `tofu -chdir=infra/aws-eks/0-bootstrap plan`: `aws_iam_role_policy.github_actions_plan_scope will be created` · `aws_iam_role_policy_attachment.github_actions_admin will be destroyed` · `aws_iam_role_policy_attachment.github_actions_readonly will be created` · `Plan: 2 to add, 0 to change, 1 to destroy.`
+- `[메모]` ⚪ 미검증: 좁힌 역할로 PR plan 이 실제로 통과하는가(ReadOnlyAccess 가 refresh 에 필요한 `ce:GetAnomaly*`·`budgets:ViewBudget` 등을 덮는지). 머지 후 `simulate-principal-policy` + 다음 인프라 PR(3-C)의 plan 으로 확인.

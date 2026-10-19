@@ -15,12 +15,14 @@ output "account_id" {
 }
 
 output "github_actions_role_arn" {
-  description = "CI 워크플로가 assume할 역할 ARN (apply-plan 파이프라인에서 사용)"
+  description = "PR plan 용 읽기 전용 역할 ARN — GitHub 시크릿 AWS_ROLE_ARN (계정 ID 포함 — 민감)"
   value       = aws_iam_role.github_actions.arn
+  # 📌D-016 3-B (B3-12): ARN 에 계정 ID → `account_id`·`acm_certificate_arn` 과 같은 기준으로 sensitive.
+  sensitive = true
 }
 
 # 📌D-016 순서표 3. ARN 에 계정 ID 가 들어간다 → `account_id`·`acm_certificate_arn` 과 같은 기준으로
-#   sensitive (B3-12 — 위 `github_actions_role_arn` 은 non-sensitive 라 기준이 어긋나 있다. 복제하지 않는다).
+#   sensitive (B3-12 — 위 `github_actions_role_arn` 도 3-B 에서 sensitive 로 맞췄다).
 #   시크릿 등록: `tofu output -raw github_actions_main_role_arn | gh secret set AWS_ROLE_ARN_MAIN`
 #   (값을 화면에 찍지 않고 파이프로만 넘긴다)
 output "github_actions_main_role_arn" {

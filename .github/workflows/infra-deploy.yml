@@ -44,10 +44,25 @@ jobs:
         with:
           tofu_version: 1.8.5
 
-      # OIDC로 임시 자격증명 획득 — 신뢰정책이 이 레포 main/PR로 제한
+      # 📌D-016 순서표 3 — **역할이 이벤트마다 다르다** (2026-10-19).
+      #   PR(plan)  → AWS_ROLE_ARN      = `devquest-eks-github-actions`      좁힌 읽기 전용 (sub: main+PR)
+      #   push(apply) → AWS_ROLE_ARN_MAIN = `devquest-eks-github-actions-main` Admin        (sub: main 만)
+      #   PR 코드가 머지 전에 쓰기 권한으로 도는 경로를 없애려는 것이다(`0-bootstrap/iam-github-oidc.tf`).
+      # 🔴 아래 표현식은 MAIN 이 비면 `||` 우변(읽기 전용)으로 **조용히 떨어진다.** apply 가 권한 부족으로
+      #    죽긴 하지만 원인이 "시크릿 없음"인지 안 보인다 → 먼저 비었는지 검사해 크게 실패시킨다.
+      - name: main 역할 시크릿 존재 확인 (push)
+        if: github.event_name == 'push'
+        env:
+          MAIN_ROLE: ${{ secrets.AWS_ROLE_ARN_MAIN }}
+        run: |
+          if [ -z "$MAIN_ROLE" ]; then
+            echo "::error::secrets.AWS_ROLE_ARN_MAIN 이 비어 있다 — apply 는 main 전용 역할로만 한다"
+            exit 1
+          fi
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ github.event_name == 'push' && secrets.AWS_ROLE_ARN_MAIN || secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
       # 🔴 계정 ID 마스킹 — **이 레포는 퍼블릭이고 Actions 로그·요약도 퍼블릭이다.**
