@@ -5521,3 +5521,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 로컬 `tofu -chdir=infra/aws-eks/2-cluster plan`(클러스터 없음 = 전부 create): 변경 전 `Plan: 45 to add` → 후 **47**. plan JSON 의 principal: `aws_eks_access_entry.admin arn:aws:iam::<account>:user/bootstrap-admin` · `aws_eks_access_entry.ci_main arn:aws:iam::<account>:role/devquest-eks-github-actions-main`.
 - `[메모]` ⚪ 미검증(클러스터 필요): 실제 `CreateAccessEntry` 와 CI 역할의 kubectl — 다음 유료 세션 또는 순서표 8. 이 PR 은 `infra/aws-eks/**` 를 건드리므로 **PR plan 이 좁힌 역할로 처음 도는 실사용 검증**이기도 하다.
 - `[해결]` QA 3-C F-3(머지 조건 — 좁힌 PR 역할의 첫 CI plan) 확인: PR #466 Infra Deploy run 39202544126 — `1-network: Acquiring state lock … No changes.` · `0-bootstrap: Acquiring state lock … No changes.` CloudTrail `2026-10-19T05:03:17Z/05:03:24Z devquest-eks-github-actions ok` ⇒ **좁힌 역할로 락·state 읽기·refresh 전부 통과**(3-B 의 임시 역할 실측이 실제 CI 에서도 성립). F-1 verify 마커 3개(실패 주입: access.tf·oidc 각각 `::error::… verify 내용 단언 실패` 확인), F-2 튜토리얼 선행 조건 fixed.
+
+## 2026-10-19 — 📌D-016 순서표 5: DB 층 계획
+
+- `[메모]` Blindspot(Explore) 25건(B5-1~25) → 계획서 「5번」 절에 목적지와 함께. 계획을 바꾼 것: 비번 원천 선택지가 좁다(0-bootstrap `random_password` 는 PR 이 읽고, tofu 관리 SSM 은 PR plan 이 `ssm:GetParameter` Deny 로 실패) · verify-full 은 BE 하드코딩 `sslmode=require` 때문에 BE·Fly 배포가 필요 · SOP §8b destroy 게이트(running 인스턴스 0)가 상시 DB 로 영구 실패 · ArgoCD external 모드에서 ESO wave 1 영구 정지 · D-016 DB $36 에 데이터 볼륨·전송 미산입.
+- `[메모]` Fly 고정 이그레스 IP 조사(공식 문서): 앱 단위 IPv4 **월 $3.60**(IPv6 포함), 기본 이그레스는 *"unstable and may change"*. release 머신 적용 여부는 문서 미명시 — 커뮤니티 베타 글: *"every machine in your app in that region will use that same egress IP"*(2025-11-28, release_command 언급 없음).
+- `[결정]` 사용자 *"돈 드는 거 말고... 실무도 배우지만 뭔가 해결할 수 있는 다른 제안"* → **Fly 6PN 에 EC2 를 WireGuard 피어로**(Fly 공식 기능, 블로그 *IPv6 WireGuard Peering* — AWS/GCP 피어링, 예제 `fly-apps/rds-connector`). 5432 인터넷 노출 0, release 머신 자동 해결, $0. 기각: 고정 IP($3.60 현금) / 전체 개방+TLS / Tailscale. 사용자 확인 질문 *"EKS 가 죽었을 때 대비용인가"* → 아니다, **Fly 는 주 138시간 이상 prod** 라 매일 쓰는 경로.
+- `[결정]` 비번 = **SSM SecureString(무료)·EC2 첫 부팅 생성·덮어쓰기 금지·IaC 밖**(사용자 *"꾸랭"*). Secrets Manager 기각 근거: 핵심 이점인 회전이 Fly 시크릿 write-only 때문에 불가 → $0.40/월만 남는다. TLS = `require` 유지(사용자), verify-full 미룸.
+- `[결정]` EIP 안 씀 — WireGuard 는 EC2 가 바깥으로 연결, EKS 는 사설 IP → 퍼블릭 IP 로 들어오는 주체가 없다(B5-4 소멸).
