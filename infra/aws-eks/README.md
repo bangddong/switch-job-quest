@@ -486,6 +486,16 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 > 90일 유예 뒤 **계정 폐쇄 + 리소스 삭제**다. **01-15 전에** 유료 전환(DB 만 월 ~$12) 또는 데이터 반출을 정해야 한다.
 > 🔴 **D-015 사유 ④는 살아 있다** — 착수 순서·블로커는 계획서 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`.
 
+> ✅ **순서표 3 「CI 역할」 (2026-10-19, #464·#465·3-C)** — 쓰기는 main 전용 역할(sub = `ref:refs/heads/main` 만),
+> PR plan 역할은 좁힌 읽기 전용, 클러스터 access entry 는 명시 2개(로컬 `bootstrap-admin` + main 역할).
+> 🔴 **PR 역할을 entry 에 넣지 마라** — PR 코드가 머지 전에 그 역할로 돈다(N-2). 아래 마커는 양성 단언이라
+> *"main 역할 entry·main 전용 sub 가 사라지는"* 회귀만 잡고, PR 역할 entry **추가**는 못 잡는다.
+<!-- verify: infra/aws-eks/2-cluster/access.tf ~ github_actions_main_role_arn -->
+<!-- verify: infra/aws-eks/0-bootstrap/iam-github-oidc.tf ~ "repo:\$\{var\.github_repo\}:ref:refs/heads/main"$ -->
+<!-- verify: .github/workflows/infra-deploy.yml ~ github\.event_name == 'push' && secrets\.AWS_ROLE_ARN_MAIN -->
+
+> ⚠️ 위 두 번째 마커는 **main 역할의 sub 줄**(값 1개, 줄 끝)을 잡는다. PR 역할의 sub 는 배열 원소라 줄 끝이 `",` 다.
+
 #### 영속 레이어 — 싸다, 반드시 분리할 것
 > 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
 
