@@ -5435,4 +5435,15 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[막힘]` 로컬에 시스템 JDK 없음(`Unable to locate a Java Runtime`) → `JAVA_HOME=/opt/homebrew/opt/openjdk@21/...` 로 Gradle 9.0.0 기동 확인.
 - `[메모]` ⚠️ 위임 커밋 `c75858d` 메시지에 `Co-Authored-By` 줄이 들어갔다(프로젝트 컨벤션 위반). 이미 push 됐고 고치려면 히스토리 재작성(force push)이 필요해 **그대로 둔다**. 이후 위임 프롬프트에 금지를 명시.
 - `[메모]` 미검증: Fly 첫 `release_command` 실행(임시 머신의 `DB_*` secrets 접근·실제 소요). 배포 로그의 `[migration] migrate 성공` 으로 확인한다.
+- `[해결]` **PR #459 머지(squash `f9ba803`, 16:05 KST) → Fly 첫 `release_command` 성공.** BE CD run 39106395841:
+  ```
+  Running devquest-api release_command: migrate
+  > Created release_command machine 8654145c7d4628
+  ✔ release_command 8654145c7d4628 completed successfully
+  Updating existing machines in 'devquest-api' with rolling strategy
+  ✔ Machine e7841022c39658 is now in a good state
+  ```
+  시각(UTC): release 시작 07:11:51 → 앱 머신 갱신 07:12:42 → good state 07:12:48. **release 머신 생성~소멸 ≈ 50초**(JVM 최소 컨텍스트 기동 포함, 5분 한도의 약 1/6). `GET /health` → `200` `{"result":"SUCCESS",...}`.
+  🟡 `[migration] migrate 성공` 로그 줄은 CI 로그에 안 나온다(머신 로그는 Fly 쪽) — **성공 판정 근거는 종료 코드 0**(`completed successfully`). 임시 머신의 `DB_*` secrets 접근도 이걸로 간접 확인. ⇒ 그동안 매 기동 `repair()` 가 덮었을 수 있던 **체크섬 불일치는 없었다**(있었다면 validate 에서 exit 1).
+- `[메모]` CI 1회 실패: `❌ Unsafe !! operator found` — 실제 연산자가 아니라 로그 문자열 `"!!! REPAIR 모드 … !!!"`. `be-ci.yml` 의 `!!` 린트는 Gradle 밖 grep 이라 builder 의 `./gradlew test` 546건 통과로는 안 잡혔다 → `***` 로 교체(`d7803e6`).
 
