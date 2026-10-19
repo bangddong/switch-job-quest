@@ -723,10 +723,14 @@ GitHub Actions의 **ECR Push** 워크플로가 빌드한다. **`be/**` 를 바�
 > ```
 > Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
 > ```
-> OIDC 역할의 신뢰정책이 `refs/heads/main`과 `pull_request`만 허용하기 때문이다.
+> ECR 에 푸시하는 역할(`devquest-eks-github-actions-main`)의 신뢰정책이 `refs/heads/main` 만 허용하기 때문이다.
 > 브랜치 push의 `sub`은 `repo:<owner>/<repo>:ref:refs/heads/<branch>`라 매칭에 실패한다.
 > **보안이 의도대로 작동한 것**이므로 신뢰정책을 풀지 않는다(그 역할은 AdministratorAccess를 갖는다).
 > 브랜치의 변경을 이미지로 보려면 **머지한다.**
+>
+> 📌 역할은 둘이다 (D-016 순서표 3, 2026-10-19): **쓰기 = main 전용 역할**(위), **PR plan = 좁힌 읽기 전용
+> 역할** `devquest-eks-github-actions`(sub = main + pull_request). PR 코드가 머지 전에 쓰기 권한으로 도는
+> 경로를 없애려는 분리다. 근거·권한 구성은 `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`.
 >
 > `workflow_dispatch`는 **기본 브랜치(main)에 워크플로 파일이 있을 때만** 실행 가능하다
 > (`--ref`로 브랜치를 줘도 정의는 main에서 찾는다 → 없으면 HTTP 404).

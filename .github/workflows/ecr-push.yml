@@ -33,8 +33,8 @@ name: ECR Push
 #      마이그레이션 집합은 같다. 이미지 하나로 합치는 것은 이 범위 밖이다.
 
 # ⚠️ GitHub 제약: workflow_dispatch는 **기본 브랜치(main)에 이 파일이 있을 때만** 실행 가능하다.
-#    그리고 OIDC 신뢰정책(0-bootstrap/iam-github-oidc.tf)은 sub 이 `refs/heads/main` 또는
-#    `pull_request` 인 토큰만 받는다 → 푸시 잡은 main 에서만 돈다(아래 `if:` 가 명시).
+#    그리고 푸시 잡이 쓰는 main 전용 역할(0-bootstrap/iam-github-oidc.tf `github_actions_main`)은
+#    sub 이 `refs/heads/main` 인 토큰만 받는다 → 푸시 잡은 main 에서만 돈다(아래 `if:` 가 명시).
 on:
   push:
     branches: [main]
@@ -124,9 +124,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # 📌D-016 순서표 3: main 전용 쓰기 역할(sub = `ref:refs/heads/main` 만). 옛 `AWS_ROLE_ARN` 은
+      #   PR plan 용 읽기 전용으로 좁혀져 ECR 에 push 할 수 없다. 시크릿이 비면 이 스텝이 assume 실패로 멈춘다.
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_MAIN }}
           aws-region: ${{ env.AWS_REGION }}
 
       # 🔴 계정 ID 마스킹 — 이 레포는 퍼블릭이고 Actions 로그·요약도 퍼블릭이다.
