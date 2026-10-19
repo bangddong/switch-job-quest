@@ -96,7 +96,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 0 | ✅ **학습 문서 정리** — 재현 검증 포함, 완료 2026-10-17 (#458) | Q-1 | — |
 | 1a | ✅ **Flyway 공유 DB 안전 — BE + Fly** — 완료 2026-10-18 (#459, Fly 첫 release ≈ 50초 exit 0): 마이그레이션을 앱 기동에서 분리(C안), `repair()` 자동 경로 제거·수동 모드 격리, core-api jar 전용 모드 + Fly `release_command` | U-2 · N-11 · 아래 「1번 Blindspot」 | 0 |
 | 1b | **Flyway — EKS 쪽 마이그레이션 Job** (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
-| 2 | **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존 | N-10 | 0 |
+| 2 | **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존. 진행 2026-10-19: PR 은 빌드만(무자격증명) · main push 가 세 서비스 푸시 · 레포 IMMUTABLE · 태그 존재 시 건너뜀. 아래 「2번에서 안 하는 것」 | N-10 · U-2 · L-44 | 0 |
 | 3 | **CI 역할** — main 전용 역할(0-bootstrap) + access entry 2개(로컬 admin + CI) + 가드 재정의 | N-1 · N-2 · N-3 · N-18 | 0 |
 | 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
@@ -123,6 +123,18 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B-14 | 🟡 | 새 코드가 `be-cd.yml` 의 `./gradlew test` 에 자동 편입(L-36 쟁점 재부상) | 실행기를 core-api 안에 두므로 **새 모듈 없음** — 1a 에서 쟁점 아님. 전용 모듈로 바꾸면 재검토 |
 | B-16 | 🟡 | Neon 콜드 스탠바이(Q-2) 전환 시 누가 migrate 하는지 미정의 | → **6번**(복구·전환 리허설) |
 | B-17 | ⚪ | 실행기를 db-core 에 두면 *storage 모듈에 main* — 선례 없음 | core-api 에 두므로 해당 없음 |
+
+## 2번에서 안 하는 것 (2026-10-19)
+
+결정(기본값, 되돌리기 싼 것): PR = 빌드만 · main push = 3종 푸시 · 태그 = 40자 sha 하나 · IMMUTABLE · 보존 개수 10 유지(이제 전부 main 이미지라 늘릴 근거 없음, 비용 불변).
+
+| 항목 | 왜 지금 못 하나 → 어디서 |
+|---|---|
+| **배포할 태그 고르는 규칙**을 기계로 — `git log -1 --format=%H origin/main -- be .github/workflows/ecr-push.yml` 이 ECR 에 **있는지** 확인 후 사용, 없으면 on 실패(Fly 유지) | `paths` 필터 때문에 main HEAD 에 이미지가 없을 수 있다. 소비자(on 잡)가 아직 없다 → **8번** |
+| 푸시 실패 감지 — main push 의 ECR Push 가 빨개도 Fly 배포(`be-cd`)는 성공할 수 있다 → 그날 on 잡이 옛 이미지 또는 ImagePullBackOff | 위 규칙이 "없으면 on 실패"로 막는다 → **8번** |
+| Fly·EKS 이미지 **하나로** — 지금은 같은 커밋을 각자 빌드(소스·마이그레이션 집합은 같음) | Fly 원격 빌더 → ECR 이미지 사용으로 바꾸면 `be-cd` 구조 변경. 스큐 위험(U-2)은 커밋 단위로 이미 닫혔다 → 필요해지면 별도 |
+| OIDC 신뢰정책의 `pull_request` 제거 — 이 워크플로는 더 이상 PR 에서 assume 하지 않는다 | `infra-deploy.yml` 의 PR plan 이 같은 역할을 쓴다 → **3번**(main 전용 역할) |
+| Job·Deployment 태그 단일 출처 (B-7) | 클러스터 필요 → **1b** |
 
 ## 이번 범위에서 하지 않는 것
 

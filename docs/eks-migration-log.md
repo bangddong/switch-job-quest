@@ -5447,3 +5447,19 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   🟡 `[migration] migrate 성공` 로그 줄은 CI 로그에 안 나온다(머신 로그는 Fly 쪽) — **성공 판정 근거는 종료 코드 0**(`completed successfully`). 임시 머신의 `DB_*` secrets 접근도 이걸로 간접 확인. ⇒ 그동안 매 기동 `repair()` 가 덮었을 수 있던 **체크섬 불일치는 없었다**(있었다면 validate 에서 exit 1).
 - `[메모]` CI 1회 실패: `❌ Unsafe !! operator found` — 실제 연산자가 아니라 로그 문자열 `"!!! REPAIR 모드 … !!!"`. `be-ci.yml` 의 `!!` 린트는 Gradle 밖 grep 이라 builder 의 `./gradlew test` 546건 통과로는 안 잡혔다 → `***` 로 교체(`d7803e6`).
 
+
+## 2026-10-19 — 📌D-016 순서표 2: 이미지 공급망 (N-10)
+
+- `[메모]` 착수 전 실측 — `devquest/core-api` 최신 이미지 태그 = `latest` + `c89af6a017bd781e7215644756e8cacb61241aa8`(10-18 15:57 KST 푸시). PR #459 의 **pull_request 머지 커밋**이다 → *리뷰 전 이미지가 `latest` 를 갖고 있었다*(N-10 그대로). 이미지 크기 ≈ 175MB(`imageSizeInBytes` 175310318).
+- `[결정]` 사용자 *"2번 작업 진행하자"*. 되돌리기 싼 기본값으로 정함(질문 없음):
+  | 결정 | 선택 | 근거 |
+  |---|---|---|
+  | PR | **빌드만**, 푸시·AWS 자격증명 없음 | Dockerfile 회귀(jar 글롭·SERVICE 인자)는 머지 전에 잡고, 리뷰 전 이미지는 ECR 에 안 들인다. Q-1 로 학습 세션이 끝나 PR 이미지를 클러스터에서 볼 일이 없다 |
+  | main push | `be/**`·워크플로 변경 시 **세 서비스** 빌드·푸시 | OIDC 신뢰정책이 `refs/heads/main` 을 이미 허용 |
+  | 태그 | 40자 sha 하나, `latest` 폐지 | 매니페스트가 이미 *"latest 금지"* — 쓰는 곳 0건(`k8s/` grep) |
+  | 레포 | **IMMUTABLE** | sha 태그가 다른 이미지를 가리킬 수 없게. 재실행은 「태그 존재 확인」에서 건너뜀 |
+  | 보존 | 10개 유지 | 이제 전부 main 이미지 → 서빙 중 태그가 만료되려면 `be/**` main 머지 10건 필요. 비용 불변 |
+  | 동시성 키 | `sha + 서비스` | 키가 ref 면 연속 머지의 대기 run 이 조용히 `cancelled`(08-31 실측) → main 커밋마다 이미지가 있어야 롤백 대상이 생긴다 |
+- `[메모]` 「태그 존재 확인」의 "없음" 판정 근거 실측 — 없는 태그 조회 시 `aws: [ERROR]: An error occurred (ImageNotFoundException) when calling the DescribeImages operation: The image with imageId {imageDigest:'null', imageTag:'…'} does not exist within the repository …` exit 1, 있는 태그는 digest 출력 exit 0. ⇒ `ImageNotFoundException` 일 때만 "없음", 그 외 에러는 실패(조회 실패를 부재로 읽지 않는다). 에러 문구에 계정 ID 가 들어 있어 마스킹 스텝 뒤에 둔다.
+- `[메모]` `tofu -chdir=infra/aws-eks/0-bootstrap plan`: `aws_ecr_repository.app["ai-api"|"core-api"|"daily-api"]` **in-place** `image_tag_mutability = "MUTABLE" -> "IMMUTABLE"` · `Plan: 0 to add, 3 to change, 0 to destroy.` 0-bootstrap 은 `infra-deploy` 가 머지 시 자동 apply 한다.
+- `[메모]` ⚠️ 남는 것: 기존 이미지의 `latest` 태그는 IMMUTABLE 전환으로 지워지지 않는다(세 레포 모두 보유) → 머지 후 `aws ecr batch-delete-image --image-ids imageTag=latest` 로 **태그만** 뗀다(같은 이미지에 sha 태그가 있어 이미지는 남는다). 이 PR 범위 밖으로 미룬 것은 계획서 「2번에서 안 하는 것」.

@@ -9,14 +9,16 @@
 # 비용: 저장만 과금($0.10/GB-Mo). 빈 레포는 $0. 아래 lifecycle policy로 무한 누적을 막는다.
 #   node가 이미지를 pull하는 권한은 이미 nodes.tf의 AmazonEC2ContainerRegistryReadOnly로 부여됨.
 
-# tfsec:ignore:aws-ecr-enforce-immutable-repository — 학습장: MUTABLE로 같은 태그(latest) 재푸시 허용. prod 전환 시 IMMUTABLE(변수로 전환 가능).
 # tfsec:ignore:aws-ecr-repository-customer-key — 학습장: KMS CMK는 월 $1+. 무료 AES256로 충분(backend-state.tf의 S3 KMS 생략과 동일 판단).
 resource "aws_ecr_repository" "app" {
   for_each = toset(var.ecr_repositories)
 
   name = "devquest/${each.value}"
 
-  # 학습 편의: 같은 태그(latest 등) 재푸시 허용. prod 전환 시 IMMUTABLE 권장(태그 덮어쓰기 방지).
+  # 📌D-016 순서표 2 (2026-10-19): IMMUTABLE — 태그가 한 번 붙으면 다른 이미지를 가리킬 수 없다.
+  #   EKS 가 평일 창 동안 prod 를 서빙하므로 "그 sha 태그 = 그 커밋" 이 깨지면 안 된다.
+  #   예전 MUTABLE 은 `latest` 재푸시를 위한 것이었고, `latest` 는 이번에 폐지했다(ecr-push.yml).
+  #   (tfsec `aws-ecr-enforce-immutable-repository` ignore 도 함께 걷었다 — 되돌리면 tfsec 가 잡는다.)
   image_tag_mutability = var.ecr_image_tag_mutability
 
   # 푸시 시 기본 취약점 스캔(무료). 결과는 콘솔/`aws ecr describe-image-scan-findings`로 확인.
@@ -51,7 +53,10 @@ resource "aws_ecr_lifecycle_policy" "app" {
       },
       {
         rulePriority = 2
-        description  = "최근 ${var.ecr_keep_last_images}개 이미지만 유지, 초과분 만료"
+        # 📌D-016 순서표 2: PR 이 더는 푸시하지 않으므로 이 N개는 **전부 main 이미지**다.
+        #   예전엔 PR 이미지가 한도를 채워 *어제 배포한 sha* 가 만료될 수 있었다(계획서 N-10).
+        #   지금 서빙 중인 태그가 만료되려면 그 뒤로 `be/**` main 머지가 N건 더 있어야 한다.
+        description = "최근 ${var.ecr_keep_last_images}개 이미지만 유지, 초과분 만료"
         selection = {
           tagStatus   = "any"
           countType   = "imageCountMoreThan"
