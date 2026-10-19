@@ -71,7 +71,7 @@ resource "aws_iam_role_policy_attachment" "github_actions_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
-#tfsec:ignore:aws-iam-no-policy-wildcards — `Resource = "*"` 는 **Deny** 문에만 쓴다(넓게 막는 쪽)
+#tfsec:ignore:aws-iam-no-policy-wildcards — `Resource = "*"` 는 Deny 문, 그리고 Allow 는 **KMS `ViaService=dynamodb` 조건부 1건뿐**(StateLockKms). 다른 Allow 에 와일드카드를 넣지 마라
 resource "aws_iam_role_policy" "github_actions_plan_scope" {
   name = "tofu-plan-scope"
   role = aws_iam_role.github_actions.id
@@ -148,7 +148,7 @@ resource "aws_iam_role_policy" "github_actions_plan_scope" {
       {
         Sid         = "DenyTableReadOutsideLock"
         Effect      = "Deny"
-        Action      = ["dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:Query", "dynamodb:Scan"]
+        Action      = ["dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:PartiQLSelect"] # PartiQL: QA F-6
         NotResource = aws_dynamodb_table.tflock.arn
       },
     ]
