@@ -96,7 +96,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 0 | ✅ **학습 문서 정리** — 재현 검증 포함, 완료 2026-10-17 (#458) | Q-1 | — |
 | 1a | ✅ **Flyway 공유 DB 안전 — BE + Fly** — 완료 2026-10-18 (#459, Fly 첫 release ≈ 50초 exit 0): 마이그레이션을 앱 기동에서 분리(C안), `repair()` 자동 경로 제거·수동 모드 격리, core-api jar 전용 모드 + Fly `release_command` | U-2 · N-11 · 아래 「1번 Blindspot」 | 0 |
 | 1b | **Flyway — EKS 쪽 마이그레이션 Job** (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
-| 2 | **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존. 진행 2026-10-19: PR 은 빌드만(무자격증명) · main push 가 세 서비스 푸시 · 레포 IMMUTABLE · 태그 존재 시 건너뜀. 아래 「2번에서 안 하는 것」 | N-10 · U-2 · L-44 | 0 |
+| 2 | ✅ **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존. 완료 2026-10-19 (#461, main 첫 빌드 3/3 · IMMUTABLE · 옛 `latest` 태그 제거): PR 은 빌드만(무자격증명) · main push 가 세 서비스 푸시 · 레포 IMMUTABLE · 태그 존재 시 건너뜀. 아래 「2번에서 안 하는 것」 | N-10 · U-2 · L-44 | 0 |
 | 3 | **CI 역할** — main 전용 역할(0-bootstrap) + access entry 2개(로컬 admin + CI) + 가드 재정의 | N-1 · N-2 · N-3 · N-18 | 0 |
 | 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |

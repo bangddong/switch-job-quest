@@ -5464,3 +5464,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` `tofu -chdir=infra/aws-eks/0-bootstrap plan`: `aws_ecr_repository.app["ai-api"|"core-api"|"daily-api"]` **in-place** `image_tag_mutability = "MUTABLE" -> "IMMUTABLE"` · `Plan: 0 to add, 3 to change, 0 to destroy.` 0-bootstrap 은 `infra-deploy` 가 머지 시 자동 apply 한다.
 - `[메모]` ⚠️ 남는 것: 기존 이미지의 `latest` 태그는 IMMUTABLE 전환으로 지워지지 않는다(세 레포 모두 보유) → 머지 후 `aws ecr batch-delete-image --image-ids imageTag=latest` 로 **태그만** 뗀다(같은 이미지에 sha 태그가 있어 이미지는 남는다). 이 PR 범위 밖으로 미룬 것은 계획서 「2번에서 안 하는 것」.
 - `[해결]` QA(HIGH 0 · MEDIUM 2 · LOW 2) 전부 이 PR 에서 수정: F-1 태그 규칙에 `--first-parent`(실측 재현: `git log -1 3633b96 -- .claude/CONTEXT.md` → `b7a0835`(브랜치 커밋), `--first-parent` → `3633b96`) · F-2 복구 경로 정정(dispatch 는 HEAD 만 굽는다 → 실패 run 은 "Re-run failed jobs", 규칙에 ①HEAD 우선 추가) · F-3 main 아닌 ref dispatch 는 `ref-guard` 잡이 실패시킴(조용한 skipped 방지) · F-4 `sort_by(imagePushedAt)` 는 실습 편의, prod 는 정본 규칙으로 명시.
+- `[해결]` **PR #461 머지(squash `e9bbe1392a200da8067d7783f5421eee46133b7d`)** → 같은 커밋으로 `ECR Push` run 39181161691 success(`Build & Push` core-api·ai-api·daily-api 3/3, `Ref guard`·`Build check` skipped) · `Infra Deploy` run 39181161740 success. 확인:
+  ```
+  core-api:  IMMUTABLE | e9bbe1392a200da8067d7783f5421eee46133b7d 존재
+  ai-api:    IMMUTABLE | e9bbe1392a200da8067d7783f5421eee46133b7d 존재
+  daily-api: IMMUTABLE | e9bbe1392a200da8067d7783f5421eee46133b7d 존재
+  ```
+  PR 단계 실측: `Build check` 3잡 pass(core-api·ai-api·daily-api), tfsec 는 immutable ignore 없이 pass.
+- `[해결]` 옛 `latest` 태그 제거 — `aws ecr batch-delete-image --image-ids imageTag=latest` 세 레포 각 `{"deleted":["latest"],"failures":[]}`, 이후 `latest` 보유 이미지 0. core-api 의 그 이미지는 `c89af6a017bd781e7215644756e8cacb61241aa8` 태그로 남아 있음(태그만 뗐다). ⚠️ IMMUTABLE 레포에서도 태그 삭제는 된다 — 막히는 것은 **덮어쓰기**뿐.
