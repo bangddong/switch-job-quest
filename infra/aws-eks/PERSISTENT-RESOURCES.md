@@ -68,7 +68,8 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **ECR** `devquest/core-api` | 0-bootstrap | 이미지가 destroy마다 사라지면 세션당 재빌드 5~10분 | 🔒 **lifecycle 10개** (실측 **10개 = 1.75 GB**, 2026-09-28) | **$0.18** | 2026-07-27 | 2027-01-15 |
 | **ECR** `devquest/ai-api` | 0-bootstrap | 위와 동일 (Phase 2 대비) | 🔒 lifecycle 10개 (**실측 2개 = 0.26 GB**, 2026-09-28) | **$0.03** | 2026-07-27 | 2027-01-15 |
 | **ECR** `devquest/daily-api` | 0-bootstrap | 위와 동일. Stage C 3서비스 배포 대상 | 🔒 lifecycle 10개 (**실측 2개 = 0.27 GB**, 2026-09-28) | **$0.03** | 2026-08-29 | 2027-01-15 |
-| **IAM** OIDC 프로바이더 · GitHub Actions 역할 | 0-bootstrap | CI가 AWS에 붙는 통로 | 고정 | $0 | 2026-07 | — |
+| **IAM** OIDC 프로바이더 · GitHub Actions 역할 `devquest-eks-github-actions` | 0-bootstrap | CI가 AWS에 붙는 통로(sub = main + pull_request, Admin). 📌D-016 순서표 **3-B 머지 후** PR plan 전용 좁힌 읽기 전용으로 축소 예정 | 고정 | $0 | 2026-07 | — |
+| **IAM** GitHub Actions 역할 `devquest-eks-github-actions-main` | 0-bootstrap | **main 전용 쓰기 역할**(sub = `ref:refs/heads/main` 만, Admin). 사용처는 **3-B 머지 후**부터 — infra apply · ECR push, 이후 클러스터 전환(순서표 8). 3-A 시점 사용처 0 | 고정 | $0 | 2026-10-19 | — |
 | **S3** `devquest-eks-backups-seoul` | 0-bootstrap | **백업은 자기가 백업하는 대상보다 오래 살아야 한다.** 데이터 볼륨이 이 레이어에 있으므로 백업도 이 레이어(D-004·L-14 규칙의 3번째 적용) | 🔒 **lifecycle 30일 × 3종** — `expiration` + `noncurrent_version_expiration` + `abort_incomplete_multipart_upload`. ⚠️ 버저닝이 켜져 있어 **앞의 하나만으로는 상한이 아니다** | ~$0 (덤프 KB 단위) | 2026-09-12 | 2027-01-15 |
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
 | **Cost Anomaly** `devquest-eks-service-monitor` | 0-bootstrap | 이상 지출 감지(DAILY, $5) | 계정당 DIMENSIONAL 1개 | $0 | 2026-07-29 | — |

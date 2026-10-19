@@ -19,6 +19,16 @@ output "github_actions_role_arn" {
   value       = aws_iam_role.github_actions.arn
 }
 
+# 📌D-016 순서표 3. ARN 에 계정 ID 가 들어간다 → `account_id`·`acm_certificate_arn` 과 같은 기준으로
+#   sensitive (B3-12 — 위 `github_actions_role_arn` 은 non-sensitive 라 기준이 어긋나 있다. 복제하지 않는다).
+#   시크릿 등록: `tofu output -raw github_actions_main_role_arn | gh secret set AWS_ROLE_ARN_MAIN`
+#   (값을 화면에 찍지 않고 파이프로만 넘긴다)
+output "github_actions_main_role_arn" {
+  description = "main 전용 쓰기 역할 ARN — GitHub 시크릿 AWS_ROLE_ARN_MAIN (계정 ID 포함 — 민감)"
+  value       = aws_iam_role.github_actions_main.arn
+  sensitive   = true
+}
+
 output "ecr_repository_urls" {
   description = "앱별 ECR 레포 URL (docker push 대상 · K8s 매니페스트 image: 값)"
   value       = { for name, repo in aws_ecr_repository.app : name => repo.repository_url }
