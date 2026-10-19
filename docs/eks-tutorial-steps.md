@@ -695,20 +695,38 @@ DB 연결은 아직 안 한다. **앱이 CrashLoop에 빠지는 것이 정상이
 
 ### 1-1. 이미지 빌드·푸시 (클러스터 없어도 가능, 💰 $0)
 
-GitHub Actions의 **ECR Push** 워크플로로 빌드한다.
+GitHub Actions의 **ECR Push** 워크플로가 빌드한다. **`be/**` 를 바꾼 커밋이 main 에 들어가면
+세 서비스(core-api·ai-api·daily-api)를 자동으로 빌드·푸시한다.** 이미지가 없을 때:
+- 푸시가 실패한 run → 그 run 의 **"Re-run failed jobs"** (같은 커밋으로 재실행)
+- 만료됐거나 re-run 이 안 되면 → main 에서 `workflow_dispatch` 로 서비스를 골라 실행. 🔴 이건 **main HEAD 만** 굽는다
+  (옛 커밋을 다시 굽지 못한다). 이미 있는 태그면 건너뛴다.
 
 > **왜 로컬에서 안 만드나**: 로컬 빌드는 "그 사람 노트북 상태"가 이미지에 섞인다.
 > CI는 매번 동일한 깨끗한 환경 + 감사 로그(누가/언제/어떤 커밋)가 남는다.
 
-> 🔴 **함정 — 임의 브랜치 push로는 안 된다.**
+> **ECR 에 들어가는 것은 main 커밋뿐이다** (📌D-016 순서표 2, 2026-10-19).
+> PR 은 Dockerfile 이 깨졌는지만 보려고 **빌드만** 하고 푸시하지 않는다(AWS 자격증명도 안 쓴다).
+> 태그는 40자 git sha 하나뿐이고 `latest` 는 없다. 레포가 **IMMUTABLE** 이라 한 번 붙은 태그는
+> 다른 이미지를 가리킬 수 없다 — *"이 태그 = 이 커밋"* 이 기계적으로 보장된다.
+>
+> ⚠️ 그래서 **main HEAD 에 이미지가 없을 수 있다.** 문서만 바뀐 머지는 빌드하지 않기 때문이다.
+> 배포할 태그(**정본 규칙**): ① main HEAD 에 이미지가 있으면 HEAD, ② 없으면 *"`be/` 나 워크플로 파일을
+> 마지막으로 바꾼 main 커밋"*:
+> ```bash
+> git fetch origin main
+> git log -1 --first-parent --format=%H origin/main -- be .github/workflows/ecr-push.yml
+> ```
+> 🔴 `--first-parent` 를 빼지 마라. 머지 커밋으로 병합한 PR 이면 이미지 태그는 **머지 커밋**인데,
+> 옵션 없는 `git log -- <경로>` 는 그 머지 커밋을 건너뛰고 브랜치 쪽 커밋을 돌려준다 — 이미지가 없는 sha 다.
+
+> 🔴 **함정 — 임의 브랜치에서는 푸시할 수 없다.**
 > ```
 > Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
 > ```
 > OIDC 역할의 신뢰정책이 `refs/heads/main`과 `pull_request`만 허용하기 때문이다.
 > 브랜치 push의 `sub`은 `repo:<owner>/<repo>:ref:refs/heads/<branch>`라 매칭에 실패한다.
-> **보안이 의도대로 작동한 것**이므로 신뢰정책을 푸는 대신(그 역할은 AdministratorAccess를 갖는다)
-> **PR을 열어 `pull_request` 컨텍스트에서 빌드한다.**
-> (더 정석: ECR 전용 최소권한 역할을 따로 만들어 브랜치를 넓히기)
+> **보안이 의도대로 작동한 것**이므로 신뢰정책을 풀지 않는다(그 역할은 AdministratorAccess를 갖는다).
+> 브랜치의 변경을 이미지로 보려면 **머지한다.**
 >
 > `workflow_dispatch`는 **기본 브랜치(main)에 워크플로 파일이 있을 때만** 실행 가능하다
 > (`--ref`로 브랜치를 줘도 정의는 main에서 찾는다 → 없으면 HTTP 404).
@@ -719,9 +737,12 @@ GitHub Actions의 **ECR Push** 워크플로로 빌드한다.
 ```
 
 
-> 🔴 **CLI로 태그를 뽑을 땐 `imageTags[0]`을 쓰지 마라.** 한 이미지는 태그를 여러 개 갖고
-> (`<sha>` + `latest`) **배열 순서는 보장되지 않는다** — 그대로 쓰면 금지된 `latest`로 배포된다.
-> 40자리 hex만 골라야 한다:
+> 🔴 **CLI로 태그를 뽑을 땐 `imageTags[0]`을 쓰지 마라.** 2026-10-19 이전에 올라간 이미지는
+> 태그를 여러 개 갖고(`<sha>` + `latest`) **배열 순서는 보장되지 않는다** — 그대로 쓰면 금지된
+> `latest`로 배포된다. 지금은 sha 하나뿐이지만 필터는 남겨 둔다. 40자리 hex만 골라야 한다.
+> ⚠️ 아래 `sort_by(imagePushedAt)[-1]` 은 **"가장 최근에 푸시된 것"** 이지 *"가장 최근 커밋"* 이 아니다 —
+> 커밋별로 병렬 빌드하므로 연달아 머지하면 순서가 뒤집힐 수 있다. 실습 세션의 편의용이고,
+> prod(📌D-016) 태그는 위 **정본 규칙**으로 고른다:
 > ```bash
 > SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \
 >   --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' --output json \

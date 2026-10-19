@@ -48,8 +48,10 @@ k8s/
 
 ### 1. 이미지 준비 (클러스터 없어도 가능, $0)
 
-GitHub Actions → **ECR Push** 워크플로 수동 실행(`workflow_dispatch`) → service 선택(`core-api`).
-완료되면 Step Summary에 이미지 주소가 찍힌다:
+`be/**` 를 바꾼 커밋이 main 에 들어가면 **ECR Push** 워크플로가 세 서비스를 자동으로 빌드·푸시한다
+(📌D-016 순서표 2 — PR 은 빌드만, ECR 엔 main 커밋만). 없으면 실패한 run 의 "Re-run failed jobs",
+그것도 안 되면 GitHub Actions → **ECR Push** 수동 실행(`workflow_dispatch`, **main HEAD 만 굽는다**) → service 선택.
+배포할 태그 고르는 정본 규칙은 `eks-tutorial-steps.md` 1-1절(`--first-parent`). 완료되면 Step Summary에 이미지 주소가 찍힌다:
 
 ```
 <account>.dkr.ecr.ap-northeast-2.amazonaws.com/devquest/core-api:<git-sha>
@@ -58,7 +60,7 @@ GitHub Actions → **ECR Push** 워크플로 수동 실행(`workflow_dispatch`) 
 **항상 sha 태그를 쓴다. `latest`로 배포하지 않는다** — 롤백 불가 + 지금 뭐가 도는지 추적 불가.
 
 > ⚠️ **CLI로 태그를 뽑을 땐 `imageTags[0]`을 쓰지 마라 (07-28에 실제로 밟은 함정).**
-> 한 이미지는 태그를 여러 개 갖고(`<sha>` + `latest`) **배열 순서는 보장되지 않는다** —
+> 2026-10-19 이전 이미지는 태그를 여러 개 갖고(`<sha>` + `latest`) **배열 순서는 보장되지 않는다** —
 > 그대로 쓰면 금지된 `latest`로 배포된다. 40자리 hex만 골라야 한다:
 > ```bash
 > SHA=$(aws ecr describe-images --repository-name devquest/core-api --region ap-northeast-2 \

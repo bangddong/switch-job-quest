@@ -1,22 +1,51 @@
 name: ECR Push
 
-# 앱 컨테이너 이미지를 빌드해 ECR에 푸시한다 (EKS Stage 1+ 배포용).
+# 앱 컨테이너 이미지를 빌드해 ECR에 푸시한다 (EKS 배포용).
 #
 # 왜 CI에서 빌드하나: 로컬 머신에서 prod 이미지를 만들면 "그 사람 노트북 상태"가 이미지에 섞인다.
 #   CI는 매번 동일한 깨끗한 환경 + 감사 로그(누가/언제/어떤 커밋)가 남는다 = 실무 표준.
 #
-# 태깅 전략: <git-sha>(불변 식별자) + latest(편의용 별칭).
-#   배포 매니페스트는 **항상 sha 태그**를 쓴다. latest로 배포하면 "지금 뭐가 도는지" 알 수 없고
-#   롤백도 불가능해진다(ECR이 이전 latest를 기억하지 않음).
+# ── 📌D-016 순서표 2 「이미지 공급망」 (2026-10-19) ─────────────────────────────
+#   EKS 가 평일 창 동안 **prod 를 서빙**하게 되면서 규칙이 셋 바뀌었다 (계획서 N-10):
 #
-# 수동 실행 전용(workflow_dispatch): EKS는 destroy-after-use라 클러스터가 없는 동안
-#   자동 푸시는 낭비다. 실습 세션을 시작할 때 필요한 이미지만 만든다.
+#   ① **ECR 에 들어가는 이미지 = main 커밋뿐.** main push 가 빌드·푸시하고, PR 은 빌드만 한다.
+#      이전엔 PR 이 푸시했다 → *리뷰 전 이미지* 가 레포에 섞였고, 태그(`github.sha`)가
+#      GitHub 이 만든 **일회성 머지 커밋**이라 `git show` 로 조회조차 안 됐다(원장 L-44).
+#   ② **`latest` 를 만들지 않는다.** 배포는 언제나 40자 sha 태그. 레포는 IMMUTABLE
+#      (`0-bootstrap/variables.tf` `ecr_image_tag_mutability`) — 태그가 한 번 붙으면 다른
+#      이미지를 가리킬 수 없다. 그래서 *"같은 태그 재푸시"* 가 필요했던 `latest` 와는 공존 불가.
+#   ③ **prod 태그 보존.** PR 이미지가 lifecycle 10개 한도를 채우던 경로가 닫힌다 → 남는 10개는
+#      전부 main 이미지다. 지금 서빙 중인 태그가 만료되려면 그 뒤로 `be/**` main 머지가 10건 더
+#      있어야 하고, 그 10건은 각자 자기 이미지를 갖는다.
+#
+#   ⚠️ **main HEAD 에 항상 이미지가 있는 것은 아니다.** `paths` 필터 때문에 문서만 바뀐 머지는
+#      빌드하지 않는다. 배포할 태그(정본 규칙 — 전환 워크플로 = 순서표 8 이 이것으로 고른다):
+#        ① main HEAD 에 이미지가 있으면 HEAD
+#        ② 없으면 `git log -1 --first-parent --format=%H origin/main -- be .github/workflows/ecr-push.yml`
+#      🔴 `--first-parent` 를 빼지 마라 (QA F-1). 머지 커밋 병합이면 push 이벤트의 sha(=태그)는
+#         머지 커밋 M 인데, 이 옵션 없는 `git log -- <path>` 는 history simplification 으로 M 을
+#         건너뛰고 **브랜치 쪽 커밋**을 돌려준다 — 이미지가 없는 sha 다(실측: 3633b96 → b7a0835).
+#      ⚠️ 한 번에 여러 커밋이 push 되면 태그는 head 하나뿐이다 → 규칙 ②가 그 사이 커밋을 가리키면 없음.
+#         squash 운영(PR 1건 = 커밋 1개)에선 생기지 않는다. 생기면 ①(HEAD)로 해결되도록 HEAD 를 굽는다.
+#      `sort_by(imagePushedAt)[-1]` 로 고르지 마라 — sha 별로 병렬 빌드하므로 푸시 완료 순서 ≠ 커밋 순서.
+#
+#   ⚠️ Fly(`be-cd.yml`)는 같은 커밋을 **따로** 빌드한다 — 바이트가 같은 이미지는 아니지만 소스·
+#      마이그레이션 집합은 같다. 이미지 하나로 합치는 것은 이 범위 밖이다.
 
-# ⚠️ GitHub 제약: workflow_dispatch는 **기본 브랜치(main)에 이 파일이 있을 때만** 실행 가능하다
-#    (--ref로 브랜치를 줘도 워크플로 "정의"는 main에서 찾는다 → main에 없으면 HTTP 404).
-#    그래서 학습 브랜치(stage/eks-**)에서는 push 트리거로 동작시킨다. main 머지 후에는
-#    workflow_dispatch로 원하는 서비스를 골라 수동 실행하면 된다.
+# ⚠️ GitHub 제약: workflow_dispatch는 **기본 브랜치(main)에 이 파일이 있을 때만** 실행 가능하다.
+#    그리고 OIDC 신뢰정책(0-bootstrap/iam-github-oidc.tf)은 sub 이 `refs/heads/main` 또는
+#    `pull_request` 인 토큰만 받는다 → 푸시 잡은 main 에서만 돈다(아래 `if:` 가 명시).
 on:
+  push:
+    branches: [main]
+    paths:
+      - "be/**"
+      - ".github/workflows/ecr-push.yml"
+  # 수동 빌드 — 🔴 **main HEAD 만 굽는다**(`github.sha` = HEAD). 옛 커밋을 다시 굽는 수단이 아니다 (QA F-2).
+  #   · 푸시가 실패한 run 의 복구 = 그 run 의 **"Re-run failed jobs"** (같은 sha 로 재실행)
+  #   · 이미지가 만료됐거나 re-run 할 수 없으면 = 이걸로 HEAD 를 굽는다 → 위 규칙 ①이 HEAD 를 고른다
+  #     (HEAD 와 규칙 ② sha 사이엔 `be/` 변경이 없으므로 내용이 같다)
+  # 이미 있는 태그면 아무것도 하지 않는다(IMMUTABLE — 아래 「태그 존재 확인」).
   workflow_dispatch:
     inputs:
       service:
@@ -25,44 +54,72 @@ on:
         default: core-api
         type: choice
         options: [core-api, ai-api, daily-api]
-  # PR 컨텍스트에서도 빌드한다. 이유는 편의가 아니라 **보안 경계** 때문:
-  #   OIDC 역할의 신뢰정책(0-bootstrap/iam-github-oidc.tf)은 sub이
-  #   `refs/heads/main` 또는 `pull_request`인 토큰만 허용한다. 임의 브랜치 push는 거부된다
-  #   (실측: stage/eks-1-ecr push → "Not authorized to perform sts:AssumeRoleWithWebIdentity").
-  #   역할이 AdministratorAccess를 갖고 있으므로 이 제한을 푸는 대신 PR에서 빌드하는 게 옳다.
-  #   (더 정석: ECR 전용 최소권한 역할을 따로 만들어 브랜치를 넓히기 — Stage 2 주제)
+  # PR 은 **빌드만** 한다 — Dockerfile 이 깨졌는지(jar 글롭·SERVICE 인자) 머지 전에 안다.
+  # AWS 자격증명을 쓰지 않으므로 PR 컨텍스트에서 OIDC 역할을 assume 하는 경로가 이 워크플로에서 사라진다.
   pull_request:
     paths:
       - "be/**"
       - ".github/workflows/ecr-push.yml"
 
-# 🔴 그룹 키에 **서비스**가 반드시 들어가야 한다 (2026-08-31, Stage C 준비 중 실측으로 발견).
-#   키가 ref 뿐이면 main에서 3개 서비스를 연달아 dispatch할 때 셋 다 같은 그룹에 들어간다.
-#   `cancel-in-progress: false`는 실행 중인 것을 지키는 대신 **대기 중인 run을 새 run으로 교체**하므로
-#   (core-api 실행 / ai-api 대기 / daily-api 도착) → **ai-api가 조용히 취소**된다.
-#   실측: run 33361787944 = conclusion `cancelled`, **job 0개·8초**(큐 단계에서 대체됨).
-#   ⚠️ 위험한 건 실패 방식이다 — `cancelled`는 `failure`가 아니라 CI에 빨간불이 안 뜬다.
-#     이미지가 없는 줄 모르고 apply하면 **과금 중에** ImagePullBackOff를 디버깅하게 된다.
-#   서비스별 빌드는 서로 간섭하지 않으므로(다른 ECR 레포) 병렬이 옳다.
-concurrency:
-  group: ecr-push-${{ github.ref }}-${{ github.event.inputs.service || 'core-api' }}
-  cancel-in-progress: false
-
 permissions:
-  id-token: write # OIDC로 AWS 역할 assume
   contents: read
 
-# push 트리거에는 inputs가 없으므로 core-api로 폴백한다(|| 는 falsy일 때 우변 사용).
 env:
   AWS_REGION: ap-northeast-2
-  SERVICE: ${{ github.event.inputs.service || 'core-api' }}
 
 jobs:
-  build-push:
-    name: Build & Push (${{ github.event.inputs.service || 'core-api' }})
+  # main 이 아닌 ref 로 dispatch 하면 아래 `build-push` 는 `if:` 로 skipped 된다 → run 이 **초록인데
+  # 아무것도 안 만든다**(QA F-3). 전엔 OIDC 거부로 시끄럽게 죽었다. 부재가 성공처럼 보이지 않게 실패시킨다.
+  ref-guard:
+    name: Ref guard (main 전용)
+    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::ECR 푸시는 main 에서만 한다 — 지금 ref: ${{ github.ref }}. 브랜치 변경은 머지 후 main push 가 굽는다."
+          exit 1
+
+  build-check:
+    name: Build check (${{ matrix.service }})
+    if: github.event_name == 'pull_request'
     # EKS 노드가 arm64(Graviton, AL2023_ARM_64_STANDARD)라 arm64 러너에서 네이티브 빌드한다.
     # x86 러너 + QEMU 에뮬레이션은 Gradle/JVM 빌드에서 몇 배 느려진다.
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [core-api, ai-api, daily-api]
+    steps:
+      - uses: actions/checkout@v7
+      - name: 이미지 빌드 (푸시 안 함)
+        run: |
+          set -euo pipefail
+          docker build --build-arg SERVICE="${{ matrix.service }}" -f be/Dockerfile be
+
+  build-push:
+    name: Build & Push (${{ matrix.service }})
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write # OIDC로 AWS 역할 assume — 이 잡만
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # push = 세 서비스 전부, dispatch = 고른 하나.
+        service: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.service) || '["core-api","ai-api","daily-api"]') }}
+    # 🔴 그룹 키에 **sha 와 서비스**가 둘 다 들어가야 한다.
+    #   `cancel-in-progress: false` 는 실행 중인 run 을 지키는 대신 **대기 중인 run 을 새 run 으로
+    #   교체**한다. 키가 ref 뿐이면 연달아 들어온 run 이 조용히 `cancelled` 된다 — `failure` 가 아니라
+    #   빨간불도 안 뜬다(2026-08-31 실측: run 33361787944, job 0개·8초).
+    #   main 커밋마다 이미지가 있어야 롤백 대상이 생기므로 서로 다른 sha 는 병렬로 돈다.
+    #   같은 sha·서비스(push 와 dispatch 가 겹칠 때)만 직렬화 → 뒤엣것은 「태그 존재 확인」에서 건너뛴다.
+    concurrency:
+      group: ecr-push-${{ github.sha }}-${{ matrix.service }}
+      cancel-in-progress: false
+    env:
+      SERVICE: ${{ matrix.service }}
+      SHA: ${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v7
@@ -80,9 +137,8 @@ jobs:
         run: |
           ACCT="$(aws sts get-caller-identity --query Account --output text)"
           echo "::add-mask::$ACCT"
-          # 🔴 **여기서 크게 실패해야 한다.** 빈 값이면 아래 `sed`/치환이 아무것도 안 바꾸고
+          # 🔴 **여기서 크게 실패해야 한다.** 빈 값이면 아래 치환이 아무것도 안 바꾸고
           #    **조용히 통과**한다(fail-open) — 계정 ID 가 그대로 로그에 찍힌다.
-          #    이 레포가 반복해서 데인 형태다: *부재가 성공과 똑같이 생긴 실패*.
           #    (로컬 반증으로 확인: AWS_ACCOUNT_ID="" 이면 치환 0건, 종료코드 0)
           if [[ ! "$ACCT" =~ ^[0-9]{12}$ ]]; then
             echo "::error::계정 ID 조회 실패 — 마스킹 없이 진행할 수 없다 (길이/형식 불일치)"
@@ -90,39 +146,58 @@ jobs:
           fi
           echo "AWS_ACCOUNT_ID=$ACCT" >> "$GITHUB_ENV"
 
+      # IMMUTABLE 레포에 같은 태그를 다시 올리면 `ImageTagAlreadyExistsException` 으로 실패한다.
+      # 재실행·dispatch 가 빨개지지 않게 **이미 있으면 건너뛴다**.
+      # 🔴 "없음"은 `ImageNotFoundException` 일 때**만**이다. 그 외 에러(권한·네트워크·레포 없음)를
+      #    "없음"으로 읽으면 빌드로 넘어가 push 에서야 다른 이유로 죽거나, 더 나쁘게는 조회 실패를
+      #    부재로 착각한다 — 이 레포가 반복해서 데인 *"부재가 성공과 똑같이 생긴 실패"* 다.
+      - name: 태그 존재 확인
+        id: exists
+        shell: bash
+        run: |
+          set -uo pipefail
+          if OUT=$(aws ecr describe-images --repository-name "devquest/$SERVICE" \
+                     --image-ids imageTag="$SHA" --query 'imageDetails[0].imageDigest' --output text 2>&1); then
+            echo "::notice::devquest/$SERVICE:$SHA 이미 있음 ($OUT) — 건너뜀"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif grep -q 'ImageNotFoundException' <<<"$OUT"; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::태그 조회 실패 — 없음과 구분할 수 없어 멈춘다: $OUT"
+            exit 1
+          fi
+
       - name: ECR 로그인
+        if: steps.exists.outputs.skip == 'false'
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: 이미지 빌드 & 푸시
+        if: steps.exists.outputs.skip == 'false'
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           IMAGE="$REGISTRY/devquest/$SERVICE"
-          docker build \
-            --build-arg SERVICE="$SERVICE" \
-            -t "$IMAGE:$SHA" \
-            -t "$IMAGE:latest" \
-            -f be/Dockerfile be
+          # 태그는 sha 하나뿐이다. `latest` 를 다시 넣지 마라 — IMMUTABLE 레포에선 두 번째 푸시부터 실패한다.
+          docker build --build-arg SERVICE="$SERVICE" -t "$IMAGE:$SHA" -f be/Dockerfile be
           docker push "$IMAGE:$SHA"
-          docker push "$IMAGE:latest"
-          echo "IMAGE_URI=$IMAGE:$SHA" >> "$GITHUB_ENV"
 
       - name: 배포용 이미지 주소 출력
         shell: bash
         run: |
           set -euo pipefail
-          # ⚪ **미확인 전제**: Step Summary 는 `::add-mask::` 대상이 아니라고 보고 직접 지운다.
-          #    GH 런타임 동작이라 레포에서 검증할 수 없었다(QA F-2). 틀렸더라도 과잉 마스킹이라 무해.
-          #    파이프가 아니라 bash 파라미터 확장이라 sed 버퍼링(F-1) 이슈는 없다.
+          # ⚪ **미확인 전제**: Step Summary 는 `::add-mask::` 대상이 아니라고 보고 계정 ID 를 아예 쓰지 않는다.
           {
-            echo "### 푸시 완료 :ship:"
+            echo "### devquest/$SERVICE :ship:"
             echo ""
-            echo '`'"${IMAGE_URI//${AWS_ACCOUNT_ID:-__unset__}/<account>}"'`'
+            if [ "${{ steps.exists.outputs.skip }}" = "true" ]; then
+              echo "이미 있는 태그 — 빌드 건너뜀"
+            else
+              echo "푸시 완료"
+            fi
             echo ""
-            echo "K8s 매니페스트의 \`image:\` 값으로 이 **sha 태그**를 쓰세요 (latest 금지)."
+            echo '`<account>.dkr.ecr.'"$AWS_REGION"'.amazonaws.com/devquest/'"$SERVICE:$SHA"'`'
             echo ""
             echo "> \`<account>\` 자리의 실제 값은 로컬에서 얻으세요 — 퍼블릭 레포라 여기 찍지 않습니다:"
             echo "> \`tofu -chdir=infra/aws-eks/0-bootstrap output -json ecr_repository_urls\`"

@@ -118,8 +118,9 @@ variable "ecr_repositories" {
 
 variable "ecr_image_tag_mutability" {
   type        = string
-  description = "MUTABLE(학습: 같은 태그 재푸시 허용) 또는 IMMUTABLE(prod 권장)."
-  default     = "MUTABLE"
+  description = "IMMUTABLE(기본 — 📌D-016 순서표 2, sha 태그만 쓴다) 또는 MUTABLE(같은 태그 재푸시 허용)."
+  # MUTABLE 로 되돌리지 마라 — 그러면 `<sha>` 태그를 다른 이미지로 덮을 수 있어 "지금 도는 것 = 그 커밋" 이 깨진다.
+  default = "IMMUTABLE"
 
   validation {
     condition     = contains(["MUTABLE", "IMMUTABLE"], var.ecr_image_tag_mutability)
