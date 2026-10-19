@@ -186,6 +186,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 
 | 결정 | 선택 | 근거 |
 |---|---|---|
+| Fly 의 DB 주소 | **피어 IPv6 리터럴** `DB_HOST=[fdaa:…]` | 5-0 실측 — Java(musl)가 `._peer.internal` 해석 실패(A NXDOMAIN). 리터럴은 피어 삭제 전까지 고정 |
 | 레이어 | **1-network** (D-016 사용자 결정 유지) + 보호: 데이터 볼륨 분리·`prevent_destroy`·`ignore_changes=[ami, user_data]` | 별도 로컬 레이어는 PR plan 없음·리퍼 N-4b 반응·D-016 문구 개정(B5-19) |
 | **Fly → DB 경로** | **Fly 6PN 에 EC2 를 WireGuard 피어로** (`fly wireguard create`, 앱은 `<peer>._peer.internal`) | 사용자 10-19 — *"돈 드는 거 말고, 실무도 배우는"*. 기각: Fly 고정 이그레스 IP(월 $3.60 현금 · release 머신 적용 미명시 B-9) / `0.0.0.0/0`+TLS / Tailscale(외부 SaaS 추가). **5432 인터넷 노출 0 · release 머신 자동 해결 · tfsec ignore 불필요** |
 | EKS → DB 경로 | VPC 사설 IP. SG 인바운드 = `vpc_cidr`:5432 **만** | 클러스터 SG ID 참조(rds.tf 선례)는 매일 destroy 시 DependencyViolation(N-6) — 선례를 뒤집는 근거(B5-6) |
@@ -199,7 +200,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 
 | 단계 | 내용 | 비용 | 산출 |
 |:-:|---|---|---|
-| **5-0** | **실측 — 착수 판정.** ① 임시 t4g(IaC 밖, 끝나면 삭제)를 6PN 피어로 → Fly 쪽에서 `<peer>._peer.internal` AAAA 조회·TCP 5432 ② 서울↔Fly 게이트웨이 RTT(B5-10) ③ **Neon Postgres 메이저 버전**(B5-11 — EC2 를 같은 메이저로. Q-2 매일 복원이 상위→하위면 실패) | 수 센트 | 일지. ①이 막히면 → mTLS 공개 포트안으로 재결정 |
+| **5-0** | ✅ **실측 (2026-10-19) — 착수 가능.** Fly(nrt)→EC2 터널 Postgres 접속 성공(인바운드 0), RTT ≈ 29.7ms, 연결 0.26s. 🔴 **Java(musl)는 `._peer.internal` 을 못 푼다**(A 질의 NXDOMAIN) → `DB_HOST` = 피어 **IPv6 리터럴**(BE 변경 0). WireGuard `MTU = 1420` 명시(기본 8921). **Neon 메이저 버전만 미확인** | ≈ $0.01 | 일지 |
 | **5-A** | **IaC (1-network) — apply 하지 않음**: EC2·데이터 볼륨·SG·인스턴스 프로파일(`ssm:Get/PutParameter` 경로 한정)·`user_data`(Postgres·WireGuard 설치, 비밀 없음 B5-18④). 데이터 볼륨 AZ = 노드와 같은 2a(cross-AZ 회피, B5-7) | $0 | PR. plan 리뷰 |
 | **5-B** | **EKS 배선**: `db_mode=external`(기본값은 유지 — verify 마커 B5-15), ESO **ParameterStore** SecretStore + ExternalSecret, IRSA 정책 확장(B5-16), ESO·gitops kustomization 정리(B5-14·U-18) | $0 | PR |
 | **5-C** | **운영 문서·안전장치**: SOP §8b destroy 게이트를 태그 필터로(B5-13), PERSISTENT-RESOURCES 행·증가 상한(N-19·B5-20), 비용 모델 재산정(B5-25), D-004·D-016·`secrets.tf` 원칙 개정(B5-22·B5-23, `design-change-procedure`) | $0 | PR |
@@ -218,7 +219,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B5-7 | 🟡 | 데이터 볼륨 AZ 출처, 1-network→0-bootstrap 의존·병렬 apply | **5-A** — 1-network 자체 `azs[0]`(2a) |
 | B5-8 | 🟡 | 커넥션 최악 70+, 1 GiB 메모리, DB 재부팅 = Fly·EKS 동시 장애, 패치 창 미정 | **5-A**(`max_connections`·메모리 튜닝) + **7번**(부하) + **6번**(패치 절차) |
 | B5-9 | 🟡 | daily-api 스키마 분리 미구현(같은 DB·계정), EKS 에만 뜸 | 변경 없음 — 기록만 |
-| B5-10 | 🟡 | Fly 도쿄 ↔ DB 서울 RTT, `minimum-idle: 0` | **5-0** ② 실측 |
+| B5-10 | 🟡 | Fly 도쿄 ↔ DB 서울 RTT, `minimum-idle: 0` | ✅ 5-0: RTT 29.7ms, 연결 0.26s. Neon 대비는 Neon 리전 미확인 |
 | B5-11 | 🟡 | Postgres 메이저 미정, Neon 버전 미확인(TASK-9) | **5-0** ③ |
 | B5-12 | 🟡 | Fly 시크릿 write-only → 전환 시 Neon 자격증명 소실 = Q-2 복귀 경로 소멸 | **7번** — 전환 **전** Neon 자격증명을 SSM 에 보관 |
 | B5-13 | 🔴 | SOP §8b *"running 인스턴스 0"* 게이트가 상시 DB 로 영구 실패 | **5-C** |

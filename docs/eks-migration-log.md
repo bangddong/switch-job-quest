@@ -5529,3 +5529,30 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 사용자 *"돈 드는 거 말고... 실무도 배우지만 뭔가 해결할 수 있는 다른 제안"* → **Fly 6PN 에 EC2 를 WireGuard 피어로**(Fly 공식 기능, 블로그 *IPv6 WireGuard Peering* — AWS/GCP 피어링, 예제 `fly-apps/rds-connector`). 5432 인터넷 노출 0, release 머신 자동 해결, $0. 기각: 고정 IP($3.60 현금) / 전체 개방+TLS / Tailscale. 사용자 확인 질문 *"EKS 가 죽었을 때 대비용인가"* → 아니다, **Fly 는 주 138시간 이상 prod** 라 매일 쓰는 경로.
 - `[결정]` 비번 = **SSM SecureString(무료)·EC2 첫 부팅 생성·덮어쓰기 금지·IaC 밖**(사용자 *"꾸랭"*). Secrets Manager 기각 근거: 핵심 이점인 회전이 Fly 시크릿 write-only 때문에 불가 → $0.40/월만 남는다. TLS = `require` 유지(사용자), verify-full 미룸.
 - `[결정]` EIP 안 씀 — WireGuard 는 EC2 가 바깥으로 연결, EKS 는 사설 IP → 퍼블릭 IP 로 들어오는 주체가 없다(B5-4 소멸).
+
+## 2026-10-19 — 📌D-016 순서표 5-0: Fly 6PN ↔ EC2 WireGuard 피어 실측
+
+- `[비용]` 임시 리소스 전부 IaC 밖, 08:01~08:15 UTC(약 14분): EC2 t4g.micro 1대(+퍼블릭 IPv4) ≈ $0.004, Fly 머신 shared-cpu-1x ×4회 각 수 초. 정리 스크립트로 EC2 terminate · SG 삭제 · WireGuard 피어 제거 · Fly 프로브 앱 destroy · 설정 파일 삭제, 잔존 확인 `0 / 0 / 0`.
+- `[막힘]` `aws ec2 run-instances --instance-type t4g.nano` → `InvalidParameterCombination: The specified instance type is not eligible for Free Tier.` (D-010 Free Plan 제약 재확인) → t4g.micro.
+- `[메모]` 구성: `fly wireguard create personal nrt dq-probe` 설정(DNS 줄 제거)을 Ubuntu 24.04 arm64 `user_data` 로 `wg-quick up` · Postgres 16 · `pg_hba: host all probe fdaa::/16 scram-sha-256` · **SG 인바운드 0개**. 부팅 ~190초.
+- `[해결]` **Fly(nrt) → EC2(서울) 터널로 Postgres 접속 성공 — 인바운드 포트 0개로.** Fly 프로브 머신(postgres:17-alpine)에서 피어 IPv6 주소로:
+  ```
+  ping -c 10  → 10 transmitted, 8 received, 20% packet loss · round-trip min/avg/max = 29.389/29.654/30.135 ms
+  psql select version() → PostgreSQL 16.15 (Ubuntu …) on aarch64
+  640,000 바이트 결과(md5 ×20000) → 정상 수신
+  psql 연결+쿼리 ×3 → conn_s=0.26 / 0.26 / 0.26
+  ```
+- `[막힘]` 🔴 **Java 는 `<peer>._peer.internal` 을 풀지 못한다.** 같은 머신에서:
+  ```
+  getent hosts dq-probe._peer.internal       → fdaa:…:b02            (musl, 성공)
+  nslookup -type=AAAA dq-probe._peer.internal → fdaa:…:b02
+  nslookup -type=A    dq-probe._peer.internal → NXDOMAIN               ← 원인
+  java InetAddress.getAllByName("dq-probe._peer.internal")
+      → java.net.UnknownHostException: dq-probe._peer.internal: Name does not resolve
+  java … -Djava.net.preferIPv6Addresses=true → 같은 에러
+  java InetAddress.getAllByName("devquest-api.internal") → [fdaa:…:2]  (앱 이름은 된다)
+  ```
+  🟡 해석: 피어 이름은 A 질의에 **NXDOMAIN**(이름 자체가 없음)을 돌려준다. 앱 이름(`.internal`)은 A 가 비어 있어도 NXDOMAIN 이 아니라 통과한다. musl `getaddrinfo(AF_UNSPEC)` 는 NXDOMAIN 을 받으면 전체 실패로 본다 → 앱 이미지(`eclipse-temurin:21-jre-alpine`)의 JDBC 가 붙지 못한다. 첫 프로브의 `getent ahostsv6` 빈 결과는 등록 지연인지 같은 원인인지 미확정.
+- `[결정]` **`DB_HOST` = 피어 IPv6 리터럴 `[fdaa:…]`**(대괄호). `application-prod.yml` 의 `jdbc:postgresql://${DB_HOST}/${DB_NAME}` 가 그대로 받는다 → **BE 변경 0**. 피어 주소는 피어를 지우기 전까지 고정이고, DNS 의존이 하나 준다.
+- `[메모]` ⚠️ `wg-quick` 이 MTU 를 **8921** 로 잡았다(EC2 ENI 점보 9001 − 80). 인터넷 구간은 1500 아래여야 한다. 이번 640KB 전송은 문제없었지만 블랙홀 위험 → 5-A 에서 `MTU = 1420` 명시.
+- `[메모]` 미완: **Neon Postgres 메이저 버전**(B5-11) — `fly logs` 최근 버퍼에 Flyway 의 `PostgreSQL x.y` 줄이 없다. prod 앱 시크릿으로 조회하려면 prod 앱 안에 임시 머신을 띄워야 해서 하지 않았다(사용자에게 *"prod 와 무관"* 이라고 설명한 범위 밖).
