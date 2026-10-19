@@ -99,7 +99,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 2 | ✅ **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존. 완료 2026-10-19 (#461, main 첫 빌드 3/3 · IMMUTABLE · 옛 `latest` 태그 제거): PR 은 빌드만(무자격증명) · main push 가 세 서비스 푸시 · 레포 IMMUTABLE · 태그 존재 시 건너뜀. 아래 「2번에서 안 하는 것」 | N-10 · U-2 · L-44 | 0 |
 | 3 | ✅ **CI 역할** — main 전용 역할(0-bootstrap) + 옛 역할 좁힌 읽기 전용 + access entry 2개(로컬 admin + CI). 가드 재정의는 8번으로(B3-13). 진행: 아래 「3번」 PR A→B→C — A ✅ #464(역할·시크릿) · B ✅ #465(전환·축소, 임시 역할 plan 실측) · C ✅ #466 access entry 2개, 좁힌 PR 역할 첫 CI plan 통과(2026-10-19) | N-1 · N-2 · N-18 (N-3 → 8) | 0 |
 | 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
-| 5 | **DB 층** — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
+| 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** | N-9 · U-3 · N-15 | 5 |
 | 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1 · 6 |
 | 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크 | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
@@ -179,6 +179,69 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B3-15 | 🟡 | D-016 영향 목록에 `iam-github-oidc.tf`·`infra-deploy.yml`·`ecr-push.yml` 없음. access.tf·oidc 를 단언하는 verify 마커 0건 | **C** |
 | B3-16 | 🟡 | 튜토리얼 리소스 개수(access entry·assoc 2→4, 합계 29→31 등) | **C** |
 | B3-17 | ⚪ | entry 를 `for_each` 로 바꾸면 state 주소 변경(세션 중 apply 면 순간 kubectl 거부). CI 역할 ARN 이 존재해야 entry 생성 가능할 수 있음 | **C** — 별도 리소스로 추가(주소 유지), A 머지 후 |
+
+## 5번 — DB 층 (2026-10-19 계획)
+
+### 결정
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 레이어 | **1-network** (D-016 사용자 결정 유지) + 보호: 데이터 볼륨 분리·`prevent_destroy`·`ignore_changes=[ami, user_data]` | 별도 로컬 레이어는 PR plan 없음·리퍼 N-4b 반응·D-016 문구 개정(B5-19) |
+| **Fly → DB 경로** | **Fly 6PN 에 EC2 를 WireGuard 피어로** (`fly wireguard create`, 앱은 `<peer>._peer.internal`) | 사용자 10-19 — *"돈 드는 거 말고, 실무도 배우는"*. 기각: Fly 고정 이그레스 IP(월 $3.60 현금 · release 머신 적용 미명시 B-9) / `0.0.0.0/0`+TLS / Tailscale(외부 SaaS 추가). **5432 인터넷 노출 0 · release 머신 자동 해결 · tfsec ignore 불필요** |
+| EKS → DB 경로 | VPC 사설 IP. SG 인바운드 = `vpc_cidr`:5432 **만** | 클러스터 SG ID 참조(rds.tf 선례)는 매일 destroy 시 DependencyViolation(N-6) — 선례를 뒤집는 근거(B5-6) |
+| 퍼블릭 IP | **EIP 안 씀** — 자동 할당으로 충분 | WireGuard 는 EC2 가 **바깥으로** 연결, EKS 는 사설 IP → 아무도 퍼블릭 IP 로 들어오지 않는다. B5-4 가 설계로 소멸 |
+| **비밀번호 원천** | **SSM SecureString(표준, 무료)** — EC2 가 첫 부팅 때 생성·기록(**덮어쓰기 금지**). IaC 밖 | 사용자 10-19. tofu state·사람 손을 안 탄다(B3-6·B5-1). 기각: Secrets Manager($0.40/월 — **회전이 핵심 이점인데 Fly 시크릿이 write-only 라 회전을 켤 수 없다**) / 사람이 생성 |
+| TLS | **`sslmode=require` 유지**, 서버는 자체서명. verify-full 미룸 | 사용자 10-19. 서버 인증은 터널(WireGuard 상호 키 인증)·VPC 경계가 대신. BE 변경 0(B5-3) |
+| 인스턴스 | t4g.micro, `credit_specification = standard`, IMDSv2 강제, 루트·데이터 암호화, SSM 접속(SSH 포트 없음) | B5-24(`unlimited` 초과 과금), B5-17(tfsec) |
+| AMI | `data "aws_ami"` (SSM 공개 파라미터 금지) | B5-2 — PR 역할이 `ssm:GetParameter` Deny |
+
+### 순서
+
+| 단계 | 내용 | 비용 | 산출 |
+|:-:|---|---|---|
+| **5-0** | **실측 — 착수 판정.** ① 임시 t4g(IaC 밖, 끝나면 삭제)를 6PN 피어로 → Fly 쪽에서 `<peer>._peer.internal` AAAA 조회·TCP 5432 ② 서울↔Fly 게이트웨이 RTT(B5-10) ③ **Neon Postgres 메이저 버전**(B5-11 — EC2 를 같은 메이저로. Q-2 매일 복원이 상위→하위면 실패) | 수 센트 | 일지. ①이 막히면 → mTLS 공개 포트안으로 재결정 |
+| **5-A** | **IaC (1-network) — apply 하지 않음**: EC2·데이터 볼륨·SG·인스턴스 프로파일(`ssm:Get/PutParameter` 경로 한정)·`user_data`(Postgres·WireGuard 설치, 비밀 없음 B5-18④). 데이터 볼륨 AZ = 노드와 같은 2a(cross-AZ 회피, B5-7) | $0 | PR. plan 리뷰 |
+| **5-B** | **EKS 배선**: `db_mode=external`(기본값은 유지 — verify 마커 B5-15), ESO **ParameterStore** SecretStore + ExternalSecret, IRSA 정책 확장(B5-16), ESO·gitops kustomization 정리(B5-14·U-18) | $0 | PR |
+| **5-C** | **운영 문서·안전장치**: SOP §8b destroy 게이트를 태그 필터로(B5-13), PERSISTENT-RESOURCES 행·증가 상한(N-19·B5-20), 비용 모델 재산정(B5-25), D-004·D-016·`secrets.tf` 원칙 개정(B5-22·B5-23, `design-change-procedure`) | $0 | PR |
+| 🔴 apply | **6번 직전에 따로 승인** — 상시 과금 시작(월 ≈ $13 + 데이터 볼륨) | 과금 | — |
+
+### 5번 Blindspot (2026-10-19, Explore 읽기 전용) — 목적지
+
+| ID | 확도 | 요지 | 목적지 |
+|---|:-:|---|---|
+| B5-1 | 🔴 | 비번 원천 선택지가 좁다 — 0-bootstrap `random_password` 는 PR 이 읽고, tofu 관리 SSM 은 PR plan 을 깨뜨린다 | ✅ 결정(SSM·IaC 밖) |
+| B5-2 | 🔴 | AMI 를 SSM 공개 파라미터로 고르면 PR plan 실패 | **5-A** `data "aws_ami"` |
+| B5-3 | 🔴 | verify-full 은 BE(하드코딩 sslmode)·CA 파일 배포·CA 키 state 노출까지 | 미룸(결정). 할 때: sslmode env 화 + Neon 복귀 호환 |
+| B5-4 | 🟡 | 자동 퍼블릭 IP 는 바뀐다 | ✅ 설계로 소멸(아무도 퍼블릭 IP 로 안 들어옴) |
+| B5-5 | 🟡 | EKS 가 퍼블릭 주소로 붙으면 `vpc_cidr` 규칙 밖 | **5-B** — EKS 는 사설 IP/사설 DNS |
+| B5-6 | 🟡 | rds.tf 의 *"SG ID 참조"* 선례와 반대 | 위 결정표 근거 |
+| B5-7 | 🟡 | 데이터 볼륨 AZ 출처, 1-network→0-bootstrap 의존·병렬 apply | **5-A** — 1-network 자체 `azs[0]`(2a) |
+| B5-8 | 🟡 | 커넥션 최악 70+, 1 GiB 메모리, DB 재부팅 = Fly·EKS 동시 장애, 패치 창 미정 | **5-A**(`max_connections`·메모리 튜닝) + **7번**(부하) + **6번**(패치 절차) |
+| B5-9 | 🟡 | daily-api 스키마 분리 미구현(같은 DB·계정), EKS 에만 뜸 | 변경 없음 — 기록만 |
+| B5-10 | 🟡 | Fly 도쿄 ↔ DB 서울 RTT, `minimum-idle: 0` | **5-0** ② 실측 |
+| B5-11 | 🟡 | Postgres 메이저 미정, Neon 버전 미확인(TASK-9) | **5-0** ③ |
+| B5-12 | 🟡 | Fly 시크릿 write-only → 전환 시 Neon 자격증명 소실 = Q-2 복귀 경로 소멸 | **7번** — 전환 **전** Neon 자격증명을 SSM 에 보관 |
+| B5-13 | 🔴 | SOP §8b *"running 인스턴스 0"* 게이트가 상시 DB 로 영구 실패 | **5-C** |
+| B5-14 | 🔴 | external 모드에서 ESO `postgres-tls` 원천 부재 → ArgoCD wave 1 영구 정지 | **5-B** |
+| B5-15 | 🔴 | `db_mode` 기본값 변경 시 튜토리얼 verify 마커 실패 | **5-B** — 기본값 유지, 전환 워크플로(8)가 `-var` |
+| B5-16 | 🟡 | ESO key·IRSA 가 2-cluster 시크릿에 하드코딩 | **5-B** |
+| B5-17 | 🟡 | tfsec hard fail(IMDSv2·암호화), SG description ASCII 만(apply 에서야 실패) | **5-A** |
+| B5-18 | 🟡 | 1-network 자동 apply 부작용 — `user_data`/`instance_type` 변경 = 무인 stop/start, 서브넷 변경 = replace 시도, CI 는 TF_VAR 미주입, `user_data` 는 PR 이 읽음 | **5-A** — `ignore_changes`, 비밀 없는 `user_data`, 변수 기본값만 |
+| B5-19 | 🟡 | 별도 로컬 레이어의 비용 | 기각(위 결정표) |
+| B5-20 | 🟡 | 원장·비용 모델·D-016 영향 목록 서술이 거짓이 됨 | **5-C** |
+| B5-21 | ⚪ | 0-bootstrap 학습 EBS(10GiB) 운명, alpine→glibc 콜레이션 | **7번 이후** — 재사용 안 함, 원장 제거 절차 |
+| B5-22 | 🟡 | `secrets.tf` *"prod 실제 값을 쓰지 않는다"* 원칙이 처음 깨진다 | **5-C** (`design-change-procedure`) |
+| B5-23 | 🟡 | D-004 에 "1-network = 영속 + **가변**" 축 추가 필요 | **5-C** |
+| B5-24 | ⚪ | T4g 기본 `unlimited` 크레딧 | **5-A** `standard` |
+| B5-25 | 🔴 | D-016 DB $36 에 데이터 볼륨·스냅샷·전송·CloudWatch 미산입 | **5-C** 재산정 (Fly 고정 IP 는 기각으로 소멸) |
+
+### 미룬 것
+
+| 항목 | 왜 지금 안 하나 |
+|---|---|
+| verify-full TLS | 터널·VPC 가 서버 인증을 대신 — BE·Fly 배포를 늘릴 근거 부족(사용자 결정) |
+| 비번 자동 회전 · Secrets Manager | Fly 가 AWS 저장소를 직접 읽게 되면(OIDC → SSM) 가능. 그 전엔 회전이 Fly 를 깨뜨린다 |
+| mTLS 공개 포트 | 5-0 ① 이 막힐 때의 대안. 또는 터널 위 방어 한 겹으로 나중에 |
 
 ## 이번 범위에서 하지 않는 것
 
