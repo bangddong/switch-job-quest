@@ -506,6 +506,18 @@ variable "db_mode" {
 | **RDS** (인스턴스·서브넷그룹·보안그룹·인그레스) | 0 | 4 | **$0.025/hr** + gp3 20GB |
 | **합계** | **29** | **29** | |
 
+> 📌 **이 표는 2026-08-11 스냅샷이다.** Stage 4~5f 로 늘었고, **2026-10-19 로컬 plan 실측 = 47**(in-cluster).
+> 마지막 변화는 📌D-016 순서표 3-C 의 access entry·assoc **2 → 4**(+2: CI main 역할 `ci_main`). entry 주체는
+> 이제 *"apply 하는 사람"* 이 아니라 **명시 2개**(로컬 `bootstrap-admin` · `devquest-eks-github-actions-main`)다 —
+> CI 가 apply 하면 apply 주체가 STS 세션 ARN 이라 entry 를 못 만들기 때문(`infra/aws-eks/2-cluster/access.tf`).
+>
+> 🔴 **선행 조건 두 가지가 생겼다.**
+> ① 0-bootstrap 에 출력 `github_actions_main_role_arn` 이 **apply 돼 있어야** 2-cluster plan 이 된다(없으면
+>    `Unsupported attribute`). 0-bootstrap 은 main 머지 시 CI 가 자동 apply 하므로 보통 이미 있다.
+> ② 로컬에서 apply 하는 사람이 **`bootstrap-admin` 이 아니면** apply 는 성공하는데 kubectl 만 거부된다 —
+>    entry 가 그 사람에게 가지 않기 때문이다. 다른 IAM 사용자라면 `-var local_admin_iam_user=<이름>` 을 붙인다.
+>    확인: `aws sts get-caller-identity --query Arn` 이 `…:user/bootstrap-admin` 이면 그대로 된다.
+
 - plan에서 **`capacity_type = "ON_DEMAND"`** 확인 — 신규 계정은 Spot vCPU 쿼터가 0이라 SPOT이면 apply가 실패한다.
 - 📌 **레이어와 스테이지는 1:1이 아니다** — `2-cluster` 한 레이어가 Stage 0~3b의 리소스를 전부 담는다.
   그래서 "Stage 0을 하는데 EBS CSI 애드온이 왜 생기지?"가 정상이다. 문서 상단 동명의 절 참조.

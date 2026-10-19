@@ -5508,3 +5508,16 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   [cleanup] 임시 역할 삭제 · 확인: 역할 없음
   ```
   같은 커밋에서 F-2(Deny 에 `ssm:GetParameterHistory`·`dynamodb:GetRecords`·`ec2:GetConsoleOutput`)·F-3(락 Allow 를 `dynamodb:LeadingKeys` 로 두 레이어 한정)·F-4(낡은 서술 2곳) 수정.
+- `[해결]` **3-B 머지(#465, squash `e2647873b35de463c6e5f9dc53d9acd83476ef1d`)** → Infra Deploy run 39201795828 success(`0-bootstrap: Apply complete! Resources: 2 added, 0 changed, 1 destroyed.` · `1-network: 0 added`), ECR Push run 39201795786 success(세 서비스 `e2647873b35d…` 태그 존재). 옛 역할 부착 = `ReadOnlyAccess` + 인라인 `tofu-plan-scope`, Admin 없음. **어느 역할이 apply 했나** — 워크플로 로그엔 역할 이름이 안 찍히고 `RoleLastUsed` 는 지연(main = `None`)이라 CloudTrail 로 확인:
+  ```
+  2026-10-19T04:51:22Z devquest-eks-github-actions       ok   ← PR #465 의 plan (머지 전, 아직 Admin)
+  2026-10-19T04:54:20Z devquest-eks-github-actions-main  ok   ×5 ← 머지 후 infra-deploy 2 + ecr-push 3
+  ```
+  ⇒ push 이벤트가 **머지된 워크플로 정의로** 돌아 새 역할이 옛 역할을 축소했다(전제 실측 확인).
+
+## 2026-10-19 — 📌D-016 순서표 3-C: access entry 명시 2개
+
+- `[결정]` `access.tf` entry 주체를 `data.aws_caller_identity.current.arn`(apply 하는 주체) → **명시 2개**: `admin` = `arn:aws:iam::<account>:user/bootstrap-admin`(계정 ID 는 `data.aws_caller_identity` 로 조립, 사용자 이름은 변수 `local_admin_iam_user`) · `ci_main` = 0-bootstrap 출력 `github_actions_main_role_arn`(remote state — 단일 출처). PR 역할은 **넣지 않는다**(ReadOnlyAccess 에 `eks:AccessKubernetesApi` 가능 — QA 3-B F-2). 리소스 주소 `admin` 유지(B3-17), data 블록 유지(B3-7).
+- `[메모]` 로컬 `tofu -chdir=infra/aws-eks/2-cluster plan`(클러스터 없음 = 전부 create): 변경 전 `Plan: 45 to add` → 후 **47**. plan JSON 의 principal: `aws_eks_access_entry.admin arn:aws:iam::<account>:user/bootstrap-admin` · `aws_eks_access_entry.ci_main arn:aws:iam::<account>:role/devquest-eks-github-actions-main`.
+- `[메모]` ⚪ 미검증(클러스터 필요): 실제 `CreateAccessEntry` 와 CI 역할의 kubectl — 다음 유료 세션 또는 순서표 8. 이 PR 은 `infra/aws-eks/**` 를 건드리므로 **PR plan 이 좁힌 역할로 처음 도는 실사용 검증**이기도 하다.
+- `[해결]` QA 3-C F-3(머지 조건 — 좁힌 PR 역할의 첫 CI plan) 확인: PR #466 Infra Deploy run 39202544126 — `1-network: Acquiring state lock … No changes.` · `0-bootstrap: Acquiring state lock … No changes.` CloudTrail `2026-10-19T05:03:17Z/05:03:24Z devquest-eks-github-actions ok` ⇒ **좁힌 역할로 락·state 읽기·refresh 전부 통과**(3-B 의 임시 역할 실측이 실제 CI 에서도 성립). F-1 verify 마커 3개(실패 주입: access.tf·oidc 각각 `::error::… verify 내용 단언 실패` 확인), F-2 튜토리얼 선행 조건 fixed.
