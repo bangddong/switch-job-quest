@@ -356,7 +356,7 @@ cd infra/aws-eks/1-network && tofu init && tofu apply
 > 2-cluster 리퍼를 무장시킨다** — 끝나면 `.claude/eks-session/active` 를 지운다(2026-10-16 Blindspot N-4b).
 > 🛡️ 지우는 걸 잊어도 **이미 떠 있던 클러스터는 안전하다**(📌D-016 4번, 2026-10-20): 리퍼는 클러스터 `createdAt` 이
 > 마커의 첫 apply 시각 직후(+1h 안)인 것만 *"이 세션이 만든 것"* 으로 보고 destroy 한다. 그보다 먼저 생긴 클러스터
-> (CI 가 켠 평일 창 = prod)는 건드리지 않고 마커를 푼다 — `docs/eks-session-sop.md` 「🔒 안전장치」 절 참조.
+> (CI 가 켠 평일 창 = prod)는 건드리지 않고 마커를 푼다. 단 *"+1h 안에 CI 가 켠 클러스터"* 는 아직 mine 으로 보인다 — 8번이 닫는다 — `docs/eks-session-sop.md` 「🔒 안전장치」 절 참조.
 
 `1-network`(VPC·서브넷·IGW)도 **$0**이다 — NAT 게이트웨이를 쓰지 않기 때문이다(퍼블릭 서브넷 + 노드에
 퍼블릭 IP 부여로 대체). NAT는 시간당 $0.045 + 데이터 처리 요금이라 켜 두면 학습 계정에서 가장 조용히

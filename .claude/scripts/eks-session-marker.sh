@@ -58,6 +58,16 @@ HB_M=$(stat -c %Y "$DIR/heartbeat" 2>/dev/null || stat -f %m "$DIR/heartbeat" 2>
 case "$PREV_AT" in ''|*[!0-9]*) PREV_AT=""; PREV_AT_H="" ;; esac
 case "$HB_M" in ''|*[!0-9]*) HB_M=0 ;; esac
 [ $(( $(date +%s) - ${HB_M:-0} )) -lt "${EKS_REAPER_TTL:-7200}" ] || { PREV_AT=""; PREV_AT_H=""; }
+#   ⚠️ 그리고 **지금 클러스터가 떠 있을 때만** 보존한다 (QA F-1, 2026-10-20). 보존의 목적은 *"이미 떠 있는 내
+#   클러스터"* 를 지키는 것이다 — 클러스터가 없으면 이번 apply 가 새로 만들 것이므로 지금 시각이 맞다.
+#   하트비트만 보면 **한 턴 안의 destroy → 재apply**(Stop 훅이 그 사이에 안 돈다)에서 옛 시각이 남아
+#   새 클러스터가 foreign 이 되고 감시가 조용히 꺼진다. 조회 실패(오프라인 등)면 하트비트 규칙만 쓴다.
+if [ -n "$PREV_AT" ]; then
+  LIVE_C=$(aws --cli-connect-timeout 3 --cli-read-timeout 5 --region "${EKS_REGION:-ap-northeast-2}" \
+             eks list-clusters --query 'clusters' --output text 2>/dev/null) && {
+    case "$LIVE_C" in ''|None) PREV_AT=""; PREV_AT_H="" ;; esac
+  }
+fi
 {
   echo "repo_root=$ROOT"
   echo "cluster_dir=$ROOT/infra/aws-eks/2-cluster"

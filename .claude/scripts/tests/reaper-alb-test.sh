@@ -16,6 +16,16 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 REAPER="$ROOT/.claude/scripts/eks-reaper.sh"
 PASS=0; FAIL=0
+# 중단돼도(Ctrl-C 등) 반증 사본을 남기지 않는다 — gitignore 밖이라 untracked 로 남는다(QA F-5).
+# 실제 세션 파일 복원은 각 케이스가 하고, 여기선 남은 백업 디렉터리가 있으면 되돌린다.
+_cleanup() {
+  rm -f "$ROOT"/.claude/scripts/.reaper-broken-*.sh 2>/dev/null
+  if [ -n "${BACKUP:-}" ] && [ -d "$BACKUP" ]; then
+    rm -f "$ROOT/.claude/eks-session"/{active,heartbeat,lastcheck,state.cache,reaper.log} 2>/dev/null
+    cp -p "$BACKUP"/* "$ROOT/.claude/eks-session/" 2>/dev/null; rm -rf "$BACKUP"
+  fi
+}
+trap _cleanup EXIT INT TERM
 
 ok()   { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad()  { FAIL=$((FAIL+1)); echo "  🔴 $1"; }
@@ -252,21 +262,43 @@ if grep -q 'tofu destroy' "$CALLS"; then ok "판정을 지우니 CI 클러스터
 else bad "판정을 지워도 destroy 안 함 — **⑧ 은 아무것도 검증하지 않는다**"; fi
 rm -rf "$MOCK" "$BROKEN"
 
-echo "── ⑭ 마커 훅: 하트비트가 살아 있으면 첫 applied_at 을 보존, 죽었으면 새로 쓴다"
-echo "   (무엇의 실패를 잡나: 같은 세션 두 번째 apply 가 시각을 덮어써 자기 클러스터가 foreign 이 됨)"
+echo "── ⑭ 마커 훅: 첫 applied_at 보존 조건 = 하트비트 신선 AND 클러스터 떠 있음(조회 실패면 하트비트만)"
+echo "   (무엇의 실패를 잡나: 두 번째 apply 가 시각을 덮어써 자기 클러스터가 foreign ·"
+echo "    QA F-1 한 턴 안 destroy→재apply 에서 옛 시각이 남아 새 클러스터가 foreign — 둘 다 감시가 조용히 꺼진다)"
 MARKER_HOOK="$ROOT/.claude/scripts/eks-session-marker.sh"
-SB=$(mktemp -d); mkdir -p "$SB/bin"; printf '#!/bin/sh\nexit 1\n' > "$SB/bin/aws"; chmod +x "$SB/bin/aws"
-REPO=$(mktemp -d); ( cd "$REPO" && git init -q . )
-mkdir -p "$REPO/.claude/eks-session"
-printf 'applied_at=1000\napplied_at_h=old\n' > "$REPO/.claude/eks-session/active"
-touch "$REPO/.claude/eks-session/heartbeat"
-fire() { ( cd "$REPO" && echo '{"tool_input":{"command":"cd infra/aws-eks/2-cluster && tofu apply"}}' | PATH="$SB/bin:$PATH" bash "$MARKER_HOOK" ) >/dev/null 2>&1; }
-fire
-grep -q '^applied_at=1000$' "$REPO/.claude/eks-session/active" && ok "하트비트 신선 → 보존" || bad "덮어씀 — $(grep '^applied_at=' "$REPO/.claude/eks-session/active")"
-touch -t "$(date -v-3H '+%Y%m%d%H%M' 2>/dev/null || date -d '3 hours ago' '+%Y%m%d%H%M')" "$REPO/.claude/eks-session/heartbeat"
-fire
-grep -q '^applied_at=1000$' "$REPO/.claude/eks-session/active" && bad "하트비트 죽었는데 옛 시각 보존 — 새 세션 클러스터가 foreign" || ok "하트비트 stale → 새 시각"
+SB=$(mktemp -d); mkdir -p "$SB/bin"
+cat > "$SB/bin/aws" <<'MOCKEOF'
+#!/bin/sh
+for a in "$@"; do case "$a" in
+  list-clusters) [ "$MOCK_LIST" = "fail" ] && exit 1; [ -n "$MOCK_LIST" ] && echo "$MOCK_LIST"; exit 0 ;;
+esac; done
+exit 0
+MOCKEOF
+chmod +x "$SB/bin/aws"
+REPO=$(mktemp -d); ( cd "$REPO" && git init -q . ); mkdir -p "$REPO/.claude/eks-session"
+fire() {  # $1 = MOCK_LIST, $2 = 하트비트 (fresh|stale)
+  printf 'applied_at=1000\napplied_at_h=old\n' > "$REPO/.claude/eks-session/active"
+  if [ "$2" = fresh ]; then touch "$REPO/.claude/eks-session/heartbeat"
+  else touch -t "$(date -v-3H '+%Y%m%d%H%M' 2>/dev/null || date -d '3 hours ago' '+%Y%m%d%H%M')" "$REPO/.claude/eks-session/heartbeat"; fi
+  ( cd "$REPO" && echo '{"tool_input":{"command":"cd infra/aws-eks/2-cluster && tofu apply"}}' \
+      | MOCK_LIST="$1" PATH="$SB/bin:$PATH" bash "$MARKER_HOOK" ) >/dev/null 2>&1
+  grep -q '^applied_at=1000$' "$REPO/.claude/eks-session/active" && echo kept || echo new
+}
+[ "$(fire devquest-eks fresh)" = kept ] && ok "클러스터 있음 + 신선 → 보존" || bad "클러스터 있음 + 신선인데 덮어씀"
+[ "$(fire "" fresh)" = new ] && ok "클러스터 없음 + 신선 → 새 시각 (F-1)" || bad "🔴 클러스터 없는데 옛 시각 보존 — destroy→재apply 감시 소실"
+[ "$(fire devquest-eks stale)" = new ] && ok "하트비트 stale → 새 시각" || bad "하트비트 죽었는데 옛 시각 보존"
+[ "$(fire fail fresh)" = kept ] && ok "조회 실패 + 신선 → 보존(하트비트 규칙)" || bad "조회 실패인데 덮어씀"
 rm -rf "$REPO" "$SB"
+
+echo "── ⑯ 경계: createdAt = applied_at −30s / +3600s 는 mine, −31s / +3601s 는 foreign"
+echo "   (무엇의 실패를 잡나: QA F-3 — 부등호 방향·등호 처리 실수가 먼 값 케이스로는 안 보인다)"
+for spec in "-30:mine" "3600:mine" "-31:foreign" "3601:foreign"; do
+  off=${spec%%:*}; want=${spec##*:}
+  make_mocks; MOCK_CREATED_AT=$(iso_at $((APPLIED_AT + off))) run_reaper "$REAPER"
+  if grep -q 'tofu destroy' "$CALLS"; then got=mine; else got=foreign; fi
+  [ "$got" = "$want" ] && ok "offset $off → $want" || bad "offset $off → $got (기대 $want)"
+  rm -rf "$MOCK"
+done
 
 echo "── ⑮ 리마인더: foreign 클러스터면 마커를 풀고 destroy 를 권하지 않는다"
 echo "   (무엇의 실패를 잡나: 🔴 매 턴 '오늘 끝이면 → tofu destroy' 로 prod 를 끄라고 안내 — B4-7)"
@@ -285,6 +317,12 @@ printf 'applied_at=%s\napplied_at_h=x\n' "$APPLIED_AT" > "$SESS/active"
 OUT=$( cd "$ROOT" && PATH="$MOCK:$PATH" CALLS="$CALLS" MOCK_CREATED_AT="$(iso_at $((APPLIED_AT + 300)))" bash "$REMINDER" 2>&1 )
 [ -f "$SESS/active" ] && ok "대조군(mine): 마커 유지" || bad "대조군: mine 인데 마커 해제"
 case "$OUT" in *"tofu destroy"*) ok "대조군: destroy 안내 유지" ;; *) bad "대조군: 안내 사라짐" ;; esac
+# unknown — 판정 불가면 마커 유지 + 판정 불가 경고(QA F-3)
+rm -f "$SESS/lastcheck" "$SESS/state.cache"
+printf 'applied_at=%s\napplied_at_h=x\n' "$APPLIED_AT" > "$SESS/active"
+OUT=$( cd "$ROOT" && PATH="$MOCK:$PATH" CALLS="$CALLS" MOCK_DESCRIBE_RC=255 bash "$REMINDER" 2>&1 )
+[ -f "$SESS/active" ] && ok "unknown: 마커 유지" || bad "unknown: 마커 해제 — 감시 소실"
+case "$OUT" in *"판정하지 못했습니다"*) ok "unknown: 판정 불가 경고" ;; *) bad "unknown: 경고 없음" ;; esac
 rm -rf "$MOCK"
 rm -f "$SESS"/active "$SESS"/heartbeat "$SESS"/lastcheck "$SESS"/state.cache
 cp -p "$BACKUP"/* "$SESS/" 2>/dev/null || true; rm -rf "$BACKUP"

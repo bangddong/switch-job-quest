@@ -171,6 +171,9 @@ if [ -n "$CLUSTERS" ]; then
     foreign*)
       log "🛑 이 마커가 만든 클러스터가 아니다 — CI 창·다른 기기·기존 클러스터. destroy 하지 않는다. 마커 청소."
       log "   판정: $OWN (apply ${APPLIED_H:-미상}, applied_at=${APPLIED:-없음})"
+      # QA F-4 — 8번(CI on) 전에는 CI 창 클러스터가 존재하지 않는다. 그 구간의 foreign 은 로컬 잔존물·오판일 수 있다.
+      log "   ⚠️ 8번 전이라면 CI 창은 없다 — 로컬이 만든 클러스터인지 확인하고, 맞으면 손으로 destroy(SOP §8):"
+      log "      aws eks describe-cluster --name <이름> --query cluster.createdAt  vs  applied_at_h"
       rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
       exit 0 ;;
     unknown*)

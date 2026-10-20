@@ -14,13 +14,19 @@
 #   · 그보다 **먼저** 생긴 클러스터 = CI 창·다른 기기·기존 클러스터 → foreign. 로컬은 손대지 않는다.
 #   · 마커보다 **한참 뒤** 생긴 클러스터 = 남은 마커 뒤에 CI 가 켠 것 → foreign.
 #   · 판정 재료가 없거나 조회 실패 → unknown. **destroy 하지 않는 쪽**으로 기운다(호출부 책임).
-#   ⚠️ 실패 방향을 고른 이유: foreign/unknown 오판의 대가는 학습 클러스터 과금(8번 off cron 이
-#      2차 백스톱), mine 오판의 대가는 **prod 장애**다. 둘의 무게가 다르다.
+#   ⚠️ 실패 방향을 고른 이유: foreign/unknown 오판의 대가는 학습 클러스터 과금(**8번 이후** off cron 이
+#      2차 백스톱 — 그 전엔 없다), mine 오판의 대가는 **prod 장애**다. 둘의 무게가 다르다.
+#   🔴 남은 mine 오판 경로 (QA F-2, 원장 등재 → 8번): 마커가 생긴 뒤 Stop 훅이 한 번도 못 돌고(턴 도중 종료·
+#      노트북 닫힘) **+1h 안에 CI 가 클러스터를 켜면** mine 이 된다. 8번 전엔 CI on 이 없어 성립하지 않는다.
+#      8번이 on 잡에 임대(B4-5)를 남기면 "임대 있음 = foreign" 으로 닫는다. WINDOW 는 실측 전 보수값이다.
+#   ⚠️ 클러스터가 여럿이면 하나라도 foreign 이면 foreign(QA F-6) — 무관한 클러스터가 같은 리전에 있으면
+#      내 클러스터의 리퍼도 멈춘다. 의도된 fail-safe(어느 것을 지울지 고를 수 없다).
 #   ⚠️ applied_at 은 마커 훅이 **첫 apply 시각을 보존**하므로 성립한다(같은 세션의 두 번째 apply 가
 #      덮어쓰면 자기 클러스터가 foreign 이 된다 — eks-session-marker.sh 참조).
 
 EKS_OWN_SKEW="${EKS_OWN_SKEW:-30}"       # 초. 로컬 시계와 AWS 시계 차
-EKS_OWN_WINDOW="${EKS_OWN_WINDOW:-3600}" # 초. apply 시작 → CreateCluster 호출까지의 상한(실측 수 분)
+EKS_OWN_WINDOW="${EKS_OWN_WINDOW:-3600}" # 초. apply 시작 → CreateCluster 호출까지의 상한. 🟡 미실측 보수값 —
+                                         # 승인 프롬프트 대기도 여기 들어간다(마커는 PreToolUse 에서 생긴다)
 
 # ISO8601(aws CLI 기본 출력, 예 2026-09-13T03:05:19.561000+00:00) → epoch. 실패 시 빈 출력·rc 1.
 # GNU date 먼저, 안 되면 BSD date(macOS — `-d` 가 없다).

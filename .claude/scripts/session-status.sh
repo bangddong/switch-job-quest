@@ -167,6 +167,7 @@ if [ -f "$MARKER" ]; then
   if [ -n "$LIVE" ] && [ "${OWN%% *}" = "foreign" ]; then
     row "세션 마커" "${C_Y}⚠️ 마커는 있으나 EKS[$C] 는 이 세션이 만든 게 아니다 — CI 창(prod)·다른 기기${C_0}"
     row "" "${C_DIM}로컬에서 destroy 하지 마라. 리퍼도 건드리지 않고 마커를 푼다. 끄기 = off 워크플로(순서표 8번)${C_0}"
+    row "" "${C_DIM}8번 전이면 CI 창은 없다 — 로컬 잔존물인지 확인: aws eks describe-cluster --name <이름> --query cluster.createdAt  vs  .claude/eks-session/active 의 applied_at_h${C_0}"
   elif [ -n "$LIVE" ]; then
     row "세션 마커" "${C_R}🔴 활성 — apply ${AT:-시각미상}. ${C_B}실제로 과금 중${C_0}"
     case "$OWN" in unknown*) row "" "${C_Y}소유 판정 불가 — destroy 전 createdAt 확인 (${OWN#unknown })${C_0}" ;; esac
@@ -185,6 +186,7 @@ else
   if [ -n "$C" ]; then
     row "세션 마커" "${C_Y}없음 — 그러나 EKS[$C] 가동 중: CI 창(prod)·다른 기기. ${C_B}과금 중${C_0}"
     row "" "${C_DIM}로컬 리퍼 감시 대상 아님. 끄기 = off 워크플로(순서표 8번) — 로컬 destroy 금지${C_0}"
+    row "" "${C_DIM}8번 전이면 CI 창은 없다 — 다른 기기·원격 세션이 켠 것인지 먼저 확인${C_0}"
   else
     row "세션 마커" "${C_G}없음 — 클러스터 미가동${C_0}"
   fi

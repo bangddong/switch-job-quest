@@ -439,12 +439,18 @@
 > | **unknown** | `applied_at` 없음·`describe-cluster` 실패·시각 해석 실패 | **destroy 안 함**, 마커 유지·재시도(rc 1) | 판정 불가 경고 + 확인 명령 |
 >
 > - 실패 방향: foreign/unknown 오판의 대가는 학습 클러스터 과금, mine 오판의 대가는 **prod 장애**다 → 판정 못 하면 안 지운다.
-> - `applied_at` 은 마커 훅이 **세션의 첫 apply 시각으로 보존**한다(하트비트가 TTL 안일 때만). 두 번째 apply 가
+>   ⚠️ **8번 전에는 CI 창이 없다** — 그 구간에 foreign 이 나오면 로컬 잔존물·오판일 수 있으니 `createdAt` vs `applied_at_h` 를
+>   확인하고, 내 것이면 §8 로 손으로 destroy. *"8번 off cron 이 2차 백스톱"* 도 8번 **이후**의 이야기다.
+> - 🔴 **남은 mine 오판 경로 (원장 등재 → 8번)**: 마커가 생긴 뒤 Stop 훅이 한 번도 못 돌고(턴 도중 종료) **+1h 안에 CI 가
+>   클러스터를 켜면** mine 이 된다. 8번 전엔 CI on 이 없어 성립하지 않는다. 8번이 on 잡의 임대로 닫는다.
+> - 클러스터가 여럿이면 **하나라도 foreign 이면 foreign** — 무관한 클러스터가 있으면 내 리퍼도 멈춘다(의도된 fail-safe).
+> - `applied_at` 은 마커 훅이 **세션의 첫 apply 시각으로 보존**한다(하트비트가 TTL 안이고 **지금 클러스터가 떠 있을 때만** —
+>   클러스터가 없으면 이번 apply 가 새로 만들 것이라 새 시각. 한 턴 안 destroy→재apply 대비, QA F-1). 두 번째 apply 가
 >   덮어쓰면 자기 클러스터가 foreign 이 되어 dead man's switch 가 조용히 꺼진다.
 > - 마커 정규식은 **조이지 않았다** — L-22(*조일 때마다 새 우회*). 마커가 아니라 destroy 대상을 판정한다.
 > - **CI 가 켠 클러스터의 dead man's switch 는 로컬 리퍼가 아니다** — Fly 복귀를 포함한 off 경로를 반복 실행하는
 >   워크플로로 **순서표 8번에서** 만든다(로컬 리퍼는 맥이 깨어 있을 때만 돌고, 원격 세션의 마커는 보지도 못한다).
-> - 회귀: `bash .claude/scripts/tests/reaper-alb-test.sh` ⑧~⑮ (무과금 목. CI 미편입 — 수동 실행).
+> - 회귀: `bash .claude/scripts/tests/reaper-alb-test.sh` ⑧~⑯ (무과금 목. CI 미편입 — 수동 실행).
 
 **동작 요지**: 네가 Claude로 작업 중이면 매 턴 하트비트가 갱신돼 리퍼가 안 건드린다.
 네가 **끝 신호 없이 사라지면** 하트비트가 2시간 뒤 stale → 리퍼가 자동 `tofu destroy` → 과금 종료.

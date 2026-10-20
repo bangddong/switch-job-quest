@@ -50,6 +50,7 @@ if [ $((NOW - LASTCHK)) -ge 300 ]; then
         rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
         echo "ℹ️  EKS[$CLUSTERS] 는 이 세션이 만든 클러스터가 아닙니다(CI 창·다른 기기) — 로컬 마커 해제, 리퍼 감시 대상 아님." >&2
         echo "   끄지 마세요(창 중이면 prod). 끄기는 off 워크플로 몫입니다(Fly 복귀 포함 — 순서표 8번)." >&2
+        echo "   ⚠️ 8번 전이면 CI 창은 아직 없습니다 — 로컬 잔존물일 수 있으니 확인: aws eks describe-cluster --name <이름> --query cluster.createdAt  vs  .claude/eks-session/active 의 applied_at_h" >&2
         exit 0 ;;
       unknown*) printf ' · ⚠️소유판정불가' >> "$DIR/state.cache" 2>/dev/null ;;
     esac

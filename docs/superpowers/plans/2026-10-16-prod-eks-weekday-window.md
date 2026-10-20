@@ -188,8 +188,9 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 |---|---|---|
 | 범위 | **4a = 로컬 도구가 CI 클러스터를 절대 destroy·destroy 안내하지 않게** · CI 클러스터 dead man's switch 는 **8번** | 창 중 ALB = prod 입구. 회수는 *Fly 복귀 + destroy* 여야 하고 그 경로는 8번이 만든다(B4-1). destroy 만 하는 CI 리퍼를 지금 만들면 오작동 = prod 장애 |
 | 판정 방식 | **소유 판정** — 클러스터 `createdAt` ∈ [마커 `applied_at` −30s, +1h] 이면 mine | 마커 정규식을 조이지 않는다(L-22). 마커가 아니라 **destroy 대상**을 판정하면 N-4b(1-network apply)·B4-6(따옴표 오탐)·B4-7(리마인더)·B4-8(status) 이 한 규칙으로 닫힌다. 태그 자리가 없어(B4-4) 태그 방식 기각 |
-| 실패 방향 | foreign·unknown → destroy 안 함 | mine 오판 = prod 장애, 반대 = 학습 클러스터 과금(8번 off cron 이 2차 백스톱) |
-| applied_at | 마커 훅이 **첫 apply 시각 보존**(하트비트 TTL 안일 때만) | 두 번째 apply 가 덮어쓰면 자기 클러스터가 foreign(조용한 감시 소실). 옛 세션 마커를 이어받으면 같은 결말 → 하트비트로 세션 경계 판정 |
+| 실패 방향 | foreign·unknown → destroy 안 함 | mine 오판 = prod 장애, 반대 = 학습 클러스터 과금(8번 **이후** off cron 이 2차 백스톱 — 그 전엔 없다) |
+| applied_at | 마커 훅이 **첫 apply 시각 보존** — 하트비트 TTL 안 **그리고 지금 클러스터가 떠 있을 때만** | 두 번째 apply 가 덮어쓰면 자기 클러스터가 foreign(조용한 감시 소실). 옛 세션 마커를 이어받거나(→ 하트비트) 한 턴 안 destroy→재apply 에서 옛 시각이 남아도(→ 클러스터 존재, QA F-1) 같은 결말 |
+| 남은 위험 | 마커 직후 Stop 훅이 못 돌고 +1h 안에 CI 가 켠 클러스터는 mine (QA F-2) | **8번 전엔 CI on 이 없어 불성립** → 원장 등재, 8번 on 잡의 임대(B4-5)로 *"임대 있음 = foreign"* |
 
 변경: `.claude/scripts/lib/eks-cluster-owner.sh`(신규) · `eks-reaper.sh` · `eks-session-marker.sh` · `eks-heartbeat-reminder.sh` ·
 `session-status.sh`(마커 없어도 클러스터 조회) · `tests/reaper-alb-test.sh` ⑧~⑮. 하네스 동결 해제 근거 = N-20(D-016 이 막힌 증거 N-4).
@@ -207,7 +208,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B4-2 | 🔴 | ArgoCD selfHeal 이 Ingress 삭제를 되돌린다(SOP §8 ⓪ Application 선삭제를 리퍼가 건너뜀) | **8번** off 경로 — prod Ingress 가 ArgoCD 앱에 들어가는 순간 필수 |
 | B4-3 | 🔴 | `kubectl get ingress … 2>/dev/null \| grep -c .` 가 Forbidden 을 0건으로 오판 → ALB 고아 | **8번**(CI off 에서 rc 구분). 로컬 리퍼 동일 결함은 mine(학습) 클러스터 한정 — 같은 때 함께 |
 | B4-4 | 🔴 | EKS 클러스터에 태그 자리 없음 | ✅ 해당 없음 — createdAt 판정이라 태그 불필요 |
-| B4-5 | 🔴 | 임대(lease) 값은 아직 없는 on 잡이 써야 한다 | **8번** — on 잡이 쓰고 off/dead man's switch 가 읽는 계약을 함께 정의 |
+| B4-5 | 🔴 | 임대(lease) 값은 아직 없는 on 잡이 써야 한다 | **8번** — on 잡이 쓰고 off/dead man's switch 가 읽는 계약을 함께 정의. **로컬 소유 판정도 "임대 있음 = foreign" 을 읽어 QA F-2 를 닫는다** |
 | B4-6 | 🔴 | 오탐 마커 허용 근거(자가청소)가 창 중 무너짐 | ✅ 이번 PR(소유 판정) |
 | B4-7 | 🔴 | 리마인더가 prod destroy 를 안내 | ✅ 이번 PR |
 | B4-8 | 🔴 | session-status 가 마커 없으면 "미가동" 단정 | ✅ 이번 PR |
