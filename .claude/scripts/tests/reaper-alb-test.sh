@@ -25,7 +25,8 @@ _cleanup() {
     cp -p "$BACKUP"/* "$ROOT/.claude/eks-session/" 2>/dev/null; rm -rf "$BACKUP"
   fi
 }
-trap _cleanup EXIT INT TERM
+trap _cleanup EXIT
+trap 'exit 130' INT TERM   # 핸들러가 끝나도 bash 는 계속 진행한다 — 중단 신호면 멈춘다(EXIT trap 이 정리, QA F-7)
 
 ok()   { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad()  { FAIL=$((FAIL+1)); echo "  🔴 $1"; }
