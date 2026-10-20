@@ -11,6 +11,8 @@
 #    SSM 세션에서 **같은 스크립트를 손으로 다시 돌린다**:
 #        aws ssm start-session --target <db_instance_id>
 #        sudo bash /var/lib/cloud/instance/scripts/part-001
+#    ⚠️ 재실행은 `10-devquest.conf` 를 다시 쓰고 **Postgres 를 재시작한다** — Fly·EKS 가 동시에 몇 초 끊긴다.
+#       설정 튜닝은 재실행이 아니라 **별도 conf.d 파일**(예: 20-tuning.conf) + `pg_ctlcluster 17 main reload`(QA F-12).
 #    로그: /var/log/cloud-init-output.log (첫 부팅) — 비밀은 출력하지 않는다(xtrace 를 켜지 않는다).
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -82,9 +84,19 @@ chown postgres:postgres /var/lib/postgresql
 mkdir -p "/etc/postgresql/$PGV"
 if [ -d "$ETCV" ]; then
   # 재부착(또는 재실행) — 볼륨의 설정을 그대로 쓴다.
-  [ -L "$CONF" ] || { rm -rf "$CONF"; ln -s "$ETCV" "$CONF"; log "기존 클러스터 재부착 (설정 = 볼륨)"; }
+  if [ ! -L "$CONF" ]; then
+    rm -rf "$CONF"; ln -s "$ETCV" "$CONF"
+    # 볼륨 파일은 **숫자 UID** 로 소유된다. 새 AMI 에서 postgres 의 UID 가 달라졌을 수 있다(QA F-10) —
+    # 재부착 때만 다시 맞춘다(10GiB, 수 초).
+    chown -R postgres:postgres "/var/lib/postgresql/$PGV"
+    log "기존 클러스터 재부착 (설정 = 볼륨, 소유권 재설정)"
+  fi
+elif [ -f "$DATA/PG_VERSION" ] && [ -f "$CONF/postgresql.conf" ] && [ ! -L "$CONF" ]; then
+  # 첫 부팅이 pg_createcluster 뒤·mv 전에 죽은 경우(QA F-11) — 하던 일을 마저 한다.
+  mv "$CONF" "$ETCV"; ln -s "$ETCV" "$CONF"
+  log "중단된 첫 부팅 이어서 (설정 → 볼륨)"
 elif [ -f "$DATA/PG_VERSION" ]; then
-  log "데이터는 있는데 볼륨에 설정이 없다($ETCV) — 자동 복구 불가, 중단"; exit 1
+  log "데이터는 있는데 설정이 어디에도 없다($ETCV · $CONF) — 자동 복구 불가, 중단"; exit 1
 else
   pg_createcluster "$PGV" main
   mv "$CONF" "$ETCV"
