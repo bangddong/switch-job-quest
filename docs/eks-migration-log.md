@@ -5558,3 +5558,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 미완: **Neon Postgres 메이저 버전**(B5-11) — `fly logs` 최근 버퍼에 Flyway 의 `PostgreSQL x.y` 줄이 없다. prod 앱 시크릿으로 조회하려면 prod 앱 안에 임시 머신을 띄워야 해서 하지 않았다(사용자에게 *"prod 와 무관"* 이라고 설명한 범위 밖).
 - `[해결]` (2026-10-20) **Neon = Postgres 17** — 사용자가 Neon 콘솔 프로젝트 설정 `Postgres > Version 17` 확인. TASK-9 해소(학습 RDS 기본 17.10 · in-cluster `postgres:17-alpine` 과 같은 메이저). EC2 도 17. Neon 리전은 호스트 이름상 `ap-southeast-1`(싱가포르) — 지금 prod 는 Fly(도쿄)↔싱가포르 왕복.
 - `[메모]` 🔴 (2026-10-19) Neon 접속 정보를 찾다가 `.claude/settings.local.json` 권한 규칙에 평문 저장된 `FLY_API_TOKEN` 앞부분이 세션 출력에 찍혔다(마스킹 정규식 누락). 레포·PR 에는 없음. 이어진 자격증명 추출 시도는 auto 모드 분류기가 `Credential Exploration` 으로 차단 — 우회하지 않았다. 사용자 결정: 전환 완료 후 토큰 재발급(TASKS TASK-13).
+
+## 2026-10-20 — 📌D-016 순서표 5-A: prod DB IaC (apply 없음)
+
+- `[결정]` **`db_enabled` 플래그(기본 false)** — 1-network 는 머지 = `infra-deploy` 자동 apply 라서, 코드를 그냥 넣으면 머지 순간 상시 과금이 시작된다. 계획서는 *"apply 는 6번 직전 별도 승인"*. ⇒ 코드는 꺼진 채 머지, 켜는 것은 한 줄짜리 별도 PR. 켠 뒤 false 로 되돌리면 `prevent_destroy` 가 apply 를 막는다(의도).
+- `[결정]` 구성: Ubuntu 24.04 arm64(`data "aws_ami"` — SSM 공개 파라미터 금지 B5-2) · t4g.micro `credit_specification standard` · IMDSv2 · 루트 8GB 암호화(OS 만) · **데이터 EBS 10GiB gp3 별도**(`prevent_destroy`, AZ = `azs[0]` 2a) · SG 인바운드 `vpc_cidr`:5432 하나 · 인스턴스 프로파일(SSM Core + `ssm:Get/PutParameter` on `/devquest/prod/db/*` + KMS via ssm) · `ignore_changes = [ami, user_data]`.
+- `[결정]` `user_data` 는 비밀 0 — 데이터 볼륨 대기·빈 경우만 포맷 → PGDG 로 Postgres **17** → WireGuard 설정은 SSM `wireguard-conf`(운영자가 넣음, 최대 30분 대기)에서 받아 `DNS` 줄 제거·**`MTU = 1420`** 추가 → 기존 데이터면 클러스터 *통합*, 아니면 생성 → `pg_hba`: `hostssl devquest devquest <vpc_cidr>` · `hostssl … <Fly 조직 /48>` → 비밀번호는 SSM 에 있으면 쓰고 없으면 생성(`--overwrite` 없음).
+- `[메모]` `tofu plan`: 기본(꺼짐) `No changes.` · `-var db_enabled=true` → `Plan: 8 to add, 0 to change, 0 to destroy.`(EBS·프로파일·역할·인라인·SSM Core 부착·인스턴스·SG·볼륨 부착).
+- `[막힘]` tfsec 은 `count = 0` 이면 리소스를 평가하지 않는다 → 기본값으로는 `No problems detected!` 가 **검사를 안 한 통과**다. `--tfvars-file`(db_enabled=true)로 다시: `Result #1 LOW EBS volume does not use a customer-managed KMS key.` → 근거 붙여 ignore(CMK 월 $1+, ecr.tf 와 같은 판단) → `No problems detected!`. ⚠️ CI tfsec 도 기본값으로 돈다 — **켜는 PR 에서야 실제로 검사된다.**

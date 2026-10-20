@@ -38,3 +38,14 @@ output "vpc_cidr" {
   description = "VPC CIDR (보안그룹 규칙 등에 참조)"
   value       = aws_vpc.main.cidr_block
 }
+
+# 📌D-016 5-A. 비밀 없음. EKS(5-B)는 사설 IP 로, Fly 는 WireGuard 피어 IPv6 리터럴로 붙는다.
+output "db_private_ip" {
+  description = "prod DB 사설 IP (EKS → DB). db_enabled=false 면 null"
+  value       = var.db_enabled ? aws_instance.db[0].private_ip : null
+}
+
+output "db_instance_id" {
+  description = "prod DB 인스턴스 ID (SSM 접속: aws ssm start-session --target <id>)"
+  value       = var.db_enabled ? aws_instance.db[0].id : null
+}

@@ -1,0 +1,104 @@
+#!/bin/bash
+# prod DB 첫 부팅 스크립트 (📌D-016 순서표 5-A). templatefile 로 렌더링된다 — bash 변수는 $X 또는 $${X}.
+#
+# 🔴 이 파일에 비밀을 넣지 마라. 렌더 결과가 state 와 인스턴스 속성에 남고 PR plan 역할이 읽는다.
+#    비밀 2개는 SSM SecureString 에서 런타임에 받는다:
+#      ${ssm_prefix}/wireguard-conf  ← 운영자가 미리 넣는다 (`fly wireguard create` 산출물, 개인키 포함)
+#      ${ssm_prefix}/password        ← 이 스크립트가 처음 한 번 만든다 (덮어쓰기 금지)
+#
+# 실행 로그: /var/log/cloud-init-output.log (SSM Session Manager 로 접속해 확인). 비밀은 xtrace 를 끄고 다룬다.
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+REGION="${region}"
+PREFIX="${ssm_prefix}"
+PGV="${pg_major}"
+VPC_CIDR="${vpc_cidr}"
+DEV="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${data_vol}"
+log() { echo "[db-init] $*"; }
+
+# ── 1. 데이터 볼륨 — 붙을 때까지 기다린 뒤, 비어 있을 때만 포맷 ───────────────
+# aws_volume_attachment 는 인스턴스가 뜬 **뒤에** 붙는다 → 대기 필수.
+for i in $(seq 1 120); do [ -e "$DEV" ] && break; sleep 5; done
+[ -e "$DEV" ] || { log "데이터 볼륨이 10분 안에 안 붙었다: $DEV"; exit 1; }
+if ! blkid "$DEV" >/dev/null 2>&1; then
+  log "빈 볼륨 — ext4 포맷"
+  mkfs.ext4 -L pgdata "$DEV"
+else
+  log "기존 파일시스템 — 포맷하지 않는다 (인스턴스 교체 후 재부착)"
+fi
+mkdir -p /var/lib/postgresql
+grep -q 'LABEL=pgdata' /etc/fstab || echo 'LABEL=pgdata /var/lib/postgresql ext4 defaults,nofail 0 2' >> /etc/fstab
+mount -a
+
+# ── 2. 패키지 — WireGuard · AWS CLI · PGDG Postgres ───────────────────────
+apt-get update -y
+apt-get install -y wireguard-tools curl ca-certificates postgresql-common ssl-cert
+snap install aws-cli --classic
+/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+# 패키지 설치가 클러스터를 자동 생성하지 않게 — 기존 데이터 볼륨이면 아래에서 "통합" 해야 한다.
+sed -i 's/^#\?create_main_cluster.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf
+apt-get install -y "postgresql-$PGV"
+
+# ── 3. WireGuard — Fly 6PN 피어 ───────────────────────────────────────────
+set +x
+for i in $(seq 1 360); do
+  WG=$(aws ssm get-parameter --region "$REGION" --name "$PREFIX/wireguard-conf" --with-decryption \
+         --query Parameter.Value --output text 2>/dev/null) && break
+  [ "$i" = 1 ] && log "$PREFIX/wireguard-conf 대기 중 (운영자가 넣을 때까지, 최대 30분)"
+  sleep 5
+done
+[ -n "$${WG:-}" ] || { log "wireguard-conf 없음 — 중단"; exit 1; }
+umask 077
+# DNS 줄 제거(resolvconf 미설치 — 앱은 IPv6 리터럴로 붙는다, 5-0 실측).
+# MTU 1420 명시 — wg-quick 은 ENI 점보 MTU(9001)에서 8921 을 잡는데 인터넷 구간은 1500 이하다(5-0).
+printf '%s\n' "$WG" | sed '/^DNS/d' | sed '/^\[Interface\]/a MTU = 1420' > /etc/wireguard/fly0.conf
+unset WG
+ORG6=$(awk -F' *= *' '/^AllowedIPs/{print $2}' /etc/wireguard/fly0.conf)   # 예: fdaa:xx:xxxx::/48
+systemctl enable --now wg-quick@fly0
+log "WireGuard up — Fly 조직 대역 $ORG6"
+
+# ── 4. Postgres 클러스터 — 새로 만들거나, 기존 데이터를 통합 ─────────────────
+DATA="/var/lib/postgresql/$PGV/main"
+chown postgres:postgres /var/lib/postgresql
+if [ -f "$DATA/PG_VERSION" ]; then
+  log "기존 클러스터 통합 ($DATA)"
+  pg_createcluster "$PGV" main -d "$DATA" || true
+  NEW=0
+else
+  pg_createcluster "$PGV" main
+  NEW=1
+fi
+CONF="/etc/postgresql/$PGV/main"
+cat > "$CONF/conf.d/10-devquest.conf" <<CONFEOF
+listen_addresses = '*'
+ssl = on
+password_encryption = scram-sha-256
+CONFEOF
+# 접근은 SG(VPC 만) + 터널 + 여기 pg_hba 세 겹. hostssl = 평문 접속 거부.
+cat >> "$CONF/pg_hba.conf" <<HBAEOF
+hostssl devquest devquest $VPC_CIDR scram-sha-256
+hostssl devquest devquest $ORG6 scram-sha-256
+HBAEOF
+systemctl enable postgresql
+systemctl restart "postgresql@$PGV-main"
+
+# ── 5. 비밀번호 — SSM 에 있으면 쓰고, 없으면 만들어 넣는다(덮어쓰기 금지) ──────────
+set +x
+if PW=$(aws ssm get-parameter --region "$REGION" --name "$PREFIX/password" --with-decryption \
+          --query Parameter.Value --output text 2>/dev/null); then
+  log "기존 비밀번호 사용"
+else
+  PW=$(openssl rand -hex 24)
+  # --overwrite 를 주지 않는다 — 동시에 두 번 돌아도 먼저 쓴 쪽이 이긴다.
+  aws ssm put-parameter --region "$REGION" --name "$PREFIX/password" --type SecureString --value "$PW" >/dev/null
+  log "새 비밀번호 생성·저장"
+fi
+if [ "$NEW" = 1 ]; then
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" <<'SQLEOF'
+CREATE ROLE devquest LOGIN PASSWORD :'pw';
+CREATE DATABASE devquest OWNER devquest;
+SQLEOF
+  log "role·database devquest 생성"
+fi
+unset PW
+log "완료"
