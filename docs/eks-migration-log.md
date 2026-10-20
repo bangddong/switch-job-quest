@@ -5556,3 +5556,5 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` **`DB_HOST` = 피어 IPv6 리터럴 `[fdaa:…]`**(대괄호). `application-prod.yml` 의 `jdbc:postgresql://${DB_HOST}/${DB_NAME}` 가 그대로 받는다 → **BE 변경 0**. 피어 주소는 피어를 지우기 전까지 고정이고, DNS 의존이 하나 준다.
 - `[메모]` ⚠️ `wg-quick` 이 MTU 를 **8921** 로 잡았다(EC2 ENI 점보 9001 − 80). 인터넷 구간은 1500 아래여야 한다. 이번 640KB 전송은 문제없었지만 블랙홀 위험 → 5-A 에서 `MTU = 1420` 명시.
 - `[메모]` 미완: **Neon Postgres 메이저 버전**(B5-11) — `fly logs` 최근 버퍼에 Flyway 의 `PostgreSQL x.y` 줄이 없다. prod 앱 시크릿으로 조회하려면 prod 앱 안에 임시 머신을 띄워야 해서 하지 않았다(사용자에게 *"prod 와 무관"* 이라고 설명한 범위 밖).
+- `[해결]` (2026-10-20) **Neon = Postgres 17** — 사용자가 Neon 콘솔 프로젝트 설정 `Postgres > Version 17` 확인. TASK-9 해소(학습 RDS 기본 17.10 · in-cluster `postgres:17-alpine` 과 같은 메이저). EC2 도 17. Neon 리전은 호스트 이름상 `ap-southeast-1`(싱가포르) — 지금 prod 는 Fly(도쿄)↔싱가포르 왕복.
+- `[메모]` 🔴 (2026-10-19) Neon 접속 정보를 찾다가 `.claude/settings.local.json` 권한 규칙에 평문 저장된 `FLY_API_TOKEN` 앞부분이 세션 출력에 찍혔다(마스킹 정규식 누락). 레포·PR 에는 없음. 이어진 자격증명 추출 시도는 auto 모드 분류기가 `Credential Exploration` 으로 차단 — 우회하지 않았다. 사용자 결정: 전환 완료 후 토큰 재발급(TASKS TASK-13).
