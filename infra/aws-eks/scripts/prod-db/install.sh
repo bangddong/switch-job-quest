@@ -32,7 +32,9 @@ if grep -q '^CUTOVER_DONE=1$' "$ENV_FILE" 2>/dev/null; then CUTOVER=1; fi
 # 데이터 볼륨 표식(QA F-2) — 인스턴스를 교체해 /etc 가 사라져도 남는다. 있으면 1, --cutover-done 이면 만든다.
 MARK=/var/lib/postgresql/.devquest-cutover-done
 [ -e "$MARK" ] && CUTOVER=1
-if [ "$CUTOVER" = 1 ] && [ -d /var/lib/postgresql ] && [ ! -e "$MARK" ]; then
+if [ "$CUTOVER" = 1 ] && [ ! -e "$MARK" ]; then
+  # 데이터 볼륨이 없으면 조용히 건너뛰지 않는다(QA F-9) — 그러면 /etc 에만 1 이 남아 F-2 가 막으려던 구멍 그대로다.
+  [ -d /var/lib/postgresql ] || { echo "❌ /var/lib/postgresql 없음 — 데이터 볼륨이 붙은 뒤 다시 --cutover-done" >&2; exit 1; }
   date -u +%FT%TZ > "$MARK"
 fi
 
