@@ -5,12 +5,17 @@ name: Infra Deploy
 #   - main 머지    → tofu apply (실제 반영)
 # 역할 ARN·민감 변수는 커밋 파일에 두지 않고 GitHub Secret으로 주입한다.
 
+# 🔴 paths 는 **CI 가 apply 하는 레이어 디렉터리만**이다 (📌D-016 6-A, 2026-10-20 — B4-17·B6-28).
+#    종전 `infra/aws-eks/**` 는 README·PERSISTENT-RESOURCES·scripts/·reaper/ 변경에도 0-bootstrap·1-network 를
+#    apply 했다. 1-network 에 **상시 prod DB** 가 생기면(6-B) 문서 PR 하나가 prod DB 레이어 apply 를 일으킨다.
+#    `.terraform.lock.hcl`·`*.tftpl` 은 레이어 디렉터리 안이라 포함된다. 2-cluster 는 매트릭스 밖이라 무관.
+#    ⚠️ 레이어를 매트릭스에 추가하면 **여기에도** 추가한다 — 빠뜨리면 그 레이어 변경이 조용히 apply 되지 않는다.
 on:
   pull_request:
-    paths: ["infra/aws-eks/**"]
+    paths: ["infra/aws-eks/0-bootstrap/**", "infra/aws-eks/1-network/**"]
   push:
     branches: [main]
-    paths: ["infra/aws-eks/**"]
+    paths: ["infra/aws-eks/0-bootstrap/**", "infra/aws-eks/1-network/**"]
 
 concurrency:
   group: infra-deploy-${{ github.ref }}

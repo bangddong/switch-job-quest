@@ -5632,3 +5632,15 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` Neon 자격증명 = **읽기 전용 role**, 사용자가 콘솔에서 만들고 AWS 콘솔로 SSM 에 직접(TASK-14) — 값이 대화·레포·state 를 안 거친다. Neon 콘솔 role 은 쓰기 기본이라 그대로 두면 EC2 버그 = prod 삭제(B6-12).
 - `[메모]` 기존 `db-backup.sh`·`db-restore.sh` 는 **고치지 않는다** — *"prod Neon 에 붙을 수 없다"* 를 호스트 인자 부재로 구현했고(N-17), 튜토리얼 verify 마커 4개·목 테스트 18건이 리터럴을 단언한다. prod 용은 `scripts/prod-db/` 새 파일.
 - `[메모]` 계획: 6-0(TASK-14) → 6-A(IaC·스크립트, 플래그 꺼짐, `infra-deploy` paths 좁힘) → 6-B(🔴 켜기 = 상시 과금, 별도 승인) → 6-C(리허설·RTO 실측) → 6-D(감시·문서). B6 37건 목적지는 계획서 「6번」.
+
+## 2026-10-20 — 📌D-016 순서표 6-A: prod DB 백업 도구 ($0, 플래그 꺼짐)
+
+- `[결정]` `scripts/prod-db/` 새 디렉터리 — `backup.sh`(스냅샷 덤프 → S3 스트리밍 + 같은 스냅샷 행 수 + 헬스 키) · `restore-check.sh`(최신 덤프 → 스크래치 DB → 값 비교 → 즉시 DROP) · `neon-import.sh`(Neon 읽기 전용 → EC2, 7번 리허설) · systemd timer 2개(백업 매일 03:30 KST, 복원 판정 주 1회 — CPU 크레딧 B6-15) · `install.sh`(EC2, 멱등, Postgres 재시작 없음) · `deploy.sh`(로컬 → S3 tooling/<sha>.tgz → SSM Run Command, **origin/main 과 같은 HEAD 만**).
+- `[결정]` 덤프와 행 수를 **같은 스냅샷**으로: REPEATABLE READ 세션(bash coproc)에서 `pg_export_snapshot()` → `pg_dump --snapshot`, 같은 세션에서 행 수. 따로 세면 쓰기 중인 prod 의 정상 백업이 불일치로 판정된다.
+- `[해결]` 반증: `--snapshot` 을 지우고 동시 INSERT 중 백업 → 테스트 ⑦ `복원 판정 실패 rc=1`. 되돌리면 통과. 판정이 실제로 스냅샷에 기대고 있다.
+- `[막힘]` 테스트 ④(쓰기 권한 role 거부) 뒤 `ERROR: relation "users" does not exist` — **`--reset` 이 Neon 읽기 전용 검사보다 먼저 대상 DB 를 지우고 있었다.** 거부는 했지만 대상은 이미 비어 있었다. 7번 이후라면 `CUTOVER_DONE` 가드가 먼저 막지만, 순서 자체가 틀렸다.
+- `[해결]` 원천 검사(SSM·형식·role 이름·pooler·쓰기 권한) 전부 뒤로 `--reset` 을 옮겼다. 24/24.
+- `[메모]` 준비 단계 첫 실패: `psql -c "CREATE ROLE …; CREATE DATABASE …"` — `-c` 하나는 암묵 트랜잭션이라 `CREATE DATABASE` 가 실패한다. 테스트 하네스 문제(스크립트 아님).
+- `[결정]` 1-network: 인스턴스 역할에 `s3:PutObject`·`GetObject`(`<버킷>/prod-db/*`) + `ListBucket`(prefix 조건). Delete 계열 없음(B6-34). 버킷 이름은 1-network 변수로 **복제**(remote_state 금지 — 병렬 apply B6-9), prefix 는 `postgres/` 금지 validation(B6-6). 로컬 plan: 출력 2개 추가만. tfsec(`db_enabled=true` tfvars): No problems.
+- `[결정]` `infra-deploy.yml` paths → `infra/aws-eks/{0-bootstrap,1-network}/**`(B4-17·B6-28). 하네스 동결 해제 근거: 선행 조건 2(백업 리허설)가 첫 창을 막고, 6-B 이후엔 문서 PR 이 prod DB 레이어 apply 를 일으킨다.
+- `[해결]` QA(6-A) HIGH 0 · MEDIUM 3 · LOW 5. F-1 restore-check 가 **`.counts` 짝이 있는 최신**을 고른다(백업이 중간에 죽으면 잘린 `.dump` 만 남고, 인스턴스 역할엔 Delete 가 없다) · F-2 전환 완료 표식을 **데이터 볼륨**(`/var/lib/postgresql/.devquest-cutover-done`)에도 — `/etc` 는 인스턴스 교체로 사라져 가드가 열린다 + `--reset` 은 원격 접속이 있으면 거부(세 번째 가드) + 7번 행에 *"트래픽 전환 전에 `--cutover-done`"* · F-3 SSM 원격 명령을 POSIX(`set -eu`)로 — RunShellScript 는 sh(dash) · F-4 임시 테이블 제외·`COLLATE "C"` 정렬 · F-5 `cd /`·coproc stderr 분리 · F-6 스크래치 복원 전 여유 공간(원본×2+1GiB) · F-8 버킷 이름 복제 두 곳 verify 마커. 테스트 24 → 32(부분 덤프·표식·접속 중 거부·`@:%` 비번). F-7 의 CI 편입·systemd·deploy 경로는 wontfix/6-C 실측.

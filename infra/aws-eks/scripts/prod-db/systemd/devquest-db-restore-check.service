@@ -1,0 +1,12 @@
+# 📌D-016 6-A — 최신 덤프를 스크래치 DB 에 복원해 데이터로 판정. 백업 뒤에 돈다.
+[Unit]
+Description=devquest prod DB restore check (latest S3 dump -> scratch DB)
+After=postgresql.service network-online.target devquest-db-backup.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/devquest-db/restore-check.sh
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=2h

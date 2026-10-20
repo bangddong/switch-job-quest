@@ -1,0 +1,13 @@
+# 📌D-016 6-A — prod DB 일일 백업. install.sh 가 /etc/systemd/system 에 설치한다.
+[Unit]
+Description=devquest prod DB backup (pg_dump -> S3)
+After=postgresql.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/devquest-db/backup.sh
+# 백업이 prod 쿼리보다 앞서지 않게 — t4g.micro CPU 크레딧 standard(B6-15).
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h
