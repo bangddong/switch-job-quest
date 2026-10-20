@@ -89,6 +89,17 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 간격 반복,
       로그인·DB·RPG XP 연동. **지금은 보류이고, 판단은 사용자 몫이다.**
 
+### TASK-13: Fly API 토큰 폐기·재발급 (사용자 결정 2026-10-20 — **📌D-016 전환 완료 후**)
+
+**왜**: 2026-10-19 Neon 접속 정보를 찾다가 `.claude/settings.local.json` 권한 규칙에 **평문으로 저장된
+`FLY_API_TOKEN`** 앞부분(~250자)이 세션 출력에 찍혔다(마스킹 정규식이 `FlyV1` 형식을 못 거름).
+레포·커밋·PR·일지에는 없다 — 대화 기록에만. 노출된 것으로 간주한다.
+
+**언제**: 사용자 결정 — *"전환 완료되면 새 토큰 베이스로 다시 작업"*. 그때 Claude 가 세션에서 한다.
+1. 새 토큰 발급 → GitHub 시크릿 `FLY_API_TOKEN`(be-cd) 교체 — **폐기보다 먼저**(순서 바뀌면 배포가 깨진다)
+2. `fly tokens list` 에서 옛 토큰 찾아 `fly tokens revoke`
+3. `.claude/settings.local.json` 에서 토큰이 박힌 권한 규칙 삭제(gitignore 파일 — 근본 원인)
+
 ## 완료된 항목
 
 ### TASK-10: ACM 인증서 DNS 검증 → **완료 (2026-09-16)**
@@ -130,24 +141,3 @@ CONTEXT.md 고정 내용(비자명적 결정, 참조 문서) 상단 배치, 동�
 ### [Observability] Sentry → 포기, Logtail 연동 완료
 - **Sentry**: Spring Boot 4.x 미지원으로 포기 (PR #52에서 의존성 제거)
 - **Logtail (Better Stack)**: 연동 완료 (fly.io log drain 등록)
-
-## TASK-9: prod(Neon)의 PostgreSQL 메이저 버전 확인
-
-**왜**: EKS 학습 RDS의 `db_engine_version`을 기본 `17.10`으로 뒀는데, prod(Neon)의 메이저를
-모르는 상태다. 메이저가 다르면 Flyway 마이그레이션 12개를 EKS에서 돌려봐도
-"prod에서도 된다"는 근거가 약해진다(학습 가치는 유지되나 회귀 검증 가치가 떨어짐).
-
-**하는 법** (Neon 콘솔 또는 psql):
-```sql
-SELECT version();
-```
-또는 Neon 대시보드 → 프로젝트 → Settings에서 Postgres 버전 확인.
-
-**결과 반영**: `infra/aws-eks/2-cluster/variables.tf`의 `db_engine_version` 기본값을
-prod와 같은 메이저로 맞춘다(예: prod가 16이면 `"16.x"`).
-지원 버전 확인: `aws rds describe-db-engine-versions --region ap-northeast-2 --engine postgres`
-
-**07-28 실측 보강 (#339 세션)**: RDS **PostgreSQL 17.10**에 대해 Flyway **12개 마이그레이션이
-전부 정상 적용**됐다(`Successfully validated 12 migrations` / `Current version of schema "public": 12`).
-즉 17.x에서 스키마가 깨지지 않는 것은 확인됐다. 남은 건 "prod와 **같은** 메이저인가"뿐이고,
-다르더라도 **학습 진행에는 지장 없다**(회귀 검증의 강도만 낮아진다). 우선순위 낮음.

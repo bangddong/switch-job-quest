@@ -29,3 +29,34 @@ variable "public_subnet_cidrs" {
   description = "퍼블릭 서브넷 CIDR (azs와 인덱스 대응). /20 = 각 4091 IP"
   default     = ["10.0.0.0/20", "10.0.16.0/20"]
 }
+
+# ── 📌D-016 순서표 5-A — prod DB (db.tf) ─────────────────────────────────
+variable "db_enabled" {
+  type        = bool
+  description = "prod DB EC2 를 만들지. 🔴 true 로 바꾸는 머지 = 상시 과금 시작(월 ≈ $13+). 별도 PR·승인으로만"
+  default     = false
+}
+
+variable "db_instance_type" {
+  type        = string
+  description = "prod DB 인스턴스 타입. Free Plan 은 free-tier-eligible 만 launch 된다(D-010, t4g.nano 거부 실측). 변경 = stop/start"
+  default     = "t4g.micro"
+}
+
+variable "db_data_volume_gb" {
+  type        = number
+  description = "데이터 EBS 크기(GiB). 늘리기만 가능(줄이기 불가)"
+  default     = 10
+}
+
+variable "db_postgres_major" {
+  type        = string
+  description = "Postgres 메이저 — Neon 과 같아야 한다(Q-2 매일 복원, B5-11). Neon = 17 (2026-10-20 확인)"
+  default     = "17"
+}
+
+variable "db_ssm_prefix" {
+  type        = string
+  description = "DB 비밀이 사는 SSM 경로(password · wireguard-conf). IaC 밖에서 만들어진다"
+  default     = "/devquest/prod/db"
+}
