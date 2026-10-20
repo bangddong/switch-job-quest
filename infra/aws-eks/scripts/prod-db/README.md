@@ -84,14 +84,22 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
    aws s3 cp s3://$B/prod-db/dumps/$C /tmp/expected
    bash -c ". /opt/devquest-db/common.sh; local_counts $DB" | diff -u /tmp/expected - && echo 일치
    ```
-   ⚠️ **2단계 뒤 어디서든 실패하면 되돌린다**(QA F-9·F-10) — 남겨 둔 DB 는 `ALLOW_CONNECTIONS false` 상태라 이름만 바꾸면 접속이 안 된다.
-   셸을 잃어 `$OLD` 가 비었으면 먼저 찾는다: `runuser -u postgres -- psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'devquest_broken_%'"`
+   ⚠️ **2단계 뒤 어디서든 실패하면 되돌린다**(QA F-9·F-10·F-11). 🔴 **남겨 둔 `$OLD` 가 실제로 있을 때만** 새 `$DB` 를 지운다 —
+   2단계의 RENAME 이 실패했으면 원본은 아직 `$DB` 이름 그대로라, 확인 없이 DROP 하면 **원본을 지운다**(문장별 autocommit 이라
+   `ON_ERROR_STOP` 이 이미 끝난 DROP 을 되돌리지 못한다). 셸을 잃어 `$OLD` 가 비었으면 먼저 찾는다:
+   `runuser -u postgres -- psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'devquest_broken_%'"`
    ```bash
-   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d postgres <<SQL
+   if [ -n "${OLD:-}" ] && [ -n "${DB:-}" ] && \
+      [ "$(runuser -u postgres -- psql -X -d postgres -Atc "SELECT 1 FROM pg_database WHERE datname = '$OLD'")" = 1 ]; then
+     runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d postgres <<SQL
    DROP DATABASE IF EXISTS $DB WITH (FORCE);
    ALTER DATABASE $OLD RENAME TO $DB;
    ALTER DATABASE $DB ALLOW_CONNECTIONS true;
    SQL
+   else
+     echo "남겨 둔 DB '${OLD:-?}' 가 없다 — RENAME 이 안 됐다. 원본은 아직 '${DB:-devquest}' 다. 접속만 다시 연다:"
+     echo "  runuser -u postgres -- psql -d postgres -c 'ALTER DATABASE ${DB:-devquest} ALLOW_CONNECTIONS true'"
+   fi
    ```
 5. 확인 뒤 남겨 둔 것을 지운다(10GiB 볼륨 — 오래 두지 마라): `runuser -u postgres -- psql -d postgres -c "DROP DATABASE $OLD"`
 
