@@ -22,6 +22,7 @@ case "${1:-}" in --reset) RESET=1 ;; "") ;; *) die "알 수 없는 인자: $1" ;
 RO_USER="${NEON_RO_USER:-devquest_ro}"
 
 [ "$CUTOVER_DONE" = "0" ] || die "전환(7번) 완료 표시 CUTOVER_DONE=$CUTOVER_DONE — EC2 가 prod 원본이다. 가져오기 금지"
+! cutover_done || die "전환(7번) 완료 표식이 데이터 볼륨에 있다($CUTOVER_MARK) — EC2 가 prod 원본이다. 가져오기 금지"
 
 URL=$(aws ssm get-parameter --region "$REGION" --name "$SSM_PREFIX/neon-source-url" --with-decryption \
         --query Parameter.Value --output text) || die "SSM $SSM_PREFIX/neon-source-url 없음 — TASK-14"
@@ -53,6 +54,10 @@ log "Neon 접속·읽기 전용 확인 — $N_HOST/$N_DB"
 n=$(user_table_count "$DB")
 if [ "$n" != "0" ]; then
   [ "$RESET" = "1" ] || die "대상 $DB 에 테이블 ${n}개 — 비어 있지 않다. 리허설 반복이면 --reset"
+  # 세 번째 가드(QA F-2): 앱이 붙어 있으면 지우지 않는다. 전환 전엔 Fly·EKS 가 이 DB 를 쓰지 않는다.
+  live=$("${AS_PG[@]}" psql -X -q -A -t -v ON_ERROR_STOP=1 -d postgres -c \
+    "SELECT count(*) FROM pg_stat_activity WHERE datname = '$DB' AND client_addr IS NOT NULL")
+  [ "$live" = "0" ] || die "$DB 에 원격 접속 ${live}개 — 앱이 쓰는 DB 다. --reset 거부"
   log "--reset: $DB 를 지우고 다시 만든다(전환 전 리허설)"
   "${AS_PG[@]}" psql -X -q -v ON_ERROR_STOP=1 -d postgres \
     -c "DROP DATABASE \"$DB\" WITH (FORCE)" -c "CREATE DATABASE \"$DB\" OWNER devquest" >/dev/null

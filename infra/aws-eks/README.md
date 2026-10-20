@@ -516,6 +516,9 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 > 🔴 기존 `db-backup.sh`·`db-restore.sh` 에 호스트 인자를 더하지 마라 — *"prod 에 못 붙는다"* 를 그 부재로 구현했다(N-17).
 <!-- verify: infra/aws-eks/1-network/db.tf ~ Resource = "arn:aws:s3:::\$\{var\.db_backup_bucket\}/\$\{var\.db_backup_prefix\}\*" -->
 <!-- verify: infra/aws-eks/scripts/prod-db/neon-import.sh ~ \[ "\$CUTOVER_DONE" = "0" \] \|\| die -->
+<!-- verify: infra/aws-eks/0-bootstrap/variables.tf ~ default     = "devquest-eks-backups-seoul" -->
+<!-- verify: infra/aws-eks/1-network/variables.tf ~ default     = "devquest-eks-backups-seoul" -->
+> ⚠️ 위 두 마커는 버킷 이름 **복제 두 곳**(0-bootstrap 실물 · 1-network 인스턴스 권한)을 같은 리터럴로 잠근다(QA F-8). 이름을 바꾸면 둘 다 바꾸고 마커도 바꾼다.
 <!-- verify: .github/workflows/infra-deploy.yml ~ paths: \["infra/aws-eks/0-bootstrap/\*\*", "infra/aws-eks/1-network/\*\*"\] -->
 
 > ✅ **순서표 4 「리퍼·마커 정책」 (2026-10-20, 사용자 — 4a 지금 · CI 리퍼는 8번)** — 로컬 리퍼·리마인더·session-status 는

@@ -31,8 +31,10 @@ KEY="${PREFIX}tooling/$SHA.tgz"
 aws s3 cp --region "$REGION" --only-show-errors "$TMP/tooling.tgz" "s3://$BUCKET/$KEY"
 echo "[deploy] 올림: s3://$BUCKET/$KEY"
 
+# ⚠️ AWS-RunShellScript 는 명령을 **sh** 로 돌린다(Ubuntu = dash) — bash 전용 문법(`pipefail` 등)을 쓰지 않는다(QA F-3).
+#    install.sh 는 명시적으로 bash 로 부른다.
 CMDS=$(jq -cn --arg b "$BUCKET" --arg k "$KEY" --arg r "$REGION" --arg p "$PREFIX" --arg x "$EXTRA" '[
-  "set -euo pipefail",
+  "set -eu",
   "export PATH=$PATH:/snap/bin",
   "d=$(mktemp -d); trap \"rm -rf $d\" EXIT",
   ("aws s3 cp --region " + $r + " --only-show-errors s3://" + $b + "/" + $k + " $d/t.tgz"),

@@ -101,7 +101,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 4 | ✅ **리퍼·마커 정책** — 2026-10-20 **4a**: 로컬 리퍼·리마인더·session-status 가 *이 마커가 만든 클러스터* 만 자기 것으로 본다(createdAt 소유 판정). CI 클러스터의 dead man's switch 는 **8번으로 이관**(Fly 복귀 필요 — B4-1). 아래 「4번」 | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** (계획 2026-10-20 — 아래 「6번」: 리허설 원천 = Neon prod 덤프(읽기 전용, **7번 이전 리허설 겸함**) · Neon 자동 복원은 **7번 전환 후부터** · 실행 = EC2 systemd timer + SSM 설치) | N-9 · U-3 · N-15 · B-13 · B-16 · N-19 | 5 |
-| 7 | **Neon → EC2 데이터 이전**(리허설은 6-C 가 겸한다 — 10-20), JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE), **전환 직후 Neon 콜드 대기 매일 복원 켜기**(6번에서 미룸) | U-11 · U-6 · U-4 · B6-1 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
+| 7 | **Neon → EC2 데이터 이전**(리허설은 6-C 가 겸한다 — 10-20), JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE), **전환 직후 Neon 콜드 대기 매일 복원 켜기**(6번에서 미룸) · 🔴 **트래픽을 EC2 로 돌리기 *전에* `scripts/prod-db/deploy.sh --cutover-done`**(데이터 볼륨 표식 — 이후 `neon-import` 영구 거부, QA 6-A F-2) | U-11 · U-6 · U-4 · B6-1 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
 | 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크, **CI 클러스터 dead man's switch**(off 경로 반복 — 4번에서 이관, 「4번」 B4 표) | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |

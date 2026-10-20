@@ -29,6 +29,12 @@ ENV_FILE=/etc/devquest-db.env
 # 🔴 CUTOVER_DONE 은 **내려가지 않는다.** 한 번 1 이 되면(7번 전환 완료) 인자 없이 재설치해도 1 을 유지한다.
 #    0 으로 되돌아가면 neon-import 가 다시 열리고, `--reset` 한 번이 prod 원본을 지운다.
 if grep -q '^CUTOVER_DONE=1$' "$ENV_FILE" 2>/dev/null; then CUTOVER=1; fi
+# 데이터 볼륨 표식(QA F-2) — 인스턴스를 교체해 /etc 가 사라져도 남는다. 있으면 1, --cutover-done 이면 만든다.
+MARK=/var/lib/postgresql/.devquest-cutover-done
+[ -e "$MARK" ] && CUTOVER=1
+if [ "$CUTOVER" = 1 ] && [ -d /var/lib/postgresql ] && [ ! -e "$MARK" ]; then
+  date -u +%FT%TZ > "$MARK"
+fi
 
 install -d -m 0755 /opt/devquest-db
 install -m 0755 "$SRC/common.sh" "$SRC/backup.sh" "$SRC/restore-check.sh" "$SRC/neon-import.sh" /opt/devquest-db/

@@ -9,6 +9,8 @@
 # 비밀은 파일에 없다 — Neon 접속 정보는 실행 때 SSM 에서 받고 환경변수로만 넘긴다(argv 에 두면 ps 에 보인다).
 set -euo pipefail
 export PATH="$PATH:/snap/bin:/usr/lib/postgresql/17/bin"
+# runuser 로 postgres 가 된 psql 이 cwd(예: SSM 세션의 /root)에 접근 못 하면 경고를 낸다 — 아예 / 에서 돈다(QA F-5).
+cd /
 
 ENV_FILE="${DEVQUEST_DB_ENV:-/etc/devquest-db.env}"
 [ -f "$ENV_FILE" ] || { echo "[prod-db] 설정 없음: $ENV_FILE — install.sh 를 먼저" >&2; exit 2; }
@@ -37,8 +39,9 @@ SELECT n.nspname || '.' || c.relname || '|' ||
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
  WHERE c.relkind IN ('r', 'p')
    AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg\_toast%'
+   AND c.relpersistence <> 't'  -- 다른 세션의 임시 테이블은 count 가 에러다(QA F-4)
    AND has_table_privilege(c.oid, 'SELECT')
- ORDER BY 1;
+ ORDER BY (n.nspname || '.' || c.relname) COLLATE "C";  -- 서버 collation 과 무관한 순서(Neon↔EC2 비교, F-4)
 SELECT 'flyway|' || CASE WHEN to_regclass('flyway_schema_history') IS NULL THEN 'absent'
   ELSE coalesce((xpath('/row/v/text()', query_to_xml(
          'SELECT string_agg(coalesce(version, ''R'') || '':'' || coalesce(checksum, 0) || '':'' || success, '','' ORDER BY installed_rank) AS v FROM flyway_schema_history',
@@ -54,7 +57,8 @@ SQL
 # shellcheck disable=SC2034  # PSQL_PREFIX·PSQL_CONN 은 호출부가 정하는 입력이다
 snapshot_dump() {
   local out="$1" snap line=""
-  coproc SNAPPG { "${PSQL_PREFIX[@]}" psql -X -q -A -t -v ON_ERROR_STOP=1 "${PSQL_CONN[@]}" 2>&1; }
+  # stderr 는 섞지 않는다(QA F-5) — 경고 한 줄이 스냅샷 id·행 수 자리로 읽힌다. 에러면 EOF → 아래 die.
+  coproc SNAPPG { "${PSQL_PREFIX[@]}" psql -X -q -A -t -v ON_ERROR_STOP=1 "${PSQL_CONN[@]}"; }
   local w="${SNAPPG[1]}" r="${SNAPPG[0]}"
   printf '%s\n' "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;" "SELECT pg_export_snapshot();" >&"$w"
   read -r -t 60 snap <&"$r" || die "스냅샷 내보내기 응답 없음"
@@ -81,6 +85,11 @@ user_table_count() {  # $1 = DB 이름
   "${AS_PG[@]}" psql -X -q -A -t -v ON_ERROR_STOP=1 -d "$1" -c \
     "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg\_toast%'"
 }
+
+# 🔴 전환 완료 표식은 **데이터 볼륨**에도 둔다(QA F-2). /etc 는 루트 볼륨이라 인스턴스를 교체하면 사라지고,
+#    인자 없이 재설치하면 CUTOVER_DONE=0 으로 가드가 열린다. 데이터 볼륨은 인스턴스보다 오래 산다(5-A).
+CUTOVER_MARK=/var/lib/postgresql/.devquest-cutover-done
+cutover_done() { [ "$CUTOVER_DONE" != "0" ] || [ -e "$CUTOVER_MARK" ]; }
 
 disk_pct() { df --output=pcent /var/lib/postgresql | tail -1 | tr -dc '0-9'; }
 

@@ -40,7 +40,8 @@ case "$1 $2" in
     else f=$(path "$4"); mkdir -p "$(dirname "$f")"; cp "$3" "$f"; fi ;;
   "s3api head-object") b=$4; k=$6; stat -c %s "/mock-s3/$b/$k" ;;
   "s3api put-object")  b=$4; k=$6; mkdir -p "$(dirname "/mock-s3/$b/$k")"; : > "/mock-s3/$b/$k" ;;
-  "s3api list-objects-v2") b=$4; p=$6; ls "/mock-s3/$b/$p" 2>/dev/null | grep "\.dump$" | sort | tail -1 | sed "s#^#$p#" ;;
+  "s3api list-objects-v2") b=$4; p=$6; case "$8" in *.counts*) sfx=counts;; *) sfx=dump;; esac
+                           ls "/mock-s3/$b/$p" 2>/dev/null | grep "\.$sfx$" | sort | tail -1 | sed "s#^#$p#" ;;
   "ssm get-parameter") cat "/mock-ssm/$4" ;;
   *) echo "mock aws: 모르는 호출 $*" >&2; exit 9 ;;
 esac
@@ -117,6 +118,27 @@ out=$(RUN neon-import.sh --reset); rc=$?
 [ $rc -ne 0 ] && echo "$out" | grep -q '가져오기 금지' && ok "거부" || bad "🔴 전환 뒤 가져오기 진행(rc=$rc)"
 X "sed -i 's/^CUTOVER_DONE=1/CUTOVER_DONE=0/' /etc/devquest-db.env"
 
+echo "── ⑥b 데이터 볼륨 표식만 있어도 거부 (QA F-2 — 인스턴스 교체로 /etc 가 사라진 경우)"
+X 'touch /var/lib/postgresql/.devquest-cutover-done'
+out=$(RUN neon-import.sh --reset); rc=$?
+[ $rc -ne 0 ] && echo "$out" | grep -q '데이터 볼륨에 있다' && ok "거부(CUTOVER_DONE=0 이어도)" || bad "🔴 표식을 무시했다(rc=$rc)"
+X 'rm -f /var/lib/postgresql/.devquest-cutover-done'
+
+echo "── ⑥c 앱이 붙어 있으면 --reset 거부 (QA F-2 세 번째 가드)"
+X "PGPASSWORD=x psql -X -q -h localhost -U devquest -d devquest -c 'SELECT pg_sleep(6)' >/dev/null 2>&1" &
+L=$!; perl -e 'select undef,undef,undef,1.0'
+out=$(RUN neon-import.sh --reset); rc=$?
+wait $L
+[ $rc -ne 0 ] && echo "$out" | grep -q '원격 접속' && ok "거부" || bad "🔴 접속 중인 DB 를 지웠다(rc=$rc)"
+[ "$(Q devquest 'SELECT count(*) FROM users')" = 50 ] && ok "대상 보존" || bad "대상이 지워졌다"
+
+echo "── ⑥d 비밀번호에 @ : % 가 있어도(URL 인코딩) 가져온다"
+Q neonsrc "ALTER ROLE devquest_ro PASSWORD 'p@ss:w%rd'" >/dev/null
+setp 'postgresql://devquest_ro:p%40ss%3Aw%25rd@localhost:5432/neonsrc?sslmode=require'
+out=$(RUN neon-import.sh --reset); rc=$?
+[ $rc -eq 0 ] && ok "인코딩 비번 디코딩" || { bad "rc=$rc"; echo "$out" | tail -4; }
+echo "$out" | grep -q 'p@ss\|p%40ss' && bad "🔴 비밀번호가 출력에 나왔다" || ok "출력에 비밀번호 없음"
+
 echo "── ⑦ 쓰기가 계속되는 중에 백업 → 복원 판정 통과 (스냅샷 일관성)"
 echo "   (무엇의 실패를 잡나: 덤프와 행 수를 다른 시점에 세면 정상 백업이 불일치로 판정된다)"
 X "for i in \$(seq 1 400); do runuser -u postgres -- psql -X -q -d devquest -c 'INSERT INTO quest_progress(user_id,xp) VALUES (1,1)' >/dev/null; done" &
@@ -129,6 +151,12 @@ out=$(RUN restore-check.sh); rc=$?
 [ $rc -eq 0 ] && ok "복원 판정 통과" || { bad "복원 판정 실패 rc=$rc"; echo "$out" | tail -12; }
 [ -z "$(Q postgres "SELECT 1 FROM pg_database WHERE datname='devquest_restore_check'")" ] && ok "스크래치 DB 삭제됨" || bad "스크래치 DB 남음"
 X 'ls /mock-s3/bkt/prod-db/health/restore' | grep -qE '_secs=[0-9]+_tables=3$' && ok "restore 헬스 키(secs·tables)" || bad "restore 헬스 키 이상"
+
+echo "── ⑦b 백업이 중간에 죽어 잘린 .dump 만 남아도 restore-check 는 짝(.counts)이 있는 최신을 고른다 (QA F-1)"
+X ': > /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump'
+out=$(RUN restore-check.sh); rc=$?
+[ $rc -eq 0 ] && ok "잘린 덤프를 건너뛰고 통과" || { bad "잘린 덤프를 골랐다(rc=$rc)"; echo "$out" | tail -3; }
+X 'rm -f /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump'
 
 echo "── ⑧ 반증: 행 수 파일을 바꾸면 복원 판정이 실패해야 한다 + 실패해도 스크래치 삭제"
 X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); sed -i "s/^public.users|50$/public.users|49/" "$f"; grep -q "users|49" "$f"' \
@@ -146,6 +174,9 @@ echo "── ⑩ install.sh — CUTOVER_DONE 은 내려가지 않는다 (systemc
 X 'printf "#!/bin/sh\nexit 0\n" > /usr/local/bin/systemctl; chmod +x /usr/local/bin/systemctl'
 X 'bash /opt/src/install.sh --region r --bucket b --prefix prod-db/ --cutover-done >/dev/null && bash /opt/src/install.sh --region r --bucket b --prefix prod-db/ >/dev/null'
 X 'grep -qx CUTOVER_DONE=1 /etc/devquest-db.env' && ok "재설치 뒤에도 CUTOVER_DONE=1" || bad "🔴 CUTOVER_DONE 이 0 으로 내려갔다"
+X 'test -s /var/lib/postgresql/.devquest-cutover-done' && ok "--cutover-done 이 데이터 볼륨 표식을 만든다" || bad "표식 없음"
+X 'rm -f /etc/devquest-db.env && bash /opt/src/install.sh --region r --bucket b --prefix prod-db/ >/dev/null && grep -qx CUTOVER_DONE=1 /etc/devquest-db.env' \
+  && ok "/etc 가 사라져도(인스턴스 교체) 표식에서 1 복원" || bad "🔴 인스턴스 교체 뒤 가드가 열렸다"
 X 'bash /opt/src/install.sh --region r --bucket b --prefix postgres/ >/dev/null 2>&1' && bad "학습 prefix 를 받았다(B6-6)" || ok "학습 prefix postgres/ 거부"
 
 echo
