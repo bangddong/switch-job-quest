@@ -5653,3 +5653,20 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` 사용자가 SQL `CREATE ROLE` 로 재생성 → 재검증 `쓰기 권한 표 0` · 소속 없음 · 속성 전부 false. Neon: PG **17.11**, 스키마 `public` 하나, 사용자 테이블 14, Flyway 13건, **8.7MB**, **`pg_export_snapshot()` 직접 호스트에서 OK**(백업 스냅샷 전제 성립). 로컬 pg_dump 17.11.
 - `[메모]` 사용자 계정 ID·루트 이메일은 대화에서만 다뤘다(공개 레포 금지). 예산·이상 알림 구독 주소로 루트 이메일 후보를 찾았다(`account:GetPrimaryEmail` 은 AccessDenied).
 - `[결정]` 6-B 사용자 승인(*"웅 그래"*) — `db_enabled` **기본값** true(B6-27). 원장 ⏸ 6행 → 실물, 합계 $1.14 → **$14.02/월**, 영속 EBS 기대값 2개, SSM 3개(neon-source-url 은 7번 뒤 삭제).
+
+## 2026-10-20 — 📌D-016 순서표 6-B 켜기 · 6-C 리허설 (💰 상시 과금 시작)
+
+- `[비용]` **16:28 KST prod DB 과금 시작**(#475 머지 → infra-deploy apply `Plan: 8 to add, 0 to change, 0 to destroy`). t4g.micro + IPv4 + EBS 10+8GiB ≈ **$12.9/월**. 직전 크레딧 잔여 $192.31.
+- `[메모]` 머지 전 IaC 밖 준비: `fly wireguard create personal nrt devquest-prod-db <파일>`(umask 077) → `aws ssm put-parameter … --value file://…` → 로컬 사본 삭제. 출력에서 키는 보지 않고 `Address`·`AllowedIPs`(fdaa 조직 /48)만 확인.
+- `[메모]` 첫 부팅 콘솔(초): 20.7 빈 볼륨 포맷 → **247.9 WireGuard up** → 255.0 클러스터 생성(설정 → 볼륨) → 280.1 비밀번호 생성·저장 → 280.7 완료. 4분 넘게 걸린 대부분은 apt — **T4g standard 는 런치 크레딧이 없다**(`CPUCreditBalance` 16:30 ≈ 0.00005) → 첫 부팅이 기준선 CPU 로 돈다.
+- `[메모]` SSM 확인: `postgresql@17-main` active · PostgreSQL 17.11(PGDG) · `ssl=on`·`listen_addresses=*` · `devquest` DB · WireGuard 최근 핸드셰이크 88초 전 · 데이터 볼륨 9.8G 중 41M(1%) · `/etc/postgresql/17/main → /var/lib/postgresql/17/etc-main` · 메모리 904MB 중 available 561MB.
+- `[해결]` QA 6-A F-3(SSM 원격 명령의 셸) — `deploy.sh` 첫 실측 `Success`, `[install] ✅ 설치 완료 — CUTOVER_DONE=0`, timer 2개 등록(백업 다음 03:32 KST · 복원 판정 토 19:36 UTC).
+- `[결정]` 6-C 리허설(전부 SSM, 손으로 1회):
+  ```
+  neon-import      9s  · 테이블 14 · Flyway 이력 일치   health/neon-import/…_secs=9_tables=14
+  backup           72,874 bytes (8.7MB DB, -Fc 압축)    health/backup/…_disk=1_bytes=72874_tables=14
+  restore-check    1s  · 값 일치 · 스크래치 DB 0개 남음  health/restore/…_secs=1_tables=14
+  neon-import 재실행 → ❌ 대상 devquest 에 테이블 14개 — 비어 있지 않다(가드 실물 동작)
+  ```
+  **RTO(이 크기) ≈ 1초 복원 + 9초 이전.** 크레딧·디스크 부담은 이 규모에서 무시 가능 — 복원 판정 주 1회 유지(B6-15).
+- `[메모]` 남은 6-C: Neon **브랜치** 1회 복원 리허설(콜드 대기 도구 검증 — 7번 전환 후 매일 복원의 사전 연습). 브랜치 전용 role 은 SQL 로(콘솔 role 은 neon_superuser 자동 소속 — 6-0 교훈).
