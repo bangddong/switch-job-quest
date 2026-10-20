@@ -84,10 +84,11 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
    aws s3 cp s3://$B/prod-db/dumps/$C /tmp/expected
    bash -c ". /opt/devquest-db/common.sh; local_counts $DB" | diff -u /tmp/expected - && echo 일치
    ```
-   ⚠️ **3·4단계가 실패하면 되돌린다**(QA F-9) — 남겨 둔 DB 는 `ALLOW_CONNECTIONS false` 상태라 이름만 바꾸면 접속이 안 된다:
+   ⚠️ **2단계 뒤 어디서든 실패하면 되돌린다**(QA F-9·F-10) — 남겨 둔 DB 는 `ALLOW_CONNECTIONS false` 상태라 이름만 바꾸면 접속이 안 된다.
+   셸을 잃어 `$OLD` 가 비었으면 먼저 찾는다: `runuser -u postgres -- psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'devquest_broken_%'"`
    ```bash
    runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d postgres <<SQL
-   DROP DATABASE $DB;
+   DROP DATABASE IF EXISTS $DB WITH (FORCE);
    ALTER DATABASE $OLD RENAME TO $DB;
    ALTER DATABASE $DB ALLOW_CONNECTIONS true;
    SQL
