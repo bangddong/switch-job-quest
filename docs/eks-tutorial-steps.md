@@ -472,8 +472,12 @@ Plan: <N> to add, 0 to change, 0 to destroy.
 # infra/aws-eks/2-cluster/variables.tf
 variable "db_mode" {
   default = "in-cluster"   # rds = 관리형(Stage 2) / in-cluster = Postgres StatefulSet(Stage 3a~)
-}
+}                          # / external = 클러스터 밖 prod DB (📌D-016 — 학습 튜토리얼 범위 밖)
 ```
+
+> 📌 **`external` 은 이 튜토리얼에서 쓰지 않는다** (2026-10-20). 평일 창 동안 EKS 가 **진짜 prod DB**(1-network EC2)에
+> 붙는 모드이고, ArgoCD path 도 `k8s/gitops/apps-external` 로 바뀐다(`tofu output argocd_apps_path`). 따라 하는
+> 사람은 기본값(`in-cluster`)으로만 진행한다 — 플래그를 잊은 학습 apply 가 prod DB 에 붙지 않게 하는 것이 기본값의 역할이다.
 
 <!-- verify: infra/aws-eks/2-cluster/variables.tf ~ variable "db_mode" -->
 <!-- verify: infra/aws-eks/2-cluster/variables.tf ~ default[[:space:]]*=[[:space:]]*"in-cluster" -->
@@ -662,7 +666,7 @@ aws elbv2 describe-load-balancers --region $R --query 'LoadBalancers[].LoadBalan
 aws ec2 describe-volumes --region $R --filters Name=status,Values=available --query 'Volumes[].VolumeId'
 aws ec2 describe-nat-gateways --region $R --filter Name=state,Values=available
 aws ec2 describe-instances --region $R --filters Name=instance-state-name,Values=running \
-  --query 'Reservations[].Instances[].InstanceId'
+  --query "Reservations[].Instances[?!(Tags[?Key=='Role' && Value=='prod-db'])][].InstanceId"   # prod DB(📌D-016)는 상시라 제외
 
 # ── RDS 계열 (인스턴스가 사라져도 스냅샷은 남아 과금된다) ──
 aws rds describe-db-instances --region $R --query 'DBInstances[].DBInstanceIdentifier'

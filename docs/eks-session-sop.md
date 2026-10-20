@@ -309,9 +309,15 @@
    R=ap-northeast-2
    aws ec2 describe-instances --region $R \
      --filters Name=instance-state-name,Values=running,pending \
-     --query 'length(Reservations[].Instances[])' --output text    # → 0
+     --query "length(Reservations[].Instances[?!(Tags[?Key=='Role' && Value=='prod-db'])][])" --output text    # → 0
    aws eks list-clusters --region $R --query 'length(clusters)' --output text   # → 0
    ```
+   > 📌 **prod DB(`Role=prod-db`, 1-network — 📌D-016 순서표 5)는 세지 않는다** (2026-10-20). 상시 인스턴스라
+   > 예전 쿼리(필터 없음)로는 이 게이트가 **영원히 0 이 안 된다** → 매번 실패하는 검사는 곧 눈으로 넘기게 되고,
+   > 최악은 *"0 을 만들려고"* prod DB 를 종료하는 것이다(Blindspot B5-13). 같은 이유로 EBS 고아 검사가
+   > 영속 볼륨을 `Persistent=true` 로 거르는 것과 같은 모양이다.
+   > 확인: `aws ec2 describe-instances --region $R --filters Name=tag:Role,Values=prod-db Name=instance-state-name,Values=running --query 'length(Reservations[])' --output text` → `db_enabled` 이면 1.
+
    🔴 **이 두 숫자가 0 인 것을 눈으로 본 뒤에 세션을 닫는다.** `tofu destroy` 의 출력이 아니라
    **AWS 의 답**으로 판정한다. state 는 destroy 가 성공했다고 믿을 수 있지만 AWS 는 못 속인다.
 

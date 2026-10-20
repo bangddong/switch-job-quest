@@ -160,7 +160,7 @@
 
 | 데이터 | 소속 | destroy 시 |
 |--------|------|-----------|
-| 앱 DB (Neon Postgres) | AWS 밖 외부 SaaS | ✅ 완전 유지 |
+| 앱 DB (Neon Postgres) | AWS 밖 외부 SaaS | ✅ 완전 유지 — ⚠️ 📌D-016 5번 apply 뒤엔 prod DB 가 **1-network EC2**(아래 주석) |
 | tfstate / VPC·서브넷 | 0-bootstrap / 1-network | ✅ 유지 (destroy 대상은 `2-cluster` 뿐) |
 | K8s 매니페스트·ArgoCD | git | ✅ 유지 |
 | Grafana 대시보드·메트릭 | Grafana Cloud | ✅ 유지 |
@@ -170,6 +170,9 @@
 | EKS 컨트롤플레인 로그 (Stage 5f, **켠 세션만**) | CloudWatch Logs `/aws/eks/devquest-eks/cluster` — 0-bootstrap | ✅ 유지 (보존 30일). 그룹을 미리 만들어 두지 않으면 EKS 가 보존 무기한 그룹을 스스로 만든다. 켠 세션 실측(10-16): audit 98.0% · 평상시 ≈ $0.067/h(3노드 클러스터의 +36%), 나머지 종류 합 ≈ $0 |
 
 - **NAT·EIP 가 코드 어디에도 없다**(전수 확인) + 컨트롤플레인 로깅 **기본** OFF → **destroy 후 잔존 비용 ≈ $0.**
+  - ⚠️ **📌D-016 순서표 5 (2026-10-20)**: 1-network 에 **상시 prod DB**(`db_enabled`, 기본 false)가 생겼다. 켜면 **destroy 와 무관하게** 월 ≈ $12.9
+    (t4g.micro $0.0104/h ≈ $7.59 · 퍼블릭 IPv4 $0.005/h ≈ $3.65 · gp3 루트 8GB + 데이터 10GB × $0.0912 ≈ $1.64). EIP 는 여전히 없다(5번 결정 — 아무도 퍼블릭 IP 로 들어오지 않는다).
+    인터넷 전송(Fly↔EC2 터널)은 계정 공통 월 100GB 무료 안 — 🟡 실측 전.
   (Stage 5d 의 학습용 로그 그룹은 남지만 저장 $0.0314/GB-월 · 보존 30일이라 ≈ $0 — 컨트롤플레인 로깅은 5f 부터 **변수 토글**(`control_plane_log_types`, 기본 끔). 켠 세션의 수집 요금은 세션 비용이다)
   NAT 회피 설계가 여기서 값을 한다(있었으면 월 $32 계속).
 - 🔴 **destroy-after-use 가 실패하는 진짜 경로**: `tofu destroy` 는 **state 에 있는 것만** 지운다.
@@ -184,7 +187,7 @@ S3 클라이언트·로컬 디스크 경로 설정 **전부 0건** — 파일을
 
 | 데이터 | 실제 저장소 | EBS 필요? |
 |--------|------------|:---:|
-| 앱 DB (사용자·퀘스트·진행도·AI 평가·`ai_call_log`) | Neon (AWS 밖) | ❌ |
+| 앱 DB (사용자·퀘스트·진행도·AI 평가·`ai_call_log`) | Neon (AWS 밖) — 📌D-016 이전 후 **EC2(이 계정)** | ❌ → ⚠️ 이전 후엔 **계정 폐쇄 = prod DB 소멸**. 탈출 경로 = Q-2 Neon 콜드 대기(6번) |
 | 컨테이너 이미지 | ECR | ❌ |
 | K8s 매니페스트·ArgoCD 설정 | git (GitOps) | ❌ |
 | 메트릭·로그 (prod) | Grafana Cloud (OTLP push) | ❌ |

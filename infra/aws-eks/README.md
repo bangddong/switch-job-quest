@@ -496,6 +496,10 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 
 > ⚠️ 위 두 번째 마커는 **main 역할의 sub 줄**(값 1개, 줄 끝)을 잡는다. PR 역할의 sub 는 배열 원소라 줄 끝이 `",` 다.
 
+> 💰 **DB 비용 재산정 (5-C, 2026-10-20 — B5-25)**: 결정 표의 $36 = 인스턴스 $22.7 + 루트 gp3 8GB $2.2 + IPv4 $10.9(≈ 3개월).
+> 빠졌던 것: **데이터 볼륨 10GB ≈ $0.91/월 → 3개월 $2.7**(5-A 가 분리) · 스냅샷(6번에서 정함) · 인터넷 전송(월 100GB 무료 안 🟡).
+> **Fly 고정 이그레스 IP 는 6PN WireGuard 피어로 기각돼 소멸**(현금 $3.60/월 0). ⇒ **≈ $38.5 / 여유 ≈ $17.5**(스냅샷 미산입).
+
 > 🚧 **순서표 5 「DB 층」 (2026-10-20, #469·5-B)** — prod DB = 1-network EC2 Postgres 17(`db_enabled` 기본 false).
 > EKS 는 `db_mode=external` + ArgoCD path `k8s/gitops/apps-external`(postgres 5종·`postgres-tls` 를 뺀 오버레이)로 붙는다.
 > external 모드에선 EKS 기동 시 migrate 를 **끈다** — Fly `release_command` 가 유일한 실행자(1a). 비밀번호는 SSM(EC2 생성)에만 있고 **어떤 tofu state 에도 없다** — 아래 마커는 그 배선의 양성 단언이다.
@@ -505,6 +509,12 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 
 #### 영속 레이어 — 싸다, 반드시 분리할 것
 > 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
+
+> 📌 **2026-10-20 축 추가 (📌D-016 순서표 5, Blindspot B5-23)** — 이 블록의 결론은 *"리퍼 사정권 밖 = 0-bootstrap"* 이고
+> 근거 하나가 *"0-bootstrap 머지 = 과금 개시, 단 **상태 변경 없음**"* 이었다. prod DB 는 **1-network**(역시 리퍼 밖, 머지 = 자동 apply)에
+> 들어갔는데 성질이 다르다: **영속 + 가변** — 머지가 상시 prod DB 를 바꿀 수 있다. 그래서 1-network 쪽 보호는 "레이어 선택"이 아니라
+> 리소스 단위로 건다: `db_enabled` 기본 false · `prevent_destroy`(인스턴스·데이터 볼륨) · `ignore_changes=[ami, user_data]` ·
+> `disable_api_termination` · 데이터는 별도 EBS(설정까지 볼륨에). 0-bootstrap 학습 EBS 를 재사용하지 않는다(B5-21 — 7번 이후 정리).
 
 > ✅ **07-31 진행**: 3a 완료(#349), **3b 구현 완료**. `🔄부분무효`였던 이유(=동적 PVC를 배제한 서술)는
 > "배제가 아니라 순서"로 정리돼 해소됐다. 두 Stage 모두 코드에 살아 있다(`postgres.yaml` ↔ `postgres-static.yaml`).

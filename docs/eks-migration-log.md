@@ -5601,3 +5601,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[막힘]` F-2 — `tfsec:ignore` 를 `dynamic "statement"` 위에 달았더니 **안 먹었다**: `tfsec --tfvars-file`(db_mode=external) 결과 `irsa-eso.tf,119,…,aws-iam-no-policy-wildcards,HIGH,IAM policy document uses sensitive action 'kms:Decrypt' on wildcarded resource '*'`. 기본 모드에선 블록이 비어 **tfsec 이 평가조차 안 해 CI 는 초록**이었다(같은 함정: 5-A 의 `count = 0`). → ignore 를 `resources = ["*"]` 바로 위로 → 두 모드 모두 실패 0.
 - `[해결]` F-7 — QA 가 실행하지 못한 스키마 검증: ESO 차트 2.8.0 을 `helm pull` 해 `templates/crds/externalsecret.yaml` 의 `v1` 스키마에 `data[].sourceRef.storeRef` 가 있음을 확인. 렌더: external 에서만 core-api 에 `DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP=false`, `../apps` 렌더엔 0건. 출력 `argocd_apps_path`(db_mode 의 짝) 추가 — 불일치는 둘 다 wave 1 SecretSyncError 로 막히지만(fail-closed) 단서가 없었다.
 - `[해결]` F-3 README 마커 블록 위치 정정 · F-4 계획서 5-B 행 재작성 · F-5 시크릿·역할 description 갱신(정책 description 은 ForceNew 라 유지, 주석), 튜토리얼·k8s/README 서술은 5-C · F-6 `prod_db_password_parameter` 에 선행 `/` 검증.
+
+## 2026-10-20 — 📌D-016 순서표 5-C: 운영 문서·안전장치 ($0)
+
+- `[해결]` B5-13 — SOP §8b destroy 완료 게이트 `length(Reservations[].Instances[])` 는 상시 prod DB 가 생기면 **영원히 0 이 아니다**(→ 매번 실패하는 검사 → 눈으로 넘김, 최악은 0 을 만들려고 DB 종료). 쿼리를 `Instances[?!(Tags[?Key=='Role' && Value=='prod-db'])]` 로. 튜토리얼 0-5 도. 반증(jmespath, 혼합 입력 — 일반 노드·태그 없음·`Role=other`·`Role=prod-db`): `count: 3` · `ids: ['i-node', 'i-notag', 'i-node2']` → prod-db 만 빠지고 태그 없는 인스턴스는 계속 센다. 현재 계정 실행 결과 `0`.
+- `[결정]` 데이터 볼륨에 **`Persistent = "true"`** — 이 태그는 *읽는 코드가 있다*: 리퍼·SOP·원장의 고아 EBS 검사가 `available` 이면서 이 태그가 **없는** 볼륨에 `aws ec2 delete-volume …` 을 안내한다. 인스턴스가 사라져 데이터 볼륨이 available 이 되면 **prod 데이터 삭제 안내**가 나갈 뻔했다. (acm.tf 가 *"읽는 코드가 없는 태그는 붙이지 마라"* 고 경고한 것과 반대 경우.)
+- `[메모]` 원장(PERSISTENT-RESOURCES)에 ⏸ 행 6개(EC2 · 데이터 EBS · 루트 EBS · SG/IAM · SSM 2개(IaC 밖) · Fly 피어) — 데이터 EBS 증가 상한 = **10GiB 고정, 자동 확장 없음, 차면 쓰기 실패 → 감시는 6번**(N-19). 켜는 PR 이 ⏸ 를 지운다.
+- `[메모]` B5-25 비용 재산정: $36(인스턴스 22.7 + 루트 2.2 + IPv4 10.9, ≈3개월) + 데이터 볼륨 $2.7 = **≈ $38.5**, 여유 ≈ $17.5(스냅샷 미산입). Fly 고정 IP 는 기각으로 소멸. 단가는 README·리퍼의 기존 Pricing API 실측(gp3 $0.0912/GB-월) — 이번 `aws pricing get-products` 재조회는 빈 응답이라 쓰지 않았다.
+- `[결정]` D-004 에 축 추가(B5-23): 1-network = **영속 + 가변**(머지가 상시 prod DB 를 바꿀 수 있다) → 보호는 레이어가 아니라 리소스 단위. `secrets.tf` 의 *"prod 실제 값을 쓰지 않는다"* 는 앱 시크릿 원칙으로 한정하고 DB 예외(external)를 명시(B5-22). 튜토리얼·k8s/README 에 external 은 튜토리얼 범위 밖이라는 안내.
