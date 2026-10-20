@@ -53,6 +53,8 @@ eks_cluster_owner() {
 # stdout 첫 단어가 판정, 나머지는 사람이 읽을 근거.
 eks_clusters_owner() {
   local verdict="mine" detail="" c v
+  # 빈 목록을 "전부 mine" 으로 떨어뜨리지 않는다(공허한 전칭 — 호출부가 비었는지 먼저 보지만 이중으로).
+  [ -n "${1// /}" ] || { echo "unknown 클러스터 목록 비어 있음"; return 0; }
   for c in $1; do
     v=$(eks_cluster_owner "$c" "$2" "$3")
     detail="$detail $c:${v}"
