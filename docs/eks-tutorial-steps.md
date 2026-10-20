@@ -4110,7 +4110,7 @@ Schema "public" is up to date. No migration necessary.
 
 | 안 한 것 | 왜 | 언제 |
 |---|---|---|
-| **자동 백업** (CronJob + IRSA) | 지금은 세션형이라 *"클러스터가 켜져 있을 때만 도는 CronJob"* 은 백업이 아니다 | 상시 운영 전환 시 |
+| **자동 백업** (CronJob + IRSA) | 지금은 세션형이라 *"클러스터가 켜져 있을 때만 도는 CronJob"* 은 백업이 아니다 | ✅ **prod 는 했다(📌D-016 6번, 2026-10-20)** — 클러스터가 아니라 **DB EC2 의 systemd timer** 로. 이 튜토리얼(학습 클러스터) 범위 밖: `infra/aws-eks/scripts/prod-db/README.md` |
 | **PITR** | 논리 백업은 시점 복구가 안 된다. WAL 아카이빙이 필요하다 | prod 이관 시 |
-| **복구 시간 목표(RTO) 측정** | 이번 DB 는 46KB 다. 의미 있는 숫자가 아니다 | 실데이터 이후 |
-| prod(Neon) 데이터 대상 | 크리덴셜이 Fly secrets 에 write-only (D-013 B-9) | 이관 시점 |
+| **복구 시간 목표(RTO) 측정** | 이번 DB 는 46KB 다. 의미 있는 숫자가 아니다 | ✅ prod 실데이터 8.7MB: 복원 1초·Neon→EC2 9초(6-C, 2026-10-20) |
+| prod(Neon) 데이터 대상 | 크리덴셜이 Fly secrets 에 write-only (D-013 B-9) | ✅ Neon **읽기 전용 role**(SQL 로 생성 — 콘솔 role 은 `neon_superuser` 자동 소속)로 6-C 에서 |

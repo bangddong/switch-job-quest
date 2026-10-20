@@ -23,6 +23,8 @@
 #   1인 학습장에서 백업 버킷 하나를 감시하려고 버킷을 하나 더 만드는 것은 과투자다.
 #   `backend-state.tf:9` 가 tfstate 버킷에 대해 같은 근거로 같은 판단을 이미 했다.
 #   ⚠️ prod 이관 후에는 재판단 대상이다 — 그때는 "누가 백업을 읽어갔나"가 실제 감사 항목이 된다.
+#   ✅ **재판정 2026-10-20(B6-7) — 끈 채 유지.** 읽을 수 있는 주체가 EC2 역할(prefix)과 관리자뿐이고,
+#      로그 버킷을 하나 더 두면 그것도 상한·원장 대상이다. 감사가 필요해지면 CloudTrail S3 데이터 이벤트가 먼저다.
 #tfsec:ignore:aws-s3-enable-bucket-logging
 resource "aws_s3_bucket" "db_backups" {
   bucket = var.backup_bucket_name
@@ -40,7 +42,8 @@ resource "aws_s3_bucket" "db_backups" {
     #    **괄호와 em-dash 가 걸린다.** 같은 계정, 같은 terraform, 다른 서비스, 다른 규칙이다.
     #    → 태그 값은 ASCII 로 쓴다. 설명은 이 주석이 담당한다(태그는 검색·과금 배분용이지
     #      문서가 아니다).
-    Purpose = "pg_dump logical backups for in-cluster Postgres"
+    # 2026-10-20 갱신(📌D-016 6-D, B6-7) — prefix 두 개: postgres/(학습 in-cluster) · prod-db/(prod EC2)
+    Purpose = "pg_dump logical backups - postgres/ learning and prod-db/ prod"
 
     # 🔑 EBS 와 같은 축. 이 버킷은 세션과 함께 사라지지 않는 것이 **정상**이다.
     #    (S3 는 SOP §9 고아 검사 대상이 아니지만, 원장 §확인 명령에는 넣는다 — 안 넣으면
@@ -96,7 +99,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "db_backups" {
 # tfsec 판단: aws-s3-encryption-customer-key — AES256(SSE-S3, $0)로 암호화 유지, CMK 는 월 ~$1.
 #   이 버킷이 담는 것은 **학습장 DB 의 논리 덤프**이고 그 데이터는 마이그레이션으로 재생성된다.
 #   자물쇠가 지키려는 데이터보다 비싸지는 구조 — `ebs-postgres.tf:16-23` 과 동일한 판단이다.
-#   🔴 **prod 이관 시 이 판단은 뒤집힌다.** 그때 덤프에는 사용자 데이터가 들어간다.
+#   ~~🔴 **prod 이관 시 이 판단은 뒤집힌다.** 그때 덤프에는 사용자 데이터가 들어간다.~~
+#   ✅ **재판정 2026-10-20(📌D-016 6-D, B6-7) — SSE-S3 유지.** prod 덤프가 들어왔지만 CMK 가 더해 주는 것은
+#      *"S3 권한과 별개인 키 정책"* 이다. 이 버킷의 읽기는 이미 IAM 으로 닫혀 있다 — PR 역할은 GetObject Deny,
+#      EC2 역할은 `prod-db/` prefix 만, 나머지는 관리자 1명. 같은 계정 안의 키라 계정 폐쇄(N-15)엔 무력하다.
+#      월 ~$1 × 3개월 = 예산 여유 $17.6 의 17%. 막아 주는 위협이 없는데 비용은 실재한다.
 #tfsec:ignore:aws-s3-encryption-customer-key
 resource "aws_s3_bucket_server_side_encryption_configuration" "db_backups" {
   bucket = aws_s3_bucket.db_backups.id

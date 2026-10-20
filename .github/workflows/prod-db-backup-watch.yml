@@ -1,0 +1,66 @@
+name: Prod DB Backup Watch
+
+# 📌D-016 순서표 6-D — prod DB(EC2 Postgres) 백업이 **매일 실제로 되고 있는지** 본다.
+#   백업은 EC2 의 systemd timer 가 하고(scripts/prod-db/backup.sh), 실패하면 헬스 키를 안 남길 뿐 아무에게도
+#   알리지 않는다. 버킷 lifecycle 이 30일이라 조용히 멈추면 **마지막 정상 덤프까지 사라진다**(B6-8).
+#   이 워크플로가 빨개지는 것 = GitHub 실패 메일 = 유일한 알림 경로다.
+#
+# 🔑 권한: **좁힌 읽기 전용 역할**(`AWS_ROLE_ARN`, PR plan 과 같은 역할) — Admin 이 아니다(B6-31).
+#    S3 `ListObjectsV2` 만 쓰고 객체 본문은 읽지 않는다(그 역할은 백업 버킷 GetObject 가 Deny — 덤프 = prod 데이터).
+#    ⚠️ 이 워크플로로 `id-token: write` 를 가진 워크플로가 3개가 됐다(infra-deploy · ecr-push · 이것, B6-25).
+# ⚠️ GitHub cron 은 지연·누락이 있고, 레포 활동이 60일 없으면 schedule 이 자동 비활성화된다(N-13).
+#    판정 기준(26h)에 여유를 둔 이유. 비활성화 자체는 이 워크플로가 잡지 못한다 — 사람이 Actions 화면에서 본다.
+on:
+  schedule:
+    - cron: "0 2 * * *" # 11:00 KST — 백업(03:3x KST)과 주간 복원 판정(일 04:3x KST) 뒤
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/prod-db-backup-watch.yml"
+      - "infra/aws-eks/scripts/prod-db/watch.sh"
+
+concurrency:
+  group: prod-db-backup-watch
+  cancel-in-progress: true
+
+permissions:
+  id-token: write # OIDC 로 읽기 전용 역할 assume
+  contents: read
+
+jobs:
+  watch:
+    name: Prod DB Backup Watch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      # 🔴 계정 ID 마스킹 — 퍼블릭 레포의 Actions 로그·요약은 퍼블릭이다(infra-deploy.yml 과 같은 이유·같은 fail-closed).
+      #    이 워크플로는 ARN 을 찍지 않지만, CLI 에러 메시지가 ARN 을 담을 수 있다(AccessDenied 등).
+      - name: 계정 ID 마스킹
+        shell: bash
+        run: |
+          ACCT="$(aws sts get-caller-identity --query Account --output text)"
+          echo "::add-mask::$ACCT"
+          if [[ ! "$ACCT" =~ ^[0-9]{12}$ ]]; then
+            echo "::error::계정 ID 조회 실패 — 마스킹 없이 진행할 수 없다"
+            exit 1
+          fi
+          echo "AWS_ACCOUNT_ID=$ACCT" >> "$GITHUB_ENV"
+
+      - name: 백업 감시
+        shell: bash
+        run: |
+          set -euo pipefail
+          rc=0
+          bash infra/aws-eks/scripts/prod-db/watch.sh || rc=$?
+          # Step Summary 는 마스킹되지 않는다 — 계정 ID 를 지운다(infra-deploy.yml 선례).
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            sed -i "s/${AWS_ACCOUNT_ID}/<account>/g" "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$rc"
