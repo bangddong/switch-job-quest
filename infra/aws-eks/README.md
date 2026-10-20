@@ -438,7 +438,7 @@ Fly·EKS 두 core-api 가 `migrate-on-startup: true`(`application-prod.yml:37`)�
 > 위 k3s 행은 그 지점을 등재해둔 것이다. 되살릴 때는 `design-change-procedure.md` 전 단계를 밟을 것.
 
 #### 평일 창 동안 EKS 가 prod 를 서빙한다 — DB 는 EC2 자가 운영 Postgres
-> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/infra-deploy.yml`, `.github/workflows/ecr-push.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`
+> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/infra-deploy.yml`, `.github/workflows/ecr-push.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`, `docs/eks-tutorial-steps.md`, `k8s/README.md`, `k8s/gitops/apps-external`, `infra/aws-eks/2-cluster/secrets.tf`, `infra/aws-eks/2-cluster/irsa-eso.tf`, `infra/aws-eks/1-network/db.tf`
 
 **결정 (2026-10-16, 사용자)**: *"실제 돌리면서 EKS 의 실무 경험을 해보고 싶다."* D-015 의 기각 대안 **B**(prod + Fly 폴백 왕복)를
 DB 를 바꿔 다시 채택한다.
@@ -508,7 +508,7 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 <!-- verify: infra/aws-eks/1-network/db.tf ~ db_count = var\.db_enabled \? 1 : 0 -->
 
 #### 영속 레이어 — 싸다, 반드시 분리할 것
-> 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
+> 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/1-network/db.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static" · 재판정 2026-10-20 "1-network = 영속+가변" 축 추가(📌D-016 5-C)
 
 > 📌 **2026-10-20 축 추가 (📌D-016 순서표 5, Blindspot B5-23)** — 이 블록의 결론은 *"리퍼 사정권 밖 = 0-bootstrap"* 이고
 > 근거 하나가 *"0-bootstrap 머지 = 과금 개시, 단 **상태 변경 없음**"* 이었다. prod DB 는 **1-network**(역시 리퍼 밖, 머지 = 자동 apply)에

@@ -1566,6 +1566,7 @@ aws ec2 describe-volumes --region ap-northeast-2 \
   --filters "Name=tag:Persistent,Values=true" \
   --query 'Volumes[].[VolumeId,State,Size,AvailabilityZone]' --output text
 ```
+> 📌 (2026-10-20) 📌D-016 prod DB 가 켜져 있으면 prod 데이터 볼륨(1-network, in-use)이 한 줄 더 나온다 — 0-bootstrap 학습 볼륨과 혼동하지 말 것.
 ```
 vol-0518b6d0dcd2b0d70   available   10   ap-northeast-2a
 ```
@@ -1899,10 +1900,13 @@ cd infra/aws-eks/2-cluster && tofu destroy      # ③ 인프라
 ```bash
 aws eks list-clusters --region ap-northeast-2                 # → (없음)
 aws ec2 describe-instances --region ap-northeast-2 \
-  --filters "Name=instance-state-name,Values=running" --query 'Reservations[].Instances[].InstanceId' --output text   # → (없음)
+  --filters "Name=instance-state-name,Values=running" \
+  --query "Reservations[].Instances[?!(Tags[?Key=='Role' && Value=='prod-db'])][].InstanceId" --output text   # → (없음)
 aws ec2 describe-volumes --region ap-northeast-2 \
   --filters "Name=tag:Persistent,Values=true" --query 'Volumes[].[VolumeId,State]' --output text
 ```
+> 📌 (2026-10-20) 📌D-016 prod DB 가 켜져 있으면(`Role=prod-db`, 1-network) 인스턴스 쿼리는 그것을 **세지 않는다**(상시라 정상).
+> 볼륨 쿼리엔 prod DB 데이터 볼륨(`…-prod-db-data`, **in-use**)이 한 줄 더 나온다 — 성공 조건은 *학습 볼륨이 available 로 남는 것* 이다.
 ```
 vol-0518b6d0dcd2b0d70   available     ← 이게 남는 것이 이 단계의 성공 조건
 ```
