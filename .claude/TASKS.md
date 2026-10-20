@@ -100,6 +100,30 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 2. `fly tokens list` 에서 옛 토큰 찾아 `fly tokens revoke`
 3. `.claude/settings.local.json` 에서 토큰이 박힌 권한 규칙 삭제(gitignore 파일 — 근본 원인)
 
+### TASK-14: Neon 읽기 전용 접속 정보를 SSM 에 넣기 (📌D-016 순서표 6-0 — **6-C 리허설 전까지**)
+
+**왜**: 6번 리허설은 Neon prod 를 **읽기만** 해서 EC2 로 옮겨 본다(7번 이전 리허설 겸함). Fly 시크릿은
+write-only 라 Claude 가 꺼낼 수 없고, **값이 대화·레포·tofu state 를 거치면 안 된다** — 그래서 사용자가
+콘솔 두 곳에서 직접 한다. 쓰기 권한이 있는 role 을 쓰면 EC2 스크립트 버그 하나가 prod 삭제다(B6-12).
+
+1. **Neon 콘솔** → 프로젝트 → 브랜치 `main` → **Roles** → *New role* → 이름 `devquest_ro` → 표시되는 비밀번호 복사(한 번만 보인다)
+2. **Neon 콘솔 SQL Editor** (앱이 쓰는 데이터베이스 선택) — 읽기 권한만 준다:
+   ```sql
+   GRANT CONNECT ON DATABASE <앱 DB 이름> TO devquest_ro;
+   GRANT USAGE ON SCHEMA public TO devquest_ro;
+   GRANT SELECT ON ALL TABLES IN SCHEMA public TO devquest_ro;
+   GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO devquest_ro;
+   ```
+   확인: 같은 편집기에서 `SELECT schema_name FROM information_schema.schemata;` — `public` 말고 앱 스키마가 더 있으면 그 스키마에도 2~4줄 반복
+3. **AWS 콘솔** → 리전 **서울(ap-northeast-2)** → Systems Manager → Parameter Store → *Create parameter*
+   - Name `/devquest/prod/db/neon-source-url` · Tier Standard · Type **SecureString** · KMS 기본(`alias/aws/ssm`)
+   - Value `postgresql://devquest_ro:<비밀번호>@<Neon 호스트>/<앱 DB 이름>?sslmode=require`
+     (호스트는 Neon 콘솔 *Connect* 창의 접속 문자열에서 — **pooler(`-pooler`) 가 아닌 직접 호스트**를 쓴다. `pg_dump` 는 pooler 를 지원하지 않는다)
+4. Claude 에게 "넣었다"고만 알려준다 — 값은 말하지 않는다. Claude 는 존재·형식(`postgresql://devquest_ro@` 접두)만 확인한다.
+
+**완료 조건**: `aws ssm describe-parameters --parameter-filters Key=Name,Values=/devquest/prod/db/neon-source-url` 가 1건.
+**나중에**: 7번 전환 뒤 이 role 은 쓸 일이 없다 → Neon 콘솔에서 삭제, SSM 도 삭제.
+
 ## 완료된 항목
 
 ### TASK-10: ACM 인증서 DNS 검증 → **완료 (2026-09-16)**

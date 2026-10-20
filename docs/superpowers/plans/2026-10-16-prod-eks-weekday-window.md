@@ -100,8 +100,8 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 3 | ✅ **CI 역할** — main 전용 역할(0-bootstrap) + 옛 역할 좁힌 읽기 전용 + access entry 2개(로컬 admin + CI). 가드 재정의는 8번으로(B3-13). 진행: 아래 「3번」 PR A→B→C — A ✅ #464(역할·시크릿) · B ✅ #465(전환·축소, 임시 역할 plan 실측) · C ✅ #466 access entry 2개, 좁힌 PR 역할 첫 CI plan 통과(2026-10-19) | N-1 · N-2 · N-18 (N-3 → 8) | 0 |
 | 4 | ✅ **리퍼·마커 정책** — 2026-10-20 **4a**: 로컬 리퍼·리마인더·session-status 가 *이 마커가 만든 클러스터* 만 자기 것으로 본다(createdAt 소유 판정). CI 클러스터의 dead man's switch 는 **8번으로 이관**(Fly 복귀 필요 — B4-1). 아래 「4번」 | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
-| 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** | N-9 · U-3 · N-15 | 5 |
-| 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
+| 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** (계획 2026-10-20 — 아래 「6번」: 리허설 원천 = Neon prod 덤프(읽기 전용, **7번 이전 리허설 겸함**) · Neon 자동 복원은 **7번 전환 후부터** · 실행 = EC2 systemd timer + SSM 설치) | N-9 · U-3 · N-15 · B-13 · B-16 · N-19 | 5 |
+| 7 | **Neon → EC2 데이터 이전**(리허설은 6-C 가 겸한다 — 10-20), JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE), **전환 직후 Neon 콜드 대기 매일 복원 켜기**(6번에서 미룸) | U-11 · U-6 · U-4 · B6-1 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
 | 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크, **CI 클러스터 dead man's switch**(off 경로 반복 — 4번에서 이관, 「4번」 B4 표) | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
@@ -293,6 +293,72 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 | verify-full TLS | 터널·VPC 가 서버 인증을 대신 — BE·Fly 배포를 늘릴 근거 부족(사용자 결정) |
 | 비번 자동 회전 · Secrets Manager | Fly 가 AWS 저장소를 직접 읽게 되면(OIDC → SSM) 가능. 그 전엔 회전이 Fly 를 깨뜨린다 |
 | mTLS 공개 포트 | 5-0 ① 이 막힐 때의 대안. 또는 터널 위 방어 한 겹으로 나중에 |
+
+## 6번 — 백업·복구 (2026-10-20 계획)
+
+### 결정 (사용자 10-20 — 세 질문 모두 추천안)
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 리허설 원천 | **Neon prod 를 읽기 전용으로 덤프 → EC2 복원 → S3 백업 → 스크래치 DB 복원 판정**. 7번의 이전 리허설을 겸한다 | 7번 전엔 EC2 가 비어 판정할 데이터가 없다(B6-2). 합성 데이터는 크기·콜레이션·확장 문제를 7번까지 숨긴다 |
+| Neon 자격증명 | **읽기 전용 role**(`pg_read_all_data`)을 사용자가 Neon 콘솔에서 만들고, 접속 문자열을 **AWS 콘솔에서 직접** SSM SecureString 에 넣는다(값이 대화·레포·state 를 거치지 않는다) | Fly 시크릿은 write-only(B5-12). Neon 콘솔 role 은 쓰기 권한이 기본 → EC2 버그 = prod 삭제(B6-12). tofu 관리 SSM 은 PR plan 을 깨뜨린다(B6-11) |
+| Neon 콜드 대기 | **7번 전환 후부터** 매일 복원(옛 prod Neon 을 덮어쓴다). 6번에선 **Neon 에 자동으로 쓰는 경로를 만들지 않는다** — 복원 도구는 별도 Neon **브랜치**에 1회 수동 리허설 | 7번 전 Neon = prod. 빈 EC2 덤프로 prod 를 덮어쓸 수 있다(B6-1) |
+| 실행 위치 | **EC2 systemd timer**, 스크립트·유닛은 레포 파일 → **SSM Run Command 로 설치**(멱등, Postgres 재시작 없음) | user_data 는 `ignore_changes` 라 켠 뒤 반영 불가 + 재실행 = Postgres 재시작(B6-10). GitHub cron 은 8번 off 와 같은 장애에 함께 걸린다(B6-35) |
+| 감시 | 매일 GitHub 워크플로가 **좁힌 읽기 전용 역할**로 S3 `ListObjectsV2`(LastModified·Size) — 신선도·크기·디스크 사용률(키 이름에 인코딩) | Admin 불필요(B6-31). lifecycle 30일이 버킷 전체라 백업이 조용히 멈추면 **마지막 정상 덤프까지 사라진다**(B6-8) — 감시가 유일한 방어선 |
+| 판정 | **데이터로 판정** — 원천·복원본의 테이블별 행 수 + `flyway_schema_history` 최대 버전·체크섬 일치. `app.jar validate` 는 쓰지 않는다 | `validate` 는 `*:pending` 을 무시해 **빈 DB 도 통과**(B6-3). EC2 엔 JVM 없음·1GiB(B6-14). 센티넬은 prod 에 Flyway 밖 테이블을 만든다(B6-19) |
+| 스냅샷 | **안 만든다**(DLM 기각) | 같은 계정이라 N-15 를 못 푼다. 고아 검사 사각지대(B6-21·B6-36) |
+
+### 순서
+
+| 단계 | 내용 | 비용 | 승인 |
+|:-:|---|---|---|
+| **6-0** | 👤 사용자: Neon 콘솔에서 읽기 전용 role 생성(`GRANT pg_read_all_data`) → 접속 문자열을 AWS 콘솔에서 SSM `/devquest/prod/db/neon-source-url`(SecureString)에 직접 입력 — `.claude/TASKS.md` TASK-14 | $0 | — |
+| **6-A** | IaC·스크립트, **플래그 꺼진 채**: ①1-network 인스턴스 역할에 S3 `prod-db/` prefix Put·Get(Delete·`DeleteObjectVersion` 없음, B6-34) — 버킷 이름은 1-network 변수로 복제(remote_state 신설 금지, 병렬 apply B6-9) ②`infra/aws-eks/scripts/prod-db/` 새 파일(기존 `db-backup.sh`·`db-restore.sh` **수정 금지** — N-17 안전장치·verify 마커 4개·목 테스트 18건, B6-4·B6-5): `backup.sh`(`pg_dump -Fc` 스트리밍 → S3, 크기 되읽기, 디스크 사용률), `restore-check.sh`(스크래치 DB 복원 + 데이터 판정), `neon-import.sh`(읽기 전용 덤프 → EC2), systemd 유닛, `install.sh`(SSM Run Command 대상) ③목 테스트 ④`infra-deploy.yml` paths 를 `{0-bootstrap,1-network}/**` 로 좁힘(B4-17·B6-28 — 안 하면 6번 스크립트·문서 PR 마다 prod DB 레이어 apply) | $0 | — |
+| **6-B** | 🔴 **켜기**: `db_enabled` **기본값** true(tfvars 로 켜면 다음 CI apply 가 destroy 시도 → `prevent_destroy` 로 매번 빨강, B6-27) · WireGuard 피어 생성·SSM 입력 · 원장 ⏸ 제거 · 첫 부팅 검증(Fly·EKS 사설 경로 접속) | **상시 과금 시작** ≈ $13/월 | 🔴 **사용자 별도 승인** |
+| **6-C** | 리허설: SSM 으로 timer 설치 → `neon-import` → `backup` → `restore-check`(행 수·Flyway 이력 일치) → **복원 시간(RTO)·덤프 크기 실측** → Neon **브랜치**에 1회 수동 복원(브랜치 전용 role — 부모 브랜치에 없는 role 은 main 에 접속 불가 🟡 Neon 문서 확인 필요) | 미미 | — |
+| **6-D** | 감시 워크플로(읽기 전용 역할, 계정 ID 마스킹 B6-30) + 실패 주입(백업 멈춤 → 빨강) · 패치 절차 문서(B5-8) · 원장·비용 모델·튜토리얼 갱신 | $0 | — |
+
+### 6번 Blindspot (2026-10-20, Explore 읽기 전용) — 목적지
+
+| ID | 확도 | 요지 | 목적지 |
+|---|:-:|---|---|
+| B6-1 | 🔴 | 7번 전 Neon = prod — EC2→Neon 매일 복원이 prod 를 덮어쓴다 | ✅ 결정(7번 전환 후) → **7번** |
+| B6-2 | 🔴 | 6↔7 순환 — 7 전 EC2 에 판정할 데이터가 없다 | ✅ 결정(Neon 읽기 덤프로 6-C 가 7 리허설 겸함) |
+| B6-3 | 🔴 | `app.jar validate` 는 빈 DB 도 통과 | ✅ 결정(데이터 판정) — **B-13 대체** |
+| B6-4 | 🔴 | 기존 스크립트 재사용 = N-17 안전장치(호스트 인자 없음) 격하 | **6-A** 새 파일 |
+| B6-5 | 🔴 | 기존 스크립트 수정 시 verify 마커 4개·목 테스트 18건 파손 | **6-A** 새 파일 |
+| B6-6 | 🔴 | S3 키 prefix 가 학습·prod 미분리 → 학습 클러스터에 prod 복원 경로 | **6-A** `prod-db/` prefix, 역할도 그 prefix 만 |
+| B6-7 | 🟡 | 버킷의 "prod 이관 시 재판단" 3건(CMK·접근 로그·보존 30일)·`Purpose` 태그·`ReviewBy` | **6-D** 재판정(비용 근거로 각각 결정, 일지) |
+| B6-8 | 🟡 | lifecycle 전체 적용 — 백업이 멈추면 마지막 정상 덤프까지 소멸 | **6-D** 감시 + 실패 주입 |
+| B6-9 | 🟡 | 1-network→0-bootstrap 의존 | **6-A** 변수 복제(두 곳 함께 바꿀 것 주석) |
+| B6-10 | 🔴 | timer 를 user_data 에 넣으면 켠 뒤 반영 불가 + 재실행 = 재시작 | ✅ 결정(SSM 설치) |
+| B6-11 | 🔴 | Neon 자격증명 위치 — IaC 밖 SSM `/devquest/prod/db/*`(EC2 기존 읽기 권한, ESO 는 못 읽음) | **6-0** · 원장 SSM 행 개수 갱신(**6-B**) |
+| B6-12 | 🔴 | EC2 의 Neon 자격증명 = prod 쓰기 권한 | ✅ 결정(읽기 전용 role) · 7번 쓰기 role 은 **7번** |
+| B6-13 | 🟡 | `pg_hba` 가 스크래치 DB 원격 접속을 막는다 | 해당 없음 — 판정을 EC2 로컬(peer)에서 한다 |
+| B6-14 | 🟡 | EC2 에 JVM 없음·1GiB | ✅ 결정(데이터 판정, JVM 불필요) |
+| B6-15 | 🟡 | CPU 크레딧 `standard` — 스크래치 복원이 크레딧을 태워 prod 를 기준선에 묶는다 | **6-C** 실측(`CPUCreditBalance`), 리허설 주기를 실측으로 정함(매일이 아니라 주 1회일 수 있다) |
+| B6-16 | 🟡 | 디스크 10GiB 고정 — 스크래치 DB 가 2배, 덤프 임시 파일 | **6-A** 스트리밍 + 스크래치는 판정 후 즉시 DROP · **6-C** 실측 |
+| B6-17 | ⚪ | Neon 무료 한도 수치 근거 0 — 넘으면 콜드 대기가 조용히 실패 | **6-C** 덤프 크기 실측 + Neon 콘솔 한도 확인 → **7번** 콜드 대기 켤 때 크기 감시 |
+| B6-18 | 🟡 | B-16 — Neon 으로 장애 전환 시 migrate 주체(Fly `release_command`), `fly secrets set` 만으로 도는지 미확인 | **7번**(전환 절차에 포함) |
+| B6-19 | 🟡 | 센티넬 방식을 prod 에 쓰면 Flyway 밖 테이블 | ✅ 결정(센티넬 안 씀) |
+| B6-20 | 🔴 | 켜는 PR 이 갱신할 원장 항목(⏸ 6행·합계·EBS 2개·백업 버킷 행·복구 절차) | **6-B**(⏸·합계) · **6-D**(버킷 행·복구 절차) |
+| B6-21 | 🔴 | 원장·SOP 에 EBS 스냅샷 조회 0건 | 해당 없음(스냅샷 안 만듦). 만들게 되면 그때 함께 |
+| B6-22 | 🟡 | D-016 영향 목록 누락·백업 경로 verify 마커 0건 | **6-A** |
+| B6-23 | 🟡 | 튜토리얼 "아직 안 한 것" 표 | **6-D** |
+| B6-24 | 🟡 | 비용 모델 "계정 폐쇄돼도 prod 무영향" 이 7 이후 거짓 · EC2→Neon 송신 | **6-D**(서술) · **7번**(송신 실측) |
+| B6-25 | 🟡 | `id-token: write` 가 infra-deploy·ecr-push 뿐이라는 불변식(B3-9)이 바뀐다 | **6-D** — 계획서 3번 절 불변식 갱신 |
+| B6-26 | 🟡 | TASKS "prod 는 Fly+Neon 이라 무영향" 서술 · TASK-13 과 Neon 자격증명 얽힘 | **7번**(전환 때 서술 갱신) |
+| B6-27 | 🔴 | 켜기는 변수 **기본값**으로 — tfvars 로 켜면 CI 가 destroy 시도 | **6-B** |
+| B6-28 | 🔴 | `infra-deploy` paths 가 `infra/aws-eks/**` 전체 | **6-A** — 좁힐 때 `.terraform.lock.hcl` 은 레이어 디렉터리 안이라 포함됨 |
+| B6-29 | 🟡 | guard-local-layers 는 새 워크플로를 못 본다 | **8번**(N-3) — 6-D 워크플로는 읽기 전용 역할이라 Admin 경로를 늘리지 않는다 |
+| B6-30 | 🟡 | 퍼블릭 CI 로그 마스킹 | **6-D** |
+| B6-31 | 🟡 | 신선도 검사는 좁힌 읽기 전용 역할로 가능(`ListObjectsV2` 허용, `GetObject`·`HeadObject` Deny) | ✅ 결정 |
+| B6-32 | 🟡 | 하네스 동결 — `.github/` 추가 근거 | 선행 조건 2(백업 리허설)가 첫 창을 막는다(N-20 선례). 6-A·6-D PR 본문에 근거 |
+| B6-33 | 🟡 | 임시 EC2·볼륨의 태그 딜레마 | 해당 없음 — 임시 EC2·볼륨을 만들지 않는다(같은 인스턴스 스크래치 DB) |
+| B6-34 | 🟡 | EC2 역할에 Get 을 주면 침해 시 30일치 열람 · Delete 금지 · Object Lock 없음 | **6-A** Delete 계열 미부여. Get 은 restore-check 에 필요 — 위험 수용(같은 인스턴스가 원본 DB 를 이미 가진다) |
+| B6-35 | 🟡 | GitHub Actions + SSM Run Command 대안 | ❌ 기각(결정) |
+| B6-36 | 🟡 | DLM 스냅샷 | ❌ 기각(결정) |
+| B6-37 | ⚪ | EC2→S3 동일 리전 무료, EC2→Neon 인터넷 송신 | **7번** 실측 |
 
 ## 이번 범위에서 하지 않는 것
 
