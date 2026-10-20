@@ -44,7 +44,7 @@
 #tfsec:ignore:AVD-AWS-0098
 resource "aws_secretsmanager_secret" "db_connection" {
   name        = "${var.cluster_name}/db-connection"
-  description = "core-api DB 접속 좌표 (host/dbname). 크리덴셜은 RDS 관리형 시크릿에 별도 존재."
+  description = "core-api DB 접속 좌표. rds = 크리덴셜은 RDS 관리형 시크릿 / in-cluster = 여기 포함 / external = 비밀번호는 SSM(/devquest/prod/db/password)"
 
   # 🔴 0 = 즉시 삭제. 기본값(30일)이면 destroy 후에도 "삭제 대기" 상태로 남아
   #    시크릿당 $0.40/월이 계속 과금된다 — destroy-after-use에서 놓치기 쉬운 고아.
@@ -91,6 +91,29 @@ resource "aws_secretsmanager_secret_version" "db_connection_incluster" {
     username = var.db_master_username
     password = data.terraform_remote_state.bootstrap.outputs.postgres_master_password
   })
+}
+
+# 📌D-016 순서표 5-B — external 모드: 클러스터 밖 prod DB(1-network EC2 Postgres).
+#   여기엔 **좌표만** 쓴다(host·dbname·username). 비밀번호는 넣지 않는다 — 원천은 SSM
+#   `/devquest/prod/db/password`(EC2 가 생성)이고 ESO 가 ParameterStore 로 따로 읽는다
+#   (`k8s/gitops/apps-external/kustomization.yaml`). 이 state 에 prod 비밀번호가 들어가지 않게 하는 것이 요점이다.
+#   host = EC2 **사설 IP** — EKS 파드는 VPC 안이라 `vpc_cidr`:5432 SG 규칙으로 들어간다(B5-5).
+#   1-network 의 `db_private_ip` 출력은 `db_enabled=true` 일 때만 값이 있다(null 출력은 state 에서 빠진다 → try).
+resource "aws_secretsmanager_secret_version" "db_connection_external" {
+  count     = local.external_enabled
+  secret_id = aws_secretsmanager_secret.db_connection.id
+  secret_string = jsonencode({
+    host     = try(data.terraform_remote_state.network.outputs.db_private_ip, null)
+    dbname   = "devquest"
+    username = "devquest"
+  })
+
+  lifecycle {
+    precondition {
+      condition     = try(data.terraform_remote_state.network.outputs.db_private_ip, null) != null
+      error_message = "db_mode=external 인데 1-network 에 prod DB 가 없다(db_private_ip 출력 없음). 1-network 의 db_enabled 를 먼저 켜고 apply 할 것."
+    }
+  }
 }
 
 # ℹ️ in-cluster Postgres의 superuser 비밀번호는 **여기서 만들지 않는다.**

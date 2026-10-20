@@ -26,6 +26,7 @@
 locals {
   rds_enabled       = var.db_mode == "rds" ? 1 : 0
   incluster_enabled = var.db_mode == "in-cluster" ? 1 : 0
+  external_enabled  = var.db_mode == "external" ? 1 : 0 # 📌D-016 — secrets.tf·irsa-eso.tf
 }
 
 # 서브넷 그룹 — RDS를 어느 서브넷에 놓을지. 2개 이상 AZ 필수(고가용성 전제 때문).

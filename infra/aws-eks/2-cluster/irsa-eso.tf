@@ -69,7 +69,7 @@ data "aws_iam_policy_document" "eso_trust" {
 # 의미: External Secrets Operator가 Secrets Manager를 읽기 위한 IRSA 역할
 resource "aws_iam_role" "eso" {
   name               = "${var.cluster_name}-eso"
-  description        = "IRSA role for External Secrets Operator to read Secrets Manager"
+  description        = "IRSA role for External Secrets Operator to read Secrets Manager (and SSM prod DB password when db_mode=external)"
   assume_role_policy = data.aws_iam_policy_document.eso_trust.json
 }
 
@@ -100,6 +100,32 @@ data "aws_iam_policy_document" "eso_read_secrets" {
       one(aws_db_instance.main[*].master_user_secret[0].secret_arn),
     ])
   }
+
+  # 📌D-016 5-B — external 모드에서만: prod DB 비밀번호(SSM SecureString, EC2 가 생성). 파라미터 **하나**로 좁힌다.
+  dynamic "statement" {
+    for_each = local.external_enabled == 1 ? [1] : []
+    content {
+      effect    = "Allow"
+      actions   = ["ssm:GetParameter"]
+      resources = ["arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.prod_db_password_parameter}"]
+    }
+  }
+  dynamic "statement" {
+    for_each = local.external_enabled == 1 ? [1] : []
+    content {
+      effect  = "Allow"
+      actions = ["kms:Decrypt"]
+      # KMS 키 ARN 을 모른다(AWS 관리 aws/ssm) — ViaService 로 ssm 경유만. ignore 는 이 줄 바로 위여야 먹는다
+      # (dynamic 블록 위에 달면 tfsec 이 무시 — 실측). 기본 모드에선 블록이 비어 tfsec 이 평가조차 안 한다(QA F-2).
+      #tfsec:ignore:aws-iam-no-policy-wildcards
+      resources = ["*"]
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["ssm.${var.region}.amazonaws.com"]
+      }
+    }
+  }
 }
 
 resource "aws_iam_policy" "eso_read_secrets" {
@@ -107,6 +133,7 @@ resource "aws_iam_policy" "eso_read_secrets" {
   # ASCII만 (위 aws_iam_role.eso 주석 참조)
   # 의미: ESO — 이 클러스터용 Secrets Manager 시크릿 읽기 전용
   # (개수를 안 적는다 — db_mode에 따라 3개/2개로 달라지므로 숫자를 박으면 곧 거짓말이 된다)
+  # ⚠️ 정책 description 은 ForceNew(replace) 라 external(SSM) 추가 후에도 그대로 둔다 — 실제 범위는 위 문서와 dynamic 블록.
   description = "ESO read-only access to this cluster's Secrets Manager secrets"
   policy      = data.aws_iam_policy_document.eso_read_secrets.json
 }

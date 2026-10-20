@@ -95,13 +95,13 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 |:-:|---|---|---|
 | 0 | ✅ **학습 문서 정리** — 재현 검증 포함, 완료 2026-10-17 (#458) | Q-1 | — |
 | 1a | ✅ **Flyway 공유 DB 안전 — BE + Fly** — 완료 2026-10-18 (#459, Fly 첫 release ≈ 50초 exit 0): 마이그레이션을 앱 기동에서 분리(C안), `repair()` 자동 경로 제거·수동 모드 격리, core-api jar 전용 모드 + Fly `release_command` | U-2 · N-11 · 아래 「1번 Blindspot」 | 0 |
-| 1b | **Flyway — EKS 쪽 마이그레이션 Job** (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
+| 1b | **Flyway — EKS 쪽 마이그레이션 Job** (🟡 2026-10-20 재판정: prod(external) 모드는 5-B 가 EKS migrate 를 끄고 Fly `release_command` 에 맡긴다 → 1b 는 in-cluster 학습 모드에만 남는다. 8번 착수 때 폐기 여부 결정) (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
 | 2 | ✅ **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존. 완료 2026-10-19 (#461, main 첫 빌드 3/3 · IMMUTABLE · 옛 `latest` 태그 제거): PR 은 빌드만(무자격증명) · main push 가 세 서비스 푸시 · 레포 IMMUTABLE · 태그 존재 시 건너뜀. 아래 「2번에서 안 하는 것」 | N-10 · U-2 · L-44 | 0 |
 | 3 | ✅ **CI 역할** — main 전용 역할(0-bootstrap) + 옛 역할 좁힌 읽기 전용 + access entry 2개(로컬 admin + CI). 가드 재정의는 8번으로(B3-13). 진행: 아래 「3번」 PR A→B→C — A ✅ #464(역할·시크릿) · B ✅ #465(전환·축소, 임시 역할 plan 실측) · C ✅ #466 access entry 2개, 좁힌 PR 역할 첫 CI plan 통과(2026-10-19) | N-1 · N-2 · N-18 (N-3 → 8) | 0 |
 | 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** | N-9 · U-3 · N-15 | 5 |
-| 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1 · 6 |
+| 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
 | 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크 | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
@@ -118,8 +118,8 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B-6 | 🟡 | daily-api(wave 4)도 `ddl-auto: validate` → 마이그레이션 뒤여야 | → **1b** |
 | B-7 | 🔴 | 이미지 태그 패치가 `Deployment/core-api` 만 겨냥 → Job 태그를 따로 적으면 클러스터 안 스큐 재발 | → **1b** + 순서표 2(이미지 공급망) |
 | B-9 | ⚪ | Fly release 머신의 이그레스 IP 가 앱 머신 고정 IP 와 다를 수 있음 → EC2 DB SG(N-6) 허용 목록에 영향 | DB 가 아직 Neon → **5번**(SG 설계 시 실측) |
-| B-12 | 🟡 | *"core-api 가 유일한 마이그레이션 실행자"* 서술이 `k8s/README.md`·`kustomization.yaml` wave 3 주석·`daily-api.yaml`·양 `application-prod.yml` 에 박혀 있음. 손 경로에 Job 단계 없음 | EKS 는 1a 에서 동작이 안 바뀐다(기동 시 migrate 유지, repair 만 빠짐) → **1b** 에서 함께 |
-| B-13 | 🟡 | 복구 절차(`eks-tutorial-steps.md` 백업 절, `db-restore.sh`, `PERSISTENT-RESOURCES.md`)가 *앱 기동 시 Flyway* 를 판정 도구로 씀. `selfHeal` 이 복구 중 Job 을 다시 띄워 `pg_restore` 와 경쟁 가능 | → **1b** + **6번**(복구 리허설) |
+| B-12 | 🟡 | *"core-api 가 유일한 마이그레이션 실행자"* 서술이 `k8s/README.md`·`kustomization.yaml` wave 3 주석·`daily-api.yaml`·양 `application-prod.yml` 에 박혀 있음. 손 경로에 Job 단계 없음 | EKS 는 1a 에서 동작이 안 바뀐다(기동 시 migrate 유지, repair 만 빠짐) → **1b** 에서 함께 🟡 10-20: prod(external) 모드는 EKS migrate 꺼짐(5-B) → 서술 갱신은 1b 폐기 판정(8번)과 함께 |
+| B-13 | 🟡 | 복구 절차(`eks-tutorial-steps.md` 백업 절, `db-restore.sh`, `PERSISTENT-RESOURCES.md`)가 *앱 기동 시 Flyway* 를 판정 도구로 씀. `selfHeal` 이 복구 중 Job 을 다시 띄워 `pg_restore` 와 경쟁 가능 | → **1b** + **6번**(복구 리허설) 🔴 10-20: external 모드는 **앱 기동 시 Flyway 가 꺼져 있어** 복구 판정 도구가 사라졌다 → **6번**(복구 리허설)에서 대체 판정(`java -jar app.jar validate` 를 Fly release 머신/로컬 이미지로) 설계 |
 | B-14 | 🟡 | 새 코드가 `be-cd.yml` 의 `./gradlew test` 에 자동 편입(L-36 쟁점 재부상) | 실행기를 core-api 안에 두므로 **새 모듈 없음** — 1a 에서 쟁점 아님. 전용 모듈로 바꾸면 재검토 |
 | B-16 | 🟡 | Neon 콜드 스탠바이(Q-2) 전환 시 누가 migrate 하는지 미정의 | → **6번**(복구·전환 리허설) |
 | B-17 | ⚪ | 실행기를 db-core 에 두면 *storage 모듈에 main* — 선례 없음 | core-api 에 두므로 해당 없음 |
@@ -202,7 +202,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 |:-:|---|---|---|
 | **5-0** | ✅ **실측 (2026-10-19) — 착수 가능.** Fly(nrt)→EC2 터널 Postgres 접속 성공(인바운드 0), RTT ≈ 29.7ms, 연결 0.26s. 🔴 **Java(musl)는 `._peer.internal` 을 못 푼다**(A 질의 NXDOMAIN) → `DB_HOST` = 피어 **IPv6 리터럴**(BE 변경 0). WireGuard `MTU = 1420` 명시(기본 8921). **Neon = Postgres 17**(콘솔 프로젝트 설정, 사용자 확인 10-20) → EC2 = 17. Neon 리전 = `ap-southeast-1`(싱가포르) | ≈ $0.01 | 일지 |
 | **5-A** | **IaC (1-network) — 진행 2026-10-20 (일회용 인스턴스 리허설 통과: 첫 부팅·Fly TLS 접속·재실행 멱등·**볼륨 재부착 복구**. ⚠️ 리허설은 임시 역할·피어로 돌았다 — 커밋된 `db.tf` 의 IAM·SG·프로파일은 **켜는 PR 의 첫 부팅이 첫 실행**): `db.tf` + `db-userdata.sh.tftpl`, `db_enabled` 기본 false(머지해도 생성 0 — 1-network 는 머지 = 자동 apply). 켜는 것은 별도 PR**: EC2·데이터 볼륨·SG·인스턴스 프로파일(`ssm:Get/PutParameter` 경로 한정)·`user_data`(Postgres·WireGuard 설치, 비밀 없음 B5-18④). 데이터 볼륨 AZ = 노드와 같은 2a(cross-AZ 회피, B5-7) | $0 | PR. plan 리뷰 |
-| **5-B** | **EKS 배선**: `db_mode=external`(기본값은 유지 — verify 마커 B5-15), ESO **ParameterStore** SecretStore + ExternalSecret, IRSA 정책 확장(B5-16), ESO·gitops kustomization 정리(B5-14·U-18) | $0 | PR |
+| **5-B** | **EKS 배선 — 진행 2026-10-20**: `db_mode=external`(기본 in-cluster 유지 — B5-15) · 좌표 = Secrets Manager, 비밀번호 = SSM ParameterStore(ESO 합성, IRSA 는 파라미터 하나) · 오버레이 `k8s/gitops/apps-external`(postgres 5종·`postgres-tls` 삭제 — B5-14, **core-api 기동 시 migrate 끔** — Fly `release_command` 가 유일한 실행자, external 모드엔 1b 불필요) · 1-network DB 없으면 precondition 으로 plan 중단 · 출력 `argocd_apps_path`. ⚠️ EKS 이미지 태그 = Fly 배포 커밋 고정은 8번 · 튜토리얼·k8s/README 의 db_mode 서술은 5-C | $0 | PR |
 | **5-C** | **운영 문서·안전장치**: SOP §8b destroy 게이트를 태그 필터로(B5-13), PERSISTENT-RESOURCES 행·증가 상한(N-19·B5-20), 비용 모델 재산정(B5-25), D-004·D-016·`secrets.tf` 원칙 개정(B5-22·B5-23, `design-change-procedure`) | $0 | PR |
 | 🔴 apply | **6번 직전에 따로 승인** — 상시 과금 시작(월 ≈ $13 + 데이터 볼륨) | 과금 | — |
 
