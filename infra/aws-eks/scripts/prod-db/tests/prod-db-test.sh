@@ -40,8 +40,12 @@ case "$1 $2" in
     else f=$(path "$4"); mkdir -p "$(dirname "$f")"; cp "$3" "$f"; fi ;;
   "s3api head-object") b=$4; k=$6; stat -c %s "/mock-s3/$b/$k" ;;
   "s3api put-object")  b=$4; k=$6; mkdir -p "$(dirname "/mock-s3/$b/$k")"; : > "/mock-s3/$b/$k" ;;
-  "s3api list-objects-v2") b=$4; p=$6; case "$8" in *.counts*) sfx=counts;; *) sfx=dump;; esac
-                           ls "/mock-s3/$b/$p" 2>/dev/null | grep "\.$sfx$" | sort | tail -1 | sed "s#^#$p#" ;;
+  "s3api list-objects-v2") b=$4; p=$6
+    # 목 자신이 pipefail 이라 없는 경로의 ls 실패가 "조회 실패"(rc 2)로 새지 않게 || true — 실제 S3 는 빈 목록을 돌려준다
+    if [[ "$p" == */health/* ]]; then k=$( (ls "/mock-s3/$b/$p" 2>/dev/null || true) | sort | tail -1)   # watch.sh — 최신 헬스 키
+    else case "$8" in *.counts*) sfx=counts;; *) sfx=dump;; esac
+         k=$(ls "/mock-s3/$b/$p" 2>/dev/null | grep "\.$sfx$" | sort | tail -1); fi
+    if [ -n "$k" ]; then echo "$p$k"; else echo None; fi ;;
   "ssm get-parameter") cat "/mock-ssm/$4" ;;
   *) echo "mock aws: 모르는 호출 $*" >&2; exit 9 ;;
 esac
@@ -169,6 +173,22 @@ echo "── ⑨ 반증: Flyway 이력 체크섬이 다르면 실패"
 X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); sed -i "s/^public.users|49$/public.users|50/; s/:-222:/:-223:/" "$f"; grep -q ":-223:" "$f"' || bad "반증 준비 실패"
 out=$(RUN restore-check.sh); rc=$?
 [ $rc -ne 0 ] && ok "체크섬 불일치 검출" || bad "🔴 체크섬 변조 통과"
+
+echo "── ⑪ watch.sh — 헬스 키 이름만으로 판정 (QA 6-D F-4: 유일한 알림 경로의 회귀)"
+WN() { docker exec -i -e BUCKET=bkt "$@" "$C" bash /opt/src/watch.sh 2>&1; }
+NOW=$(date -u +%s)
+out=$(WN); rc=$?
+[ $rc -eq 0 ] && ok "정상 → 통과" || { bad "정상인데 실패 rc=$rc"; echo "$out" | tail -4; }
+out=$(WN -e WATCH_NOW=$((NOW+30*3600))); rc=$?
+[ $rc -eq 1 ] && echo "$out" | grep -q 'backup 이 3[0-9]h 전이 마지막' && ok "백업 30h 멈춤 → 빨강" || bad "🔴 멈춘 백업을 놓쳤다(rc=$rc)"
+out=$(WN -e MAX_DISK_PCT=0); rc=$?
+[ $rc -eq 1 ] && echo "$out" | grep -q '데이터 볼륨' && ok "디스크 기준 초과 → 빨강" || bad "🔴 디스크 판정 공허(rc=$rc)"
+out=$(WN -e MAX_BACKUP_AGE_H=9999 -e WATCH_NOW=$((NOW+181*3600))); rc=$?
+[ $rc -eq 1 ] && echo "$out" | grep -q '복원 판정이' && ! echo "$out" | grep -q 'backup 이' && ok "복원 판정 181h → 빨강(백업과 독립)" || bad "🔴 복원 판정 나이를 놓쳤다(rc=$rc)"
+out=$(WN -e PREFIX=nothing/); rc=$?
+[ $rc -eq 1 ] && echo "$out" | grep -q '헬스 키가 없거나' && ok "헬스 키 없음 → 빨강" || bad "🔴 키 없음을 통과시켰다(rc=$rc)"
+out=$(WN -e MIN_TABLES=999); rc=$?
+[ $rc -eq 1 ] && ok "테이블 기준 → 빨강" || bad "🔴 테이블 판정 공허(rc=$rc)"
 
 echo "── ⑩ install.sh — CUTOVER_DONE 은 내려가지 않는다 (systemctl 목)"
 X 'printf "#!/bin/sh\nexit 0\n" > /usr/local/bin/systemctl; chmod +x /usr/local/bin/systemctl'

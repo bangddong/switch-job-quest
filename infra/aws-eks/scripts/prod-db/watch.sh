@@ -14,7 +14,8 @@
 #   ① 최신 backup 헬스 키 나이 ≤ MAX_BACKUP_AGE_H(26h — 매일 03:3x KST + 지연·랜덤 10분 여유)
 #   ② 그 키의 disk ≤ MAX_DISK_PCT(80 — 데이터 볼륨 10GiB 고정·자동 확장 없음, N-19)
 #   ③ tables ≥ MIN_TABLES(1 — 0 이면 DB 가 비었다는 뜻: 백업은 "성공" 해도 지킬 게 없다)
-#   ④ 최신 restore 헬스 키 나이 ≤ MAX_RESTORE_AGE_H(194h = 8일 — 주 1회 + 여유)
+#   ④ 최신 restore 헬스 키 나이 ≤ MAX_RESTORE_AGE_H(180h — 주 1회(168h) + 감시 시각 차 6.5h + cron 지연 여유.
+#      194h 였을 땐 일요일 복원 실패를 월요일에야 잡았다 — QA F-6)
 #   (restore·backup 의 tables 비교는 하지 않는다 — 주 1회 복원 뒤 마이그레이션이 테이블을 더하면 정상인데도 빨갛다)
 # ⚠️ 조회 실패·키 형식 불일치는 **실패로** 친다(fail-closed) — "못 봤다" 를 "괜찮다" 로 읽지 않는다.
 set -euo pipefail
@@ -24,7 +25,7 @@ REGION="${AWS_REGION:-ap-northeast-2}"
 MAX_BACKUP_AGE_H="${MAX_BACKUP_AGE_H:-26}"
 MAX_DISK_PCT="${MAX_DISK_PCT:-80}"
 MIN_TABLES="${MIN_TABLES:-1}"
-MAX_RESTORE_AGE_H="${MAX_RESTORE_AGE_H:-194}"
+MAX_RESTORE_AGE_H="${MAX_RESTORE_AGE_H:-180}"
 NOW="${WATCH_NOW:-$(date -u +%s)}"   # 테스트용 시각 주입
 
 FAIL=0

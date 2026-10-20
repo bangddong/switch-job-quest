@@ -14,13 +14,19 @@ on:
   schedule:
     - cron: "0 2 * * *" # 11:00 KST — 백업(03:3x KST)과 주간 복원 판정(일 04:3x KST) 뒤
   workflow_dispatch:
+    inputs:
+      inject_failure:
+        description: "일부러 빨갛게(백업 나이 기준 0h) — 실패 메일이 실제로 오는지 확인용(QA 6-D F-3, B4-23)"
+        type: boolean
+        default: false
   pull_request:
     paths:
       - ".github/workflows/prod-db-backup-watch.yml"
       - "infra/aws-eks/scripts/prod-db/watch.sh"
 
+# 이벤트별 그룹 — PR 실행이 정기 실행을 cancelled 로 지우면(실패가 아니라 메일도 없다) 그날 감시가 사라진다(QA F-5).
 concurrency:
-  group: prod-db-backup-watch
+  group: prod-db-backup-watch-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -33,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -55,6 +61,9 @@ jobs:
 
       - name: 백업 감시
         shell: bash
+        env:
+          # 수동 실행에서만 켤 수 있다. 실제 데이터로 판정하되 기준만 0h 로 — 빨강·메일 경로 확인용.
+          MAX_BACKUP_AGE_H: ${{ inputs.inject_failure && '0' || '26' }}
         run: |
           set -euo pipefail
           rc=0
