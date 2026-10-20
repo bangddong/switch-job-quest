@@ -498,7 +498,7 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 
 > 💰 **DB 비용 재산정 (5-C, 2026-10-20 — B5-25)**: 결정 표의 $36 = 인스턴스 $22.7 + 루트 gp3 8GB $2.2 + IPv4 $10.9(≈ 3개월).
 > 빠졌던 것: **데이터 볼륨 10GB ≈ $0.91/월 → 3개월 $2.7**(5-A 가 분리) · 스냅샷(6번에서 정함) · 인터넷 전송(월 100GB 무료 안 🟡).
-> **Fly 고정 이그레스 IP 는 6PN WireGuard 피어로 기각돼 소멸**(현금 $3.60/월 0). ⇒ **≈ $38.5 / 여유 ≈ $17.5**(스냅샷 미산입).
+> **Fly 고정 이그레스 IP 는 6PN WireGuard 피어로 기각돼 소멸**(현금 $3.60/월 0). ⇒ **≈ $38.5 / 여유 ≈ $17.6**(스냅샷 미산입).
 
 > 🚧 **순서표 5 「DB 층」 (2026-10-20, #469·5-B)** — prod DB = 1-network EC2 Postgres 17(`db_enabled` 기본 false).
 > EKS 는 `db_mode=external` + ArgoCD path `k8s/gitops/apps-external`(postgres 5종·`postgres-tls` 를 뺀 오버레이)로 붙는다.
