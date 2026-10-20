@@ -40,10 +40,10 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 
 ## 현재 영속 리소스
 
-**합계 ≈ $1.14/월** (ECR **$0.23** + EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00** + **로그 그룹 ~$0.00**). 6개월 ≈ $6.8 = 크레딧의 3.5%
+**합계 ≈ $14.02/월** (ECR **$0.23** + 학습 EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00** + **로그 그룹 ~$0.00** + **prod DB $12.88** = EC2 $7.59 + IPv4 $3.65 + 데이터 EBS $0.91 + 루트 EBS $0.73). 남은 3개월 ≈ $42
 
-> ℹ️ **2026-10-20 ⏸ 행 6개(📌D-016 prod DB) 추가 시 재검산 — 합계는 그대로다.** ⏸ 는 *코드만 있고 리소스는 0개*(`db_enabled=false`)라
-> 합계·§확인 ① 대조에 **넣지 않는다**. 켜는 PR 이 ⏸ 를 지우고 합계를 **≈ $14.0/월**(+$12.9)로, 영속 EBS 기대값을 **2개**로 바꾼다.
+> ℹ️ **2026-10-20 prod DB 켬(📌D-016 6-B, 사용자 승인) — 재검산: $1.14 → $14.02.** ⏸ 6행을 실물 행으로 바꿨다.
+> **영속 EBS 기대값 = 2개**(학습 10GiB `postgres-data` + prod DB 데이터 10GiB, 둘 다 `Persistent=true`). 루트 EBS 는 `Persistent` 태그가 없다(인스턴스와 수명이 같다).
 
 > ℹ️ **2026-10-14 로그 그룹 행 추가 시 재검산함 — 값은 그대로다.** 저장 단가 $0.0314/GB-월에 세션당 수십 MB(🟡 5d P6 실측 전)라 반올림하면 $0 다. 돈은 저장이 아니라 **수집**($0.76/GB)에서 나고, 그건 세션 비용이라 이 합계에 들어가지 않는다. QA F-6 규칙대로 *변화 없음* 을 명시한다.
 
@@ -73,12 +73,12 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **ECR** `devquest/daily-api` | 0-bootstrap | 위와 동일. Stage C 3서비스 배포 대상 | 🔒 lifecycle 10개 (**실측 2개 = 0.27 GB**, 2026-09-28) | **$0.03** | 2026-08-29 | 2027-01-15 |
 | **IAM** OIDC 프로바이더 · GitHub Actions 역할 `devquest-eks-github-actions` | 0-bootstrap | CI가 AWS에 붙는 통로. 📌D-016 순서표 3-B(2026-10-19) 이후 **PR plan 전용 좁힌 읽기 전용**(sub = main + pull_request, ReadOnlyAccess + Deny: 2-cluster state·백업·시크릿 값·로그 본문) | 고정 | $0 | 2026-07 | — |
 | **IAM** GitHub Actions 역할 `devquest-eks-github-actions-main` | 0-bootstrap | **main 전용 쓰기 역할**(sub = `ref:refs/heads/main` 만, Admin). infra apply · ECR push(3-B 이후), 클러스터 전환(순서표 8) | 고정 | $0 | 2026-10-19 | — |
-| ⏸ **EC2** prod DB `devquest-eks-prod-db` (t4g.micro, `Role=prod-db`) | **1-network** | 📌D-016 — Fly·EKS 가 공유하는 상시 prod Postgres 17. **`db_enabled` 기본 false — 켜기 전까지 0개** | 인스턴스 1대 고정(`count`), `instance_type` 변경 = stop/start(금지) | **≈ $11.24**(인스턴스 $7.59 + IPv4 $3.65) | 2026-10-20(코드) | 2027-01-15 |
-| ⏸ **EBS** prod DB 데이터 `devquest-eks-prod-db-data` (10GiB gp3, `Persistent=true`) | **1-network** | 데이터 + **Postgres 설정**(인스턴스 교체 후 재부착 — 리허설 통과). `prevent_destroy` | 🔴 **10GiB 고정, 자동 확장 없음 — 차면 DB 쓰기 실패.** 디스크 사용량 감시는 **6번**(N-19). 늘리기만 가능 | **$0.91** | 2026-10-20(코드) | 2027-01-15 |
-| ⏸ **EBS** prod DB 루트 (8GiB gp3) | 1-network | OS·패키지. `delete_on_termination` | 고정 | $0.73 | 2026-10-20(코드) | — |
-| ⏸ **SG** `devquest-eks-prod-db` · **IAM** 역할/프로파일 `devquest-eks-prod-db` | 1-network | 인바운드 `vpc_cidr`:5432 만 · SSM 접속 + 비밀 파라미터 | 고정 | $0 | 2026-10-20(코드) | — |
-| ⏸ **SSM** `/devquest/prod/db/password` · `/devquest/prod/db/wireguard-conf` (SecureString, **IaC 밖**) | — | 비밀번호 = EC2 가 생성(원천), WireGuard = 운영자가 `fly wireguard create` 결과를 넣음. tofu state 에 비밀을 두지 않기 위해 IaC 밖(B3-6) | 2개 고정 | $0(표준 티어) | 2026-10-20(설계) | — |
-| ⏸ **Fly** WireGuard 피어 (Fly 조직 6PN) | **Fly**(AWS 밖) | EC2 ↔ Fly 6PN 터널. `DB_HOST` = 이 피어의 IPv6 리터럴(이름 해석 불가 — 5-0) | 1개 | $0 | 2026-10-20(설계) | — |
+| **EC2** prod DB `devquest-eks-prod-db` (t4g.micro, `Role=prod-db`) | **1-network** | 📌D-016 — Fly·EKS 가 공유하는 상시 prod Postgres 17. **2026-10-20 켬(6-B)** | 인스턴스 1대 고정(`count`), `instance_type` 변경 = stop/start(금지) | **≈ $11.24**(인스턴스 $7.59 + IPv4 $3.65) | 2026-10-20(코드) | 2027-01-15 |
+| **EBS** prod DB 데이터 `devquest-eks-prod-db-data` (10GiB gp3, `Persistent=true`) | **1-network** | 데이터 + **Postgres 설정**(인스턴스 교체 후 재부착 — 리허설 통과). `prevent_destroy` | 🔴 **10GiB 고정, 자동 확장 없음 — 차면 DB 쓰기 실패.** 디스크 사용량은 백업 헬스 키(`disk=`)에 매일 남고 감시는 **6-D**(N-19). 늘리기만 가능 | **$0.91** | 2026-10-20(코드) | 2027-01-15 |
+| **EBS** prod DB 루트 (8GiB gp3) | 1-network | OS·패키지. `delete_on_termination` | 고정 | $0.73 | 2026-10-20(코드) | — |
+| **SG** `devquest-eks-prod-db` · **IAM** 역할/프로파일 `devquest-eks-prod-db` | 1-network | 인바운드 `vpc_cidr`:5432 만 · SSM 접속 + 비밀 파라미터 | 고정 | $0 | 2026-10-20(코드) | — |
+| **SSM** `/devquest/prod/db/password` · `/devquest/prod/db/wireguard-conf` · `/devquest/prod/db/neon-source-url` (SecureString, **IaC 밖**) | — | 비밀번호 = EC2 가 생성(원천), WireGuard = 운영자가 `fly wireguard create` 결과를 넣음, neon-source-url = Neon **읽기 전용** role(TASK-14, 6-C·7번 리허설용 — **7번 뒤 삭제**). tofu state 에 비밀을 두지 않기 위해 IaC 밖(B3-6) | 3개(7번 뒤 2개) | $0(표준 티어) | 2026-10-20(설계) | — |
+| **Fly** WireGuard 피어 `devquest-prod-db` (Fly 조직 6PN) | **Fly**(AWS 밖) | EC2 ↔ Fly 6PN 터널. `DB_HOST` = 이 피어의 IPv6 리터럴(이름 해석 불가 — 5-0) | 1개 | $0 | 2026-10-20(설계) | — |
 | **S3** `devquest-eks-backups-seoul` | 0-bootstrap | **백업은 자기가 백업하는 대상보다 오래 살아야 한다.** 데이터 볼륨이 이 레이어에 있으므로 백업도 이 레이어(D-004·L-14 규칙의 3번째 적용) | 🔒 **lifecycle 30일 × 3종** — `expiration` + `noncurrent_version_expiration` + `abort_incomplete_multipart_upload`. ⚠️ 버저닝이 켜져 있어 **앞의 하나만으로는 상한이 아니다** | ~$0 (덤프 KB 단위) | 2026-09-12 | 2027-01-15 |
 | **Budgets** ×2 (`credit-010-100`, `credit-110-200`) | 0-bootstrap | 누적 크레딧 소진 알림 20단계 | 🔒 예산당 알림 10개(AWS 상한) | **$0** ※ | 2026-07-31 | — |
 | **Cost Anomaly** `devquest-eks-service-monitor` | 0-bootstrap | 이상 지출 감지(DAILY, $5) | 계정당 DIMENSIONAL 1개 | $0 | 2026-07-29 | — |
@@ -86,8 +86,8 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **CloudWatch 로그 그룹** ×2 `/devquest/eks-learning/containers` · `/devquest/eks-learning/events` | 0-bootstrap | 학습 클러스터의 컨테이너 로그·K8s 이벤트를 **클러스터가 destroy 된 뒤에도** 읽기 위한 통(Stage 5d). 2-cluster 에 두면 destroy 가 그룹째 지운다(D-004·L-14 6번째 적용) | 🔒 **보존 30일** — 세션이 멈추면 30일 뒤 0 으로 수렴. 🔒 그룹은 **이 2개뿐**: 수집기 IRSA 에 `CreateLogGroup` 없음 + 설정 `auto_create_group Off` | ~$0 (저장 $0.0314/GB-월 · 세션당 수십 MB 🟡 5d P6 실측 전) ※ 수집은 세션 비용($0.76/GB) | 5d 세션 전 apply | 2027-01-15 |
 | **CloudWatch 로그 그룹** `/aws/eks/devquest-eks/cluster` | 0-bootstrap | EKS **컨트롤플레인** 로그(api · audit · authenticator · controllerManager · scheduler, Stage 5f). 🔴 이름은 EKS 가 정한다 — 없으면 EKS 가 **보존 무기한 · state 밖** 그룹을 스스로 만들므로 미리 만든다. 수집기 맵과 분리(수집기에 쓰기 권한 없음) | 🔒 **보존 30일**. 🔒 기본은 로그 **끔**(`2-cluster` `var.control_plane_log_types = []`), 켜도 이름이 어긋나면 plan 의 precondition 이 막는다 | ~$0 (빈 그룹 $0) ※ 수집은 세션 비용 | 5f 세션 전 apply | 2027-01-15 |
 
-> ⏸ = **코드만 있고 아직 없다**(`db_enabled=false`). 켜는 PR 이 이 표의 ⏸ 를 지우고 합계를 갱신한다(월 ≈ +$12.9).
-> 제거 절차: `disable_api_termination` 끄기 → `prevent_destroy` 제거 PR → **데이터 반출(Q-2 Neon) 확인 뒤** apply. SSM 2개는 `aws ssm delete-parameter`, 피어는 `fly wireguard remove`.
+> prod DB 행은 2026-10-20 6-B 에서 켰다(그 전엔 ⏸ — 코드만).
+> 제거 절차: `disable_api_termination` 끄기 → `prevent_destroy` 제거 PR → **데이터 반출(Q-2 Neon) 확인 뒤** apply. SSM 은 `aws ssm delete-parameter`, 피어는 `fly wireguard remove personal devquest-prod-db`.
 
 > ※ **퍼블릭 ACM 인증서는 발급·갱신·보관 전부 무료다**(유료인 것은 ACM Private CA 뿐).
 > **그래도 등재한다** — 원장은 금액이 아니라 *존재*를 기준으로 삼는다(S3 백업 버킷 행과 같은 근거).

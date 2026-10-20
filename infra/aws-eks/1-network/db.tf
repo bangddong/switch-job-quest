@@ -12,7 +12,7 @@
 #     tofu 리소스로 만들지도 않는다(refresh 가 `ssm:GetParameter` → PR 역할 Deny → plan 실패).
 #
 # 🔴 **이 레이어는 머지 = 자동 apply 다**(`infra-deploy.yml`). 그래서:
-#   ① `db_enabled` 기본 false — 이 코드를 머지해도 아무것도 생기지 않는다. 켜는 것은 **별도 PR + 승인**
+#   ① `db_enabled` — 5-A 땐 기본 false(머지해도 생성 0). **2026-10-20 6-B 에서 사용자 승인으로 기본값 true**
 #      (상시 과금 시작 — 계획서: 6번 직전).
 #   ② 켠 뒤 `false` 로 되돌리면 destroy 를 시도하고 `prevent_destroy` 가 apply 를 빨갛게 막는다 — 의도다.
 #   ③ `ignore_changes = [ami, user_data]` — 새 AMI 나 스크립트 수정이 **무인 replace·stop/start** 를

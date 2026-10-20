@@ -502,7 +502,7 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 > 빠졌던 것: **데이터 볼륨 10GB ≈ $0.91/월 → 3개월 $2.7**(5-A 가 분리) · 스냅샷(6번에서 정함) · 인터넷 전송(월 100GB 무료 안 🟡).
 > **Fly 고정 이그레스 IP 는 6PN WireGuard 피어로 기각돼 소멸**(현금 $3.60/월 0). ⇒ **≈ $38.5 / 여유 ≈ $17.6**(스냅샷 미산입).
 
-> 🚧 **순서표 5 「DB 층」 (2026-10-20, #469·5-B)** — prod DB = 1-network EC2 Postgres 17(`db_enabled` 기본 false).
+> 🚧 **순서표 5 「DB 층」 (2026-10-20, #469·5-B)** — prod DB = 1-network EC2 Postgres 17(`db_enabled` — **2026-10-20 6-B 에서 기본값 true 로 켬**, 사용자 승인).
 > EKS 는 `db_mode=external` + ArgoCD path `k8s/gitops/apps-external`(postgres 5종·`postgres-tls` 를 뺀 오버레이)로 붙는다.
 > external 모드에선 EKS 기동 시 migrate 를 **끈다** — Fly `release_command` 가 유일한 실행자(1a). 비밀번호는 SSM(EC2 생성)에만 있고 **어떤 tofu state 에도 없다** — 아래 마커는 그 배선의 양성 단언이다.
 <!-- verify: k8s/gitops/apps-external/kustomization.yaml ~ remoteRef: \{ key: /devquest/prod/db/password \} -->
@@ -535,7 +535,7 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 > 📌 **2026-10-20 축 추가 (📌D-016 순서표 5, Blindspot B5-23)** — 이 블록의 결론은 *"리퍼 사정권 밖 = 0-bootstrap"* 이고
 > 근거 하나가 *"0-bootstrap 머지 = 과금 개시, 단 **상태 변경 없음**"* 이었다. prod DB 는 **1-network**(역시 리퍼 밖, 머지 = 자동 apply)에
 > 들어갔는데 성질이 다르다: **영속 + 가변** — 머지가 상시 prod DB 를 바꿀 수 있다. 그래서 1-network 쪽 보호는 "레이어 선택"이 아니라
-> 리소스 단위로 건다: `db_enabled` 기본 false · `prevent_destroy`(인스턴스·데이터 볼륨) · `ignore_changes=[ami, user_data]` ·
+> 리소스 단위로 건다: `db_enabled`(켜는 것은 별도 승인 PR — 6-B) · `prevent_destroy`(인스턴스·데이터 볼륨) · `ignore_changes=[ami, user_data]` ·
 > `disable_api_termination` · 데이터는 별도 EBS(설정까지 볼륨에). 0-bootstrap 학습 EBS 를 재사용하지 않는다(B5-21 — 7번 이후 정리).
 
 > ✅ **07-31 진행**: 3a 완료(#349), **3b 구현 완료**. `🔄부분무효`였던 이유(=동적 PVC를 배제한 서술)는
