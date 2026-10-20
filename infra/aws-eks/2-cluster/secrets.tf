@@ -131,7 +131,12 @@ resource "aws_secretsmanager_secret_version" "db_connection_external" {
 
 # ── 앱 시크릿 (JWT / GitHub OAuth) ─────────────────────────────
 #
-# 🔴 **prod의 실제 값을 쓰지 않는다 — 의도적이다.**
+# 🔴 **prod의 실제 값을 쓰지 않는다 — 의도적이다.** (← 앱 시크릿 = JWT·OAuth 에 대한 원칙)
+#   ⚠️ 📌D-016 이후 **DB 자격증명은 예외가 생겼다**(2026-10-20, Blindspot B5-22): `db_mode=external` 은
+#   **진짜 prod DB** 에 붙는다(비밀번호는 SSM → ESO, 이 파일엔 좌표만). Q-1 은 *이 클러스터를 prod 전용으로
+#   전환한다*(학습 문서 정리 뒤 — 조건 충족 10-17)는 결정이고, 전환 전까지 학습 세션은 기본값 `in-cluster` 로 돈다.
+#   학습 apply 가 prod DB 에 붙지 않게 하는 경계는 `db_mode` 기본값과 ArgoCD path 두 개다.
+#   JWT·OAuth 의 prod 값 주입은 아직 금지다(7번 U-11 에서 JWT 키 통일과 함께 재판정).
 #   학습 클러스터에 prod GitHub OAuth 크리덴셜을 넣으면 그 클러스터가
 #   실서비스 사용자에게 유효한 토큰을 발급할 수 있게 된다. 학습장에 프로덕션
 #   신원 발급 권한을 주는 셈이라 금지.

@@ -138,7 +138,11 @@ resource "aws_ebs_volume" "db_data" {
   type              = "gp3"
   encrypted         = true
 
-  tags = { Name = "${var.cluster_name}-prod-db-data", Role = "prod-db" }
+  # `Persistent = "true"` — **읽는 코드가 있는 태그다**(acm.tf 의 경고와 반대 경우). 리퍼·SOP·원장의 고아 EBS 검사가
+  # `available` 볼륨 중 이 태그가 없는 것을 *"삭제하라"* 고 안내한다(eks-reaper.sh warn_orphan_volumes).
+  # 인스턴스가 사라져 이 볼륨이 available 이 되면 **prod 데이터를 지우라는 안내**가 나간다 → 태그로 제외한다.
+  # 영속 인벤토리(session-status·marker)에도 잡혀 PERSISTENT-RESOURCES 대조 대상이 된다.
+  tags = { Name = "${var.cluster_name}-prod-db-data", Role = "prod-db", Persistent = "true" }
 
   lifecycle {
     prevent_destroy = true
