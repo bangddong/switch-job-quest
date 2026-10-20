@@ -1,0 +1,67 @@
+# 📌D-016 순서표 5-B — **외부 DB(EC2 Postgres) 모드**의 ArgoCD 대상 폴더.
+#
+# `../apps`(in-cluster DB 모드)를 그대로 가져와 **DB 가 클러스터 밖에 있다는 차이만** 덮는다:
+#   ① postgres 5종(StorageClass·PV·PVC·Service·StatefulSet)을 뺀다 — DB 는 1-network 의 EC2 다.
+#   ② ExternalSecret `postgres-tls` 를 뺀다 — 그 원천(2-cluster `postgres_tls`)은 in-cluster 모드에만 있다.
+#      남겨 두면 SecretSyncError → wave 1 이 Healthy 가 안 돼 **이후 wave 가 영원히 시작되지 않는다**(Blindspot B5-14).
+#   ③ ExternalSecret `core-api-db` 의 원천을 바꾼다 — 좌표(host·dbname·username)는 Secrets Manager
+#      `devquest-eks/db-connection`(2-cluster 가 db_mode=external 로 씀), 비밀번호는 SSM Parameter Store.
+#      두 원천 합성은 Stage 2 `k8s/eso/externalsecret-db.yaml` 과 같은 모양이다.
+#
+# 쓰는 법: ArgoCD Application 의 `path` 를 `k8s/gitops/apps` → `k8s/gitops/apps-external` 로(순서표 8 전환 워크플로).
+#   2-cluster 는 `-var db_mode=external` 로 apply. 기본값(in-cluster)은 그대로 둔다 — 튜토리얼 verify 마커(B5-15).
+# ⚠️ Application 의 PV 패치(volumeHandle·AZ)는 대상이 없어져 아무것도 바꾸지 않는다(로컬 렌더로 확인 — 에러 아님).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../apps
+  - secretstore-parameterstore.yaml
+
+patches:
+  # ① ② — 삭제
+  - patch: |-
+      $patch: delete
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata: { name: gp3-static }
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata: { name: postgres-data }
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata: { name: postgres-data, namespace: default }
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata: { name: postgres, namespace: default }
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata: { name: postgres, namespace: default }
+  - patch: |-
+      $patch: delete
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata: { name: postgres-tls, namespace: default }
+  # ③ — core-api-db 원천 교체. CRD 라 strategic merge 가 아니라 JSON merge → `data` 목록이 **통째로** 바뀐다.
+  - target: { group: external-secrets.io, kind: ExternalSecret, name: core-api-db }
+    patch: |-
+      - op: replace
+        path: /spec/data
+        value:
+          - secretKey: DB_HOST
+            remoteRef: { key: devquest-eks/db-connection, property: host }
+          - secretKey: DB_NAME
+            remoteRef: { key: devquest-eks/db-connection, property: dbname }
+          - secretKey: DB_USERNAME
+            remoteRef: { key: devquest-eks/db-connection, property: username }
+          - secretKey: DB_PASSWORD
+            sourceRef:
+              storeRef: { name: aws-parameterstore, kind: SecretStore }
+            remoteRef: { key: /devquest/prod/db/password }

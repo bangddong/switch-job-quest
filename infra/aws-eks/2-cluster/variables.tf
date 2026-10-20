@@ -192,17 +192,21 @@ variable "node_max_size" {
 #   Stage 2 재현은 **의도적 행위**라 플래그를 명시하는 게 오히려 맞다.
 #     tofu apply -var db_mode=rds        # Stage 2 재현
 #     tofu apply                          # Stage 3a 이후 (기본)
+#     tofu apply -var db_mode=external   # 📌D-016 prod 창 — 전환 워크플로(순서표 8)가 붙인다
+#   🔴 external 을 **기본값으로 만들지 마라** — 튜토리얼 verify 마커가 in-cluster 기본을 단언하고(B5-15),
+#      플래그를 잊은 학습 apply 가 prod DB 에 붙는 것(U-1)이 "돈이 나간다" 보다 나쁘다.
 variable "db_mode" {
   description = <<-EOT
-    DB를 어디에 둘지. rds = 관리형(Stage 2) / in-cluster = Postgres StatefulSet(Stage 3a~).
+    DB를 어디에 둘지. rds = 관리형(Stage 2) / in-cluster = Postgres StatefulSet(Stage 3a~)
+    / external = 클러스터 밖 prod DB(1-network 의 EC2 Postgres, 📌D-016 — ArgoCD path 는 k8s/gitops/apps-external).
     기본은 in-cluster — 플래그를 잊어도 과금 리소스가 생기지 않는 쪽이 기본이어야 한다.
   EOT
   type        = string
   default     = "in-cluster"
 
   validation {
-    condition     = contains(["rds", "in-cluster"], var.db_mode)
-    error_message = "db_mode must be \"rds\" or \"in-cluster\"."
+    condition     = contains(["rds", "in-cluster", "external"], var.db_mode)
+    error_message = "db_mode must be \"rds\", \"in-cluster\" or \"external\"."
   }
 }
 
@@ -330,4 +334,12 @@ variable "local_admin_iam_user" {
   type        = string
   description = "클러스터 admin entry 를 받을 로컬 IAM 사용자 이름 (ARN 은 계정 ID 로 조립)"
   default     = "bootstrap-admin"
+}
+
+# 📌D-016 5-B — external 모드에서 ESO 가 읽는 prod DB 비밀번호 파라미터. 1-network `db_ssm_prefix` + "/password" 와 같아야 한다.
+#   (k8s/gitops/apps-external 의 ExternalSecret `remoteRef.key` 에도 같은 경로가 리터럴로 있다 — 바꿀 땐 셋 다.)
+variable "prod_db_password_parameter" {
+  type        = string
+  description = "prod DB 비밀번호 SSM 파라미터 이름 (db_mode=external)"
+  default     = "/devquest/prod/db/password"
 }

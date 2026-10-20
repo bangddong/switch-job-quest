@@ -5588,3 +5588,12 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
 - `[해결]` F-3 멱등: role·DB 는 `pg_roles`/`pg_database` 를 직접 보고 `\gexec` 로 생성, 비밀번호는 매번 SSM 값으로 `ALTER ROLE`(SSM = 원천), pg_hba 는 표식 줄로 중복 방지, 수동 재실행 경로를 스크립트 머리말에. F-4 `PATH=/snap/bin` + get-parameter stderr 를 로그로. F-6 `PutParameter` 를 `password` 하나로. F-7 `AllowedIPs` 형식 검증 · `--force-confold` · `disable_api_termination`. F-5 튜닝은 근거(실측) 없이 숫자를 정하지 않는다 → 7번. F-9 TASKS 정렬.
 - `[해결]` 재QA(HIGH 0, F-1~F-9 fixed) 델타 지적: F-10 재부착 시 postgres UID 불일치 가능(새 AMI) → 재부착 분기에서만 `chown -R postgres:postgres /var/lib/postgresql/17` · F-11 첫 부팅이 `pg_createcluster` 뒤 `mv` 전에 죽은 경우를 "복구 불가" 로 오판 → 이어서 하는 분기 추가 · F-12 재실행 = Postgres 재시작(동시 단절)이므로 튜닝은 별도 conf.d + reload 로 정정, 리허설은 임시 역할로 돌았으니 커밋된 `db.tf` 는 켜는 PR 의 첫 부팅이 첫 실행. 렌더 → `bash -n` · `shellcheck -S warning` 통과(F-10·F-11 분기는 리허설로 재실행하지 않음 — 🟡).
+
+## 2026-10-20 — 📌D-016 순서표 5-B: EKS 를 외부 DB 에 배선 (클러스터 없음, $0)
+
+- `[결정]` `db_mode` 에 **`external`** 추가 — 기본값은 `in-cluster` 그대로(튜토리얼 verify 마커 B5-15, 플래그를 잊은 학습 apply 가 prod DB 에 붙는 U-1 방지). 전환 워크플로(8)가 `-var db_mode=external` 을 붙인다.
+- `[결정]` 시크릿 합성(Stage 2 RDS 선례와 같은 모양): **좌표**(host=EC2 사설 IP·dbname·username)는 2-cluster 가 Secrets Manager `devquest-eks/db-connection` 에, **비밀번호**는 SSM `/devquest/prod/db/password` 에서 ESO ParameterStore 로. ⇒ prod 비밀번호는 **어떤 tofu state 에도 없다.** ESO IRSA 에 `ssm:GetParameter`(그 파라미터 하나)·`kms:Decrypt`(ViaService ssm)를 external 모드에서만 추가.
+- `[결정]` ArgoCD 대상 = 새 오버레이 `k8s/gitops/apps-external` — `../apps` 를 가져와 postgres 5종(SC·PV·PVC·Service·StatefulSet)과 ExternalSecret `postgres-tls` 를 `$patch: delete`, `core-api-db` 의 `spec.data` 를 JSON patch 로 교체. `postgres-tls` 를 남기면 원천(in-cluster 전용)이 없어 SecretSyncError → wave 1 영구 정지(B5-14).
+- `[메모]` 로컬 렌더(`kubectl kustomize`): external 오버레이에 postgres 5종·`postgres-tls` 없음, SecretStore 2개 모두 wave 1, `core-api-db` = `DB_HOST/DB_NAME/DB_USERNAME ← aws-secretsmanager` · `DB_PASSWORD ← aws-parameterstore /devquest/prod/db/password`. Application 의 PV 패치(대상 없음)는 **에러 없이 무시** — 임시 kustomization 으로 확인(B5-14 ⚪ 해소).
+- `[메모]` 2-cluster plan: 기본 `Plan: 47 to add`(변화 없음) · `-var db_mode=external` → 1-network DB 가 아직 없어 **precondition 으로 중단**(`db_mode=external 인데 1-network 에 prod DB 가 없다`) — 의도. DB 가 있을 때의 성공 경로는 1-network `db_enabled=true` 뒤에야 실측 가능(⚪).
+- `[메모]` verify 마커 3개 추가(README D-016): 오버레이 비밀번호 원천 · `db_connection_external` · `db_count = var.db_enabled ? 1 : 0`. 앞의 두 개는 실패 주입으로 `verify 내용 단언 실패` 확인. 처음 쓴 세 번째 마커 `default|db_enabled` 는 아무 파일에나 맞는 **헐거운 검사**라 바꿨다(CLAUDE.md 「검사가 주장보다 헐겁다」).

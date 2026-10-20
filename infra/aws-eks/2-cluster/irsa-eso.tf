@@ -100,6 +100,29 @@ data "aws_iam_policy_document" "eso_read_secrets" {
       one(aws_db_instance.main[*].master_user_secret[0].secret_arn),
     ])
   }
+
+  # 📌D-016 5-B — external 모드에서만: prod DB 비밀번호(SSM SecureString, EC2 가 생성). 파라미터 **하나**로 좁힌다.
+  dynamic "statement" {
+    for_each = local.external_enabled == 1 ? [1] : []
+    content {
+      effect    = "Allow"
+      actions   = ["ssm:GetParameter"]
+      resources = ["arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.prod_db_password_parameter}"]
+    }
+  }
+  dynamic "statement" {
+    for_each = local.external_enabled == 1 ? [1] : []
+    content {
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = ["*"]
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["ssm.${var.region}.amazonaws.com"]
+      }
+    }
+  }
 }
 
 resource "aws_iam_policy" "eso_read_secrets" {
