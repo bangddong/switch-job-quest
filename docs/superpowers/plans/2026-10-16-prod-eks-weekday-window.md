@@ -95,7 +95,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 |:-:|---|---|---|
 | 0 | ✅ **학습 문서 정리** — 재현 검증 포함, 완료 2026-10-17 (#458) | Q-1 | — |
 | 1a | ✅ **Flyway 공유 DB 안전 — BE + Fly** — 완료 2026-10-18 (#459, Fly 첫 release ≈ 50초 exit 0): 마이그레이션을 앱 기동에서 분리(C안), `repair()` 자동 경로 제거·수동 모드 격리, core-api jar 전용 모드 + Fly `release_command` | U-2 · N-11 · 아래 「1번 Blindspot」 | 0 |
-| 1b | **Flyway — EKS 쪽 마이그레이션 Job** (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
+| 1b | **Flyway — EKS 쪽 마이그레이션 Job** (🟡 2026-10-20 재판정: prod(external) 모드는 5-B 가 EKS migrate 를 끄고 Fly `release_command` 에 맡긴다 → 1b 는 in-cluster 학습 모드에만 남는다. 8번 착수 때 폐기 여부 결정) (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
 | 2 | ✅ **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존. 완료 2026-10-19 (#461, main 첫 빌드 3/3 · IMMUTABLE · 옛 `latest` 태그 제거): PR 은 빌드만(무자격증명) · main push 가 세 서비스 푸시 · 레포 IMMUTABLE · 태그 존재 시 건너뜀. 아래 「2번에서 안 하는 것」 | N-10 · U-2 · L-44 | 0 |
 | 3 | ✅ **CI 역할** — main 전용 역할(0-bootstrap) + 옛 역할 좁힌 읽기 전용 + access entry 2개(로컬 admin + CI). 가드 재정의는 8번으로(B3-13). 진행: 아래 「3번」 PR A→B→C — A ✅ #464(역할·시크릿) · B ✅ #465(전환·축소, 임시 역할 plan 실측) · C ✅ #466 access entry 2개, 좁힌 PR 역할 첫 CI plan 통과(2026-10-19) | N-1 · N-2 · N-18 (N-3 → 8) | 0 |
 | 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
@@ -202,7 +202,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 |:-:|---|---|---|
 | **5-0** | ✅ **실측 (2026-10-19) — 착수 가능.** Fly(nrt)→EC2 터널 Postgres 접속 성공(인바운드 0), RTT ≈ 29.7ms, 연결 0.26s. 🔴 **Java(musl)는 `._peer.internal` 을 못 푼다**(A 질의 NXDOMAIN) → `DB_HOST` = 피어 **IPv6 리터럴**(BE 변경 0). WireGuard `MTU = 1420` 명시(기본 8921). **Neon = Postgres 17**(콘솔 프로젝트 설정, 사용자 확인 10-20) → EC2 = 17. Neon 리전 = `ap-southeast-1`(싱가포르) | ≈ $0.01 | 일지 |
 | **5-A** | **IaC (1-network) — 진행 2026-10-20 (일회용 인스턴스 리허설 통과: 첫 부팅·Fly TLS 접속·재실행 멱등·**볼륨 재부착 복구**. ⚠️ 리허설은 임시 역할·피어로 돌았다 — 커밋된 `db.tf` 의 IAM·SG·프로파일은 **켜는 PR 의 첫 부팅이 첫 실행**): `db.tf` + `db-userdata.sh.tftpl`, `db_enabled` 기본 false(머지해도 생성 0 — 1-network 는 머지 = 자동 apply). 켜는 것은 별도 PR**: EC2·데이터 볼륨·SG·인스턴스 프로파일(`ssm:Get/PutParameter` 경로 한정)·`user_data`(Postgres·WireGuard 설치, 비밀 없음 B5-18④). 데이터 볼륨 AZ = 노드와 같은 2a(cross-AZ 회피, B5-7) | $0 | PR. plan 리뷰 |
-| **5-B** | **EKS 배선 — 진행 2026-10-20**: `db_mode=external`(기본 in-cluster 유지), 좌표=Secrets Manager·비번=ParameterStore 합성, 오버레이 `k8s/gitops/apps-external`(postgres 5종·`postgres-tls` ES 삭제). 1-network DB 없으면 precondition 으로 plan 중단: `db_mode=external`(기본값은 유지 — verify 마커 B5-15), ESO **ParameterStore** SecretStore + ExternalSecret, IRSA 정책 확장(B5-16), ESO·gitops kustomization 정리(B5-14·U-18) | $0 | PR |
+| **5-B** | **EKS 배선 — 진행 2026-10-20**: `db_mode=external`(기본 in-cluster 유지 — B5-15) · 좌표 = Secrets Manager, 비밀번호 = SSM ParameterStore(ESO 합성, IRSA 는 파라미터 하나) · 오버레이 `k8s/gitops/apps-external`(postgres 5종·`postgres-tls` 삭제 — B5-14, **core-api 기동 시 migrate 끔** — Fly `release_command` 가 유일한 실행자, external 모드엔 1b 불필요) · 1-network DB 없으면 precondition 으로 plan 중단 · 출력 `argocd_apps_path`. ⚠️ EKS 이미지 태그 = Fly 배포 커밋 고정은 8번 · 튜토리얼·k8s/README 의 db_mode 서술은 5-C | $0 | PR |
 | **5-C** | **운영 문서·안전장치**: SOP §8b destroy 게이트를 태그 필터로(B5-13), PERSISTENT-RESOURCES 행·증가 상한(N-19·B5-20), 비용 모델 재산정(B5-25), D-004·D-016·`secrets.tf` 원칙 개정(B5-22·B5-23, `design-change-procedure`) | $0 | PR |
 | 🔴 apply | **6번 직전에 따로 승인** — 상시 과금 시작(월 ≈ $13 + 데이터 볼륨) | 과금 | — |
 

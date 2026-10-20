@@ -44,7 +44,7 @@
 #tfsec:ignore:AVD-AWS-0098
 resource "aws_secretsmanager_secret" "db_connection" {
   name        = "${var.cluster_name}/db-connection"
-  description = "core-api DB 접속 좌표 (host/dbname). 크리덴셜은 RDS 관리형 시크릿에 별도 존재."
+  description = "core-api DB 접속 좌표. rds = 크리덴셜은 RDS 관리형 시크릿 / in-cluster = 여기 포함 / external = 비밀번호는 SSM(/devquest/prod/db/password)"
 
   # 🔴 0 = 즉시 삭제. 기본값(30일)이면 destroy 후에도 "삭제 대기" 상태로 남아
   #    시크릿당 $0.40/월이 계속 과금된다 — destroy-after-use에서 놓치기 쉬운 고아.

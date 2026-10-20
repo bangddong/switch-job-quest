@@ -342,4 +342,10 @@ variable "prod_db_password_parameter" {
   type        = string
   description = "prod DB 비밀번호 SSM 파라미터 이름 (db_mode=external)"
   default     = "/devquest/prod/db/password"
+
+  # 선행 `/` 가 없으면 ARN 이 `parameterdevquest…` 로 깨져 ESO 가 AccessDenied 를 받는다(QA 5-B F-6).
+  validation {
+    condition     = startswith(var.prod_db_password_parameter, "/")
+    error_message = "prod_db_password_parameter must start with \"/\"."
+  }
 }

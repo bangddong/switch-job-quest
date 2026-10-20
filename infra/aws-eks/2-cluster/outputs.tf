@@ -160,3 +160,10 @@ output "node_role_name" {
   description = "노드 IAM 역할 이름. Karpenter EC2NodeClass 의 spec.role 과 같아야 한다"
   value       = aws_iam_role.node.name
 }
+
+# 📌D-016 5-B — db_mode 와 짝이 되는 ArgoCD Application path. 둘이 어긋나면 wave 1 에서 SecretSyncError 로
+#   멈추는데(fail-closed) 어느 쪽이 틀렸는지 단서가 없다(QA 5-B F-7) → apply 결과에 짝을 찍는다.
+output "argocd_apps_path" {
+  description = "이 db_mode 에 맞는 ArgoCD Application spec.source path"
+  value       = var.db_mode == "external" ? "k8s/gitops/apps-external" : "k8s/gitops/apps"
+}

@@ -494,14 +494,14 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 <!-- verify: infra/aws-eks/0-bootstrap/iam-github-oidc.tf ~ "repo:\$\{var\.github_repo\}:ref:refs/heads/main"$ -->
 <!-- verify: .github/workflows/infra-deploy.yml ~ github\.event_name == 'push' && secrets\.AWS_ROLE_ARN_MAIN -->
 
+> ⚠️ 위 두 번째 마커는 **main 역할의 sub 줄**(값 1개, 줄 끝)을 잡는다. PR 역할의 sub 는 배열 원소라 줄 끝이 `",` 다.
+
 > 🚧 **순서표 5 「DB 층」 (2026-10-20, #469·5-B)** — prod DB = 1-network EC2 Postgres 17(`db_enabled` 기본 false).
 > EKS 는 `db_mode=external` + ArgoCD path `k8s/gitops/apps-external`(postgres 5종·`postgres-tls` 를 뺀 오버레이)로 붙는다.
-> 비밀번호는 SSM(EC2 생성)에만 있고 **어떤 tofu state 에도 없다** — 아래 마커는 그 배선의 양성 단언이다.
+> external 모드에선 EKS 기동 시 migrate 를 **끈다** — Fly `release_command` 가 유일한 실행자(1a). 비밀번호는 SSM(EC2 생성)에만 있고 **어떤 tofu state 에도 없다** — 아래 마커는 그 배선의 양성 단언이다.
 <!-- verify: k8s/gitops/apps-external/kustomization.yaml ~ remoteRef: \{ key: /devquest/prod/db/password \} -->
 <!-- verify: infra/aws-eks/2-cluster/secrets.tf ~ resource "aws_secretsmanager_secret_version" "db_connection_external" -->
 <!-- verify: infra/aws-eks/1-network/db.tf ~ db_count = var\.db_enabled \? 1 : 0 -->
-
-> ⚠️ 위 두 번째 마커는 **main 역할의 sub 줄**(값 1개, 줄 끝)을 잡는다. PR 역할의 sub 는 배열 원소라 줄 끝이 `",` 다.
 
 #### 영속 레이어 — 싸다, 반드시 분리할 것
 > 📌 **D-004** · 상태 `✅유효` · 영향 `infra/aws-eks/0-bootstrap/ebs-postgres.tf`, `infra/aws-eks/1-network/outputs.tf`, `infra/aws-eks/2-cluster/nodes.tf`, `infra/aws-eks/2-cluster/addons.tf`, `infra/aws-eks/2-cluster/remote-state.tf`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `docs/eks-session-sop.md`, `k8s/base/postgres-static.yaml`, `k8s/README.md`, Stage 3a·3b · 재판정 `docs/eks-migration-log.md` 07-30 "EBS 2단계 확정 — 3a 동적 → 3b static"
