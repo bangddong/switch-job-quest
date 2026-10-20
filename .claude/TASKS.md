@@ -89,8 +89,6 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 간격 반복,
       로그인·DB·RPG XP 연동. **지금은 보류이고, 판단은 사용자 몫이다.**
 
-## 완료된 항목
-
 ### TASK-13: Fly API 토큰 폐기·재발급 (사용자 결정 2026-10-20 — **📌D-016 전환 완료 후**)
 
 **왜**: 2026-10-19 Neon 접속 정보를 찾다가 `.claude/settings.local.json` 권한 규칙에 **평문으로 저장된
@@ -101,6 +99,8 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 1. 새 토큰 발급 → GitHub 시크릿 `FLY_API_TOKEN`(be-cd) 교체 — **폐기보다 먼저**(순서 바뀌면 배포가 깨진다)
 2. `fly tokens list` 에서 옛 토큰 찾아 `fly tokens revoke`
 3. `.claude/settings.local.json` 에서 토큰이 박힌 권한 규칙 삭제(gitignore 파일 — 근본 원인)
+
+## 완료된 항목
 
 ### TASK-10: ACM 인증서 DNS 검증 → **완료 (2026-09-16)**
 

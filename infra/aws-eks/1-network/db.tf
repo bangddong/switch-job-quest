@@ -96,12 +96,19 @@ resource "aws_iam_role_policy" "db_params" {
     Version = "2012-10-17"
     Statement = [
       {
-        # password: 첫 부팅에 PutParameter(덮어쓰기 없이), 재설치 시 GetParameter.
         # wireguard-conf: 운영자가 넣고(`fly wireguard create` 산출물 — 개인키) EC2 는 읽기만.
-        Sid      = "DbParams"
+        # password: 재실행 시 읽기.
+        Sid      = "DbParamsRead"
         Effect   = "Allow"
-        Action   = ["ssm:GetParameter", "ssm:PutParameter"]
+        Action   = ["ssm:GetParameter"]
         Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.db_ssm_prefix}/*"
+      },
+      {
+        # 쓰기는 password 하나만 — wireguard-conf 를 인스턴스가 덮어쓸 수 없게(QA F-6).
+        Sid      = "DbPasswordWrite"
+        Effect   = "Allow"
+        Action   = ["ssm:PutParameter"]
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.db_ssm_prefix}/password"
       },
       {
         Sid      = "SsmKms"
@@ -145,6 +152,8 @@ resource "aws_instance" "db" {
   subnet_id              = local.db_subnet_id
   vpc_security_group_ids = [aws_security_group.db[0].id]
   iam_instance_profile   = aws_iam_instance_profile.db[0].name
+  # 콘솔·CLI 종료 방지 — `prevent_destroy` 는 tofu 만 막는다(QA F-7). 정말 지울 땐 이걸 먼저 끈다.
+  disable_api_termination = true
 
   # T4g 기본은 `unlimited` — 버스트 초과분이 크레딧 산술 밖으로 샌다(B5-24).
   credit_specification {

@@ -5566,3 +5566,24 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` `user_data` 는 비밀 0 — 데이터 볼륨 대기·빈 경우만 포맷 → PGDG 로 Postgres **17** → WireGuard 설정은 SSM `wireguard-conf`(운영자가 넣음, 최대 30분 대기)에서 받아 `DNS` 줄 제거·**`MTU = 1420`** 추가 → 기존 데이터면 클러스터 *통합*, 아니면 생성 → `pg_hba`: `hostssl devquest devquest <vpc_cidr>` · `hostssl … <Fly 조직 /48>` → 비밀번호는 SSM 에 있으면 쓰고 없으면 생성(`--overwrite` 없음).
 - `[메모]` `tofu plan`: 기본(꺼짐) `No changes.` · `-var db_enabled=true` → `Plan: 8 to add, 0 to change, 0 to destroy.`(EBS·프로파일·역할·인라인·SSM Core 부착·인스턴스·SG·볼륨 부착).
 - `[막힘]` tfsec 은 `count = 0` 이면 리소스를 평가하지 않는다 → 기본값으로는 `No problems detected!` 가 **검사를 안 한 통과**다. `--tfvars-file`(db_enabled=true)로 다시: `Result #1 LOW EBS volume does not use a customer-managed KMS key.` → 근거 붙여 ignore(CMK 월 $1+, ecr.tf 와 같은 판단) → `No problems detected!`. ⚠️ CI tfsec 도 기본값으로 돈다 — **켜는 PR 에서야 실제로 검사된다.**
+- `[막힘]` QA(5-A) HIGH 1 · MEDIUM 4 — 스크립트가 **한 번도 실행되지 않았다**는 지적(F-8)이 핵심. 렌더(`tofu console` + `templatefile`) → `bash -n` · `shellcheck -S warning` 통과 후 **일회용 인스턴스 리허설**(IaC 밖, 2026-10-20 00:42~01:06 UTC, t4g.micro ×4회 + 1GiB EBS + 임시 피어·SSM·역할, 전부 삭제 — 잔존 `ec2 0 · ebs 0 · role 0 · ssm 0 · wg 0 · fly 0`).
+- `[해결]` F-1(HIGH) `umask 077` 누수 → 서브셸 `( umask 077; … )` 로 한정. 리허설에서 Postgres 정상 기동.
+- `[막힘]` 🔴 **F-2 실측 재현** — 볼륨 재부착 후 `pg_createcluster 17 main -d <기존 데이터>`:
+  ```
+  [db-init] 기존 데이터 통합 (/var/lib/postgresql/17/main)
+  Error: move_conffile: required configuration file /var/lib/postgresql/17/main/postgresql.conf does not exist
+  ```
+  원인: Ubuntu postgresql-common 은 설정을 `/etc/postgresql/17/main`(**루트 볼륨**)에 두고 데이터만 `/var/lib`(데이터 볼륨)에 둔다 → 인스턴스 교체 = 설정 소실, "통합" 은 데이터 디렉터리 안 설정을 기대해 실패. **데이터 EBS 를 분리한 이유(복구)가 그대로였으면 안 됐다.**
+- `[해결]` 설정 디렉터리를 데이터 볼륨(`/var/lib/postgresql/17/etc-main`)으로 옮기고 `/etc/postgresql/17/main` 은 심볼릭 링크. 재부착이면 링크만 다시 건다. 데이터는 있는데 볼륨에 설정이 없으면 **멈춘다**(자동 복구 불가 — `|| true` 로 삼키지 않음).
+- `[해결]` 리허설 결과(전부 실측):
+  ```
+  ① 첫 부팅   빈 볼륨 — ext4 포맷 → WireGuard up (fdaa:56:a50e::/48) → 새 클러스터 생성 (설정 → 볼륨) → 새 비밀번호 생성·저장 → 완료 (231s)
+  ② Fly→DB    devquest | PostgreSQL 17.11 (…pgdg24.04+2) | ssl=t
+               sslmode=disable → FATAL: no pg_hba.conf entry … no encryption       (평문 거부)
+               dbname=postgres → FATAL: no pg_hba.conf entry … database "postgres"  (다른 DB 거부)
+  ③ 재실행    sudo bash /var/lib/cloud/instance/scripts/part-001 → 포맷 안 함 · SSM 비밀번호 사용 · 완료 · pg_hba 표식 1개(중복 없음)
+  ④ 재부착    인스턴스 terminate → 새 인스턴스에 같은 볼륨 → 기존 파일시스템 · 기존 클러스터 재부착 (설정 = 볼륨) · SSM 비밀번호 사용 · 완료
+               canary 행 'rehearsal-1' 보존 · pg_lsclusters 17 main online · /etc/postgresql/17/main -> /var/lib/postgresql/17/etc-main
+               Fly 에서 devquest 로그인 성공(canary 는 postgres 소유라 permission denied — 정상)
+  ```
+- `[해결]` F-3 멱등: role·DB 는 `pg_roles`/`pg_database` 를 직접 보고 `\gexec` 로 생성, 비밀번호는 매번 SSM 값으로 `ALTER ROLE`(SSM = 원천), pg_hba 는 표식 줄로 중복 방지, 수동 재실행 경로를 스크립트 머리말에. F-4 `PATH=/snap/bin` + get-parameter stderr 를 로그로. F-6 `PutParameter` 를 `password` 하나로. F-7 `AllowedIPs` 형식 검증 · `--force-confold` · `disable_api_termination`. F-5 튜닝은 근거(실측) 없이 숫자를 정하지 않는다 → 7번. F-9 TASKS 정렬.

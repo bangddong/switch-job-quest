@@ -201,7 +201,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 단계 | 내용 | 비용 | 산출 |
 |:-:|---|---|---|
 | **5-0** | ✅ **실측 (2026-10-19) — 착수 가능.** Fly(nrt)→EC2 터널 Postgres 접속 성공(인바운드 0), RTT ≈ 29.7ms, 연결 0.26s. 🔴 **Java(musl)는 `._peer.internal` 을 못 푼다**(A 질의 NXDOMAIN) → `DB_HOST` = 피어 **IPv6 리터럴**(BE 변경 0). WireGuard `MTU = 1420` 명시(기본 8921). **Neon = Postgres 17**(콘솔 프로젝트 설정, 사용자 확인 10-20) → EC2 = 17. Neon 리전 = `ap-southeast-1`(싱가포르) | ≈ $0.01 | 일지 |
-| **5-A** | **IaC (1-network) — 진행 2026-10-20: `db.tf` + `db-userdata.sh.tftpl`, `db_enabled` 기본 false(머지해도 생성 0 — 1-network 는 머지 = 자동 apply). 켜는 것은 별도 PR**: EC2·데이터 볼륨·SG·인스턴스 프로파일(`ssm:Get/PutParameter` 경로 한정)·`user_data`(Postgres·WireGuard 설치, 비밀 없음 B5-18④). 데이터 볼륨 AZ = 노드와 같은 2a(cross-AZ 회피, B5-7) | $0 | PR. plan 리뷰 |
+| **5-A** | **IaC (1-network) — 진행 2026-10-20 (일회용 인스턴스 리허설 통과: 첫 부팅·Fly TLS 접속·재실행 멱등·**볼륨 재부착 복구**): `db.tf` + `db-userdata.sh.tftpl`, `db_enabled` 기본 false(머지해도 생성 0 — 1-network 는 머지 = 자동 apply). 켜는 것은 별도 PR**: EC2·데이터 볼륨·SG·인스턴스 프로파일(`ssm:Get/PutParameter` 경로 한정)·`user_data`(Postgres·WireGuard 설치, 비밀 없음 B5-18④). 데이터 볼륨 AZ = 노드와 같은 2a(cross-AZ 회피, B5-7) | $0 | PR. plan 리뷰 |
 | **5-B** | **EKS 배선**: `db_mode=external`(기본값은 유지 — verify 마커 B5-15), ESO **ParameterStore** SecretStore + ExternalSecret, IRSA 정책 확장(B5-16), ESO·gitops kustomization 정리(B5-14·U-18) | $0 | PR |
 | **5-C** | **운영 문서·안전장치**: SOP §8b destroy 게이트를 태그 필터로(B5-13), PERSISTENT-RESOURCES 행·증가 상한(N-19·B5-20), 비용 모델 재산정(B5-25), D-004·D-016·`secrets.tf` 원칙 개정(B5-22·B5-23, `design-change-procedure`) | $0 | PR |
 | 🔴 apply | **6번 직전에 따로 승인** — 상시 과금 시작(월 ≈ $13 + 데이터 볼륨) | 과금 | — |
@@ -217,10 +217,10 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B5-5 | 🟡 | EKS 가 퍼블릭 주소로 붙으면 `vpc_cidr` 규칙 밖 | **5-B** — EKS 는 사설 IP/사설 DNS |
 | B5-6 | 🟡 | rds.tf 의 *"SG ID 참조"* 선례와 반대 | 위 결정표 근거 |
 | B5-7 | 🟡 | 데이터 볼륨 AZ 출처, 1-network→0-bootstrap 의존·병렬 apply | **5-A** — 1-network 자체 `azs[0]`(2a) |
-| B5-8 | 🟡 | 커넥션 최악 70+, 1 GiB 메모리, DB 재부팅 = Fly·EKS 동시 장애, 패치 창 미정 | **5-A**(`max_connections`·메모리 튜닝) + **7번**(부하) + **6번**(패치 절차) |
+| B5-8 | 🟡 | 커넥션 최악 70+, 1 GiB 메모리, DB 재부팅 = Fly·EKS 동시 장애, 패치 창 미정 | 튜닝 = **7번**(실제 연결 수·메모리 실측 뒤 — 근거 없이 숫자를 정하지 않는다. 기본 `max_connections=100` 으로 시작. 스크립트가 멱등이라 `conf.d` 수정 후 재실행으로 반영 가능 — QA 5-A F-5) + **6번**(패치 절차) |
 | B5-9 | 🟡 | daily-api 스키마 분리 미구현(같은 DB·계정), EKS 에만 뜸 | 변경 없음 — 기록만 |
 | B5-10 | 🟡 | Fly 도쿄 ↔ DB 서울 RTT, `minimum-idle: 0` | ✅ 5-0: RTT 29.7ms, 연결 0.26s. 현재 Neon 은 **싱가포르** → 도쿄↔싱가포르보다 짧을 가능성 🟡(비교 실측 없음) |
-| B5-11 | 🟡 | Postgres 메이저 미정, Neon 버전 미확인(TASK-9) | ✅ Neon **17** → EC2 17 (Ubuntu 24.04 기본은 16 — 5-A 는 PGDG 또는 AL2023 `postgresql17`) |
+| B5-11 | 🟡 | Postgres 메이저 미정, Neon 버전 미확인(TASK-9 — 10-20 종결) | ✅ Neon **17** → EC2 17 (Ubuntu 24.04 기본은 16 — 5-A 는 PGDG 또는 AL2023 `postgresql17`) |
 | B5-12 | 🟡 | Fly 시크릿 write-only → 전환 시 Neon 자격증명 소실 = Q-2 복귀 경로 소멸 | **7번** — 전환 **전** Neon 자격증명을 SSM 에 보관 |
 | B5-13 | 🔴 | SOP §8b *"running 인스턴스 0"* 게이트가 상시 DB 로 영구 실패 | **5-C** |
 | B5-14 | 🔴 | external 모드에서 ESO `postgres-tls` 원천 부재 → ArgoCD wave 1 영구 정지 | **5-B** |

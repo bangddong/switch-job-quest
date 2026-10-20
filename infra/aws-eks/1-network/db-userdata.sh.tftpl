@@ -1,104 +1,132 @@
 #!/bin/bash
-# prod DB 첫 부팅 스크립트 (📌D-016 순서표 5-A). templatefile 로 렌더링된다 — bash 변수는 $X 또는 $${X}.
+# prod DB 초기화 스크립트 (📌D-016 순서표 5-A). templatefile 로 렌더링된다 — bash 변수는 $X 또는 $${X}.
 #
 # 🔴 이 파일에 비밀을 넣지 마라. 렌더 결과가 state 와 인스턴스 속성에 남고 PR plan 역할이 읽는다.
 #    비밀 2개는 SSM SecureString 에서 런타임에 받는다:
 #      ${ssm_prefix}/wireguard-conf  ← 운영자가 미리 넣는다 (`fly wireguard create` 산출물, 개인키 포함)
-#      ${ssm_prefix}/password        ← 이 스크립트가 처음 한 번 만든다 (덮어쓰기 금지)
+#      ${ssm_prefix}/password        ← 이 스크립트가 처음 한 번 만든다 (덮어쓰기 금지). 이후 **원천**이다
 #
-# 실행 로그: /var/log/cloud-init-output.log (SSM Session Manager 로 접속해 확인). 비밀은 xtrace 를 끄고 다룬다.
+# 🔁 **멱등이다 — 몇 번 다시 돌려도 같은 상태가 된다** (QA F-3). user_data 는 첫 부팅에만 돌고
+#    `ignore_changes = [user_data]`·`prevent_destroy` 라 IaC 로 다시 돌릴 수 없으므로, 중간에 죽으면
+#    SSM 세션에서 **같은 스크립트를 손으로 다시 돌린다**:
+#        aws ssm start-session --target <db_instance_id>
+#        sudo bash /var/lib/cloud/instance/scripts/part-001
+#    로그: /var/log/cloud-init-output.log (첫 부팅) — 비밀은 출력하지 않는다(xtrace 를 켜지 않는다).
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+# snap 으로 설치한 aws 는 /snap/bin 에 있고 cloud-init 의 PATH 엔 없을 수 있다(QA F-4).
+export PATH="$PATH:/snap/bin"
 REGION="${region}"
 PREFIX="${ssm_prefix}"
 PGV="${pg_major}"
 VPC_CIDR="${vpc_cidr}"
 DEV="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${data_vol}"
+APT_OPTS=(-y -o Dpkg::Options::=--force-confold)
 log() { echo "[db-init] $*"; }
 
 # ── 1. 데이터 볼륨 — 붙을 때까지 기다린 뒤, 비어 있을 때만 포맷 ───────────────
 # aws_volume_attachment 는 인스턴스가 뜬 **뒤에** 붙는다 → 대기 필수.
-for i in $(seq 1 120); do [ -e "$DEV" ] && break; sleep 5; done
+for _ in $(seq 1 120); do [ -e "$DEV" ] && break; sleep 5; done
 [ -e "$DEV" ] || { log "데이터 볼륨이 10분 안에 안 붙었다: $DEV"; exit 1; }
 if ! blkid "$DEV" >/dev/null 2>&1; then
   log "빈 볼륨 — ext4 포맷"
   mkfs.ext4 -L pgdata "$DEV"
 else
-  log "기존 파일시스템 — 포맷하지 않는다 (인스턴스 교체 후 재부착)"
+  log "기존 파일시스템 — 포맷하지 않는다"
 fi
 mkdir -p /var/lib/postgresql
 grep -q 'LABEL=pgdata' /etc/fstab || echo 'LABEL=pgdata /var/lib/postgresql ext4 defaults,nofail 0 2' >> /etc/fstab
-mount -a
+mountpoint -q /var/lib/postgresql || mount /var/lib/postgresql
 
 # ── 2. 패키지 — WireGuard · AWS CLI · PGDG Postgres ───────────────────────
 apt-get update -y
-apt-get install -y wireguard-tools curl ca-certificates postgresql-common ssl-cert
-snap install aws-cli --classic
-/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-# 패키지 설치가 클러스터를 자동 생성하지 않게 — 기존 데이터 볼륨이면 아래에서 "통합" 해야 한다.
+apt-get install "$${APT_OPTS[@]}" wireguard-tools curl ca-certificates postgresql-common ssl-cert
+command -v aws >/dev/null || snap install aws-cli --classic
+[ -f /etc/apt/sources.list.d/pgdg.sources ] || [ -f /etc/apt/sources.list.d/pgdg.list ] \
+  || /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+# 패키지 설치가 클러스터를 자동 생성하지 않게 — 아래 4단계가 직접 판정한다.
 sed -i 's/^#\?create_main_cluster.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf
-apt-get install -y "postgresql-$PGV"
+apt-get install "$${APT_OPTS[@]}" "postgresql-$PGV"
 
 # ── 3. WireGuard — Fly 6PN 피어 ───────────────────────────────────────────
-set +x
-for i in $(seq 1 360); do
-  WG=$(aws ssm get-parameter --region "$REGION" --name "$PREFIX/wireguard-conf" --with-decryption \
-         --query Parameter.Value --output text 2>/dev/null) && break
-  [ "$i" = 1 ] && log "$PREFIX/wireguard-conf 대기 중 (운영자가 넣을 때까지, 최대 30분)"
-  sleep 5
-done
-[ -n "$${WG:-}" ] || { log "wireguard-conf 없음 — 중단"; exit 1; }
-umask 077
-# DNS 줄 제거(resolvconf 미설치 — 앱은 IPv6 리터럴로 붙는다, 5-0 실측).
-# MTU 1420 명시 — wg-quick 은 ENI 점보 MTU(9001)에서 8921 을 잡는데 인터넷 구간은 1500 이하다(5-0).
-printf '%s\n' "$WG" | sed '/^DNS/d' | sed '/^\[Interface\]/a MTU = 1420' > /etc/wireguard/fly0.conf
-unset WG
+if [ ! -s /etc/wireguard/fly0.conf ]; then
+  WG=""
+  for i in $(seq 1 360); do
+    # stderr 는 로그로 — 권한·PATH 문제를 "없음" 으로 오해하지 않게(F-4). 값은 stdout 으로만.
+    WG=$(aws ssm get-parameter --region "$REGION" --name "$PREFIX/wireguard-conf" --with-decryption \
+           --query Parameter.Value --output text) && break
+    [ "$i" = 1 ] && log "$PREFIX/wireguard-conf 대기 중 (운영자가 넣을 때까지, 최대 30분)"
+    sleep 5
+  done
+  [ -n "$WG" ] || { log "wireguard-conf 를 못 받았다 — 중단"; exit 1; }
+  # DNS 줄 제거(앱은 IPv6 리터럴로 붙는다, 5-0). MTU 1420 명시 — wg-quick 은 ENI 점보(9001)에서 8921 을 잡는다(5-0).
+  # umask 는 서브셸 안에서만 — 밖으로 새면 이후 만드는 Postgres 설정이 0600 이 되어 기동 실패(QA F-1).
+  ( umask 077; printf '%s\n' "$WG" | sed '/^DNS/d' | sed '/^\[Interface\]/a MTU = 1420' > /etc/wireguard/fly0.conf )
+  unset WG
+fi
 ORG6=$(awk -F' *= *' '/^AllowedIPs/{print $2}' /etc/wireguard/fly0.conf)   # 예: fdaa:xx:xxxx::/48
+[[ "$ORG6" =~ ^fdaa:[0-9a-f:]+/[0-9]+$ ]] || { log "AllowedIPs 형식이 예상과 다르다: '$ORG6'"; exit 1; }
 systemctl enable --now wg-quick@fly0
 log "WireGuard up — Fly 조직 대역 $ORG6"
 
-# ── 4. Postgres 클러스터 — 새로 만들거나, 기존 데이터를 통합 ─────────────────
+# ── 4. Postgres 클러스터 — **설정도 데이터 볼륨에 둔다** ───────────────────────
+# Ubuntu(postgresql-common)는 설정을 /etc/postgresql/<ver>/main(= **루트 볼륨**)에, 데이터를
+# /var/lib/postgresql(= 데이터 볼륨)에 나눠 둔다. 인스턴스를 교체하면 설정만 사라지고, `pg_createcluster -d`
+# 로 "통합" 하려 하면 실패한다 — 리허설 실측(2026-10-20):
+#   Error: move_conffile: required configuration file /var/lib/postgresql/17/main/postgresql.conf does not exist
+# ⇒ 설정 디렉터리를 데이터 볼륨(`$ETCV`)으로 옮기고 /etc 에는 심볼릭 링크만 둔다. 볼륨이 곧 클러스터 전체다.
 DATA="/var/lib/postgresql/$PGV/main"
+ETCV="/var/lib/postgresql/$PGV/etc-main"
+CONF="/etc/postgresql/$PGV/main"
 chown postgres:postgres /var/lib/postgresql
-if [ -f "$DATA/PG_VERSION" ]; then
-  log "기존 클러스터 통합 ($DATA)"
-  pg_createcluster "$PGV" main -d "$DATA" || true
-  NEW=0
+mkdir -p "/etc/postgresql/$PGV"
+if [ -d "$ETCV" ]; then
+  # 재부착(또는 재실행) — 볼륨의 설정을 그대로 쓴다.
+  [ -L "$CONF" ] || { rm -rf "$CONF"; ln -s "$ETCV" "$CONF"; log "기존 클러스터 재부착 (설정 = 볼륨)"; }
+elif [ -f "$DATA/PG_VERSION" ]; then
+  log "데이터는 있는데 볼륨에 설정이 없다($ETCV) — 자동 복구 불가, 중단"; exit 1
 else
   pg_createcluster "$PGV" main
-  NEW=1
+  mv "$CONF" "$ETCV"
+  ln -s "$ETCV" "$CONF"
+  log "새 클러스터 생성 (설정 → 볼륨)"
 fi
-CONF="/etc/postgresql/$PGV/main"
 cat > "$CONF/conf.d/10-devquest.conf" <<CONFEOF
 listen_addresses = '*'
 ssl = on
 password_encryption = scram-sha-256
 CONFEOF
-# 접근은 SG(VPC 만) + 터널 + 여기 pg_hba 세 겹. hostssl = 평문 접속 거부.
-cat >> "$CONF/pg_hba.conf" <<HBAEOF
+# 접근은 SG(VPC 만) + 터널 + pg_hba 세 겹. hostssl = 평문 접속 거부. 표식 줄로 중복 추가 방지(F-3).
+if ! grep -q '^# devquest-managed' "$CONF/pg_hba.conf"; then
+  cat >> "$CONF/pg_hba.conf" <<HBAEOF
+# devquest-managed (db-userdata.sh.tftpl)
 hostssl devquest devquest $VPC_CIDR scram-sha-256
 hostssl devquest devquest $ORG6 scram-sha-256
 HBAEOF
+fi
 systemctl enable postgresql
 systemctl restart "postgresql@$PGV-main"
+systemctl is-active --quiet "postgresql@$PGV-main" || { log "postgres 기동 실패"; exit 1; }
 
-# ── 5. 비밀번호 — SSM 에 있으면 쓰고, 없으면 만들어 넣는다(덮어쓰기 금지) ──────────
-set +x
+# ── 5. 비밀번호 — SSM 이 원천. 있으면 쓰고, 없을 때만 만든다(덮어쓰기 금지) ──────────
 if PW=$(aws ssm get-parameter --region "$REGION" --name "$PREFIX/password" --with-decryption \
           --query Parameter.Value --output text 2>/dev/null); then
-  log "기존 비밀번호 사용"
+  log "SSM 비밀번호 사용"
 else
   PW=$(openssl rand -hex 24)
-  # --overwrite 를 주지 않는다 — 동시에 두 번 돌아도 먼저 쓴 쪽이 이긴다.
+  # --overwrite 없음 — 동시에 두 번 돌아도 먼저 쓴 쪽이 이기고 뒤쪽은 실패로 멈춘다.
   aws ssm put-parameter --region "$REGION" --name "$PREFIX/password" --type SecureString --value "$PW" >/dev/null
   log "새 비밀번호 생성·저장"
 fi
-if [ "$NEW" = 1 ]; then
-  sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" <<'SQLEOF'
-CREATE ROLE devquest LOGIN PASSWORD :'pw';
-CREATE DATABASE devquest OWNER devquest;
+
+# role·DB 는 **존재 여부를 직접 보고** 맞춘다(F-3 — 데이터 유무로 판정하면 중간 실패 뒤 영영 안 생긴다).
+# 비밀번호는 매번 SSM 값으로 맞춘다 → 어느 시점에 다시 돌려도 DB 와 SSM 이 일치한다.
+sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" <<'SQLEOF'
+SELECT format('CREATE ROLE devquest LOGIN PASSWORD %L', :'pw')
+ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'devquest') \gexec
+ALTER ROLE devquest LOGIN PASSWORD :'pw';
+SELECT 'CREATE DATABASE devquest OWNER devquest'
+ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'devquest') \gexec
 SQLEOF
-  log "role·database devquest 생성"
-fi
 unset PW
 log "완료"
