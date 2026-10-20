@@ -98,11 +98,11 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 1b | **Flyway — EKS 쪽 마이그레이션 Job** (🟡 2026-10-20 재판정: prod(external) 모드는 5-B 가 EKS migrate 를 끄고 Fly `release_command` 에 맡긴다 → 1b 는 in-cluster 학습 모드에만 남는다. 8번 착수 때 폐기 여부 결정) (`stage/`, 클러스터 필요): Sync wave(시크릿 뒤·core-api 앞) 훅, Job·Deployment 이미지 태그 단일 출처, 손 경로·복구 절차 갱신 | 「1번 Blindspot」 B-3·B-6·B-7·B-12·B-13 | 1a · 2 · 5 |
 | 2 | ✅ **이미지 공급망** — main push 빌드, `latest` 금지, prod 태그 보존. 완료 2026-10-19 (#461, main 첫 빌드 3/3 · IMMUTABLE · 옛 `latest` 태그 제거): PR 은 빌드만(무자격증명) · main push 가 세 서비스 푸시 · 레포 IMMUTABLE · 태그 존재 시 건너뜀. 아래 「2번에서 안 하는 것」 | N-10 · U-2 · L-44 | 0 |
 | 3 | ✅ **CI 역할** — main 전용 역할(0-bootstrap) + 옛 역할 좁힌 읽기 전용 + access entry 2개(로컬 admin + CI). 가드 재정의는 8번으로(B3-13). 진행: 아래 「3번」 PR A→B→C — A ✅ #464(역할·시크릿) · B ✅ #465(전환·축소, 임시 역할 plan 실측) · C ✅ #466 access entry 2개, 좁힌 PR 역할 첫 CI plan 통과(2026-10-19) | N-1 · N-2 · N-18 (N-3 → 8) | 0 |
-| 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
+| 4 | ✅ **리퍼·마커 정책** — 2026-10-20 **4a**: 로컬 리퍼·리마인더·session-status 가 *이 마커가 만든 클러스터* 만 자기 것으로 본다(createdAt 소유 판정). CI 클러스터의 dead man's switch 는 **8번으로 이관**(Fly 복귀 필요 — B4-1). 아래 「4번」 | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** | N-9 · U-3 · N-15 | 5 |
 | 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
-| 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크 | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
+| 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크, **CI 클러스터 dead man's switch**(off 경로 반복 — 4번에서 이관, 「4번」 B4 표) | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
 
@@ -179,6 +179,55 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B3-15 | 🟡 | D-016 영향 목록에 `iam-github-oidc.tf`·`infra-deploy.yml`·`ecr-push.yml` 없음. access.tf·oidc 를 단언하는 verify 마커 0건 | **C** |
 | B3-16 | 🟡 | 튜토리얼 리소스 개수(access entry·assoc 2→4, 합계 29→31 등) | **C** |
 | B3-17 | ⚪ | entry 를 `for_each` 로 바꾸면 state 주소 변경(세션 중 apply 면 순간 kubectl 거부). CI 역할 ARN 이 존재해야 entry 생성 가능할 수 있음 | **C** — 별도 리소스로 추가(주소 유지), A 머지 후 |
+
+## 4번 — 리퍼·마커 정책 (2026-10-20)
+
+### 결정 (사용자 10-20: *"4a 지금 + CI 리퍼는 8번에"*)
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 범위 | **4a = 로컬 도구가 CI 클러스터를 절대 destroy·destroy 안내하지 않게** · CI 클러스터 dead man's switch 는 **8번** | 창 중 ALB = prod 입구. 회수는 *Fly 복귀 + destroy* 여야 하고 그 경로는 8번이 만든다(B4-1). destroy 만 하는 CI 리퍼를 지금 만들면 오작동 = prod 장애 |
+| 판정 방식 | **소유 판정** — 클러스터 `createdAt` ∈ [마커 `applied_at` −30s, +1h] 이면 mine | 마커 정규식을 조이지 않는다(L-22). 마커가 아니라 **destroy 대상**을 판정하면 N-4b(1-network apply)·B4-6(따옴표 오탐)·B4-7(리마인더)·B4-8(status) 이 한 규칙으로 닫힌다. 태그 자리가 없어(B4-4) 태그 방식 기각 |
+| 실패 방향 | foreign·unknown → destroy 안 함 | mine 오판 = prod 장애, 반대 = 학습 클러스터 과금(8번 off cron 이 2차 백스톱) |
+| applied_at | 마커 훅이 **첫 apply 시각 보존**(하트비트 TTL 안일 때만) | 두 번째 apply 가 덮어쓰면 자기 클러스터가 foreign(조용한 감시 소실). 옛 세션 마커를 이어받으면 같은 결말 → 하트비트로 세션 경계 판정 |
+
+변경: `.claude/scripts/lib/eks-cluster-owner.sh`(신규) · `eks-reaper.sh` · `eks-session-marker.sh` · `eks-heartbeat-reminder.sh` ·
+`session-status.sh`(마커 없어도 클러스터 조회) · `tests/reaper-alb-test.sh` ⑧~⑮. 하네스 동결 해제 근거 = N-20(D-016 이 막힌 증거 N-4).
+
+> 🔑 **부수 발견** — 기존 반증 케이스 ⑦ 은 **처음부터 공허했다.** 고장 낸 사본을 `mktemp` 에 두면 리퍼가 자기 위치에서
+> ROOT 를 계산해 **다른 마커 디렉터리**를 보고 즉시 종료한다 → *"delete 가 사라졌다"* 가 코드를 지워서가 아니라
+> 리퍼가 안 돌아서 참이었다. 새 반증 ⑬ 을 반대 방향(destroy 가 **생겨야** 함)으로 쓰다 드러났다. 사본을 원본 옆에 두도록 고쳤다.
+> CLAUDE.md 「검사가 주장보다 헐겁다」 의 사례 그대로다 — *부재* 를 단언하는 반증은 아무것도 안 돌아도 통과한다.
+
+### 4번 Blindspot (2026-10-20, Explore 읽기 전용) — 목적지
+
+| ID | 확도 | 내용 | 목적지 |
+|---|:-:|---|---|
+| B4-1 | 🔴 | 창 중 destroy = Fly 복귀 없는 prod 장애. Cloudflare 시크릿 0건 | **8번** — CI dead man's switch 는 off 경로(Fly 복귀 포함)를 반복 실행하는 형태 |
+| B4-2 | 🔴 | ArgoCD selfHeal 이 Ingress 삭제를 되돌린다(SOP §8 ⓪ Application 선삭제를 리퍼가 건너뜀) | **8번** off 경로 — prod Ingress 가 ArgoCD 앱에 들어가는 순간 필수 |
+| B4-3 | 🔴 | `kubectl get ingress … 2>/dev/null \| grep -c .` 가 Forbidden 을 0건으로 오판 → ALB 고아 | **8번**(CI off 에서 rc 구분). 로컬 리퍼 동일 결함은 mine(학습) 클러스터 한정 — 같은 때 함께 |
+| B4-4 | 🔴 | EKS 클러스터에 태그 자리 없음 | ✅ 해당 없음 — createdAt 판정이라 태그 불필요 |
+| B4-5 | 🔴 | 임대(lease) 값은 아직 없는 on 잡이 써야 한다 | **8번** — on 잡이 쓰고 off/dead man's switch 가 읽는 계약을 함께 정의 |
+| B4-6 | 🔴 | 오탐 마커 허용 근거(자가청소)가 창 중 무너짐 | ✅ 이번 PR(소유 판정) |
+| B4-7 | 🔴 | 리마인더가 prod destroy 를 안내 | ✅ 이번 PR |
+| B4-8 | 🔴 | session-status 가 마커 없으면 "미가동" 단정 | ✅ 이번 PR |
+| B4-9 | 🔴 | CI 로그 퍼블릭 — ARN·리소스 ID 의 계정 ID 마스킹 필요 | **8번** — `infra-deploy.yml` 마스킹 단계 복제 |
+| B4-10 | 🟡 | CI 2-cluster destroy 전제: tofu 1.8.5(CI) vs 1.12.4(로컬) state 읽기 호환 미실측 · 무인자 destroy 의 기본값(`db_mode` 등) · `karpenter-cleanup.tf` local-exec 러너 의존 | **8번** — on 과 같은 `-var` 출처, 버전 통일 실측 |
+| B4-11 | 🟡 | off·dead man's switch·on 의 state 락 경합, `-lock-timeout`·force-unlock 정책 없음 | **8번**(N-13 공용 concurrency 와 함께) |
+| B4-12 | 🟡 | 마커 훅의 레이어 판별(2-cluster 일 때만)은 명령 문자열로 불가 | ❌ 기각 — 소유 판정으로 대체 |
+| B4-13 | 🔴 | 리퍼 은퇴·이름 변경 시 D-002·D-015·D-016 영향 경로와 폐기 계획서 verify 마커(`EKS_REAPER_TTL:-7200`, `touch .*heartbeat`)가 깨진다 | 해당 없음(리퍼 유지). **은퇴할 때 주의** — Q-1 완료 후 로컬 리퍼 은퇴를 검토하는 사람에게 |
+| B4-14 | 🔴 | D-016 영향 목록에 마커·리마인더·status·테스트 누락 | ✅ 이번 PR |
+| B4-15 | 🟡 | 리퍼 테스트가 어떤 워크플로에서도 안 돈다(ruby·BSD date 의존) | **미룸** — CI 편입은 가드 스위트 확장(동결 규칙). 이식성(ruby 제거) 선행. 8번에서 CI 리퍼 테스트를 만들 때 함께 판단 |
+| B4-16 | 🟡 | "리퍼가 지운다" 서술 다수 | ✅ SOP 안전장치·튜토리얼 1-network·ALB 절 갱신. `PERSISTENT-RESOURCES.md` *"잊으면 리퍼가 지움"* 은 mine 클러스터에 여전히 참이라 유지 |
+| B4-17 | 🟡 | `infra/aws-eks/**` 문서만 바꿔도 머지 시 1-network apply — 6번(`db_enabled=true`) 이후엔 prod DB 레이어 apply | **6번** — 켜기 전에 paths 필터를 `*.tf`/`*.tftpl` 로 좁힐지 판단 |
+| B4-18 | 🟡 | `guard-local-layers` 가 새 워크플로를 못 본다 | **8번**(N-3, 이미 이관) |
+| B4-20 | 🟡 | 생존 판정 OR 에 EC2 를 넣으면 상시 prod-db 로 영구 destroy 루프 | 유지 — 넣지 않았다. 넣을 일이 생기면 `Role=prod-db` 제외(SOP §8b 선례) |
+| B4-21 | 🟡 | off 와 dead man's switch 가 둘 다 GitHub cron — 같은 장애에 함께 걸림. AWS 쪽 독립 백스톱 0 | **8번** — 설계 시 독립 경로 검토(Budgets·Anomaly 는 일 단위라 느리다) |
+| B4-22 | 🟡 | 로컬 리퍼는 맥이 깨어 있을 때만, 원격 세션 마커는 못 본다 | **8번** 근거(CI 쪽에 둔다) |
+| B4-23 | ⚪ | 스케줄 워크플로 실패 메일 수신 전제 미확인 | **8번** — 첫 실패 주입 때 실측 |
+| B4-24 | 🔴 | 마커가 클러스터를 식별하지 못한다 | ✅ 이번 PR — createdAt 비교가 그 식별 |
+
+B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이라 목적지 없음.
 
 ## 5번 — DB 층 (2026-10-19 계획)
 

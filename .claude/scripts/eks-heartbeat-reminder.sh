@@ -35,6 +35,25 @@ if [ $((NOW - LASTCHK)) -ge 300 ]; then
     rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
     exit 0
   fi
+  # 🔴 소유 판정(📌D-016 4번) — 리퍼와 **같은 함수**를 쓴다(판정 기준이 갈리면 둘 중 하나가 거짓말한다).
+  #    이 세션이 만든 클러스터가 아니면(CI 창 = prod) 로컬은 손대지 않는다: 마커를 풀고, destroy 를
+  #    권하지 않는다. 종전엔 여기서 "오늘 끝이면 → tofu destroy" 를 찍어 **prod 를 끄라고 안내**했다(B4-7).
+  if [ -n "$CLUSTERS" ]; then
+    APPLIED0=$(grep '^applied_at=' "$MARKER" 2>/dev/null | cut -d= -f2)
+    if . "$ROOT/.claude/scripts/lib/eks-cluster-owner.sh" 2>/dev/null; then
+      OWN=$(eks_clusters_owner "$CLUSTERS" "$APPLIED0" "$REGION")
+    else
+      OWN="unknown 소유 판정 라이브러리 없음"
+    fi
+    case "$OWN" in
+      foreign*)
+        rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
+        echo "ℹ️  EKS[$CLUSTERS] 는 이 세션이 만든 클러스터가 아닙니다(CI 창·다른 기기) — 로컬 마커 해제, 리퍼 감시 대상 아님." >&2
+        echo "   끄지 마세요(창 중이면 prod). 끄기는 off 워크플로 몫입니다(Fly 복귀 포함 — 순서표 8번)." >&2
+        exit 0 ;;
+      unknown*) printf ' · ⚠️소유판정불가' >> "$DIR/state.cache" 2>/dev/null ;;
+    esac
+  fi
 fi
 
 CACHE=$(cat "$DIR/state.cache" 2>/dev/null || echo "")
@@ -44,6 +63,11 @@ APPLIED=$(grep '^applied_at=' "$MARKER" 2>/dev/null | cut -d= -f2)
 MINS=0; [ -n "$APPLIED" ] && MINS=$(( (NOW - APPLIED) / 60 ))
 
 echo "⚠️  과금 리소스가 살아있습니다 ($CACHE · ~${MINS}분 · 과금 중)." >&2
+case "$CACHE" in *소유판정불가*)
+  echo "   🔴 이 세션이 만든 클러스터인지 판정하지 못했습니다 — destroy 전에 확인:" >&2
+  echo "      aws eks describe-cluster --name <이름> --query cluster.createdAt  vs  .claude/eks-session/active 의 applied_at_h" >&2
+  echo "      리퍼도 판정 불가면 destroy 하지 않습니다." >&2 ;;
+esac
 echo "   오늘 끝이면 → cd infra/aws-eks/2-cluster && tofu destroy" >&2
 echo "   destroy 후 고아 전수 검증 필수(RDS 스냅샷·시크릿 포함) → docs/eks-session-sop.md §9" >&2
 echo "   방치 시 로컬 리퍼가 하트비트 2h stale에서 자동 destroy합니다." >&2

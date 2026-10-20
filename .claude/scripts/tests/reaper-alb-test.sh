@@ -46,6 +46,9 @@ echo "aws $*" >> "$CALLS"
 for a in "$@"; do
   case "$a" in
     list-clusters)          echo "devquest-eks"; exit 0 ;;
+    describe-cluster)
+      [ "${MOCK_DESCRIBE_RC:-0}" = "0" ] || exit "$MOCK_DESCRIBE_RC"
+      echo "${MOCK_CREATED_AT}"; exit 0 ;;
     describe-db-instances)  exit 0 ;;
     update-kubeconfig)      exit "${MOCK_KUBECONFIG_RC:-0}" ;;
     describe-volumes)       exit 0 ;;
@@ -67,6 +70,10 @@ EOF
   chmod +x "$MOCK/kubectl" "$MOCK/aws" "$MOCK/tofu"
 }
 
+# epoch → aws CLI 와 같은 ISO8601(UTC, 소수 6자리). BSD(`-r`)·GNU(`-d @`) 둘 다.
+iso_at() { date -u -r "$1" '+%Y-%m-%dT%H:%M:%S.123000+00:00' 2>/dev/null || date -u -d "@$1" '+%Y-%m-%dT%H:%M:%S.123000+00:00'; }
+APPLIED_AT=$(( $(date +%s) - 10800 ))
+
 # 마커·하트비트를 "사람이 사라진" 상태로 세팅하고 리퍼를 돌린다.
 run_reaper() {
   SESS="$ROOT/.claude/eks-session"
@@ -75,7 +82,13 @@ run_reaper() {
   BACKUP=$(mktemp -d); cp -p "$SESS"/* "$BACKUP/" 2>/dev/null || true
 
   CDIR="$MOCK/cluster"; mkdir -p "$CDIR"
-  printf 'cluster_dir=%s\napplied_at_h=2026-09-11 10:00\n' "$CDIR" > "$SESS/active"
+  # applied_at = 3시간 전. 클러스터 createdAt 기본값 = 그 5분 뒤(= 이 마커의 apply 가 만든 클러스터, mine).
+  # 소유 판정(📌D-016 4번)이 생긴 뒤로 applied_at·createdAt 이 없으면 리퍼는 destroy 하지 않는다.
+  if [ "${MOCK_NO_APPLIED_AT:-0}" = "1" ]; then
+    printf 'cluster_dir=%s\napplied_at_h=2026-09-11 10:00\n' "$CDIR" > "$SESS/active"
+  else
+    printf 'cluster_dir=%s\napplied_at=%s\napplied_at_h=2026-09-11 10:00\n' "$CDIR" "$APPLIED_AT" > "$SESS/active"
+  fi
   # 하트비트를 TTL 밖으로 (3시간 전)
   touch -t "$(date -v-3H '+%Y%m%d%H%M' 2>/dev/null || date -d '3 hours ago' '+%Y%m%d%H%M')" "$SESS/heartbeat"
   : > "$SESS/reaper.log"
@@ -86,6 +99,8 @@ run_reaper() {
     MOCK_KUBECONFIG_RC="${MOCK_KUBECONFIG_RC:-0}" \
     MOCK_DESTROY_RC="${MOCK_DESTROY_RC:-0}" \
     MOCK_ALB_LEFT="${MOCK_ALB_LEFT:-0}" \
+    MOCK_DESCRIBE_RC="${MOCK_DESCRIBE_RC:-0}" \
+    MOCK_CREATED_AT="${MOCK_CREATED_AT:-$(iso_at $((APPLIED_AT + 300)))}" \
     bash "$1" >/dev/null 2>&1
   RC=$?
   LOGOUT=$(cat "$SESS/reaper.log" 2>/dev/null)
@@ -160,7 +175,11 @@ echo "   (무엇의 실패를 잡나: 🔴 이 테스트가 무엇이든 통과�
 #   직전이라 **여전히 destroy 보다 앞**이었다. 케이스 ①은 그걸 정상으로 판정한다.
 #   즉 그 반증은 **아무것도 반증하지 못했다.** 진짜 반증은 호출을 **지우는** 것이다.
 #   → 반증도 잘못 만들 수 있다. "고장 냈다"고 믿는 것과 실제로 고장 난 것은 다르다.
-BROKEN="$(mktemp).sh"
+# 🔴 고장 낸 사본은 **원본과 같은 디렉터리**에 둔다 (2026-10-20 발견). 리퍼는 자기 위치에서 ROOT 를
+#   계산하므로(`$SCRIPT_DIR/../..`), mktemp 사본은 **다른 마커 디렉터리**를 보고 "마커 없음" 으로 즉시
+#   종료한다 — 그러면 "delete 가 사라졌다" 는 판정이 **코드를 지워서가 아니라 리퍼가 아예 안 돌아서**
+#   참이 된다. 이 반증은 처음부터 공허했다(⑬ 을 만들다 반대 방향 단언으로 드러남).
+BROKEN="$ROOT/.claude/scripts/.reaper-broken-$$.sh"
 ruby -e '
 s = File.read(ARGV[0])
 before = s.length
@@ -174,6 +193,101 @@ else
   ok "호출을 지우니 delete 사라짐 — 테스트가 실제로 그 코드를 밟고 있다"
 fi
 rm -rf "$MOCK" "$BROKEN"
+
+# ══ 소유 판정 (📌D-016 4번, 2026-10-20) ═══════════════════════════════
+# 🔴 여기부터 잡는 실패의 무게가 다르다 — 위 케이스들은 **과금**을, 아래는 **prod 장애**를 막는다.
+#    CI 가 평일 창 동안 같은 이름의 클러스터를 prod 로 켠다. 로컬 마커는 1-network apply·따옴표 오탐에도
+#    생긴다. 마커만 보고 destroy 하면 Fly 복귀 없이 prod 가 내려간다.
+
+echo "── ⑧ 마커보다 **먼저** 생긴 클러스터(CI 창)는 destroy 하지 않고 마커를 푼다"
+echo "   (무엇의 실패를 잡나: 🔴 오탐 마커 + 2h 공백 → 리퍼가 prod 를 destroy — B4-6·N-4b)"
+make_mocks; MOCK_CREATED_AT=$(iso_at $((APPLIED_AT - 3600))) run_reaper "$REAPER"
+if grep -q 'tofu destroy' "$CALLS"; then bad "🔴 CI 클러스터를 destroy 했다"; else ok "destroy 안 함"; fi
+if grep -q 'kubectl delete ingress' "$CALLS"; then bad "🔴 CI 클러스터의 Ingress(=prod 입구)를 지웠다"; else ok "Ingress 안 건드림"; fi
+case "$LOGOUT" in *"이 마커가 만든 클러스터가 아니다"*) ok "foreign 로그" ;; *) bad "판정 로그 없음" ;; esac
+[ "$RC" -eq 0 ] && ok "rc=0 (정상 종료 — 마커 해제)" || bad "rc=$RC"
+rm -rf "$MOCK"
+
+echo "── ⑨ 마커보다 **한참 뒤**(+1h 초과) 생긴 클러스터도 foreign"
+echo "   (무엇의 실패를 잡나: 정리 못 된 옛 마커 뒤에 CI 가 켠 클러스터를 내 것으로 오인)"
+make_mocks; MOCK_CREATED_AT=$(iso_at $((APPLIED_AT + 7200))) run_reaper "$REAPER"
+if grep -q 'tofu destroy' "$CALLS"; then bad "🔴 창 밖 클러스터를 destroy"; else ok "destroy 안 함"; fi
+rm -rf "$MOCK"
+
+echo "── ⑩ createdAt 조회 실패 → destroy 하지 않고 마커 유지(rc≠0)"
+echo "   (무엇의 실패를 잡나: 판정 불가를 mine 으로 떨어뜨리는 fail-open)"
+make_mocks; MOCK_DESCRIBE_RC=255 run_reaper "$REAPER"
+if grep -q 'tofu destroy' "$CALLS"; then bad "🔴 판정 불가인데 destroy"; else ok "destroy 안 함"; fi
+case "$LOGOUT" in *"소유 판정 불가"*) ok "unknown 로그" ;; *) bad "unknown 로그 없음" ;; esac
+[ "$RC" -ne 0 ] && ok "rc=$RC (다음 주기 재시도)" || bad "rc=0 — 판정 불가가 조용히 끝남"
+rm -rf "$MOCK"
+
+echo "── ⑪ 마커에 applied_at 이 없으면 unknown"
+make_mocks; MOCK_NO_APPLIED_AT=1 run_reaper "$REAPER"
+if grep -q 'tofu destroy' "$CALLS"; then bad "🔴 applied_at 없이 destroy"; else ok "destroy 안 함"; fi
+rm -rf "$MOCK"
+
+echo "── ⑫ +09:00 표기 createdAt 도 같은 시각으로 읽는다 (mine → destroy)"
+echo "   (무엇의 실패를 잡나: 시간대 표기 차이로 판정이 9시간 어긋나는 것)"
+kst=$(date -u -r $((APPLIED_AT + 300 + 32400)) '+%Y-%m-%dT%H:%M:%S.000000+09:00' 2>/dev/null \
+      || date -u -d "@$((APPLIED_AT + 300 + 32400))" '+%Y-%m-%dT%H:%M:%S.000000+09:00')
+make_mocks; MOCK_CREATED_AT="$kst" run_reaper "$REAPER"
+if grep -q 'tofu destroy' "$CALLS"; then ok "+09:00 → mine → destroy"; else bad "+09:00 해석 실패 — 학습 클러스터 방치"; fi
+rm -rf "$MOCK"
+
+echo "── ⑬ 반증: 소유 판정을 지운 리퍼는 ⑧ 에서 실패해야 한다"
+# 🔴 고장 낸 사본은 **원본과 같은 디렉터리**에 둔다 (2026-10-20 발견). 리퍼는 자기 위치에서 ROOT 를
+#   계산하므로(`$SCRIPT_DIR/../..`), mktemp 사본은 **다른 마커 디렉터리**를 보고 "마커 없음" 으로 즉시
+#   종료한다 — 그러면 "delete 가 사라졌다" 는 판정이 **코드를 지워서가 아니라 리퍼가 아예 안 돌아서**
+#   참이 된다. 이 반증은 처음부터 공허했다(⑬ 을 만들다 반대 방향 단언으로 드러남).
+BROKEN="$ROOT/.claude/scripts/.reaper-broken-$$.sh"
+ruby -e '
+s = File.read(ARGV[0])
+before = s.length
+s = s.sub(/^if \[ -n "\$CLUSTERS" \]; then\n  if \[ "\$\{OWNER_LIB_MISSING.*?\nfi\n/m, "")
+abort("반증 준비 실패: 소유 판정 블록을 못 찾았다") if s.length == before
+File.write(ARGV[1], s)' "$REAPER" "$BROKEN" || bad "반증 스크립트 생성 실패"
+make_mocks; MOCK_CREATED_AT=$(iso_at $((APPLIED_AT - 3600))) run_reaper "$BROKEN"
+if grep -q 'tofu destroy' "$CALLS"; then ok "판정을 지우니 CI 클러스터를 destroy — ⑧ 이 실제로 그 코드를 밟는다"
+else bad "판정을 지워도 destroy 안 함 — **⑧ 은 아무것도 검증하지 않는다**"; fi
+rm -rf "$MOCK" "$BROKEN"
+
+echo "── ⑭ 마커 훅: 하트비트가 살아 있으면 첫 applied_at 을 보존, 죽었으면 새로 쓴다"
+echo "   (무엇의 실패를 잡나: 같은 세션 두 번째 apply 가 시각을 덮어써 자기 클러스터가 foreign 이 됨)"
+MARKER_HOOK="$ROOT/.claude/scripts/eks-session-marker.sh"
+SB=$(mktemp -d); mkdir -p "$SB/bin"; printf '#!/bin/sh\nexit 1\n' > "$SB/bin/aws"; chmod +x "$SB/bin/aws"
+REPO=$(mktemp -d); ( cd "$REPO" && git init -q . )
+mkdir -p "$REPO/.claude/eks-session"
+printf 'applied_at=1000\napplied_at_h=old\n' > "$REPO/.claude/eks-session/active"
+touch "$REPO/.claude/eks-session/heartbeat"
+fire() { ( cd "$REPO" && echo '{"tool_input":{"command":"cd infra/aws-eks/2-cluster && tofu apply"}}' | PATH="$SB/bin:$PATH" bash "$MARKER_HOOK" ) >/dev/null 2>&1; }
+fire
+grep -q '^applied_at=1000$' "$REPO/.claude/eks-session/active" && ok "하트비트 신선 → 보존" || bad "덮어씀 — $(grep '^applied_at=' "$REPO/.claude/eks-session/active")"
+touch -t "$(date -v-3H '+%Y%m%d%H%M' 2>/dev/null || date -d '3 hours ago' '+%Y%m%d%H%M')" "$REPO/.claude/eks-session/heartbeat"
+fire
+grep -q '^applied_at=1000$' "$REPO/.claude/eks-session/active" && bad "하트비트 죽었는데 옛 시각 보존 — 새 세션 클러스터가 foreign" || ok "하트비트 stale → 새 시각"
+rm -rf "$REPO" "$SB"
+
+echo "── ⑮ 리마인더: foreign 클러스터면 마커를 풀고 destroy 를 권하지 않는다"
+echo "   (무엇의 실패를 잡나: 🔴 매 턴 '오늘 끝이면 → tofu destroy' 로 prod 를 끄라고 안내 — B4-7)"
+REMINDER="$ROOT/.claude/scripts/eks-heartbeat-reminder.sh"
+SESS="$ROOT/.claude/eks-session"; mkdir -p "$SESS"
+BACKUP=$(mktemp -d); cp -p "$SESS"/* "$BACKUP/" 2>/dev/null || true
+rm -f "$SESS/lastcheck" "$SESS/state.cache"
+printf 'applied_at=%s\napplied_at_h=x\n' "$APPLIED_AT" > "$SESS/active"
+make_mocks
+OUT=$( cd "$ROOT" && PATH="$MOCK:$PATH" CALLS="$CALLS" MOCK_CREATED_AT="$(iso_at $((APPLIED_AT - 3600)))" bash "$REMINDER" 2>&1 )
+[ -f "$SESS/active" ] && bad "마커가 남았다" || ok "마커 해제"
+case "$OUT" in *"tofu destroy"*) bad "🔴 destroy 를 권했다" ;; *) ok "destroy 권고 없음" ;; esac
+# 대조군 — mine 이면 종전대로 destroy 를 권한다(한쪽만 보면 반대 방향으로 깨진다)
+rm -f "$SESS/lastcheck" "$SESS/state.cache"
+printf 'applied_at=%s\napplied_at_h=x\n' "$APPLIED_AT" > "$SESS/active"
+OUT=$( cd "$ROOT" && PATH="$MOCK:$PATH" CALLS="$CALLS" MOCK_CREATED_AT="$(iso_at $((APPLIED_AT + 300)))" bash "$REMINDER" 2>&1 )
+[ -f "$SESS/active" ] && ok "대조군(mine): 마커 유지" || bad "대조군: mine 인데 마커 해제"
+case "$OUT" in *"tofu destroy"*) ok "대조군: destroy 안내 유지" ;; *) bad "대조군: 안내 사라짐" ;; esac
+rm -rf "$MOCK"
+rm -f "$SESS"/active "$SESS"/heartbeat "$SESS"/lastcheck "$SESS"/state.cache
+cp -p "$BACKUP"/* "$SESS/" 2>/dev/null || true; rm -rf "$BACKUP"
 
 echo
 echo "── 결과: 통과 $PASS · 실패 $FAIL"

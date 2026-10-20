@@ -43,11 +43,26 @@ DIR="$ROOT/.claude/eks-session"
 mkdir -p "$DIR" 2>/dev/null
 
 # 마커에 리퍼가 tofu destroy를 돌릴 위치와 시작 시각을 기록 (머신 독립)
+#
+# 🔴 applied_at 은 **세션의 첫 apply 시각을 보존**한다 (📌D-016 4번, 2026-10-20).
+#   리퍼는 이제 *"클러스터 createdAt 이 applied_at 직후인가"* 로 소유를 판정한다(lib/eks-cluster-owner.sh).
+#   같은 세션의 두 번째 apply 가 시각을 덮어쓰면 **자기가 만든 클러스터가 foreign 이 되어** dead man's
+#   switch 가 조용히 꺼진다. 마커가 이미 있으면 시각만 그대로 두고 나머지는 다시 쓴다.
+#   ⚠️ 단 **하트비트가 살아 있을 때만** 보존한다. 지난 세션이 정리되지 못하고 남긴 마커(맥 잠듦 등)의
+#   옛 시각을 이어받으면, 이번 세션이 만든 클러스터가 창(+1h) 밖이라 foreign 이 된다 — 같은 결말.
+#   하트비트 TTL 은 리퍼와 같은 값(EKS_REAPER_TTL, 기본 7200)이다: 그보다 오래 조용했으면 다른 세션이다.
+PREV_AT=$(grep '^applied_at=' "$DIR/active" 2>/dev/null | cut -d= -f2-)
+PREV_AT_H=$(grep '^applied_at_h=' "$DIR/active" 2>/dev/null | cut -d= -f2-)
+# GNU 먼저 — GNU `stat -f` 는 파일시스템 모드라 실패하면서도 stdout 에 쓰레기를 남긴다. BSD `stat -c` 는 조용히 실패.
+HB_M=$(stat -c %Y "$DIR/heartbeat" 2>/dev/null || stat -f %m "$DIR/heartbeat" 2>/dev/null || echo 0)
+case "$PREV_AT" in ''|*[!0-9]*) PREV_AT=""; PREV_AT_H="" ;; esac
+case "$HB_M" in ''|*[!0-9]*) HB_M=0 ;; esac
+[ $(( $(date +%s) - ${HB_M:-0} )) -lt "${EKS_REAPER_TTL:-7200}" ] || { PREV_AT=""; PREV_AT_H=""; }
 {
   echo "repo_root=$ROOT"
   echo "cluster_dir=$ROOT/infra/aws-eks/2-cluster"
-  echo "applied_at=$(date +%s)"
-  echo "applied_at_h=$(date '+%Y-%m-%d %H:%M:%S %Z')"
+  echo "applied_at=${PREV_AT:-$(date +%s)}"
+  echo "applied_at_h=${PREV_AT_H:-$(date '+%Y-%m-%d %H:%M:%S %Z')}"
 } > "$DIR/active" 2>/dev/null
 
 touch "$DIR/heartbeat" 2>/dev/null

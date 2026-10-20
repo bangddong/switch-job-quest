@@ -148,7 +148,7 @@ if [ -f "$MARKER" ]; then
   #   (오늘 SOP 고아 검사에서 고친 것과 같은 병이다.)
   #
   #   → 마커는 "확인해볼 이유"일 뿐이고, **판정은 AWS 실물이 한다.**
-  LIVE=""
+  LIVE=""; C=""; D=""
   if command -v aws >/dev/null 2>&1; then
     AWSQ2=(aws --cli-connect-timeout 3 --cli-read-timeout 5 --region "${EKS_REGION:-ap-northeast-2}")
     C=$("${AWSQ2[@]}" eks list-clusters --query 'clusters' --output text 2>/dev/null)
@@ -158,8 +158,18 @@ if [ -f "$MARKER" ]; then
     LIVE="${C}${D}"
   fi
 
-  if [ -n "$LIVE" ]; then
+  # 소유 판정(📌D-016 4번) — 리퍼·리마인더와 같은 함수. CI 창 클러스터에 "destroy 하라" 고 말하지 않는다(B4-8).
+  OWN=""
+  if [ -n "$C" ] && . "$ROOT/.claude/scripts/lib/eks-cluster-owner.sh" 2>/dev/null; then
+    OWN=$(eks_clusters_owner "$C" "$(grep '^applied_at=' "$MARKER" 2>/dev/null | cut -d= -f2)" "${EKS_REGION:-ap-northeast-2}")
+  fi
+
+  if [ -n "$LIVE" ] && [ "${OWN%% *}" = "foreign" ]; then
+    row "세션 마커" "${C_Y}⚠️ 마커는 있으나 EKS[$C] 는 이 세션이 만든 게 아니다 — CI 창(prod)·다른 기기${C_0}"
+    row "" "${C_DIM}로컬에서 destroy 하지 마라. 리퍼도 건드리지 않고 마커를 푼다. 끄기 = off 워크플로(순서표 8번)${C_0}"
+  elif [ -n "$LIVE" ]; then
     row "세션 마커" "${C_R}🔴 활성 — apply ${AT:-시각미상}. ${C_B}실제로 과금 중${C_0}"
+    case "$OWN" in unknown*) row "" "${C_Y}소유 판정 불가 — destroy 전 createdAt 확인 (${OWN#unknown })${C_0}" ;; esac
     row "" "${C_DIM}끝났다면 destroy: docs/eks-session-sop.md §8${C_0}"
   else
     row "세션 마커" "${C_Y}⚠️ 유령 마커 — 마커는 있으나 EKS·RDS 실물이 없다${C_0}"
@@ -167,7 +177,17 @@ if [ -f "$MARKER" ]; then
     row "" "${C_DIM}즉시 지우려면: rm -f .claude/eks-session/active${C_0}"
   fi
 else
-  row "세션 마커" "${C_G}없음 — 클러스터 미가동${C_0}"
+  # 🔴 마커가 없다 ≠ 클러스터가 없다 (📌D-016 4번, B4-8). CI 가 켠 창 클러스터에는 로컬 마커가 없다.
+  #    종전엔 여기서 AWS 를 보지 않고 "클러스터 미가동" 이라고 단정했다 → 창 동안 대시보드가 거짓말한다.
+  C=""
+  command -v aws >/dev/null 2>&1 && C=$(aws --cli-connect-timeout 3 --cli-read-timeout 5 \
+    --region "${EKS_REGION:-ap-northeast-2}" eks list-clusters --query 'clusters' --output text 2>/dev/null)
+  if [ -n "$C" ]; then
+    row "세션 마커" "${C_Y}없음 — 그러나 EKS[$C] 가동 중: CI 창(prod)·다른 기기. ${C_B}과금 중${C_0}"
+    row "" "${C_DIM}로컬 리퍼 감시 대상 아님. 끄기 = off 워크플로(순서표 8번) — 로컬 destroy 금지${C_0}"
+  else
+    row "세션 마커" "${C_G}없음 — 클러스터 미가동${C_0}"
+  fi
 fi
 
 # 영속 리소스: destroy로 사라지지 않는 것. 조회 실패는 조용히 넘어간다.
