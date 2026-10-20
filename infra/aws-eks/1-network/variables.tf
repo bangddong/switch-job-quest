@@ -60,3 +60,26 @@ variable "db_ssm_prefix" {
   description = "DB 비밀이 사는 SSM 경로(password · wireguard-conf). IaC 밖에서 만들어진다"
   default     = "/devquest/prod/db"
 }
+
+# ── 📌D-016 6-A: prod DB 백업 ─────────────────────────────────────────
+# 🔴 버킷 이름은 0-bootstrap `backup_bucket_name` 의 **복제**다 — 바꿀 땐 두 곳을 함께 바꾼다.
+#    remote_state 로 읽지 않는 이유: infra-deploy 가 0-bootstrap·1-network 를 **병렬** apply 해서
+#    새 출력을 추가한 PR 에서 1-network 가 옛 state 를 읽고 실패한다(B6-9). 5-A 의 AZ 가 같은 판단.
+variable "db_backup_bucket" {
+  type        = string
+  description = "prod DB 덤프를 올릴 S3 버킷 (0-bootstrap backup_bucket_name 과 같아야 한다)"
+  default     = "devquest-eks-backups-seoul"
+}
+
+# 🔴 학습용 덤프(`postgres/`, db-backup.sh)와 **반드시 다른 prefix** — 같으면 `db-restore.sh --s3` 가
+#    학습 클러스터에 prod 데이터를 복원할 수 있다(B6-6, N-17 역방향). 인스턴스 역할도 이 prefix 만.
+variable "db_backup_prefix" {
+  type        = string
+  description = "prod DB 덤프·헬스 키의 S3 prefix (끝은 /)"
+  default     = "prod-db/"
+
+  validation {
+    condition     = endswith(var.db_backup_prefix, "/") && var.db_backup_prefix != "postgres/"
+    error_message = "db_backup_prefix 는 / 로 끝나야 하고 학습용 postgres/ 와 달라야 한다(B6-6)."
+  }
+}

@@ -49,3 +49,14 @@ output "db_instance_id" {
   description = "prod DB 인스턴스 ID (SSM 접속: aws ssm start-session --target <id>)"
   value       = var.db_enabled ? aws_instance.db[0].id : null
 }
+
+# 📌D-016 6-A — scripts/prod-db/deploy.sh 가 읽는다(같은 값을 세 번째 곳에 복제하지 않으려고).
+output "db_backup_bucket" {
+  description = "prod DB 덤프 버킷"
+  value       = var.db_backup_bucket
+}
+
+output "db_backup_prefix" {
+  description = "prod DB 덤프 prefix"
+  value       = var.db_backup_prefix
+}

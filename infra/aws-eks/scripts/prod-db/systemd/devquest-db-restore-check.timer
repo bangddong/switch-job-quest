@@ -1,0 +1,12 @@
+# 주 1회(일 04:30 KST = 토 19:30 UTC). 매일이 아닌 이유: 인덱스 재생성이 CPU 크레딧(standard)을 태워
+# prod 를 기준선에 묶을 수 있다(B6-15). 주기는 6-C 에서 CPUCreditBalance 실측 뒤 조정한다.
+[Unit]
+Description=weekly devquest prod DB restore check
+
+[Timer]
+OnCalendar=Sat *-*-* 19:30:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

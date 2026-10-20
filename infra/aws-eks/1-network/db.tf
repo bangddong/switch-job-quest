@@ -70,7 +70,7 @@ resource "aws_security_group" "db" {
   tags = { Name = "${var.cluster_name}-prod-db", Role = "prod-db" }
 }
 
-# ── 인스턴스 프로파일 — SSM 접속(SSH 포트 없음) + 비밀 파라미터 2개 ─────────────
+# ── 인스턴스 프로파일 — SSM 접속(SSH 포트 없음) + 비밀 파라미터 + 백업 prefix ─────────────
 resource "aws_iam_role" "db" {
   count = local.db_count
   name  = "${var.cluster_name}-prod-db"
@@ -109,6 +109,25 @@ resource "aws_iam_role_policy" "db_params" {
         Effect   = "Allow"
         Action   = ["ssm:PutParameter"]
         Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.db_ssm_prefix}/password"
+      },
+      {
+        # 📌D-016 6-A 백업 — **prod prefix 만**(B6-6). Put = 덤프·행 수·헬스 키, Get = restore-check·도구 설치.
+        # 🔴 Delete·DeleteObjectVersion 은 주지 않는다(B6-34) — 이 인스턴스는 Fly 6PN 피어로 노출된다.
+        #    침해돼도 버저닝 덕에 덮어쓰기는 이전 버전이 남고, 지울 수는 없다. 보존은 버킷 lifecycle(30일)이 한다.
+        Sid      = "BackupObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = "arn:aws:s3:::${var.db_backup_bucket}/${var.db_backup_prefix}*"
+      },
+      {
+        # 최신 덤프 고르기(restore-check). 목록도 prefix 안으로 좁힌다.
+        Sid      = "BackupList"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = "arn:aws:s3:::${var.db_backup_bucket}"
+        Condition = {
+          StringLike = { "s3:prefix" = ["${var.db_backup_prefix}*"] }
+        }
       },
       {
         Sid      = "SsmKms"
