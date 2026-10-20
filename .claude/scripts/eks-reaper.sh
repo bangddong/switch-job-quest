@@ -25,6 +25,10 @@ LOG="$DIR/reaper.log"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] $*" >> "$LOG" 2>/dev/null; }
 
+# 클러스터 소유 판정(📌D-016 4번) — 이 마커가 만든 클러스터만 destroy 한다. 못 읽으면 destroy 하지 않는다.
+# shellcheck source=lib/eks-cluster-owner.sh
+. "$SCRIPT_DIR/lib/eks-cluster-owner.sh" 2>/dev/null || OWNER_LIB_MISSING=1
+
 # ── 고아 EBS 경고 (감지 전용, 삭제하지 않는다) ──────────────────────
 #
 # 왜 "경고만" 인가 — 리퍼가 할 수 있는 일은 `tofu destroy` 하나뿐이다.
@@ -94,7 +98,7 @@ warn_orphan_albs() {
   albs=$(aws elbv2 describe-load-balancers --region "$REGION" \
     --query 'LoadBalancers[].[LoadBalancerName,LoadBalancerArn]' --output text 2>/dev/null) || return 0
   [ -n "$albs" ] || return 0
-  log "⚠️ 고아 ALB 감지 — 클러스터가 사라져 LBC 가 회수할 수 없다. **수동 삭제 필요**(월 ~$16.43):"
+  log "⚠️ 고아 ALB 감지 — 클러스터가 사라져 LBC 가 회수할 수 없다. **수동 삭제 필요**(월 ~\$16.43):"
   echo "$albs" | while IFS=$'\t' read -r name arn; do
     [ -n "$name" ] || continue
     log "     $name  →  aws elbv2 delete-load-balancer --region $REGION --load-balancer-arn $arn"
@@ -150,6 +154,36 @@ fi
 
 CLUSTER_DIR=$(grep '^cluster_dir=' "$MARKER" 2>/dev/null | cut -d= -f2-)
 APPLIED_H=$(grep '^applied_at_h=' "$MARKER" 2>/dev/null | cut -d= -f2-)
+APPLIED=$(grep '^applied_at=' "$MARKER" 2>/dev/null | cut -d= -f2-)
+
+# ── 소유 판정 — **이 마커의 apply 로 생긴 클러스터만** destroy 한다 (📌D-016 4번, 2026-10-20) ──
+# 🔴 D-016 이후 같은 이름·같은 state 의 클러스터를 CI 가 평일 창 동안 **prod 로** 켠다. 로컬 마커는
+#    1-network apply(N-4b)·따옴표 안 오탐(B4-6)에도 생기므로, 마커가 있다는 사실만으로 destroy 하면
+#    **prod 를 Fly 복귀 없이 내린다**(B4-1). CI 클러스터의 회수는 8번 off 경로(Fly 복귀 포함)의 몫이다.
+# RDS 만 남은 부분 잔존(위)은 판정 대상이 아니다 — prod DB 는 RDS 가 아니라 1-network EC2 다.
+if [ -n "$CLUSTERS" ]; then
+  if [ "${OWNER_LIB_MISSING:-0}" = "1" ]; then
+    log "⛔ 소유 판정 라이브러리 없음($SCRIPT_DIR/lib/eks-cluster-owner.sh) — destroy 하지 않는다. 마커 유지."
+    exit 1
+  fi
+  OWN=$(eks_clusters_owner "$CLUSTERS" "$APPLIED" "$REGION")
+  case "$OWN" in
+    foreign*)
+      log "🛑 이 마커가 만든 클러스터가 아니다 — CI 창·다른 기기·기존 클러스터. destroy 하지 않는다. 마커 청소."
+      log "   판정: $OWN (apply ${APPLIED_H:-미상}, applied_at=${APPLIED:-없음})"
+      # QA F-4 — 8번(CI on) 전에는 CI 창 클러스터가 존재하지 않는다. 그 구간의 foreign 은 로컬 잔존물·오판일 수 있다.
+      log "   ⚠️ 8번 전이라면 CI 창은 없다 — 로컬이 만든 클러스터인지 확인하고, 맞으면 손으로 destroy(SOP §8):"
+      log "      aws eks describe-cluster --name <이름> --query cluster.createdAt  vs  applied_at_h"
+      rm -f "$MARKER" "$DIR/lastcheck" "$DIR/state.cache" 2>/dev/null
+      exit 0 ;;
+    unknown*)
+      log "⛔ 소유 판정 불가 — destroy 하지 않는다(prod 일 수 있다). 마커 유지, 다음 주기 재시도. 수동 확인:"
+      log "   판정: $OWN"
+      log "   aws eks describe-cluster --name <이름> --query cluster.createdAt  vs  마커 applied_at_h=${APPLIED_H:-미상}"
+      exit 1 ;;
+  esac
+  log "   소유 판정: $OWN — 이 세션이 만든 클러스터"
+fi
 
 log "🔴 DEAD MAN'S SWITCH 발동 — 하트비트 ${STALE}s stale(TTL ${TTL}s), 생존: EKS[${CLUSTERS:-없음}] RDS[${RDS:-없음}]."
 log "   apply 시각: ${APPLIED_H:-미상} / destroy 실행: $CLUSTER_DIR"

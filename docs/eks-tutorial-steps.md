@@ -354,6 +354,9 @@ cd infra/aws-eks/1-network && tofu init && tofu apply
 > ⚠️ **`tofu -chdir=… apply` 로 치지 마라** — 그 형태는 승인 게이트를 비껴간다(0-2 경고와 같은 이유). `1-network` 는 비용 $0 이고
 > main 머지 시 CI(`infra-deploy`)가 적용하므로 손으로 칠 일이 드물다. 손으로 쳤다면 **세션 마커 훅이 이 레이어에도 반응해
 > 2-cluster 리퍼를 무장시킨다** — 끝나면 `.claude/eks-session/active` 를 지운다(2026-10-16 Blindspot N-4b).
+> 🛡️ 지우는 걸 잊어도 **이미 떠 있던 클러스터는 안전하다**(📌D-016 4번, 2026-10-20): 리퍼는 클러스터 `createdAt` 이
+> 마커의 첫 apply 시각 직후(+1h 안)인 것만 *"이 세션이 만든 것"* 으로 보고 destroy 한다. 그보다 먼저 생긴 클러스터
+> (CI 가 켠 평일 창 = prod)는 건드리지 않고 마커를 푼다. 단 *"+1h 안에 CI 가 켠 클러스터"* 는 아직 mine 으로 보인다 — 8번이 닫는다 — `docs/eks-session-sop.md` 「🔒 안전장치」 절 참조.
 
 `1-network`(VPC·서브넷·IGW)도 **$0**이다 — NAT 게이트웨이를 쓰지 않기 때문이다(퍼블릭 서브넷 + 노드에
 퍼블릭 IP 부여로 대체). NAT는 시간당 $0.045 + 데이터 처리 요금이라 켜 두면 학습 계정에서 가장 조용히
@@ -2475,6 +2478,8 @@ aws elbv2 describe-load-balancers --region ap-northeast-2 \
 > 리퍼가 도는 조건 = 사람이 자리를 비운 상황 = 위 수동 절차가 실행되지 않는 상황이라,
 > 방어가 없으면 가장 위험한 경로였다. destroy **전에** Ingress를 지우고(SG 의존성 회피),
 > 후에 잔존 ALB를 경고한다. 회귀 테스트: `.claude/scripts/tests/reaper-alb-test.sh` (무과금).
+> ⚠️ 단 **이 세션이 만든 클러스터일 때만**이다(📌D-016 4번 소유 판정). CI 가 켠 창 클러스터의 Ingress 는 prod 입구라
+> 로컬 리퍼가 지우면 안 된다 — 그 회수는 Fly 복귀를 포함한 off 워크플로(순서표 8번)의 몫이다.
 
 ### 4-7. 비용 — 세션 단가가 25% 오른다
 
