@@ -5670,3 +5670,17 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
   **RTO(이 크기) ≈ 1초 복원 + 9초 이전.** 크레딧·디스크 부담은 이 규모에서 무시 가능 — 복원 판정 주 1회 유지(B6-15).
 - `[메모]` 남은 6-C: Neon **브랜치** 1회 복원 리허설(콜드 대기 도구 검증 — 7번 전환 후 매일 복원의 사전 연습). 브랜치 전용 role 은 SQL 로(콘솔 role 은 neon_superuser 자동 소속 — 6-0 교훈).
+
+## 2026-10-20 — 📌D-016 순서표 6-D: 백업 감시 · 런북 · 버킷 재판정 ($0)
+
+- `[결정]` 감시 = `scripts/prod-db/watch.sh` + `.github/workflows/prod-db-backup-watch.yml`(매일 02:00 UTC = 11:00 KST, `workflow_dispatch`, 자기 파일 PR). 역할 = **PR plan 과 같은 좁힌 읽기 전용**(`AWS_ROLE_ARN`) — `ListObjectsV2` 로 헬스 키 **이름**만 읽는다(GetObject Deny, B6-31). 계정 ID 마스킹·Step Summary sed 는 infra-deploy 와 같은 fail-closed.
+- `[결정]` 판정: backup 헬스 키 ≤ 26h · `disk=` ≤ 80%(N-19 감시 완료) · `tables=` ≥ 1 · restore 헬스 키 ≤ 194h(8일). 조회 실패는 exit 2(실패로 친다). restore·backup 테이블 수 비교는 **뺐다** — 주 1회 복원 뒤 마이그레이션이 테이블을 더하면 정상인데도 빨갛다.
+- `[해결]` 실 S3 로 실패 주입 6종 전부 빨강: `WATCH_NOW+30h` → `❌ backup 이 30h 전이 마지막` · `MAX_DISK_PCT=0` → 디스크 · `MIN_TABLES=99` → 덤프 · `+9일` → backup·복원 둘 다 · 빈 prefix · 없는 버킷 → `조회 실패`. 정상 rc=0.
+- `[막힘]` 빈 prefix 가 *"키 없음"* 이 아니라 `조회 실패`(rc 2)로 나왔다 — `sort_by(Contents, &Key)` 가 `Contents` 부재(null)에서 JMESPath 에러. fail-closed 라 결과는 맞지만 메시지가 원인을 속인다.
+- `[해결]` `sort_by(Contents || \`[]\`, &Key)` → `❌ backup 헬스 키가 없거나 형식이 다르다(없음)`.
+- `[결정]` 런북 `scripts/prod-db/README.md` — 자동 작업 표·접속·도구 갱신·**복구 절차**(덤프 선택 = `.counts` 짝 · 기존 DB 는 RENAME 으로 남김 · 판정 = 행 수 diff)·패치(B5-8)·전환 뒤 할 일. 복구 판정 단계(`local_counts` diff)를 실 EC2 에서 그대로 돌려 `일치` 확인.
+- `[결정]` 버킷 재판정(B6-7): CMK **유지 안 함**(SSE-S3) — 읽기는 IAM 으로 이미 닫혔고 같은 계정 키는 N-15 에 무력, 월 ~$1 = 여유의 17% · 접근 로깅 **끈 채** · 보존 **30일 유지**(RPO 는 주기가 정한다) · `Purpose` 태그를 두 prefix 로 갱신(0-bootstrap in-place). `id-token: write` 워크플로 3개째 — 계획서 B3-9 불변식 갱신(B6-25).
+- `[해결]` QA(6-D) HIGH 0 · MEDIUM 4 · LOW 3 전부 이 PR 에서. **F-1 런북 복구가 장애 중 첫 단계에서 실패할 뻔했다** — `psql -d devquest` 세션에서 `ALTER DATABASE devquest RENAME` 은 `current database cannot be renamed`, 다른 세션이 있어도 실패. → `-d postgres` + `ALLOW_CONNECTIONS false` + `pg_terminate_backend` 로 바꾸고, **실 EC2 에서 테스트 DB(`rbtest`, 접속 세션 1개 붙여 둠)로 블록을 그대로 실행**: `count 1`(세션 종료) → `ALTER DATABASE` → `CREATE DATABASE` → 복원 → `일치` → 테스트 DB 0개. · F-2 런북이 전환 전/후를 안 갈랐다 — 지금은 앱이 Neon 을 보므로 Fly 를 건드리면 불필요한 prod 중단, `fly scale count 0` 은 머신 파괴·복귀 미검증 → 삭제, 쓰기 차단은 DB 쪽에서 · F-3 실패 메일 도달 미검증 → `workflow_dispatch` 입력 `inject_failure`(백업 기준 0h), B4-23 을 6-D 로 당김 · F-4 watch 회귀 6건을 docker 테스트에 편입(38/38) — 목 aws 가 자기 pipefail 로 빈 prefix 를 "조회 실패" 로 내던 하네스 버그 1건 수정 · F-5 concurrency 를 이벤트별로(PR 실행이 정기 실행을 cancelled 로 지우지 않게) · F-6 복원 기준 194h → ~~180h~~ **160h** — 재QA 가 산술을 다시 했다: 정상 최대 ≈150.5h, 일요일 복원 실패 시 ≈174.5h. 180h 도 월요일에야 잡는다(첫 지적의 174.5h 해석 오류를 내가 검산 없이 받았다) · F-7 checkout v4 → v7.
+- `[해결]` 재QA F-8 `inject_failure` 기준 0h → **-1h**(나이가 정수 시간이라 백업 직후엔 0 ≤ 0 으로 초록) · F-9 런북에 **되돌리기 블록**(복원 실패 시 새 DB 삭제 → 이름 복구 → `ALLOW_CONNECTIONS true`) — 실 EC2 테스트 DB 로 그대로 실행: `되돌린 뒤 접속·테이블: 14`, 테스트 DB 0개.
+- `[막힘]` 재QA F-11(MEDIUM): 내가 F-10 을 고치며 넣은 `DROP DATABASE IF EXISTS $DB WITH (FORCE)` 가 **2단계 RENAME 이 실패했을 때 원본 prod DB 를 지우는 경로**를 열었다 — 원본이 `$DB` 이름 그대로인데 확인 없이 DROP, psql 은 문장별 autocommit 이라 `ON_ERROR_STOP` 이 되돌리지 못한다. 고치려다 더 위험하게 만든 것 — CLAUDE.md L-22 *"조일 때마다 새 우회"* 의 런북판.
+- `[해결]` 되돌리기를 **`$OLD` 가 실제로 존재할 때만** 실행하는 `if` 가드로 감쌌다. 실 EC2 에서 블록을 그대로 추출해 3경우: A 정상(RENAME 됨) → 되돌림·테이블 14 · **B RENAME 실패 → DROP 안 함, 원본 14 보존** · C 셸 유실(빈 변수) → DROP 안 함, 안내만. 테스트 DB 0개.

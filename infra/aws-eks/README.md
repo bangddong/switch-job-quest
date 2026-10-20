@@ -438,7 +438,7 @@ Fly·EKS 두 core-api 가 `migrate-on-startup: true`(`application-prod.yml:37`)�
 > 위 k3s 행은 그 지점을 등재해둔 것이다. 되살릴 때는 `design-change-procedure.md` 전 단계를 밟을 것.
 
 #### 평일 창 동안 EKS 가 prod 를 서빙한다 — DB 는 EC2 자가 운영 Postgres
-> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/infra-deploy.yml`, `.github/workflows/ecr-push.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`, `docs/eks-tutorial-steps.md`, `k8s/README.md`, `k8s/gitops/apps-external`, `infra/aws-eks/2-cluster/secrets.tf`, `infra/aws-eks/2-cluster/irsa-eso.tf`, `infra/aws-eks/1-network/db.tf`, `.claude/scripts/lib/eks-cluster-owner.sh`, `.claude/scripts/eks-session-marker.sh`, `.claude/scripts/eks-heartbeat-reminder.sh`, `.claude/scripts/session-status.sh`, `.claude/scripts/tests/reaper-alb-test.sh`, `infra/aws-eks/scripts/prod-db`, `infra/aws-eks/0-bootstrap/s3-backups.tf`, `infra/aws-eks/scripts/db-restore.sh`
+> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/infra-deploy.yml`, `.github/workflows/ecr-push.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`, `docs/eks-tutorial-steps.md`, `k8s/README.md`, `k8s/gitops/apps-external`, `infra/aws-eks/2-cluster/secrets.tf`, `infra/aws-eks/2-cluster/irsa-eso.tf`, `infra/aws-eks/1-network/db.tf`, `.claude/scripts/lib/eks-cluster-owner.sh`, `.claude/scripts/eks-session-marker.sh`, `.claude/scripts/eks-heartbeat-reminder.sh`, `.claude/scripts/session-status.sh`, `.claude/scripts/tests/reaper-alb-test.sh`, `infra/aws-eks/scripts/prod-db`, `infra/aws-eks/0-bootstrap/s3-backups.tf`, `.github/workflows/prod-db-backup-watch.yml`, `infra/aws-eks/scripts/db-restore.sh`
 
 **결정 (2026-10-20 추가)** 순서표 4 — 아래 「순서표 4」 절.
 
@@ -520,6 +520,11 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 <!-- verify: infra/aws-eks/1-network/variables.tf ~ default     = "devquest-eks-backups-seoul" -->
 > ⚠️ 위 두 마커는 버킷 이름 **복제 두 곳**(0-bootstrap 실물 · 1-network 인스턴스 권한)을 같은 리터럴로 잠근다(QA F-8). 이름을 바꾸면 둘 다 바꾸고 마커도 바꾼다.
 <!-- verify: .github/workflows/infra-deploy.yml ~ paths: \["infra/aws-eks/0-bootstrap/\*\*", "infra/aws-eks/1-network/\*\*"\] -->
+
+> ✅ **순서표 6-D 「백업 감시」 (2026-10-20)** — `Prod DB Backup Watch`(매일 11:00 KST)가 **좁힌 읽기 전용 역할**로 S3 헬스 키 이름만 본다
+> (백업 26h · 복원 판정 8일 · 디스크 80% · 테이블 ≥1). 빨강 = 유일한 알림(실패 메일). 백업이 멈추면 lifecycle 30일 뒤 마지막 덤프도 사라진다.
+> 🔴 이 워크플로를 main 역할(Admin)로 바꾸지 마라 — 목록 읽기면 충분하고, Admin 경로를 늘리는 것은 8번 가드 재정의(N-3) 전의 사각지대다.
+<!-- verify: .github/workflows/prod-db-backup-watch.yml ~ role-to-assume: \$\{\{ secrets\.AWS_ROLE_ARN \}\}$ -->
 
 > ✅ **순서표 4 「리퍼·마커 정책」 (2026-10-20, 사용자 — 4a 지금 · CI 리퍼는 8번)** — 로컬 리퍼·리마인더·session-status 는
 > **이 세션 마커의 apply 로 생긴 클러스터만** 자기 것으로 본다(`createdAt` ∈ [`applied_at` −30s, +1h]). 그 밖(CI 창 = prod)은

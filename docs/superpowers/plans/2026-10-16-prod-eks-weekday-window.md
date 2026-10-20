@@ -170,7 +170,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B3-6 | 🟡 | 5번이 0-bootstrap 에 Secrets Manager version 을 두면 PR plan 이 `GetSecretValue` 필요 → 실패 or PR 이 prod DB 비밀번호를 읽음 | **5번** — 0-bootstrap 에 secret **값**을 두지 않는 설계(값 주입은 별도 경로) |
 | B3-7 | 🔴 | `access.tf` 의 `data.aws_caller_identity.current` 는 `irsa-fluent-bit.tf`·`irsa-karpenter.tf` 가 공유 — 지우면 깨진다 | **C** |
 | B3-8 | 🔴 | 로컬 admin = IAM 사용자 `bootstrap-admin`(장기 키). 일지엔 *"OIDC 전환 후 키 폐기 예정"* — prod admin entry 로 박으면 그 계획과 반대로 굳는다 | **C** 는 이 사용자로. 키 폐기 시 entry 교체 — 그때 break-glass 경로(B3-11)도 함께 재설계 |
-| B3-9 | 🟡 | `sub=main` 은 schedule·dispatch 도 포함 → 경계 = main 워크플로 정의 + 머지 권한(본인 1명) + 필수 체크. 리뷰 강제 없음(`required_pull_request_reviews: null` 실측, 1인 레포라 걸 수 없음 — QA F-1) | 감수(위 결정). `id-token: write` 는 infra-deploy·ecr-push 뿐 |
+| B3-9 | 🟡 | `sub=main` 은 schedule·dispatch 도 포함 → 경계 = main 워크플로 정의 + 머지 권한(본인 1명) + 필수 체크. 리뷰 강제 없음(`required_pull_request_reviews: null` 실측, 1인 레포라 걸 수 없음 — QA F-1) | 감수(위 결정). `id-token: write` 는 infra-deploy·ecr-push 뿐 → 🔄 **2026-10-20 6-D: + `prod-db-backup-watch`(읽기 전용 역할만 — Admin 경로 아님, B6-25)** |
 | B3-10 | 🟡 | `environment:` 를 붙이면 sub 변경 → assume 실패 | **A** 주석에 명시. 8번이 environment 를 쓰려면 신뢰정책도 함께 |
 | B3-11 | 🟡 | main 역할 최소권한은 실질 불가(`iam:*` 필요) | 위 결정 |
 | B3-12 | 🟡 | `github_actions_role_arn` 출력이 non-sensitive(같은 성질의 `acm_certificate_arn` 은 sensitive) | 새 출력은 sensitive(A). 옛 출력 정정은 **B** |
@@ -225,7 +225,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B4-20 | 🟡 | 생존 판정 OR 에 EC2 를 넣으면 상시 prod-db 로 영구 destroy 루프 | 유지 — 넣지 않았다. 넣을 일이 생기면 `Role=prod-db` 제외(SOP §8b 선례) |
 | B4-21 | 🟡 | off 와 dead man's switch 가 둘 다 GitHub cron — 같은 장애에 함께 걸림. AWS 쪽 독립 백스톱 0 | **8번** — 설계 시 독립 경로 검토(Budgets·Anomaly 는 일 단위라 느리다) |
 | B4-22 | 🟡 | 로컬 리퍼는 맥이 깨어 있을 때만, 원격 세션 마커는 못 본다 | **8번** 근거(CI 쪽에 둔다) |
-| B4-23 | ⚪ | 스케줄 워크플로 실패 메일 수신 전제 미확인 | **8번** — 첫 실패 주입 때 실측 |
+| B4-23 | ⚪ | 스케줄 워크플로 실패 메일 수신 전제 미확인 | **8번** — 첫 실패 주입 때 실측 → 🔄 **2026-10-20 6-D 로 당김**(QA 6-D F-3) — 백업 감시가 이 메일을 유일한 알림으로 쓴다. 머지 직후 `Prod DB Backup Watch` 를 `inject_failure=true` 로 수동 실행해 메일 도달을 사용자가 확인 |
 | B4-24 | 🔴 | 마커가 클러스터를 식별하지 못한다 | ✅ 이번 PR — createdAt 비교가 그 식별 |
 
 B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이라 목적지 없음.
@@ -316,7 +316,7 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 | **6-A** | ✅ **2026-10-20** — 진짜 Postgres 17(docker) 테스트 24건, 스냅샷 반증(`--snapshot` 제거 시 ⑦ 실패) 확인. 테스트가 **순서 버그 1건**을 잡았다(`--reset` 이 Neon 읽기 전용 검사보다 먼저 대상을 지움). IaC·스크립트, **플래그 꺼진 채**: ①1-network 인스턴스 역할에 S3 `prod-db/` prefix Put·Get(Delete·`DeleteObjectVersion` 없음, B6-34) — 버킷 이름은 1-network 변수로 복제(remote_state 신설 금지, 병렬 apply B6-9) ②`infra/aws-eks/scripts/prod-db/` 새 파일(기존 `db-backup.sh`·`db-restore.sh` **수정 금지** — N-17 안전장치·verify 마커 4개·목 테스트 18건, B6-4·B6-5): `backup.sh`(`pg_dump -Fc` 스트리밍 → S3, 크기 되읽기, 디스크 사용률), `restore-check.sh`(스크래치 DB 복원 + 데이터 판정), `neon-import.sh`(읽기 전용 덤프 → EC2), systemd 유닛, `install.sh`(SSM Run Command 대상) ③목 테스트 ④`infra-deploy.yml` paths 를 `{0-bootstrap,1-network}/**` 로 좁힘(B4-17·B6-28 — 안 하면 6번 스크립트·문서 PR 마다 prod DB 레이어 apply) | $0 | — |
 | **6-B** | ✅ **2026-10-20 (#475, 16:28 KST 과금 시작)** — CI apply 8 생성, 첫 부팅 ≈ 4분 40초 `[db-init] 완료`, WireGuard 핸드셰이크·`ssl=on`·설정 볼륨 심볼릭 확인. 🔴 **켜기**: `db_enabled` **기본값** true(tfvars 로 켜면 다음 CI apply 가 destroy 시도 → `prevent_destroy` 로 매번 빨강, B6-27) · WireGuard 피어 생성·SSM 입력 · 원장 ⏸ 제거 · 첫 부팅 검증(Fly·EKS 사설 경로 접속) | **상시 과금 시작** ≈ $13/월 | 🔴 **사용자 별도 승인** |
 | **6-C** | 🚧 **2026-10-20 핵심 경로 통과** — `deploy.sh`(SSM Run Command 첫 실측, F-3 해소) → `neon-import` **9초**·14테이블·Flyway 일치 → `backup` 72,874 bytes → `restore-check` **1초** 값 일치. 재가져오기 가드 실물 확인. **남은 것: Neon 브랜치 1회 복원 리허설**(사용자 콘솔 — 브랜치 + 브랜치 전용 role). 리허설: SSM 으로 timer 설치 → `neon-import` → `backup` → `restore-check`(행 수·Flyway 이력 일치) → **복원 시간(RTO)·덤프 크기 실측** → Neon **브랜치**에 1회 수동 복원(브랜치 전용 role — 부모 브랜치에 없는 role 은 main 에 접속 불가 🟡 Neon 문서 확인 필요) | 미미 | — |
-| **6-D** | 감시 워크플로(읽기 전용 역할, 계정 ID 마스킹 B6-30) + 실패 주입(백업 멈춤 → 빨강) · 패치 절차 문서(B5-8) · 원장·비용 모델·튜토리얼 갱신 | $0 | — |
+| **6-D** | ✅ **2026-10-20** — `watch.sh` + `Prod DB Backup Watch`(매일 11:00 KST, 읽기 전용 역할), 실패 주입 6종(나이·디스크·테이블·복원 나이·키 없음·조회 실패) 전부 빨강 + 회귀 6건을 docker 테스트에 편입(38건). 런북 복구 블록을 실 EC2 에서 테스트 DB 이름으로 그대로 실행(세션 종료 → 이름 변경 → 복원 → `일치`). 메일 도달은 머지 직후 `inject_failure` 로. 런북 `scripts/prod-db/README.md`(복구 판정 단계 실물 확인), 버킷 재판정 B6-7. 원문: 감시 워크플로(읽기 전용 역할, 계정 ID 마스킹 B6-30) + 실패 주입(백업 멈춤 → 빨강) · 패치 절차 문서(B5-8) · 원장·비용 모델·튜토리얼 갱신 | $0 | — |
 
 ### 6번 Blindspot (2026-10-20, Explore 읽기 전용) — 목적지
 
