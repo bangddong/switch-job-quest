@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       inject_failure:
-        description: "일부러 빨갛게(백업 나이 기준 0h) — 실패 메일이 실제로 오는지 확인용(QA 6-D F-3, B4-23)"
+        description: "일부러 빨갛게(백업 나이 기준 -1h) — 실패 메일이 실제로 오는지 확인용(QA 6-D F-3, B4-23)"
         type: boolean
         default: false
   pull_request:
@@ -62,8 +62,9 @@ jobs:
       - name: 백업 감시
         shell: bash
         env:
-          # 수동 실행에서만 켤 수 있다. 실제 데이터로 판정하되 기준만 0h 로 — 빨강·메일 경로 확인용.
-          MAX_BACKUP_AGE_H: ${{ inputs.inject_failure && '0' || '26' }}
+          # 수동 실행에서만 켤 수 있다. 실제 데이터로 판정하되 기준만 -1h 로 — 빨강·메일 경로 확인용.
+          # 0 이 아니라 -1: 나이가 정수 시간이라 백업 직후(1h 미만)면 0 ≤ 0 으로 초록이 된다(QA F-8).
+          MAX_BACKUP_AGE_H: ${{ inputs.inject_failure && '-1' || '26' }}
         run: |
           set -euo pipefail
           rc=0

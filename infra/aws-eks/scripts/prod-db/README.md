@@ -11,7 +11,7 @@
 |---|---|---|---|
 | 백업 `backup.sh` | 매일 03:30 KST(±10분) | EC2 systemd `devquest-db-backup.timer` | `s3://devquest-eks-backups-seoul/prod-db/dumps/devquest-<UTC>.{dump,counts}` + `health/backup/<UTC>_disk=_bytes=_tables=` |
 | 복원 판정 `restore-check.sh` | 매주 일 04:30 KST | EC2 systemd `devquest-db-restore-check.timer` | 최신 덤프 → 스크래치 DB → 행 수·Flyway 이력 **값 비교** → `health/restore/<UTC>_secs=_tables=` |
-| 감시 `watch.sh` | 매일 11:00 KST | GitHub Actions `Prod DB Backup Watch`(읽기 전용 역할) | 헬스 키 신선도(백업 26h · 복원 180h)·디스크 80%·테이블 ≥1. **빨강 = 실패 메일** — 도달 확인: 수동 실행 `inject_failure` |
+| 감시 `watch.sh` | 매일 11:00 KST | GitHub Actions `Prod DB Backup Watch`(읽기 전용 역할) | 헬스 키 신선도(백업 26h · 복원 160h)·디스크 80%·테이블 ≥1. **빨강 = 실패 메일** — 도달 확인: 수동 실행 `inject_failure` |
 
 보존: 버킷 lifecycle **30일**(현행·이전 버전 모두). 🔴 백업이 멈추면 30일 뒤 **마지막 정상 덤프까지 사라진다** — 감시 메일을 무시하지 마라.
 
@@ -83,6 +83,14 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
    ```bash
    aws s3 cp s3://$B/prod-db/dumps/$C /tmp/expected
    bash -c ". /opt/devquest-db/common.sh; local_counts $DB" | diff -u /tmp/expected - && echo 일치
+   ```
+   ⚠️ **3·4단계가 실패하면 되돌린다**(QA F-9) — 남겨 둔 DB 는 `ALLOW_CONNECTIONS false` 상태라 이름만 바꾸면 접속이 안 된다:
+   ```bash
+   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d postgres <<SQL
+   DROP DATABASE $DB;
+   ALTER DATABASE $OLD RENAME TO $DB;
+   ALTER DATABASE $DB ALLOW_CONNECTIONS true;
+   SQL
    ```
 5. 확인 뒤 남겨 둔 것을 지운다(10GiB 볼륨 — 오래 두지 마라): `runuser -u postgres -- psql -d postgres -c "DROP DATABASE $OLD"`
 
