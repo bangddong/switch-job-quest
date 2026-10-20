@@ -33,8 +33,11 @@ variable "public_subnet_cidrs" {
 # ── 📌D-016 순서표 5-A — prod DB (db.tf) ─────────────────────────────────
 variable "db_enabled" {
   type        = bool
-  description = "prod DB EC2 를 만들지. 🔴 true 로 바꾸는 머지 = 상시 과금 시작(월 ≈ $13+). 별도 PR·승인으로만"
-  default     = false
+  description = "prod DB EC2 를 만들지. 🔴 true = 상시 과금(월 ≈ $13+). 2026-10-20 사용자 승인으로 켬(📌D-016 6-B)"
+  # 🔴 tfvars 가 아니라 **기본값**으로 켠다(B6-27) — CI 는 TF_VAR 를 주입하지 않고 기본값으로 apply 한다.
+  #    로컬 tfvars 로 켜면 다음 CI apply 가 false 기준으로 destroy 를 시도해 prevent_destroy 로 매번 빨갛게 된다.
+  #    끄려면 이 값을 false 로 돌리는 것으로는 안 된다(prevent_destroy) — PERSISTENT-RESOURCES 의 제거 절차.
+  default     = true
 }
 
 variable "db_instance_type" {
