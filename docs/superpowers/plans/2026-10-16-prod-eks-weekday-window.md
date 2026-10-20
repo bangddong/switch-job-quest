@@ -101,7 +101,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 4 | **리퍼·마커 정책** — Q-1 결과대로. CI 클러스터의 dead man's switch(off 실패 감지) | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** | N-9 · U-3 · N-15 | 5 |
-| 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1 · 6 |
+| 7 | **Neon → EC2 데이터 이전 리허설**, JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE) | U-11 · U-6 · U-4 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
 | 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크 | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
@@ -118,8 +118,8 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B-6 | 🟡 | daily-api(wave 4)도 `ddl-auto: validate` → 마이그레이션 뒤여야 | → **1b** |
 | B-7 | 🔴 | 이미지 태그 패치가 `Deployment/core-api` 만 겨냥 → Job 태그를 따로 적으면 클러스터 안 스큐 재발 | → **1b** + 순서표 2(이미지 공급망) |
 | B-9 | ⚪ | Fly release 머신의 이그레스 IP 가 앱 머신 고정 IP 와 다를 수 있음 → EC2 DB SG(N-6) 허용 목록에 영향 | DB 가 아직 Neon → **5번**(SG 설계 시 실측) |
-| B-12 | 🟡 | *"core-api 가 유일한 마이그레이션 실행자"* 서술이 `k8s/README.md`·`kustomization.yaml` wave 3 주석·`daily-api.yaml`·양 `application-prod.yml` 에 박혀 있음. 손 경로에 Job 단계 없음 | EKS 는 1a 에서 동작이 안 바뀐다(기동 시 migrate 유지, repair 만 빠짐) → **1b** 에서 함께 |
-| B-13 | 🟡 | 복구 절차(`eks-tutorial-steps.md` 백업 절, `db-restore.sh`, `PERSISTENT-RESOURCES.md`)가 *앱 기동 시 Flyway* 를 판정 도구로 씀. `selfHeal` 이 복구 중 Job 을 다시 띄워 `pg_restore` 와 경쟁 가능 | → **1b** + **6번**(복구 리허설) |
+| B-12 | 🟡 | *"core-api 가 유일한 마이그레이션 실행자"* 서술이 `k8s/README.md`·`kustomization.yaml` wave 3 주석·`daily-api.yaml`·양 `application-prod.yml` 에 박혀 있음. 손 경로에 Job 단계 없음 | EKS 는 1a 에서 동작이 안 바뀐다(기동 시 migrate 유지, repair 만 빠짐) → **1b** 에서 함께 🟡 10-20: prod(external) 모드는 EKS migrate 꺼짐(5-B) → 서술 갱신은 1b 폐기 판정(8번)과 함께 |
+| B-13 | 🟡 | 복구 절차(`eks-tutorial-steps.md` 백업 절, `db-restore.sh`, `PERSISTENT-RESOURCES.md`)가 *앱 기동 시 Flyway* 를 판정 도구로 씀. `selfHeal` 이 복구 중 Job 을 다시 띄워 `pg_restore` 와 경쟁 가능 | → **1b** + **6번**(복구 리허설) 🔴 10-20: external 모드는 **앱 기동 시 Flyway 가 꺼져 있어** 복구 판정 도구가 사라졌다 → **6번**(복구 리허설)에서 대체 판정(`java -jar app.jar validate` 를 Fly release 머신/로컬 이미지로) 설계 |
 | B-14 | 🟡 | 새 코드가 `be-cd.yml` 의 `./gradlew test` 에 자동 편입(L-36 쟁점 재부상) | 실행기를 core-api 안에 두므로 **새 모듈 없음** — 1a 에서 쟁점 아님. 전용 모듈로 바꾸면 재검토 |
 | B-16 | 🟡 | Neon 콜드 스탠바이(Q-2) 전환 시 누가 migrate 하는지 미정의 | → **6번**(복구·전환 리허설) |
 | B-17 | ⚪ | 실행기를 db-core 에 두면 *storage 모듈에 main* — 선례 없음 | core-api 에 두므로 해당 없음 |
