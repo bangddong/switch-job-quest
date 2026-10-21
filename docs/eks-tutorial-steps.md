@@ -12,11 +12,12 @@
 >
 > **최종 검증**: 이관 완료 후 클러스터 destroy → 이 문서만으로 처음부터 재현 성공해야 완료.
 
-#> 🔴 **2026-10-21 이후 이 레포의 2-cluster 는 prod 창 전용이다(📌D-016 8-A)** — `infra/aws-eks/2-cluster/prod.auto.tfvars.json`
-> (db_mode=external · environment=prod · 노드 3)을 tofu 가 **자동으로** 읽는다. 이 튜토리얼(학습 모드)을 재현하려면 **그 파일을 먼저 치운다**
-> (`mv prod.auto.tfvars.json /tmp/`). 그대로 두면 prod DB·prod JWT 를 쓰는 클러스터가 뜬다.
+> 🔴 **2026-10-21 이후 이 레포의 2-cluster 는 prod 창 전용이다(📌D-016 8-A)** — `infra/aws-eks/2-cluster/prod.auto.tfvars.json`
+> (db_mode=external · environment=prod · 노드 3)을 tofu 가 **자동으로** 읽는다. 이 튜토리얼(학습 모드)을 재현하려면
+> apply·destroy 마다 **`-var db_mode=in-cluster -var environment=learning -var node_desired_size=1`** 을 붙인다
+> (명시적 `-var` 가 auto tfvars 를 이긴다 — 추적 파일을 옮기지 않는다). 안 붙이면 prod DB·prod JWT 를 쓰는 클러스터가 뜬다.
 
-## 재현 검증 이력 — 이 문서를 얼마나 믿어도 되나
+### 재현 검증 이력 — 이 문서를 얼마나 믿어도 되나
 
 | 날짜 | 범위 | 결과 |
 |---|---|---|

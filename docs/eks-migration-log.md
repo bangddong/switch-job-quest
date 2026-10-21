@@ -5790,3 +5790,4 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` be/ 트리 해시 비교 폴백 — `git rev-parse f9ba8038:be` = `0e23c919…` 와 같은 트리의 ECR 태그 `e9bbe139`·`e2647873`(10-19) 존재 → 최신 `e2647873` 선택. **be/ 트리가 같다 = Dockerfile 포함 BE 소스가 바이트 단위로 같다 = 같은 이미지·같은 스키마.** 트리가 다르면 옛 커밋으로 물러나지 않고 실패(테스트 7건).
 - `[결정]` 1b(EKS 마이그레이션 Job) **폐기**(B8-24). tfsec(자동 tfvars 로드 포함) 문제 없음.
 - `[메모]` Ingress·LBC 배포 경로(B8-4)·metrics-server `.11` 사전 점검(B8-8)은 on 경로와 한 몸이라 **8-B** 로.
+- `[해결]` QA(8-A) **HIGH F-1**: ExternalSecret `find.name.regexp: ^[A-Z0-9_]+$` 는 ESO 가 **전체 경로**(`/devquest/prod/app/…`)에 매칭해 0건 → 에러 없이 **빈 Secret** — TASK-17 키가 조용히 안 들어갈 뻔했다(렌더 검증만으로는 못 잡는다). → 전체 경로 앵커 + **허용 목록**(F-3 envFrom 덮어쓰기 차단). F-2 "동기화 실패해도 파드는 뜬다" 주석 정정(실패면 wave 1 Degraded — 8-B 판정) · F-4 경로 3곳 복제 주석 · F-5 튜토리얼 안내 오타·헤딩 복구, 학습 재현은 파일 이동 대신 `-var` 3개 · F-6 ecr-push 옛 정본 규칙에 대체 표시, k8s README·overlay 머리말 · F-7 ECR 권한 오류를 "없음" 이 아니라 rc 2, 손 `fly deploy` 전제 명시, 테스트 9건.

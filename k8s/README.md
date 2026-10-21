@@ -45,7 +45,7 @@ k8s/
 > core-api → 나머지 → HPA)는 `k8s/gitops/apps/kustomization.yaml` 이 정한다.
 > ⚠️ ArgoCD 경로는 **3b(in-cluster · static PV) 전용**이다 — RDS(Stage 2) · 동적 PVC(3a)는 손 경로로만.
 > 📌 **prod(외부 DB, 📌D-016)** 는 별도 오버레이 `gitops/apps-external` — postgres 를 빼고 비밀번호를 SSM 에서 읽으며
-> core-api 기동 시 migrate 를 끈다. 2-cluster 는 `-var db_mode=external`. 짝은 `tofu output argocd_apps_path` 가 알려 준다.
+> core-api 기동 시 migrate 를 끈다. 2-cluster 는 `prod.auto.tfvars.json`(8-A)이 `db_mode=external` 을 자동으로 준다. 짝은 `tofu output argocd_apps_path` 가 알려 준다.
 > ⚠️ 정리할 때는 **Application 을 먼저 지운다**(SOP §8 ⓪) — selfHeal 이 손으로 지운 것을 되살린다.
 
 ### 1. 이미지 준비 (클러스터 없어도 가능, $0)

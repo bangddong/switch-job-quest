@@ -16,7 +16,7 @@
 #         `../apps` 의 core-api 태그는 학습 세션 시절 값이 그대로 박혀 있다.
 #
 # 쓰는 법: ArgoCD Application 의 `path` 를 `k8s/gitops/apps` → `k8s/gitops/apps-external` 로(순서표 8 전환 워크플로).
-#   2-cluster 는 `-var db_mode=external` 로 apply. 기본값(in-cluster)은 그대로 둔다 — 튜토리얼 verify 마커(B5-15).
+#   2-cluster 는 `prod.auto.tfvars.json` 이 db_mode=external 을 자동으로 준다(8-A). 변수 기본값(in-cluster)은 그대로 — 튜토리얼 verify 마커(B5-15).
 # ⚠️ Application 의 PV 패치(volumeHandle·AZ)는 대상이 없어져 아무것도 바꾸지 않는다(로컬 렌더로 확인 — 에러 아님).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -89,8 +89,9 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: { name: MAIL_ENABLED, value: "false" }
-      # ⑦ 앱 외부 키(externalsecret-runtime.yaml). optional — TASK-17 전이거나 동기화가 실패해도 파드는 뜬다
-      #    (AI·채점만 실패한다 — 기동을 막는 것보다 낫다. 판정은 on 잡의 스모크 몫).
+      # ⑦ 앱 외부 키(externalsecret-runtime.yaml). optional — Secret 이 **없을 때만** 파드를 살린다.
+      #    ⚠️ ExternalSecret 동기화가 **실패**하면 wave 1 이 Degraded 라 core-api 자체가 안 만들어진다(QA F-2) —
+      #    "실패해도 뜬다" 가 아니다. 판정은 8-B on 잡(ExternalSecret Ready · 키 개수 > 0).
       - op: add
         path: /spec/template/spec/containers/0/envFrom/-
         value: { secretRef: { name: core-api-runtime, optional: true } }

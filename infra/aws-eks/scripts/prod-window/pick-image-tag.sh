@@ -10,7 +10,9 @@
 # 그 sha 의 이미지가 **세 레포 모두에** 있어야 한다(core-api·ai-api·daily-api — apps 가 셋을 띄운다).
 # 하나라도 없으면 **실패한다**(옛 커밋으로 물러나지 않는다 — 스키마가 Fly 와 어긋난다). 그날은 Fly 가 계속 서빙한다.
 #
-# 필요: gh(GH_TOKEN, actions:read) · aws(ecr:DescribeImages). 사용: pick-image-tag.sh [owner/repo]
+# ⚠️ 전제: Fly 는 be-cd(`be/**` main push)로만 배포된다. **손으로 `fly deploy` 하면 이 전제가 깨진다** — 그 커밋은
+#    be-cd 이력에 없다(QA F-7). 손 배포를 했으면 그 커밋으로 be-cd 를 다시 돌리거나 이 스크립트 결과를 믿지 마라.
+# 필요: gh(GH_TOKEN, actions:read) · aws(ecr:DescribeImages) · git 이력(fetch-depth 0). 사용: pick-image-tag.sh [owner/repo]
 set -euo pipefail
 REPO="${1:-${GITHUB_REPOSITORY:-bangddong/switch-job-quest}}"
 REGION="${AWS_REGION:-ap-northeast-2}"
@@ -22,11 +24,14 @@ SHA=$(gh api "repos/$REPO/actions/workflows/be-cd.yml/runs?branch=main&status=su
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { log "main 에서 성공한 be-cd 가 없다(${SHA:-없음})"; exit 1; }
 log "Fly 배포 커밋(마지막 성공 be-cd) = $SHA"
 
-has_all() {  # $1 = 태그 — 세 레포 모두에 있으면 0
-  local svc
+has_all() {  # $1 = 태그 — 세 레포 모두에 있으면 0, 하나라도 없으면 1. 그 밖의 오류(권한·네트워크)는 rc 2 로 즉시 종료(QA F-7).
+  local svc err
   for svc in $SERVICES; do
-    aws ecr describe-images --region "$REGION" --repository-name "devquest/$svc" \
-      --image-ids "imageTag=$1" --query 'imageDetails[0].imageTags' --output text >/dev/null 2>&1 || return 1
+    if ! err=$(aws ecr describe-images --region "$REGION" --repository-name "devquest/$svc" \
+                 --image-ids "imageTag=$1" --query 'imageDetails[0].imageTags' --output text 2>&1 >/dev/null); then
+      case "$err" in *ImageNotFoundException*) return 1 ;; esac
+      log "ECR 조회 오류(devquest/$svc): ${err:0:160}"; exit 2
+    fi
   done
 }
 if has_all "$SHA"; then echo "$SHA"; exit 0; fi

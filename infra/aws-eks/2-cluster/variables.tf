@@ -359,6 +359,7 @@ variable "prod_db_password_parameter" {
 
 # 📌D-016 8-A — EKS 창 동안 앱이 쓰는 외부 키(Anthropic·Judge0·Resend·Grafana·Sentry)의 SSM 경로(사용자가 콘솔로 넣는다 — TASK-17).
 #   ESO 가 이 prefix 아래를 **경로째**(GetParametersByPath) 읽어 Secret `core-api-runtime` 을 만든다(k8s/gitops/apps-external).
+#   ⚠️ 이 값은 `k8s/gitops/apps-external/externalsecret-runtime.yaml` 의 path·regexp·rewrite 와 **복제**다 — 바꿀 땐 함께(QA 8-A F-4).
 variable "prod_app_parameter_prefix" {
   type        = string
   description = "prod 앱 외부 키 SSM 경로 prefix (db_mode=external, 끝은 /)"
