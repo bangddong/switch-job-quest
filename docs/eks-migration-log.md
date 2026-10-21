@@ -5767,3 +5767,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` 6) 백업 1회(73,038 bytes) · **Neon 대기 복원 11s** · `neon-import --reset` 재시도 → `❌ … CUTOVER_DONE=1 … 가져오기 금지`(가드 실물 동작) · be-cd 재활성 · prod 스모크 `success` · `watch.sh` 전부 ✅(standby 0h 포함).
 - `[비용]` 추가 비용 0 — prod DB 상시분(≈$12.9/월)만. **Neon 은 이제 콜드 대기**(production = 동결 사본, standby-rehearsal = 매일 복원 대상).
 - `[메모]` 쓰기 중단 창 ≈ 11분(14:48 동결 ~ 14:59). 대부분은 4번 확인 대기(로그인이 쓰기를 안 만들어 한 번 더 요청)였다.
+
+## 2026-10-21 — 📌D-016 7-C 정리 + TASK-13 (Fly 토큰 교체)
+
+- `[해결]` TASK-13: `fly tokens create deploy -a devquest-api -n gh-be-cd-2026-10 -x 8760h`(app 범위 — 이전 토큰보다 좁다) → 셸 변수로만 받아 `fly status` 로 검증(머신 1) → `gh secret set FLY_API_TOKEN`(stdin) → 노출된 `claude-auth-token`(2026-05 생성, 만료 2126) `fly tokens revoke` → 로컬 CLI `fly status` 계속 OK. `.claude/settings.local.json`(gitignore) 의 토큰 포함 권한 규칙 **11개** 삭제, 남은 `FlyV1` 0. 값은 어디에도 출력하지 않았다.
+- `[메모]` GitHub 시크릿의 옛 값(2026-03-28)이 `claude-auth-token` 과 같은 것인지는 확인하지 않았다(자격증명 파일을 더 뒤지지 않았다) — 새 토큰으로 덮어써 무관해졌다.
+- `[결정]` SSM `neon-source-url`(읽기 전용 role)·`/devquest/ops/neon-app-url`(production 쓰기 role — 중단용) 삭제. 전환 뒤 production 으로 되돌리면 EC2 쓰기를 잃으므로 중단 경로가 의미를 잃었다. 대기 가드는 `neon-prod-coords` 로 동작.
+- `[결정]` B7-25 서술 갱신: 루트 README(배포 표·구성도·prod DB 안내) · TASK-6 *"prod는 Fly+Neon이라 무영향"* · 비용 모델 *"계정 폐쇄돼도 prod 무영향"* · D-016 비교표 · 튜토리얼 · 원장 SSM 행.
