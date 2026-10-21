@@ -618,7 +618,7 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 
 | 환경 | DB | 근거 |
 |------|-----|------|
-| **Fly (prod, 24/7)** | **Neon** (변경 없음) | 상시 필요 · **$0** · 관리형 백업/PITR/풀링 |
+| **Fly (prod, 24/7)** | ~~**Neon** (변경 없음)~~ → **EC2 자가 운영 Postgres**(2026-10-21 전환, 7번) | Neon 은 콜드 대기(production 동결 사본 + 대기 브랜치 매일 복원) |
 | **EKS (학습, 가동률 ~15%)** | **in-cluster PostgreSQL + 영속 EBS** | 자기완결형 풀스택 · K8s 스토리지 실습 |
 
 - **코드 변경 0** — `application-prod.yml`이 `jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}` 등

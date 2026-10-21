@@ -129,7 +129,7 @@ core-enum ←── core-domain ←── core-api (bootJar)
 |------|--------|--------|
 | Frontend | Vercel | `quest.dhbang.co.kr` |
 | Backend | Fly.io (Tokyo, 512MB) | `api.quest.dhbang.co.kr` |
-| Database | Neon (PostgreSQL) | - |
+| Database | **AWS EC2 자가 운영 PostgreSQL 17**(t4g.micro, 서울) — Fly ↔ WireGuard(6PN 피어) · 6시간 백업 · Neon 콜드 대기 | - |
 
 - BE: 트래픽 없을 시 머신 자동 정지 (`auto_stop_machines = stop`, `min_machines_running = 0`)
 - FE → BE: `/api/*` 경로는 Vercel 프록시로 BE에 포워딩 (`vercel.json`)
@@ -153,10 +153,10 @@ core-enum ←── core-domain ←── core-api (bootJar)
 │  Spring Boot 4 · Kotlin · port 8080 │
 │  auto-stop (트래픽 없을 시 정지)      │
 └──────┬──────────────┬──────────┬────┘
-       │ Claude API   │ OAuth    │ PostgreSQL (DB_HOST secret)
+       │ Claude API   │ OAuth    │ PostgreSQL (DB_HOST = 6PN 피어 IPv6, WireGuard)
        ▼              ▼          ▼
- Anthropic API   GitHub API   Neon
- (Haiku / Sonnet)  (인증)    (PostgreSQL)
+ Anthropic API   GitHub API   AWS EC2 Postgres 17
+ (Haiku / Sonnet)  (인증)    (S3 백업 6h · Neon 콜드 대기)
        │
        │ HTTP 배치 (LogtailHttpAppender)
        ▼
@@ -445,7 +445,7 @@ GET /health
 | created_at | DATETIME | 평가 시각 |
 
 > **로컬**: H2 인메모리 DB (`local` 프로파일, 서버 재시작 시 초기화)
-> **프로덕션**: PostgreSQL (`prod` 프로파일, Neon — `DB_HOST`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` 시크릿 필요)
+> **프로덕션**: PostgreSQL (`prod` 프로파일 — `DB_HOST`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` 시크릿 필요). 2026-10-21 부터 **AWS EC2 자가 운영 Postgres 17**(📌D-016 — 이전엔 Neon). 운영 런북: `infra/aws-eks/scripts/prod-db/README.md`
 
 ---
 

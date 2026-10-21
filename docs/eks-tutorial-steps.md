@@ -1162,7 +1162,7 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/actuator/health/readines
 
 > 🎉 **Stage 1과 같은 이미지가 코드 변경 0으로 떴다.** 바뀐 건 환경변수 주입 경로뿐이다.
 > `application-prod.yml`을 100% 환경변수 기반으로 유지한 설계가 여기서 배당금을 낸다 —
-> Neon ↔ RDS ↔ in-cluster Postgres를 **재빌드 없이** 갈아끼울 수 있다.
+> Neon ↔ RDS ↔ in-cluster Postgres를 **재빌드 없이** 갈아끼울 수 있다. (prod 도 2026-10-21 같은 방식으로 Neon → EC2 를 시크릿만 바꿔 옮겼다 — 📌D-016 7번)
 
 **`DB_HOST`에 포트가 없어야 한다**(설계 확인):
 ```bash
