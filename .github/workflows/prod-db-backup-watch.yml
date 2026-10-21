@@ -9,10 +9,10 @@ name: Prod DB Backup Watch
 #    S3 `ListObjectsV2` 만 쓰고 객체 본문은 읽지 않는다(그 역할은 백업 버킷 GetObject 가 Deny — 덤프 = prod 데이터).
 #    ⚠️ 이 워크플로로 `id-token: write` 를 가진 워크플로가 3개가 됐다(infra-deploy · ecr-push · 이것, B6-25).
 # ⚠️ GitHub cron 은 지연·누락이 있고, 레포 활동이 60일 없으면 schedule 이 자동 비활성화된다(N-13).
-#    판정 기준(26h)에 여유를 둔 이유. 비활성화 자체는 이 워크플로가 잡지 못한다 — 사람이 Actions 화면에서 본다.
+#    판정 기준(백업 8h = 6시간 주기 + 여유)에 여유를 둔 이유. 비활성화 자체는 이 워크플로가 잡지 못한다 — 사람이 Actions 화면에서 본다.
 on:
   schedule:
-    - cron: "0 2 * * *" # 11:00 KST — 백업(03:3x KST)과 주간 복원 판정(일 04:3x KST) 뒤
+    - cron: "0 2 * * *" # 11:00 KST — 백업(6h 주기: 03:30·09:30·15:30·21:30 KST)·주간 복원 판정(일 04:3x KST) 뒤
   workflow_dispatch:
     inputs:
       inject_failure:
@@ -64,7 +64,7 @@ jobs:
         env:
           # 수동 실행에서만 켤 수 있다. 실제 데이터로 판정하되 기준만 -1h 로 — 빨강·메일 경로 확인용.
           # 0 이 아니라 -1: 나이가 정수 시간이라 백업 직후(1h 미만)면 0 ≤ 0 으로 초록이 된다(QA F-8).
-          MAX_BACKUP_AGE_H: ${{ inputs.inject_failure && '-1' || '26' }}
+          MAX_BACKUP_AGE_H: ${{ inputs.inject_failure && '-1' || '8' }}   # 6시간 주기 + 여유(📌D-016 7-A — 26 으로 두면 RPO 6h 감시가 무효, QA F-3)
         run: |
           set -euo pipefail
           rc=0

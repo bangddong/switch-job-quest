@@ -528,7 +528,7 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 <!-- verify: infra/aws-eks/scripts/prod-db/install.sh ~ systemctl enable --now devquest-db-standby.timer -->
 
 > ✅ **순서표 6-D 「백업 감시」 (2026-10-20)** — `Prod DB Backup Watch`(매일 11:00 KST)가 **좁힌 읽기 전용 역할**로 S3 헬스 키 이름만 본다
-> (백업 26h · 복원 판정 8일 · 디스크 80% · 테이블 ≥1). 빨강 = 유일한 알림(실패 메일). 백업이 멈추면 lifecycle 30일 뒤 마지막 덤프도 사라진다.
+> (백업 **8h**(7-A, 6시간 주기) · 복원 판정 160h · 전환 뒤 Neon 대기 30h · 디스크 80% · 테이블 ≥1). 빨강 = 유일한 알림(실패 메일). 백업이 멈추면 lifecycle 30일 뒤 마지막 덤프도 사라진다.
 > 🔴 이 워크플로를 main 역할(Admin)로 바꾸지 마라 — 목록 읽기면 충분하고, Admin 경로를 늘리는 것은 8번 가드 재정의(N-3) 전의 사각지대다.
 <!-- verify: .github/workflows/prod-db-backup-watch.yml ~ role-to-assume: \$\{\{ secrets\.AWS_ROLE_ARN \}\}$ -->
 

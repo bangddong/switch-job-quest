@@ -142,19 +142,23 @@ systemctl restart postgresql@17-main && systemctl is-active postgresql@17-main
 ## 🔴 전환(7-B) 절차 — Neon → EC2 (점검 창, 사용자 승인)
 
 **시각**: 00:00(레이트 리밋 초기화) · 03:30/09:30/15:30/21:30(백업) · 09:00(메일) KST 를 피한다. prod Fly 는 **머신 1대**라 롤링 분기는 없다(7-0).
-**사전**: TASK-16(사용자) — Neon **앱이 쓰는** 접속 문자열을 SSM **`/devquest/ops/neon-app-url`** 에(중단·복귀용). EC2 역할은 `/devquest/prod/db/*` 만 읽으므로 이 경로는 못 읽는다 — 쓰기 권한 자격증명을 EC2 에 두지 않는다(B6-12).
+**사전**: ① TASK-16(사용자) — Neon **앱이 쓰는** 접속 문자열을 SSM **`/devquest/ops/neon-app-url`** 에(중단·복귀용). EC2 역할은 `/devquest/prod/db/*` 만 읽으므로 이 경로는 못 읽는다 — 쓰기 권한 자격증명을 EC2 에 두지 않는다(B6-12).
+② SSM **`/devquest/prod/db/neon-prod-coords`**(String, `호스트/DB`, 비밀 아님) — 대기 복원 가드의 좌표(전환 뒤 source-url 을 지워도 가드가 산다). ✅ 2026-10-21 생성. 다시 만들 땐 source-url 에서 **호스트/DB 만** 뽑아(비밀번호 출력 금지):
+   `aws ssm get-parameter --name /devquest/prod/db/neon-source-url --with-decryption --query Parameter.Value --output text | sed -nE 's#^postgres(ql)?://[^@]+@([^:/?]+)(:[0-9]+)?/([^?]+).*#\2/\4#p'` → `aws ssm put-parameter --name /devquest/prod/db/neon-prod-coords --type String --value <결과>`
 
 | # | 무엇 | 어디서 | 확인 |
 |:-:|---|---|---|
 | 0 | `gh workflow disable be-cd.yml` — 전환 중 BE 배포 금지(B7-7) | 로컬 | `gh workflow list` 에 disabled |
 | 1 | **Neon 쓰기 동결**: `ALTER ROLE <앱 role> SET default_transaction_read_only = on;` → `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '<앱 role>' AND pid <> pg_backend_pid();` (앱 role 확인: `SELECT DISTINCT usename, client_addr FROM pg_stat_activity WHERE datname = 'neondb';`) | Neon SQL Editor(`production`) | 이 순간부터 **쓰기 실패**(몇 분) — 읽기는 된다 |
+| 1b | **동결 검증**(QA 7-A F-7) — 앱 자격증명으로 **새 세션**을 열어 `SHOW transaction_read_only;` 가 `on` 인지(`/devquest/ops/neon-app-url` 을 파이프로, 값 출력 금지). `off` 면 동결이 안 됐다 → 2번으로 가지 마라 | 로컬(docker psql) | `on` |
 | 2 | `/opt/devquest-db/neon-import.sh --reset` | EC2(SSM) | `✅ … 판정 통과`(행 수·Flyway·**시퀀스**) |
+| 2b | **유실 검증** — 읽기 전용 role 로 **지금의** Neon 행 수(`counts_sql`)를 다시 뽑아 EC2 와 비교. 다르면 동결 사이로 쓰기가 샜다 → 2번을 다시 | EC2(SSM) | 차이 0 |
 | 3 | `fly secrets import -a devquest-api` ← stdin: `DB_HOST=[<피어 IPv6>]` · `DB_NAME=devquest` · `DB_USERNAME=devquest` · `DB_PASSWORD=<SSM password>` · `STORAGE_DATASOURCE_CORE_MINIMUMIDLE=1` · `STORAGE_DATASOURCE_CORE_KEEPALIVETIME=120000`(B7-26) — **값은 파이프로**(출력 금지). 머신 재시작만, release 는 안 돈다(7-0) | 로컬 | `fly status` started |
-| 4 | EC2 에 Fly 가 붙었나: `SELECT client_addr, state FROM pg_stat_activity WHERE client_addr::text LIKE 'fdaa:%';` + 앱 쓰기 1건(로그인 등) 뒤 그 행이 EC2 에 있는가 | EC2 | ≥1 행 · 새 행 존재 |
+| 4 | EC2 에 Fly 가 붙었나: `SELECT client_addr, state FROM pg_stat_activity WHERE client_addr::text LIKE 'fdaa:%';` · 쓰기 확인(QA 7-A F-11): `SELECT sum(n_tup_ins + n_tup_upd + n_tup_del) FROM pg_stat_user_tables;` 를 앱 사용(로그인 1회) **전후**로 — 늘었으면 Fly 가 EC2 에 쓴다 | EC2 | ≥1 행 · 수치 증가 |
 | 5 | **그 뒤에** `deploy.sh --cutover-done` — 표식(neon-import 영구 거부) + 대기 timer + `health/cutover/` | 로컬 | `[install] 전환 헬스 키 기록` |
 | 6 | 대기 복원 1회 `systemctl start devquest-db-standby.service` · `gh workflow enable be-cd.yml` · `gh workflow run prod-smoke-daily.yml` | EC2 · 로컬 | `✅ Neon 대기 복원 판정 통과` · 스모크 초록 |
 
-**중단(4번 전에 실패하면 — 쓰기 유실 0)**: ① `fly secrets import -a devquest-api` ← `/devquest/ops/neon-app-url` 을 `DB_*` 4개로(파이프) ② Neon: `SET default_transaction_read_only = off; ALTER ROLE <앱 role> RESET default_transaction_read_only;` — 🔴 앱 role 이 SQL Editor 의 role 과 같으면 새 세션이 읽기 전용이라 **`SET … off` 를 먼저** 쳐야 `ALTER ROLE` 이 된다 ③ `gh workflow enable be-cd.yml`. 표식(5번)을 안 남겼으므로 다시 시도할 수 있다.
+**중단(4번 전에 실패하면)** — 3번 뒤엔 앱이 이미 EC2 에 썼을 수 있다: 위 `n_tup_*` 합이 2번 직후보다 늘었으면 그 쓰기는 Neon 으로 돌아가면 잃는다(그 경우 되돌리지 말고 EC2 에서 고친다). 늘지 않았으면 유실 0: ① `fly secrets import -a devquest-api` ← `/devquest/ops/neon-app-url` 을 `DB_*` 4개로(파이프) ② Neon: `SET default_transaction_read_only = off; ALTER ROLE <앱 role> RESET default_transaction_read_only;` — 🔴 앱 role 이 SQL Editor 의 role 과 같으면 새 세션이 읽기 전용이라 **`SET … off` 를 먼저** 쳐야 `ALTER ROLE` 이 된다 ③ `gh workflow enable be-cd.yml`. 표식(5번)을 안 남겼으므로 다시 시도할 수 있다.
 **4번 뒤**(EC2 에 새 쓰기가 생긴 뒤)엔 Neon 으로 되돌리면 그 쓰기를 잃는다 — 되돌리지 말고 EC2 에서 고친다.
 
 ## 전환(7번) 뒤

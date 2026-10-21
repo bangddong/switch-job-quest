@@ -41,6 +41,7 @@ case "$1 $2" in
   "s3api head-object") b=$4; k=$6; stat -c %s "/mock-s3/$b/$k" ;;
   "s3api put-object")  b=$4; k=$6; mkdir -p "$(dirname "/mock-s3/$b/$k")"; : > "/mock-s3/$b/$k" ;;
   "s3api list-objects-v2") b=$4; p=$6
+    if [[ "${8:-}" == length\(* ]]; then (ls "/mock-s3/$b/$p" 2>/dev/null || true) | wc -l | tr -d "[:space:]"; exit 0; fi   # install.sh — cutover 키 개수
     # 목 자신이 pipefail 이라 없는 경로의 ls 실패가 "조회 실패"(rc 2)로 새지 않게 || true — 실제 S3 는 빈 목록을 돌려준다
     if [[ "$p" == */health/* ]]; then k=$( (ls "/mock-s3/$b/$p" 2>/dev/null || true) | sort | tail -1)   # watch.sh — 최신 헬스 키
     else case "$8" in *.counts*) sfx=counts;; *) sfx=dump;; esac
@@ -147,7 +148,7 @@ echo "── ⑥e 시퀀스가 데이터보다 뒤처진 덤프는 가져오기 
 echo "   (무엇의 실패를 잡나: 행 수·Flyway 는 일치하는데 setval 이 틀려 전환 직후 첫 INSERT 가 id 충돌)"
 Q neonsrc "SELECT setval('users_id_seq', 1)" >/dev/null
 out=$(RUN neon-import.sh --reset); rc=$?
-[ $rc -ne 0 ] && echo "$out" | grep -q '시퀀스가 데이터보다 뒤처졌다' && echo "$out" | grep -q 'users_id_seq last=1 max=50' && ok "뒤처진 시퀀스 검출(users_id_seq last=1 max=50)" || { bad "🔴 시퀀스 불일치를 통과(rc=$rc)"; echo "$out" | tail -3; }
+[ $rc -ne 0 ] && echo "$out" | grep -q '시퀀스가 데이터보다 뒤처졌다' && echo "$out" | grep -q 'users_id_seq next=2 max=50' && ok "뒤처진 시퀀스 검출(users_id_seq next=2 max=50)" || { bad "🔴 시퀀스 불일치를 통과(rc=$rc)"; echo "$out" | tail -3; }
 Q neonsrc "SELECT setval('users_id_seq', (SELECT max(id) FROM users))" >/dev/null
 out=$(RUN neon-import.sh --reset); rc=$?
 [ $rc -eq 0 ] && ok "시퀀스 정상화 뒤 가져오기 통과" || { bad "rc=$rc"; echo "$out" | tail -3; }

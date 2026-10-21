@@ -51,21 +51,24 @@ SQL
 
 # ── 시퀀스 판정(📌D-016 7-A, B7-24) — 행 수·Flyway 만 보면 setval 이 빠지거나 틀려도 "일치" 다.
 #    그러면 전환 직후 첫 INSERT 가 기존 id 와 충돌한다(duplicate key). 원천과 값 비교는 하지 않는다 — 시퀀스는
-#    트랜잭션 밖이라 스냅샷과 어긋난다. 대신 **복원본 자체의 성질**을 본다: 소유 시퀀스의 last_value ≥ 그 컬럼 max.
+#    트랜잭션 밖이라 스냅샷과 어긋난다. 대신 **복원본 자체의 성질**을 본다: 소유 시퀀스가 **다음에 줄 값 > 그 컬럼 max**.
 #    출력이 비어 있으면 통과. 한 줄이라도 있으면 그 시퀀스가 뒤처졌다.
 seq_sql() {
   cat <<'SQL'
-SELECT n.nspname || '.' || c.relname || ' last=' || coalesce(s.last_value, 0) || ' max=' || m.mx
+SELECT n.nspname || '.' || c.relname || ' next=' || q.nxt || ' max=' || m.mx
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   JOIN pg_depend d ON d.objid = c.oid AND d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')
   JOIN pg_class t ON t.oid = d.refobjid
   JOIN pg_namespace tn ON tn.oid = t.relnamespace
   JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
-  JOIN pg_sequences s ON s.schemaname = n.nspname AND s.sequencename = c.relname
+  -- 다음에 나올 값 = is_called 면 last_value+1, 아니면 last_value(setval(…, N, false) 직후). pg_sequences.last_value 는
+  -- 그 경우 NULL 이라 거짓 실패가 났다(QA 7-A F-10) → 시퀀스 relation 을 직접 읽는다.
+  CROSS JOIN LATERAL (SELECT (xpath('/row/n/text()', query_to_xml(
+          format('SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END AS n FROM %I.%I', n.nspname, c.relname), false, true, '')))[1]::text::bigint AS nxt) q
   CROSS JOIN LATERAL (SELECT coalesce((xpath('/row/m/text()', query_to_xml(
           format('SELECT max(%I)::bigint AS m FROM %I.%I', a.attname, tn.nspname, t.relname), false, true, '')))[1]::text::bigint, 0) AS mx) m
- WHERE c.relkind = 'S' AND coalesce(s.last_value, 0) < m.mx
+ WHERE c.relkind = 'S' AND q.nxt <= m.mx
  ORDER BY 1;
 SQL
 }
@@ -86,7 +89,8 @@ snapshot_dump() {
   # stderr 는 섞지 않는다(QA F-5) — 경고 한 줄이 스냅샷 id·행 수 자리로 읽힌다. 에러면 EOF → 아래 die.
   coproc SNAPPG { "${PSQL_PREFIX[@]}" psql -X -q -A -t -v ON_ERROR_STOP=1 "${PSQL_CONN[@]}"; }
   local w="${SNAPPG[1]}" r="${SNAPPG[0]}"
-  printf '%s\n' "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;" "SELECT pg_export_snapshot();" >&"$w"
+  # SET LOCAL … = 0: 누가 서버에 idle-in-transaction 제한을 걸어도 이 세션(pg_dump 동안 놀고 있다)은 끊기지 않게(QA 7-A F-2).
+  printf '%s\n' "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;" "SET LOCAL idle_in_transaction_session_timeout = 0;" "SELECT pg_export_snapshot();" >&"$w"
   read -r -t 60 snap <&"$r" || die "스냅샷 내보내기 응답 없음"
   [[ "$snap" =~ ^[0-9A-F]+-[0-9A-F]+-[0-9]+$ ]] || die "스냅샷 id 형식 이상: $snap"
   "${PSQL_PREFIX[@]}" pg_dump -Fc --no-owner --no-acl --snapshot="$snap" "${PSQL_CONN[@]}"

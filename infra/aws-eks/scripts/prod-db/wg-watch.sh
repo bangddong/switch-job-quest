@@ -15,9 +15,13 @@ EP=$(awk -F' *= *' '/^Endpoint/{print $2; exit}' "$CONF")
 if ! wg show "$IF" >/dev/null 2>&1; then
   log "인터페이스 $IF 없음 — 기동"; systemctl restart "wg-quick@$IF"; exit 0
 fi
-PK=$(wg show "$IF" peers | head -1)
+PEERS=$(wg show "$IF" peers) || { log "피어 조회 실패"; exit 1; }
+PK=$(printf '%s\n' "$PEERS" | awk 'NR==1')
+[ -n "$PK" ] || { log "피어 0개 — 설정 확인 필요(재기동하지 않는다)"; exit 1; }
 wg set "$IF" peer "$PK" endpoint "$EP" 2>/dev/null || log "endpoint 재해석 실패($EP) — 다음 주기"
-LAST=$(wg show "$IF" latest-handshakes | awk '{print $2}' | head -1)
+# PersistentKeepalive 가 없으면 트래픽이 없을 때 핸드셰이크도 없다 → "오래됨" 이 정상이라 재기동하면 3분마다 터널을 끊는다(QA 7-A F-9).
+if ! grep -qiE '^\s*PersistentKeepalive\s*=\s*[1-9]' "$CONF"; then log "PersistentKeepalive 없음 — 재해석만 하고 재기동 판단은 건너뛴다"; exit 0; fi
+LAST=$(wg show "$IF" latest-handshakes | awk 'NR==1{print $2}')
 AGE=$(( $(date +%s) - ${LAST:-0} ))
 if [ "${LAST:-0}" -eq 0 ] || [ "$AGE" -gt "$STALE" ]; then
   log "핸드셰이크 ${AGE}s 전(기준 ${STALE}s) — wg-quick@$IF 재기동"

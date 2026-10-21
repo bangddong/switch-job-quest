@@ -409,6 +409,7 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 | B7-23 | 🟡 | 전환 뒤 DB 장애 감시 없음(`/health` 상수, WireGuard Endpoint 재해석 없음) | 7-A |
 | B7-24 | ⚪ | 판정에 시퀀스 값 없음 | 7-A(`counts_sql` 에 `last_value`) |
 | B7-25 | ⚪ | 전환 뒤 거짓이 되는 서술 다수 | 7-C |
+| B7-27 | 🔴 | (QA 7-A F-1) `CodingQuestService.generateProblem`·`submitCode` 가 `@Transactional` 안에서 LLM·Judge0 를 순차 호출 — DB 커넥션을 수십 초 쥔다. idle-in-tx 제한을 걸면 500(그래서 7-A 는 안 건다), 안 걸어도 **풀 10 을 외부 호출이 잡아먹는** 구조(다른 서비스는 이미 트랜잭션을 걷어냈다) | **BE 백로그**(10번 직전 커넥션 예산 때 함께) — 7-A 는 제한을 걸지 않는 것으로 회피 |
 | B7-26 | 🟡 | (7-0 실측) Fly→EC2 **새 접속의 처음 1~2회가 2~3초**(이후 0.28s) — TCP 재전송(1s·2s) 모양, ICMP 손실 7% 와 부합. CPU 크레딧 217(스로틀 아님). `minimum-idle: 0` + suspend 면 깨어난 첫 요청이 이 지연을 그대로 맞는다 | 7-A — Fly 풀 `minimum-idle ≥ 1`·keepalive 검토 + 전환 뒤 실측(Hikari 획득 시간) |
 
 ## 이번 범위에서 하지 않는 것
