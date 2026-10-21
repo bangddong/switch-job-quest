@@ -39,7 +39,7 @@ if [ "$CUTOVER" = 1 ] && [ ! -e "$MARK" ]; then
 fi
 
 install -d -m 0755 /opt/devquest-db
-install -m 0755 "$SRC/common.sh" "$SRC/backup.sh" "$SRC/restore-check.sh" "$SRC/neon-import.sh" /opt/devquest-db/
+install -m 0755 "$SRC/common.sh" "$SRC/backup.sh" "$SRC/restore-check.sh" "$SRC/neon-import.sh" "$SRC/standby-restore.sh" /opt/devquest-db/
 umask 022
 cat > "$ENV_FILE.tmp" <<EOF
 # install.sh 가 쓴다 — 손으로 고치지 말고 deploy.sh 로 다시 설치한다. 비밀 없음.

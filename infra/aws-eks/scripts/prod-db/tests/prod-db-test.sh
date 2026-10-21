@@ -162,6 +162,61 @@ out=$(RUN restore-check.sh); rc=$?
 [ $rc -eq 0 ] && ok "잘린 덤프를 건너뛰고 통과" || { bad "잘린 덤프를 골랐다(rc=$rc)"; echo "$out" | tail -3; }
 X 'rm -f /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump'
 
+echo "── ⑫ standby-restore — 최신 덤프를 Neon 대기 DB 에 교체 복원 + 값 판정 + **격리 증명**"
+echo "   (무엇의 실패를 잡나: 🔴 계정 밖 사본 복원이 prod Neon 을 덮어쓰는 것 — B6-1)"
+for s in "CREATE ROLE devquest_standby LOGIN PASSWORD 'sb_pw'" "CREATE DATABASE standby OWNER devquest_standby"; do Q postgres "$s" >/dev/null; done
+# 진짜 Neon 은 브랜치 role 이 main 에 **없다**. 한 클러스터인 테스트에선 hba 로 "prod(neonsrc) 는 이 role 을 거부" 를 흉내 낸다.
+HBA=$(Q postgres "SHOW hba_file")
+iso_on()  { X "sed -i '1i host neonsrc devquest_standby all reject' $HBA && runuser -u postgres -- psql -X -q -c 'SELECT pg_reload_conf()' >/dev/null"; }
+iso_off() { X "sed -i '/^host neonsrc devquest_standby all reject$/d' $HBA && runuser -u postgres -- psql -X -q -c 'SELECT pg_reload_conf()' >/dev/null"; }
+iso_on
+setsb() { X "printf '%s' '$1' > /mock-ssm/devquest/prod/db/neon-standby-url"; }
+ALL=""
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"
+[ $rc -eq 0 ] && echo "$out" | grep -q '격리 확인' && ok "격리 확인 + 대기 복원·판정 통과" || { bad "rc=$rc"; echo "$out" | tail -6; }
+X 'ls /mock-s3/bkt/prod-db/health/standby' | grep -qE '_secs=[0-9]+_tables=3$' && ok "standby 헬스 키" || bad "standby 헬스 키 없음"
+Q standby "SET ROLE devquest_standby; CREATE TABLE public.leftover_from_old_schema(x int)" >/dev/null
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"
+[ $rc -eq 0 ] && [ -z "$(Q standby "SELECT 1 FROM pg_tables WHERE tablename='leftover_from_old_schema'")" ] \
+  && ok "옛 스키마 잔여 테이블 제거 후 통과(QA F-2)" || { bad "잔여 객체로 실패/잔존 rc=$rc"; echo "$out" | tail -4; }
+[ "$(Q neonsrc 'SELECT count(*) FROM users')" = 50 ] && ok "prod(neonsrc) 무변경" || bad "🔴 prod 가 바뀌었다"
+# 복원 실패 → 이전 복원본 보존: 더 새 스탬프의 잘린 덤프 + 짝 counts
+X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); head -c 200 "${f%.counts}.dump" > /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump; cp "$f" /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.counts'
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"
+[ $rc -ne 0 ] && [ "$(Q standby 'SELECT count(*) FROM users')" = 50 ] && ok "복원 실패 시 이전 복원본 보존" || bad "🔴 실패했는데 대기 DB 가 비었거나 통과(rc=$rc)"
+X 'rm -f /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.*'
+# 목차는 멀쩡하고 **뒤쪽(데이터)만** 잘린 덤프 — `pg_restore -l` 은 통과한다(QA F-9)
+X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); d="${f%.counts}.dump"; n=$(( $(stat -c %s "$d") * 3 / 4 )); head -c $n "$d" > /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump; cp "$f" /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.counts; pg_restore -l /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump >/dev/null && echo 목차통과' | grep -q 목차통과 \
+  && ok "(준비) 꼬리 잘린 덤프가 pg_restore -l 을 통과한다 — 반증 조건 성립" || bad "반증 준비 실패"
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"
+[ $rc -ne 0 ] && [ "$(Q standby 'SELECT count(*) FROM users')" = 50 ] && ok "꼬리 잘린 덤프 → 실패 + 이전 복원본 보존(QA F-9)" || bad "🔴 반쪽 복원이 이전 복원본을 대체(rc=$rc)"
+X 'rm -f /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.*'
+setsb 'postgresql://devquest_standby:sb_pw@LOCALHOST.:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"; [ $rc -ne 0 ] && echo "$out" | grep -q '엔드포인트가 prod 와 같다' && ok "대소문자·끝 점 변형도 같은 엔드포인트로 거부(QA F-1a)" || bad "🔴 호스트 변형으로 통과(rc=$rc)"
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/neonsrc?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"; [ $rc -ne 0 ] && echo "$out" | grep -q 'DB 이름이 prod' && ok "같은 DB 이름 거부" || bad "🔴 prod DB 이름으로 진행(rc=$rc)"
+setsb 'postgresql://devquest_ro:p%40ss%3Aw%25rd@127.0.0.1:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"; [ $rc -ne 0 ] && echo "$out" | grep -q '브랜치 전용 role 만' && ok "다른 role 거부" || bad "다른 role 로 진행(rc=$rc)"
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/standby?sslmode=require'
+Q postgres "CREATE ROLE neon_superuser NOLOGIN; CREATE ROLE mid NOLOGIN" >/dev/null; Q postgres "GRANT neon_superuser TO mid" >/dev/null; Q postgres "GRANT mid TO devquest_standby" >/dev/null
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"; [ $rc -ne 0 ] && echo "$out" | grep -q 'neon_superuser·superuser 계열' && ok "neon_superuser **간접** 소속 거부(QA F-5)" || bad "🔴 상속 superuser 로 진행(rc=$rc)"
+Q postgres "REVOKE mid FROM devquest_standby" >/dev/null
+iso_off
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"; [ $rc -ne 0 ] && echo "$out" | grep -q '접속된다' && ok "🔑 role 이 prod 에도 있으면 거부(QA F-1b — main 에 만든 실수)" || bad "🔴 prod 에 접속되는 자격증명으로 진행(rc=$rc)"
+iso_on
+X 'mv /mock-ssm/devquest/prod/db/neon-source-url /tmp/src.bak'
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"; [ $rc -ne 0 ] && echo "$out" | grep -q 'prod Neon 좌표를 모른다' && ok "prod 좌표 없으면 거부" || bad "🔴 좌표 없이 진행(rc=$rc)"
+X 'mv /tmp/src.bak /mock-ssm/devquest/prod/db/neon-source-url'
+# env 에 **다른** prod 좌표가 있어도 SSM 의 진짜 prod(localhost)와도 대조해야 한다 — 대기를 SSM prod 호스트로 두면 거부
+setsb 'postgresql://devquest_standby:sb_pw@localhost:5432/standby?sslmode=require'
+out=$(docker exec -i -e NEON_PROD_HOST=127.0.0.2 -e NEON_PROD_DB=other "$C" bash /opt/src/standby-restore.sh 2>&1); rc=$?; ALL="$ALL$out"
+[ $rc -ne 0 ] && echo "$out" | grep -q '엔드포인트가 prod 와 같다' && ok "env 좌표가 SSM 좌표를 가리지 않는다(QA F-4)" || { bad "🔴 env 가 SSM prod 를 가렸다(rc=$rc)"; echo "$out" | tail -3; }
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/standby?sslmode=require'
+out=$(docker exec -i -e NEON_PROD_HOST=no-such-host.invalid -e NEON_PROD_DB=other "$C" bash /opt/src/standby-restore.sh 2>&1); rc=$?; ALL="$ALL$out"
+[ $rc -ne 0 ] && echo "$out" | grep -q '사유가 모호하다' && ok "prod 접속 거부 사유가 모호하면(DNS 실패) 중단 — fail-closed" || bad "🔴 모호한 실패를 격리로 쳤다(rc=$rc)"
+echo "$ALL" | grep -q 'sb_pw' && bad "🔴 어느 경로에선가 비밀번호 출력" || ok "모든 실행 경로에서 비밀번호 미출력(QA F-6)"
+
 echo "── ⑧ 반증: 행 수 파일을 바꾸면 복원 판정이 실패해야 한다 + 실패해도 스크래치 삭제"
 X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); sed -i "s/^public.users|50$/public.users|49/" "$f"; grep -q "users|49" "$f"' \
   || bad "반증 준비 실패 — 바꿀 줄을 못 찾았다"
