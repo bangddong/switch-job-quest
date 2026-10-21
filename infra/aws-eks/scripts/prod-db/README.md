@@ -13,6 +13,9 @@
 | 복원 판정 `restore-check.sh` | 매주 일 04:30 KST | EC2 systemd `devquest-db-restore-check.timer` | 최신 덤프 → 스크래치 DB → 행 수·Flyway 이력 **값 비교** → `health/restore/<UTC>_secs=_tables=` |
 | 감시 `watch.sh` | 매일 11:00 KST | GitHub Actions `Prod DB Backup Watch`(읽기 전용 역할) | 헬스 키 신선도(백업 26h · 복원 160h)·디스크 80%·테이블 ≥1. **빨강 = 실패 메일** — 도달 확인: 수동 실행 `inject_failure` |
 
+> ⚠️ **실패 메일은 네이버에서 스팸함으로 갔다**(2026-10-20 실측). 제목 `[bangddong/switch-job-quest] Run failed: Prod DB Backup Watch …`, 발신 `notifications@github.com` — 수신 허용에 등록해 둔다.
+> 메일 주소를 바꾸거나 새 기기·계정에서 다시 확인할 땐 Actions 화면 *Run workflow* → `inject_failure` 체크로 일부러 빨갛게 만든다.
+
 보존: 버킷 lifecycle **30일**(현행·이전 버전 모두). 🔴 백업이 멈추면 30일 뒤 **마지막 정상 덤프까지 사라진다** — 감시 메일을 무시하지 마라.
 
 ## 접속

@@ -5684,3 +5684,9 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` 재QA F-8 `inject_failure` 기준 0h → **-1h**(나이가 정수 시간이라 백업 직후엔 0 ≤ 0 으로 초록) · F-9 런북에 **되돌리기 블록**(복원 실패 시 새 DB 삭제 → 이름 복구 → `ALLOW_CONNECTIONS true`) — 실 EC2 테스트 DB 로 그대로 실행: `되돌린 뒤 접속·테이블: 14`, 테스트 DB 0개.
 - `[막힘]` 재QA F-11(MEDIUM): 내가 F-10 을 고치며 넣은 `DROP DATABASE IF EXISTS $DB WITH (FORCE)` 가 **2단계 RENAME 이 실패했을 때 원본 prod DB 를 지우는 경로**를 열었다 — 원본이 `$DB` 이름 그대로인데 확인 없이 DROP, psql 은 문장별 autocommit 이라 `ON_ERROR_STOP` 이 되돌리지 못한다. 고치려다 더 위험하게 만든 것 — CLAUDE.md L-22 *"조일 때마다 새 우회"* 의 런북판.
 - `[해결]` 되돌리기를 **`$OLD` 가 실제로 존재할 때만** 실행하는 `if` 가드로 감쌌다. 실 EC2 에서 블록을 그대로 추출해 3경우: A 정상(RENAME 됨) → 되돌림·테이블 14 · **B RENAME 실패 → DROP 안 함, 원본 14 보존** · C 셸 유실(빈 변수) → DROP 안 함, 안내만. 테스트 DB 0개.
+
+## 2026-10-20 — 📌D-016 6-D 후속: 실패 메일 도달 (B4-23)
+
+- `[막힘]` `inject_failure=true` 수동 실행 2회(run 39392855393 · 39394291192, 둘 다 `failure`, `triggering_actor`=본인) — 사용자 *"메일 안 왔어"*. 사용자 확인: GitHub 알림 설정(Actions · Email · 실패만)은 켜져 있음. 내 토큰엔 `user`·`notifications` 스코프가 없어 계정 이메일·발송 기록을 볼 수 없었다. 공식 문서: *"You'll receive a notification when any workflow runs that you've triggered have completed"* — `workflow_dispatch` 예외 없음.
+- `[해결]` 사용자가 메일함 검색 → **네이버 스팸함에 있었다.** 수신 허용 등록. 🔑 대안(AWS heartbeat 알람, 월 ≈ $0.40)을 먼저 제안했는데, 원인을 한 단계 더 좁혀 보자는 사용자 판단이 맞았다 — *안 온다* 는 *안 보냈다* 가 아니었다.
+- `[메모]` 남은 단일 장애점: GitHub cron 의 60일 무활동 자동 비활성화(N-13). 레포 활동이 끊기지 않는 동안은 무관 — 8번 이후 재판단.
