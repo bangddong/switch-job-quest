@@ -59,7 +59,10 @@ mv "$ENV_FILE.tmp" "$ENV_FILE"
 #    fstab 은 swapon 이 **성공한 뒤에만** 적는다(없는 swapfile 항목이 남지 않게).
 setup_swap() {
   if [ ! -e /swapfile ]; then
-    fallocate -l 1G /swapfile || return 1; chmod 600 /swapfile || return 1; mkswap /swapfile >/dev/null || return 1
+    # 임시 이름으로 다 만든 뒤 mv — 중간에 죽어도 반쯤 만든 /swapfile 이 남아 재실행이 생성을 건너뛰지 않게(QA 7-A F-12)
+    rm -f /swapfile.tmp
+    fallocate -l 1G /swapfile.tmp || return 1; chmod 600 /swapfile.tmp || return 1
+    mkswap /swapfile.tmp >/dev/null || return 1; mv /swapfile.tmp /swapfile || return 1
   fi
   swapon --show=NAME --noheadings | grep -qx /swapfile || swapon /swapfile || return 1
   grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab || return 1

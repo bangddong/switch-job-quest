@@ -144,6 +144,18 @@ out=$(RUN neon-import.sh --reset); rc=$?
 [ $rc -eq 0 ] && ok "인코딩 비번 디코딩" || { bad "rc=$rc"; echo "$out" | tail -4; }
 echo "$out" | grep -q 'p@ss\|p%40ss' && bad "🔴 비밀번호가 출력에 나왔다" || ok "출력에 비밀번호 없음"
 
+echo "── ⑥f --verify — 지금의 Neon 과 EC2 비교만(가져오지 않음, 전환 7-B 2b)"
+out=$(RUN neon-import.sh --verify); rc=$?
+[ $rc -eq 0 ] && echo "$out" | grep -q '지금의 Neon = EC2' && ok "같으면 통과" || { bad "rc=$rc"; echo "$out" | tail -3; }
+Q neonsrc "INSERT INTO users(name) VALUES ('leaked-write')" >/dev/null
+out=$(RUN neon-import.sh --verify); rc=$?
+[ $rc -ne 0 ] && echo "$out" | grep -q '동결 사이로 쓰기가 샜다' && ok "Neon 에 새 쓰기가 있으면 검출" || bad "🔴 샌 쓰기를 놓쳤다(rc=$rc)"
+Q neonsrc "DELETE FROM users WHERE name = 'leaked-write'" >/dev/null
+X "sed -i 's/^CUTOVER_DONE=0/CUTOVER_DONE=1/' /etc/devquest-db.env"
+out=$(RUN neon-import.sh --verify); rc=$?
+[ $rc -eq 0 ] && ok "--verify 는 전환 표식과 무관(읽기만)" || bad "rc=$rc"
+X "sed -i 's/^CUTOVER_DONE=1/CUTOVER_DONE=0/' /etc/devquest-db.env"
+
 echo "── ⑥e 시퀀스가 데이터보다 뒤처진 덤프는 가져오기 거부 (📌D-016 7-A, B7-24)"
 echo "   (무엇의 실패를 잡나: 행 수·Flyway 는 일치하는데 setval 이 틀려 전환 직후 첫 INSERT 가 id 충돌)"
 Q neonsrc "SELECT setval('users_id_seq', 1)" >/dev/null

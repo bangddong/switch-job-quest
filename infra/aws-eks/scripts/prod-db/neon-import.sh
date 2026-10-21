@@ -17,12 +17,16 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 . "$here/common.sh"
 
-RESET=0
-case "${1:-}" in --reset) RESET=1 ;; "") ;; *) die "알 수 없는 인자: $1" ;; esac
+RESET=0; VERIFY=0
+case "${1:-}" in --reset) RESET=1 ;; --verify) VERIFY=1 ;; "") ;; *) die "알 수 없는 인자: $1" ;; esac
 RO_USER="${NEON_RO_USER:-devquest_ro}"
 
+# --verify: 가져오지 않고 **지금의** Neon 행 수·Flyway 를 EC2 와 비교만 한다(전환 7-B 2b — 동결 사이로 쓰기가 샜는지, QA 7-A F-13).
+#   읽기만 하므로 전환 표식과 무관하게 돈다(아래 표식 검사보다 앞). Neon 쪽 시점은 스냅샷이 아니다 — 동결 중이면 같아야 한다.
+if [ "$VERIFY" = 1 ]; then :; else
 [ "$CUTOVER_DONE" = "0" ] || die "전환(7번) 완료 표시 CUTOVER_DONE=$CUTOVER_DONE — EC2 가 prod 원본이다. 가져오기 금지"
 ! cutover_done || die "전환(7번) 완료 표식이 데이터 볼륨에 있다($CUTOVER_MARK) — EC2 가 prod 원본이다. 가져오기 금지"
+fi
 
 URL=$(aws ssm get-parameter --region "$REGION" --name "$SSM_PREFIX/neon-source-url" --with-decryption \
         --query Parameter.Value --output text) || die "SSM $SSM_PREFIX/neon-source-url 없음 — TASK-14"
@@ -48,6 +52,15 @@ W=$( neon_env; psql -X -q -A -t -v ON_ERROR_STOP=1 -c \
   || die "Neon 접속 실패(호스트·비번·네트워크)"
 [ "$W" = "0" ] || die "Neon role $N_USER 에 쓰기 권한이 있는 테이블 ${W}개 — 읽기 전용 role 이 아니다(B6-12)"
 log "Neon 접속·읽기 전용 확인 — $N_HOST/$N_DB"
+
+if [ "$VERIFY" = 1 ]; then
+  TMPV="$(mktemp -d)"; trap 'rm -rf "$TMPV"' EXIT
+  ( neon_env; counts_sql | psql -X -q -A -t -v ON_ERROR_STOP=1 ) > "$TMPV/neon" || die "Neon 행 수 조회 실패"
+  local_counts "$DB" > "$TMPV/ec2"
+  diff -u "$TMPV/neon" "$TMPV/ec2" >&2 || die "지금의 Neon 과 EC2 가 다르다(위 diff: - Neon, + EC2) — 동결 사이로 쓰기가 샜다. --reset 으로 다시 가져온다"
+  log "✅ 검증: 지금의 Neon = EC2 (테이블 $(grep -vc '^flyway|' "$TMPV/ec2" || true)개, Flyway 일치)"
+  exit 0
+fi
 
 # 🔴 대상 DB 를 비우는 것은 **원천 검사를 전부 통과한 뒤**다(테스트 ④ 가 실제로 잡은 순서 버그 — 처음엔
 #    --reset 이 맨 앞이라 Neon role 이 쓰기 권한이어서 거부될 때도 대상은 이미 지워져 있었다).
