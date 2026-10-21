@@ -375,7 +375,7 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 
 | 단계 | 내용 | 비용 | 승인 |
 |:-:|---|---|---|
-| **7-0** | **실측** — ① prod Fly 머신 수(`fly status`, 읽기) ② **일회용 Fly 앱 + prod 이미지**로 EC2 피어 IPv6 JDBC(TLS·scram) 접속과 release(migrate) 경로 끝까지(B7-5, 지금까지 psql 로만 확인) ③ 일회용 앱에서 `fly secrets set` 이 release_command 를 도는지(B7-3) ④ 5-0 의 ping 손실 20% 재측정 | ≈ $0.01 | 일회용 앱만 — prod 앱은 읽기 |
+| **7-0** | ✅ **2026-10-21** — prod 머신 **1대**(nrt, 512MB — 롤링 분기 B7-4 해당 없음) · **prod 이미지(Java)가 피어 IPv6 리터럴로 EC2 에 TLS·scram 접속, `validate` 13건·`migrate` 적용 0건 exit 0** · `fly secrets set` = 머신 재시작만, release 미실행(문서 🟡) · ping 100회 손실 **7%**·RTT 32.8ms · psql 접속 10회: **처음 2회 2.4s·3.3s, 이후 0.28s**(TLSv1.3) → B7-26. 원문: **실측** — ① prod Fly 머신 수(`fly status`, 읽기) ② **일회용 Fly 앱 + prod 이미지**로 EC2 피어 IPv6 JDBC(TLS·scram) 접속과 release(migrate) 경로 끝까지(B7-5, 지금까지 psql 로만 확인) ③ 일회용 앱에서 `fly secrets set` 이 release_command 를 도는지(B7-3) ④ 5-0 의 ping 손실 20% 재측정 | ≈ $0.01 | 일회용 앱만 — prod 앱은 읽기 |
 | **7-A** | **전환 준비**($0, prod 무변경): EC2 튜닝 conf(`max_connections`·`shared_buffers`·keepalive — 재시작 필요한 것은 **지금**, 아무도 안 붙어 있을 때, B7-21·B7-22) · Fly Hikari 풀 상한 · 백업 6h + 감시 기준 · 대기 복원 timer·감시(B7-13)·가드 재정의(L-76·B7-8·B7-12 — 신호 = EC2 `pg_stat_activity` 의 `fdaa:` 클라이언트) · DB 감시(B7-23: WireGuard 재해석·DB 접속 스모크) · 시퀀스 판정(B7-24) · 런북 L-75 · **전환·중단 절차 런북** | $0 | — |
 | **7-B** | 🔴 **전환**(점검 창, 사용자 승인): ① be-cd 동결(B7-7) ② **Neon 쓰기 동결** — 앱 role `default_transaction_read_only` + 기존 세션 종료(B7-2), 몇 분간 쓰기 실패 ③ `neon-import --reset` + 판정(시퀀스 포함) ④ `fly secrets set DB_*`(IPv6 리터럴은 따옴표, B7-6) ⑤ EC2 에 `fdaa:` 클라이언트·쓰기 확인 ⑥ **그 뒤에** `deploy.sh --cutover-done`(B7-1 — 순서를 바꿨다: Fly 확인 전엔 되돌릴 수 있게) ⑦ 대기 복원 켜기 · **중단 절차**: ⑤ 전 실패 → Fly 시크릿 되돌림 + Neon 동결 해제(쓰기 유실 0) | 상시분만 | 🔴 사용자 |
 | **7-C** | 정리: 서술 갱신(B7-25 — "prod 는 Fly+Neon" 류), `neon-source-url`·`devquest_ro` 삭제(가드 입력은 7-A 에서 대체), TASK-13 | $0 | — |
@@ -409,6 +409,7 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 | B7-23 | 🟡 | 전환 뒤 DB 장애 감시 없음(`/health` 상수, WireGuard Endpoint 재해석 없음) | 7-A |
 | B7-24 | ⚪ | 판정에 시퀀스 값 없음 | 7-A(`counts_sql` 에 `last_value`) |
 | B7-25 | ⚪ | 전환 뒤 거짓이 되는 서술 다수 | 7-C |
+| B7-26 | 🟡 | (7-0 실측) Fly→EC2 **새 접속의 처음 1~2회가 2~3초**(이후 0.28s) — TCP 재전송(1s·2s) 모양, ICMP 손실 7% 와 부합. CPU 크레딧 217(스로틀 아님). `minimum-idle: 0` + suspend 면 깨어난 첫 요청이 이 지연을 그대로 맞는다 | 7-A — Fly 풀 `minimum-idle ≥ 1`·keepalive 검토 + 전환 뒤 실측(Hikari 획득 시간) |
 
 ## 이번 범위에서 하지 않는 것
 
