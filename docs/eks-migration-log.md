@@ -5740,3 +5740,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` QA(7-A) **HIGH 1** — 내가 넣은 `idle_in_transaction_session_timeout = '60s'` 가 **현재 코드의 정상 경로를 끊는다**: `CodingQuestService.generateProblem`·`submitCode` 가 `@Transactional` 안에서 LLM·Judge0 를 순차 호출(수십 초 idle in transaction) → 60s 넘으면 세션 종료 → 500. Neon 엔 이 제한이 없었으니 **전환 회귀**였다. 백업 스냅샷 세션도 같은 상태(F-2). → 설정 제거(유령 세션은 keepalive 가 잡는다) + 스냅샷 세션에 `SET LOCAL idle_in_transaction_session_timeout = 0`. 트랜잭션 경계 자체는 BE 과제 B7-27.
 - `[해결]` MEDIUM: F-3 CI 감시가 `MAX_BACKUP_AGE_H` 를 26 으로 박아 넣어 **watch.sh 기본 8h 가 CI 에선 무효**였다 → 워크플로 8 · F-4 `setup_swap || 경고` 는 함수 안 set -e 가 꺼져 마지막 줄만 판정 → 단계마다 `|| return` · F-5 cutover 키를 "처음 표식 만들 때만" 쓰면 중간 실패 뒤 영영 안 쓴다 → "없으면 쓴다", 실패 시 설치 실패 · F-6 `neon-prod-coords` 생성 절차 런북 「사전 ②」(생성 완료 기록) · F-7 동결 검증 1b(새 앱 세션 `transaction_read_only = on`)·유실 검증 2b(지금의 Neon 행 수 = EC2). LOW: F-8 reload 뒤 `sleep 1`·CONFD 없음 경고 · F-9 wg-watch — PersistentKeepalive 없으면 재기동 판단 건너뜀(3분마다 끊는 루프 방지)·피어 0 · F-10 시퀀스 판정을 relation 의 `is_called` 로(setval false 직후 거짓 실패) · F-11 전환 4번 기준을 `n_tup_*` 합 전후 비교로.
 - `[해결]` 재QA F-12 반쪽 swapfile(fallocate 뒤 실패 시 재실행이 생성을 건너뜀) → `/swapfile.tmp` 로 다 만든 뒤 `mv` · F-13 2b 유실 검증에 실행 수단이 없었다 → `neon-import.sh --verify`(가져오지 않고 지금의 Neon = EC2 비교, 읽기만이라 표식 무관). 테스트 ⑥f 3건(같음 통과 · Neon 에 샌 쓰기 검출 · 표식 무관) → 65/65.
+
+## 2026-10-21 — 📌D-016 7-A 적용 (EC2, prod 무변경)
+
+- `[메모]` #483 머지 → `deploy.sh`: `[install] ⚠️ 재시작이 필요한 설정: max_connections` · `CUTOVER_DONE=0` · wg-watch timer 등록. swap `/swapfile 1024M` 활성(904MB + 1023MB). `/etc/wireguard/fly0.conf` 에 `PersistentKeepalive` 있음(1) — wg-watch 재기동 판단 활성.
+- `[메모]` 백업 timer 를 6h 로 바꾸자 `Persistent=true` 가 놓친 회차로 보고 **즉시 1회 실행**(02:47 UTC) — 끝난 뒤 다음 06:33 UTC.
+- `[해결]` 원격 접속 0 확인 후 `systemctl restart postgresql@17-main` → `max_connections=50 · shared_buffers=128MB · work_mem=4MB · idle_in_transaction_session_timeout=0`. `tcp_keepalives_idle` 은 로컬 소켓 세션에서 `0` 으로 보인다(TCP 접속에만 적용되는 값 — 정상).
+- `[메모]` SSM `/devquest/prod/db/neon-prod-coords`(String, 호스트/DB) 생성 — source-url 에서 호스트/DB 만 파이프로(비밀번호 미출력).
