@@ -16,13 +16,14 @@
 #         `../apps` 의 core-api 태그는 학습 세션 시절 값이 그대로 박혀 있다.
 #
 # 쓰는 법: ArgoCD Application 의 `path` 를 `k8s/gitops/apps` → `k8s/gitops/apps-external` 로(순서표 8 전환 워크플로).
-#   2-cluster 는 `-var db_mode=external` 로 apply. 기본값(in-cluster)은 그대로 둔다 — 튜토리얼 verify 마커(B5-15).
+#   2-cluster 는 `prod.auto.tfvars.json` 이 db_mode=external 을 자동으로 준다(8-A). 변수 기본값(in-cluster)은 그대로 — 튜토리얼 verify 마커(B5-15).
 # ⚠️ Application 의 PV 패치(volumeHandle·AZ)는 대상이 없어져 아무것도 바꾸지 않는다(로컬 렌더로 확인 — 에러 아님).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../apps
   - secretstore-parameterstore.yaml
+  - externalsecret-runtime.yaml   # 📌D-016 8-A — 앱 외부 키(TASK-17)
 
 patches:
   # ① ② — 삭제
@@ -78,3 +79,19 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: { name: DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP, value: "false" }
+      # ⑤ 📌D-016 8-A — Fly(be/fly.toml [env])와 같은 값. 없으면 `application.yml` 기본(localhost:5173)이라 FE 의
+      #    POST 가 CORS 로 403 이 될 수 있다(B8-2).
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: CORS_ALLOWED_ORIGINS, value: "https://quest.dhbang.co.kr" }
+      # ⑥ 메일은 **Fly 만** 보낸다 — 창 중에도 Fly 가 살아 있고(9번), 두 곳이 보내면 중복 발송이다(B8-19·U-5).
+      #    기본값도 false 지만 명시한다(TASK-17 로 RESEND 키가 들어와도 EKS 는 보내지 않게).
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: MAIL_ENABLED, value: "false" }
+      # ⑦ 앱 외부 키(externalsecret-runtime.yaml). optional — Secret 이 **없을 때만** 파드를 살린다.
+      #    ⚠️ ExternalSecret 동기화가 **실패**하면 wave 1 이 Degraded 라 core-api 자체가 안 만들어진다(QA F-2) —
+      #    "실패해도 뜬다" 가 아니다. 판정은 8-B on 잡(ExternalSecret Ready · 키 개수 > 0).
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value: { secretRef: { name: core-api-runtime, optional: true } }

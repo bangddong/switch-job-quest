@@ -110,6 +110,19 @@ data "aws_iam_policy_document" "eso_read_secrets" {
       resources = ["arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.prod_db_password_parameter}"]
     }
   }
+  # 📌D-016 8-A — external 모드에서만: 앱 외부 키(TASK-17)를 **경로째** 읽는다. 경로 자신(GetParametersByPath 의 대상)과
+  #   그 아래 파라미터만. `/devquest/prod/db/*`(WireGuard 개인키 등)는 이 문으로 열리지 않는다.
+  dynamic "statement" {
+    for_each = local.external_enabled == 1 ? [1] : []
+    content {
+      effect  = "Allow"
+      actions = ["ssm:GetParametersByPath", "ssm:GetParameter", "ssm:GetParameters"]
+      resources = [
+        "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${trimsuffix(var.prod_app_parameter_prefix, "/")}",
+        "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.prod_app_parameter_prefix}*",
+      ]
+    }
+  }
   dynamic "statement" {
     for_each = local.external_enabled == 1 ? [1] : []
     content {

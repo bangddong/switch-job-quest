@@ -19,7 +19,9 @@ name: ECR Push
 #      있어야 하고, 그 10건은 각자 자기 이미지를 갖는다.
 #
 #   ⚠️ **main HEAD 에 항상 이미지가 있는 것은 아니다.** `paths` 필터 때문에 문서만 바뀐 머지는
-#      빌드하지 않는다. 배포할 태그(정본 규칙 — 전환 워크플로 = 순서표 8 이 이것으로 고른다):
+#      빌드하지 않는다. 🔄 **2026-10-21 8-A — 아래 규칙은 대체됐다**: 정본은 `infra/aws-eks/scripts/prod-window/pick-image-tag.sh`
+#      (마지막 성공 be-cd = Fly 배포 커밋, 없으면 be/ 트리가 같은 태그). 아래 규칙은 `-x test` 빌드라 테스트 실패 커밋도 고른다(B8-7).
+#      옛 배포 태그 규칙(기록용):
 #        ① main HEAD 에 이미지가 있으면 HEAD
 #        ② 없으면 `git log -1 --first-parent --format=%H origin/main -- be .github/workflows/ecr-push.yml`
 #      🔴 `--first-parent` 를 빼지 마라 (QA F-1). 머지 커밋 병합이면 push 이벤트의 sha(=태그)는

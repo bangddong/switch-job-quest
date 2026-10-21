@@ -5781,3 +5781,13 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 사용자(세 질문 추천안): ①**트래픽 없이 먼저**(8-0 → 8-A → 8-B 트래픽 0 검증 → 8-C 전환) ②앱 키는 **SSM 에 넣어 완전 동작**(TASK-17) ③전환 방식은 **8-0 실측 후**.
 - `[막힘]` Blindspot B8 24건 — 가장 큰 것: EKS 에 prod 런타임 키(Anthropic·Judge0·Resend·Grafana) 경로가 없다(B8-1, D-008 배선이 D-016 계획에서 빠졌다) · api.quest 인증서 없음(B8-3) · Ingress·LBC 배포 경로 없음(B8-4) · 태그 규칙이 `-x test` 이미지라 be-cd 실패 sha 도 고른다(B8-7) · concurrency pending 교체가 off 를 조용히 취소(B8-15).
 - `[메모]` 8-0 1차(읽기만): `api.quest.dhbang.co.kr CNAME devquest-api.fly.dev TTL 300`(DNS only) · `quest` 는 Cloudflare 프록시 · CAA 없음 · NS Cloudflare · Fly 인증서 `Issued`, 만료 ≈ 2개월 뒤 · Fly 시크릿 **이름**: ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_KEY · MAIL_ENABLED · GRAFANA_API_KEY · GRAFANA_LOKI_INSTANCE_ID · GRAFANA_LOKI_URL · SENTRY_DSN · GITHUB_CLIENT_ID/SECRET · JWT_SECRET · DB_* · STORAGE_DATASOURCE_CORE_*.
+
+## 2026-10-21 — 📌D-016 8-A: EKS 를 prod 수준으로 (코드, $0)
+
+- `[결정]` `2-cluster/prod.auto.tfvars.json`(db_mode=external · environment=prod · node_desired_size=3) — tofu 자동 로드라 **로컬·CI 어느 apply/destroy 도 같은 값**(B8-5 노드 1대 선점, B8-21 `-var` 누락으로 창 중 prod 를 학습 기본값으로 덮음). `.tfvars.json` 은 `.gitignore` 의 `*.tfvars` 에 안 걸린다(비밀 없음 — 커밋). 변수 기본값은 그대로(B5-15 튜토리얼 마커) — 튜토리얼 머리에 "재현하려면 이 파일을 치운다".
+- `[결정]` 앱 외부 키: ExternalSecret `core-api-runtime` 이 SSM `/devquest/prod/app/` 를 **경로째**(GetParametersByPath + 이름 regexp `^[A-Z0-9_]+$` + 경로 제거 rewrite) — 하나라도 없으면 ExternalSecret 전체가 실패해 wave 가 멈추는 B5-14 를 피한다. core-api `envFrom` 은 `optional: true`. ESO IRSA 는 그 경로만(`/devquest/prod/db/*` 안 열림). CORS_ALLOWED_ORIGINS=quest(B8-2), MAIL_ENABLED=false 명시(메일은 Fly 만, B8-19).
+- `[막힘]` `pick-image-tag.sh` 첫 실측: `Fly 배포 커밋(마지막 성공 be-cd) = f9ba8038…` → `이 커밋의 이미지가 ECR 에 없다: core-api ai-api daily-api`. Fly 의 마지막 배포는 10-18(1a)인데 ECR main 빌드는 10-19(2번)부터라 그 커밋 이미지가 없다.
+- `[해결]` be/ 트리 해시 비교 폴백 — `git rev-parse f9ba8038:be` = `0e23c919…` 와 같은 트리의 ECR 태그 `e9bbe139`·`e2647873`(10-19) 존재 → 최신 `e2647873` 선택. **be/ 트리가 같다 = Dockerfile 포함 BE 소스가 바이트 단위로 같다 = 같은 이미지·같은 스키마.** 트리가 다르면 옛 커밋으로 물러나지 않고 실패(테스트 7건).
+- `[결정]` 1b(EKS 마이그레이션 Job) **폐기**(B8-24). tfsec(자동 tfvars 로드 포함) 문제 없음.
+- `[메모]` Ingress·LBC 배포 경로(B8-4)·metrics-server `.11` 사전 점검(B8-8)은 on 경로와 한 몸이라 **8-B** 로.
+- `[해결]` QA(8-A) **HIGH F-1**: ExternalSecret `find.name.regexp: ^[A-Z0-9_]+$` 는 ESO 가 **전체 경로**(`/devquest/prod/app/…`)에 매칭해 0건 → 에러 없이 **빈 Secret** — TASK-17 키가 조용히 안 들어갈 뻔했다(렌더 검증만으로는 못 잡는다). → 전체 경로 앵커 + **허용 목록**(F-3 envFrom 덮어쓰기 차단). F-2 "동기화 실패해도 파드는 뜬다" 주석 정정(실패면 wave 1 Degraded — 8-B 판정) · F-4 경로 3곳 복제 주석 · F-5 튜토리얼 안내 오타·헤딩 복구, 학습 재현은 파일 이동 대신 `-var` 3개 · F-6 ecr-push 옛 정본 규칙에 대체 표시, k8s README·overlay 머리말 · F-7 ECR 권한 오류를 "없음" 이 아니라 rc 2, 손 `fly deploy` 전제 명시, 테스트 9건.
