@@ -105,12 +105,15 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 **왜**: 계정 밖 사본(Neon 콜드 대기) 복원 도구를 prod Neon(main)을 건드리지 않고 시험한다. **브랜치에서 SQL 로 만든 role 은
 그 브랜치에만 있어** main 에 접속할 수 없다 — 이것이 격리다. 콘솔에서 만든 role 은 `neon_superuser` 자동 소속이라 쓰지 않는다(6-0 교훈).
 
-1. **Neon 콘솔** → Branches → **New branch** — 이름 `standby-rehearsal`, parent `main`(기본값 그대로)
-2. **SQL Editor** — 🔴 위쪽 브랜치 선택을 **`standby-rehearsal`** 로 바꾼 뒤(main 이 아니다), DB `neondb` 에서:
+1. **Neon 콘솔** → Branches → **New branch** — 이름 `standby-rehearsal`, parent = 기본 브랜치(**이 프로젝트에선 이름이 `production`**)
+2. **SQL Editor** — 🔴 위쪽 브랜치 선택을 **`standby-rehearsal`** 로 바꾼 뒤(`production` 이 아니다), DB `neondb` 에서:
    ```sql
    CREATE ROLE devquest_standby LOGIN PASSWORD '새비밀번호(영문·숫자 20자 이상)';
+   GRANT devquest_standby TO CURRENT_USER;          -- PG16+: 남을 소유자로 DB 를 만들려면 그 role 로 SET ROLE 할 수 있어야 한다
    CREATE DATABASE standby OWNER devquest_standby;
+   REVOKE devquest_standby FROM CURRENT_USER;
    ```
+   ⚠️ `GRANT` 없이 하면 `ERROR: must be able to SET ROLE "devquest_standby" (SQLSTATE 42501)` — 2026-10-20 실측.
 3. 접속 문자열을 만든다 — **Connect** 창에서 branch `standby-rehearsal` 를 고르고 pooling **끈** 상태의 **호스트**(`ep-…`)만 복사.
    (role 목록에 `devquest_standby` 가 보이면 그대로 골라 DB `standby` 로 복사해도 된다)
    `postgresql://devquest_standby:<새비밀번호>@<브랜치 호스트>/standby?sslmode=require`

@@ -26,30 +26,52 @@ S_USER="${BASH_REMATCH[2]}"; S_PASS="${BASH_REMATCH[3]}"; S_HOST="${BASH_REMATCH
 S_PORT="${BASH_REMATCH[6]:-5432}"; S_DB="${BASH_REMATCH[7]}"
 unset URL
 
-P_HOST="${NEON_PROD_HOST:-}"; P_DB="${NEON_PROD_DB:-}"
-if SRC=$(get_url neon-source-url) && [[ "$SRC" =~ $re ]]; then
-  P_HOST="${P_HOST:-${BASH_REMATCH[4]}}"; P_DB="${P_DB:-${BASH_REMATCH[7]}}"
-fi
+# prod 좌표 — SSM 과 환경변수 **둘 다** 모아 전부와 대조한다(QA F-4: 한쪽이 다른 쪽을 가리면 낡은 값 하나와만 비교된다).
+P_HOSTS=(); P_DBS=()
+[ -n "${NEON_PROD_HOST:-}" ] && P_HOSTS+=("$NEON_PROD_HOST")
+[ -n "${NEON_PROD_DB:-}" ] && P_DBS+=("$NEON_PROD_DB")
+if SRC=$(get_url neon-source-url) && [[ "$SRC" =~ $re ]]; then P_HOSTS+=("${BASH_REMATCH[4]}"); P_DBS+=("${BASH_REMATCH[7]}"); fi
 unset SRC
-[ -n "$P_HOST" ] && [ -n "$P_DB" ] || die "prod Neon 좌표를 모른다 — neon-source-url 도 NEON_PROD_HOST·NEON_PROD_DB 도 없다. 대조 없이 덮어쓰지 않는다"
+[ "${#P_HOSTS[@]}" -gt 0 ] && [ "${#P_DBS[@]}" -gt 0 ] \
+  || die "prod Neon 좌표를 모른다 — neon-source-url 도 NEON_PROD_HOST·NEON_PROD_DB 도 없다. 대조 없이 덮어쓰지 않는다"
+
+# Neon 호스트 정규화 → 엔드포인트 ID(첫 라벨, 소문자, `-pooler` 제거, 끝 점 제거). 같은 엔드포인트의
+# 직접/pooler·대소문자 변형을 같은 것으로 본다(QA F-1a). 예: EP-ABC-pooler.x.neon.tech. → ep-abc
+endpoint_id() { local h; h=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]'); h="${h%.}"; h="${h%%.*}"; echo "${h%-pooler}"; }
 
 [ "$S_USER" = "$STANDBY_USER" ] || die "대기 role 이 $STANDBY_USER 가 아니다($S_USER) — 브랜치 전용 role 만 쓴다"
-[ "$S_HOST" != "$P_HOST" ] || die "대기 호스트가 prod 호스트와 같다 — prod 를 덮어쓸 수 있다. 중단"
-[ "$S_DB" != "$P_DB" ] || die "대기 DB 이름이 prod DB 이름과 같다($S_DB) — 중단"
 [[ "$S_HOST" != *-pooler* ]] || die "pooler 호스트다 — 직접 호스트를 쓴다"
+for ph in "${P_HOSTS[@]}"; do
+  [ "$(endpoint_id "$S_HOST")" != "$(endpoint_id "$ph")" ] || die "대기 엔드포인트가 prod 와 같다($(endpoint_id "$S_HOST")) — prod 를 덮어쓸 수 있다. 중단"
+done
+for pd in "${P_DBS[@]}"; do [ "$S_DB" != "$pd" ] || die "대기 DB 이름이 prod DB 이름과 같다($S_DB) — 중단"; done
 
 standby_env() {  # 서브셸 안에서만
   export PGHOST="$S_HOST" PGPORT="$S_PORT" PGUSER="$S_USER" PGDATABASE="$S_DB" PGSSLMODE=require
   PGPASSWORD="$(printf '%b' "${S_PASS//%/\\x}")"; export PGPASSWORD
 }
 
+# 접속해서 role·DB·권한을 본다. neon_superuser 는 **상속까지**(pg_has_role MEMBER), 위험 속성도(QA F-5).
 CHK=$( standby_env; psql -X -q -A -t -v ON_ERROR_STOP=1 -c \
   "SELECT current_user || '|' || current_database() || '|' ||
-          (SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
-            WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user) AND r.rolname = 'neon_superuser')" ) \
+          (CASE WHEN to_regrole('neon_superuser') IS NULL THEN false ELSE pg_has_role(current_user, 'neon_superuser', 'MEMBER') END)::text || '|' ||
+          (SELECT (rolsuper OR rolcreaterole OR rolbypassrls)::text FROM pg_roles WHERE rolname = current_user)" ) \
   || die "Neon 대기 DB 접속 실패(호스트·비번·네트워크)"
-[ "$CHK" = "$STANDBY_USER|$S_DB|0" ] || die "대기 접속 확인 실패(${CHK%%|*}…) — role·DB 가 다르거나 neon_superuser 소속이다"
-log "Neon 대기 접속 확인 — $S_HOST/$S_DB (prod 호스트와 다름)"
+[ "$CHK" = "$STANDBY_USER|$S_DB|false|false" ] || die "대기 접속 확인 실패(${CHK%%|*}…) — role·DB 가 다르거나 neon_superuser·superuser 계열이다"
+
+# 🔴 **격리를 직접 증명한다**(QA F-1b) — 대기 자격증명으로 **prod 엔드포인트**에 붙어 본다. **실패해야 통과.**
+#    브랜치에서 SQL 로 만든 role 은 그 브랜치에만 있으므로 main 엔 없다. TASK-15 에서 SQL Editor 의 브랜치를 안 바꾸고
+#    main 에 만들었다면 여기서 접속이 **된다** → 이 자격증명은 prod 에 쓸 수 있다 → 중단.
+#    거부 사유가 인증·role 부재·hba 거부일 때만 통과로 친다. 타임아웃·DNS 등 모호한 실패는 **중단**(fail-closed).
+for i in "${!P_HOSTS[@]}"; do
+  ph="${P_HOSTS[$i]}"; pd="${P_DBS[$i]:-${P_DBS[0]}}"
+  if ERR=$( standby_env; export PGHOST="$ph" PGDATABASE="$pd" PGCONNECT_TIMEOUT=10; psql -X -q -A -t -c 'SELECT 1' 2>&1 ); then
+    die "대기 자격증명으로 prod 엔드포인트($(endpoint_id "$ph"))/$pd 에 **접속된다** — 이 role 은 prod 에도 있다(main 에 만들었나?). 중단"
+  fi
+  echo "$ERR" | grep -qiE 'password authentication failed|role .* does not exist|rejects connection|not allowed|no pg_hba.conf entry' \
+    || die "prod 엔드포인트 접속 거부 사유가 모호하다 — 격리를 증명하지 못했다: $(echo "$ERR" | head -1 | cut -c1-120)"
+done
+log "Neon 대기 접속 확인 — $(endpoint_id "$S_HOST")/$S_DB · prod 엔드포인트는 이 자격증명을 거부(격리 확인)"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 CKEY=$(aws s3api list-objects-v2 --region "$REGION" --bucket "$BUCKET" --prefix "${PREFIX}dumps/" \
@@ -59,9 +81,14 @@ aws s3 cp --region "$REGION" --only-show-errors "s3://$BUCKET/$CKEY" "$TMP/expec
 log "복원 대상: ${CKEY%.counts}.dump → Neon 대기"
 
 START=$(date +%s)
-# --clean --if-exists: 이전 복원본을 지우고 덮어쓴다(대기 DB 소유자가 이 role). 한 트랜잭션 — 실패하면 이전 것이 남는다.
-aws s3 cp --region "$REGION" --only-show-errors "s3://$BUCKET/${CKEY%.counts}.dump" - \
-  | ( standby_env; pg_restore --clean --if-exists --no-owner --no-acl --single-transaction --exit-on-error -d "$S_DB" )
+# public 스키마를 통째로 비우고 덤프를 다시 넣는다 — **한 트랜잭션**(psql -1): 실패하면 이전 복원본이 그대로 남는다.
+#   `pg_restore --clean` 은 덤프에 **있는** 객체만 지운다 → 나중 마이그레이션이 DROP 한 테이블이 대기 DB 에 남아
+#   판정 diff 가 영구 실패한다(QA F-2). 그래서 스키마째 교체한다(대기 DB·public 소유자가 이 role).
+aws s3 cp --region "$REGION" --only-show-errors "s3://$BUCKET/${CKEY%.counts}.dump" "$TMP/d.dump"
+pg_restore -l "$TMP/d.dump" >/dev/null || die "덤프 목차를 읽지 못했다(잘린 파일?) — 대기 DB 는 건드리지 않았다"
+{ echo "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
+  pg_restore --no-owner --no-acl -f - "$TMP/d.dump"
+} | ( standby_env; psql -X -q -1 -v ON_ERROR_STOP=1 >/dev/null )
 SECS=$(( $(date +%s) - START ))
 
 ( standby_env; counts_sql | psql -X -q -A -t -v ON_ERROR_STOP=1 ) > "$TMP/actual"
