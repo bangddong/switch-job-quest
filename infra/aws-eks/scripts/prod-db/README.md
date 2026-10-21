@@ -1,7 +1,7 @@
 # prod DB 운영 런북 — EC2 Postgres 17 (📌D-016)
 
 > prod DB 는 `1-network` 의 EC2 t4g.micro 한 대다(`Role=prod-db`). 7번 전환 **뒤에는** Fly(밤·주말)와 EKS(평일 창)가 **같은 DB** 를 쓴다.
-> 🔴 **2026-10-20 현재는 전환 전**이다 — 앱은 아직 Neon 을 본다. EC2 에는 6-C 리허설로 옮겨 온 사본이 있다.
+> ✅ **2026-10-21 14:59 KST 전환 완료** — Fly prod 는 **EC2** 를 쓴다(`CUTOVER_DONE=1`). Neon `production` 은 읽기 전용 동결 사본, `standby-rehearsal` 이 매일 복원되는 콜드 대기.
 > 결정·근거: `infra/aws-eks/README.md` D-016 · 계획서 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md` 「5번」「6번」.
 > 🔴 이 디렉터리는 **prod 전용**이다. 학습 클러스터용 `../db-backup.sh`·`../db-restore.sh` 와 섞지 마라(N-17).
 
@@ -150,12 +150,12 @@ systemctl restart postgresql@17-main && systemctl is-active postgresql@17-main
 |:-:|---|---|---|
 | -1 | **사전 점검** — `neon-app-url` 의 엔드포인트가 **production** 엔드포인트(`neon-prod-coords`)와 같은가(값 출력 없이 첫 라벨만 비교). 🔴 Connect 창의 브랜치 선택이 다른 브랜치에 남아 있으면 대기 브랜치 주소가 들어간다 — 그 값으로 중단하면 Fly 가 **어제 사본**에 쓴다(2026-10-21 실제로 1회 발생, 다시 넣어 해결) | 로컬 | 같음 |
 | 0 | `gh workflow disable be-cd.yml` — 전환 중 BE 배포 금지(B7-7) | 로컬 | `gh workflow list` 에 disabled |
-| 1 | **Neon 쓰기 동결**: `ALTER ROLE <앱 role> SET default_transaction_read_only = on;` → `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '<앱 role>' AND pid <> pg_backend_pid();` (앱 role 확인: `SELECT DISTINCT usename, client_addr FROM pg_stat_activity WHERE datname = 'neondb';`) | Neon SQL Editor(`production`) | 이 순간부터 **쓰기 실패**(몇 분) — 읽기는 된다 |
+| 1 | **Neon 쓰기 동결**(실제로 쓴 형태 — 유휴 앱은 Neon 세션이 0 이라 role 을 확정할 수 없다): `ALTER DATABASE neondb SET default_transaction_read_only = on;` + 남은 세션 종료. 원문(role 단위): `ALTER ROLE <앱 role> SET default_transaction_read_only = on;` → `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '<앱 role>' AND pid <> pg_backend_pid();` (앱 role 확인: `SELECT DISTINCT usename, client_addr FROM pg_stat_activity WHERE datname = 'neondb';`) | Neon SQL Editor(`production`) | 이 순간부터 **쓰기 실패**(몇 분) — 읽기는 된다 |
 | 1b | **동결 검증**(QA 7-A F-7) — 앱 자격증명으로 **새 세션**을 열어 `SHOW transaction_read_only;` 가 `on` 인지(`/devquest/ops/neon-app-url` 을 파이프로, 값 출력 금지). `off` 면 동결이 안 됐다 → 2번으로 가지 마라 | 로컬(docker psql) | `on` |
 | 2 | `/opt/devquest-db/neon-import.sh --reset` | EC2(SSM) | `✅ … 판정 통과`(행 수·Flyway·**시퀀스**) |
 | 2b | **유실 검증** — `/opt/devquest-db/neon-import.sh --verify`: **지금의** Neon 행 수·Flyway 를 EC2 와 비교(가져오지 않는다). 다르면 동결 사이로 쓰기가 샜다 → 2번을 다시 | EC2(SSM) | `✅ 검증: 지금의 Neon = EC2` |
 | 3 | `fly secrets import -a devquest-api` ← stdin: `DB_HOST=[<피어 IPv6>]` · `DB_NAME=devquest` · `DB_USERNAME=devquest` · `DB_PASSWORD=<SSM password>` · `STORAGE_DATASOURCE_CORE_MINIMUMIDLE=1` · `STORAGE_DATASOURCE_CORE_KEEPALIVETIME=120000`(B7-26) — **값은 파이프로**(출력 금지). 머신 재시작만, release 는 안 돈다(7-0) | 로컬 | `fly status` started |
-| 4 | EC2 에 Fly 가 붙었나: `SELECT client_addr, state FROM pg_stat_activity WHERE client_addr::text LIKE 'fdaa:%';` · 쓰기 확인(QA 7-A F-11): `SELECT sum(n_tup_ins + n_tup_upd + n_tup_del) FROM pg_stat_user_tables;` 를 앱 사용(로그인 1회) **전후**로 — 늘었으면 Fly 가 EC2 에 쓴다 | EC2 | ≥1 행 · 수치 증가 |
+| 4 | EC2 에 Fly 가 붙었나: `SELECT client_addr, state FROM pg_stat_activity WHERE client_addr::text LIKE 'fdaa:%';` · 쓰기 확인(QA 7-A F-11): `SELECT sum(n_tup_ins + n_tup_upd + n_tup_del) FROM pg_stat_user_tables;` 를 앱 사용(⚠️ **로그인은 쓰지 않는다** — 진행 저장·회사 이력 등 저장 동작, 2026-10-21 실측) **전후**로 — 늘었으면 Fly 가 EC2 에 쓴다 | EC2 | ≥1 행 · 수치 증가 |
 | 5 | **그 뒤에** `deploy.sh --cutover-done` — 표식(neon-import 영구 거부) + 대기 timer + `health/cutover/` | 로컬 | `[install] 전환 헬스 키 기록` |
 | 6 | 대기 복원 1회 `systemctl start devquest-db-standby.service` · `gh workflow enable be-cd.yml` · `gh workflow run prod-smoke-daily.yml` | EC2 · 로컬 | `✅ Neon 대기 복원 판정 통과` · 스모크 초록 |
 
