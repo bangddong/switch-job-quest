@@ -5712,3 +5712,17 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 사용자: ①**DB 전환만**(JWT 통일·레이트 리밋 공유는 10번 직전) ②Neon 콜드 대기 = **전용 대기 브랜치**(production 은 동결 사본) ③Fly 토큰 교체는 *"노출이 너한테만 된 거면 나중에"* — 노출 범위는 이 세션 대화 기록뿐이라 전환 뒤 유지 ④RPO = **백업 6시간마다**.
 - `[막힘]` Blindspot B7 25건 — 가장 큰 것: 계획 순서가 되돌릴 수 없는 `--cutover-done` 을 실패하기 쉬운 Fly 전환 **앞**에 두고 중단 절차가 없었다(B7-1) · Fly 를 내리지 않고 Neon 쓰기를 멈추는 방법이 없었다(B7-2) · 앱 이미지로 EC2 에 붙어 본 적이 없다(5-0 은 psql, B7-5) · 커넥션 최악 합이 `max_connections` 에 닿는다(B7-21) · production 브랜치엔 대기 복원이 소유권 때문에 성립하지 않는다(B7-9).
 - `[결정]` 순서: 7-0 실측(일회용 Fly 앱 + prod 이미지) → 7-A 준비(EC2 튜닝·감시·가드 재정의·런북, prod 무변경) → 7-B 전환(🔴 승인, 점검 창: be-cd 동결 → Neon 쓰기 동결 → import → Fly 시크릿 → EC2 쓰기 확인 → **그 뒤** cutover-done) → 7-C 정리.
+
+## 2026-10-21 — 📌D-016 7-0 실측: 앱 이미지로 Fly → EC2 (≈ $0.01)
+
+- `[메모]` prod 읽기: `fly scale show -a devquest-api` → `app 1 shared 1 512 MB nrt`, 이미지 `registry.fly.io/devquest-api:deployment-01M56XFRA01R59YDBMQDCC1EHT`. **머신 1대** — 롤링 중 두 DB 분기(B7-4)는 해당 없음.
+- `[메모]` `fly secrets set` 은 머신 update(재시작)만 하고 release_command 는 `fly deploy` 에서만 돈다(Fly 문서, 🟡 — 실행 확인은 안 함). → 복귀 시 스키마가 낮으면 `fly deploy --image <현재>` 로 migrate 를 명시 실행.
+- `[해결]` 일회용 앱 `dq-70-probe-*`(org personal) + prod 이미지 + 스테이징한 시크릿(`fly secrets import` 에 stdin — 비번은 SSM 에서 파이프, 출력 0): `DB_HOST=[fdaa:…피어]`.
+  ```
+  validate  Successfully validated 13 migrations · [migration] validate 성공: 현재 버전 13 · exit 0
+  migrate   Schema "public" is up to date · [migration] migrate 성공: 이번에 적용 0건, 현재 버전 13 · exit 0
+  ```
+  **JDBC 가 대괄호 IPv6 리터럴 + `sslmode=require` + scram 으로 붙는다** — 5-0 의 psql 실측을 앱 경로로 닫았다(B7-5).
+- `[메모]` 터널: `ping -6 -c 100` → **7% packet loss**, RTT 32.3/32.8/34.7ms(5-0 은 10회 중 8회 = 20%). psql(`postgres:17-alpine`) 접속 10회 `/usr/bin/time`: `2.38s · 3.34s · 0.29 · 0.29 · 0.28 · 0.27 · 0.29 · 0.29 · 0.27 · 0.29` — 전부 TLSv1.3, 실패 0. **처음 두 번만 느리다**(TCP SYN 재전송 1s·2s 모양). EC2 CPUCreditBalance 217 — CPU 스로틀 아님. → B7-26(7-A: `minimum-idle ≥ 1`).
+- `[막힘]` 첫 측정 스크립트 실패 두 번: `fly machine run IMAGE sh -c "…"` 가 머신을 안 만들었다(인자 파싱) → `--file-local` + `--entrypoint` 로. busybox `date +%N` 미지원으로 0ms → `/usr/bin/time -f`.
+- `[메모]` 정리: 일회용 앱 destroy, 잔존 0. prod 피어 `devquest-prod-db` 는 유지(6-B 자산).
