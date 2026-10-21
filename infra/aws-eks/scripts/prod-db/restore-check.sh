@@ -50,6 +50,7 @@ local_counts "$SCRATCH" > "$TMP/actual"
 if ! diff -u "$TMP/expected" "$TMP/actual" >&2; then
   die "복원본이 덤프 시점과 다르다(위 diff: - 덤프 시점, + 복원본)"
 fi
+local_seq_check "$SCRATCH" || die "복원본의 시퀀스가 데이터보다 뒤처졌다(위) — 복원하면 첫 INSERT 가 id 충돌한다"
 TABLES=$(grep -vc '^flyway|' "$TMP/actual" || true)
 health restore "secs=$SECS" "tables=$TABLES"
 log "✅ 복원 판정 통과 — ${SECS}s, 테이블 ${TABLES}개, Flyway 이력 일치"

@@ -1,12 +1,13 @@
-# 매일 03:30 KST(= 18:30 UTC). 스케줄러(00:00·09:00 KST)와 창(낮)을 피한다.
+# 6시간마다 — 03:30 · 09:30 · 15:30 · 21:30 KST(= 18:30 · 00:30 · 06:30 · 12:30 UTC). RPO 24h → 6h(📌D-016 7 결정, B7-14).
+# 00:00(레이트 리밋 초기화)·09:00(메일 스케줄러) KST 를 피한다.
 # Persistent=true — 인스턴스가 꺼져 있던 동안 놓친 실행을 다음 부팅에 따라잡는다.
 [Unit]
-Description=daily devquest prod DB backup
+Description=devquest prod DB backup every 6h
 
 [Timer]
-OnCalendar=*-*-* 18:30:00 UTC
+OnCalendar=*-*-* 00,06,12,18:30:00 UTC
 Persistent=true
-RandomizedDelaySec=10m
+RandomizedDelaySec=5m
 
 [Install]
 WantedBy=timers.target

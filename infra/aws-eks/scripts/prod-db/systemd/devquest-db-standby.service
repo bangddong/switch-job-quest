@@ -1,0 +1,11 @@
+# 📌D-016 7 — Neon 콜드 대기 매일 복원(전용 대기 브랜치). install.sh 가 **전환 뒤에만** timer 를 켠다.
+[Unit]
+Description=devquest Neon cold standby restore (latest S3 dump -> Neon standby branch)
+After=network-online.target devquest-db-backup.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/devquest-db/standby-restore.sh
+Nice=15
+TimeoutStartSec=1h

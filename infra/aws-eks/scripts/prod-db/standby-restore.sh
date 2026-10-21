@@ -34,6 +34,12 @@ P_HOSTS=(); P_DBS=()
 [ -n "${NEON_PROD_DB:-}" ] && P_DBS+=("$NEON_PROD_DB")
 if SRC=$(get_url neon-source-url) && [[ "$SRC" =~ $re ]]; then P_HOSTS+=("${BASH_REMATCH[4]}"); P_DBS+=("${BASH_REMATCH[7]}"); fi
 unset SRC
+# 전환(7번) 뒤 `neon-source-url`(읽기 전용 비밀)을 지워도 좌표는 남긴다 — 비밀이 아닌 `neon-prod-coords`(String, "호스트/DB").
+#   이것이 없으면 가드 ④가 die 해 대기 복원이 영구히 멈춘다(B7-8). Neon production 브랜치는 전환 뒤엔 **동결된 사본**이고
+#   여전히 덮어쓰면 안 된다 — 대기는 **전용 브랜치**라 "대기 ≠ production" 모델이 그대로 유효하다(L-76 해소).
+if COORDS=$(get_url neon-prod-coords) && [[ "$COORDS" =~ ^([^/[:space:]]+)/([^/[:space:]]+)$ ]]; then
+  P_HOSTS+=("${BASH_REMATCH[1]}"); P_DBS+=("${BASH_REMATCH[2]}")
+fi
 [ "${#P_HOSTS[@]}" -gt 0 ] && [ "${#P_DBS[@]}" -gt 0 ] \
   || die "prod Neon 좌표를 모른다 — neon-source-url 도 NEON_PROD_HOST·NEON_PROD_DB 도 없다. 대조 없이 덮어쓰지 않는다"
 
@@ -98,6 +104,8 @@ SECS=$(( $(date +%s) - START ))
 
 ( standby_env; counts_sql | psql -X -q -A -t -v ON_ERROR_STOP=1 ) > "$TMP/actual"
 diff -u "$TMP/expected" "$TMP/actual" >&2 || die "Neon 대기 복원본이 덤프 시점과 다르다(위 diff)"
+SEQ=$( standby_env; seq_sql | psql -X -q -A -t -v ON_ERROR_STOP=1 ) || die "대기 시퀀스 판정 쿼리 실패"
+[ -z "$SEQ" ] || { printf '%s\n' "$SEQ" >&2; die "대기 복원본의 시퀀스가 데이터보다 뒤처졌다(위) — 복귀하면 첫 INSERT 가 id 충돌한다"; }
 TABLES=$(grep -vc '^flyway|' "$TMP/actual" || true)
 health standby "secs=$SECS" "tables=$TABLES"
 log "✅ Neon 대기 복원 판정 통과 — ${SECS}s, 테이블 ${TABLES}개, Flyway 이력 일치"
