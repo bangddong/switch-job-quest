@@ -110,6 +110,13 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
 
 **계정이 닫혔을 때**: Neon 콜드 대기(📌D-016 Q-2) — 7번 전환 뒤 매일 복원이 켜지면 Fly 의 DB 연결만 Neon 으로 돌린다. 그 전엔 Neon 이 prod 원본이다.
 
+## Neon 콜드 대기 복원 `standby-restore.sh` (📌D-016 Q-2)
+
+최신 덤프(`.counts` 짝)를 **Neon 대기 DB** 에 `--clean` 으로 덮어쓰고 값으로 판정한다. 헬스 키 `health/standby/<UTC>_secs=_tables=`.
+- 6-C: 브랜치 `standby-rehearsal` 에 손으로 1회(`systemctl` 없이 `/opt/devquest-db/standby-restore.sh`). 7번 전환 뒤: 매일 timer(7번에서 배선).
+- 🔴 가드: role 이 `devquest_standby`(브랜치에서 **SQL 로** 만든 것 — 접속해서 `neon_superuser` 비소속 확인) · 대기 호스트 ≠ prod 호스트 · 대기 DB ≠ prod DB · **prod 좌표를 모르면 덮어쓰지 않는다**(전환 전엔 `neon-source-url`, 그 뒤엔 `NEON_PROD_HOST`·`NEON_PROD_DB`).
+- 접속 정보: SSM `/devquest/prod/db/neon-standby-url` — 사용자가 콘솔로 넣는다(TASKS 의 TASK-15).
+
 ## 패치 (B5-8)
 
 Fly·EKS 가 **한 DB** 를 쓰므로 재시작 = 두 경로 동시 장애. 창 **밖**(밤·주말 = Fly 만 붙어 있을 때), 트래픽이 적은 시간에.

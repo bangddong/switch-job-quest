@@ -5690,3 +5690,9 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[막힘]` `inject_failure=true` 수동 실행 2회(run 39392855393 · 39394291192, 둘 다 `failure`, `triggering_actor`=본인) — 사용자 *"메일 안 왔어"*. 사용자 확인: GitHub 알림 설정(Actions · Email · 실패만)은 켜져 있음. 내 토큰엔 `user`·`notifications` 스코프가 없어 계정 이메일·발송 기록을 볼 수 없었다. 공식 문서: *"You'll receive a notification when any workflow runs that you've triggered have completed"* — `workflow_dispatch` 예외 없음.
 - `[해결]` 사용자가 메일함 검색 → **네이버 스팸함에 있었다.** 수신 허용 등록. 🔑 대안(AWS heartbeat 알람, 월 ≈ $0.40)을 먼저 제안했는데, 원인을 한 단계 더 좁혀 보자는 사용자 판단이 맞았다 — *안 온다* 는 *안 보냈다* 가 아니었다.
 - `[메모]` 남은 단일 장애점: GitHub cron 의 60일 무활동 자동 비활성화(N-13). 레포 활동이 끊기지 않는 동안은 무관 — 8번 이후 재판단.
+
+## 2026-10-20 — 📌D-016 6-C 마지막: Neon 콜드 대기 복원 도구 ($0)
+
+- `[결정]` `scripts/prod-db/standby-restore.sh` — 최신 덤프(`.counts` 짝)를 Neon 대기 DB 에 `pg_restore --clean --if-exists --single-transaction` 으로 덮어쓰고 같은 `counts_sql` 로 값 판정, 헬스 키 `health/standby/`. 6-C 에선 브랜치 `standby-rehearsal` 에 손으로 1회, 7번 전환 뒤 매일 timer.
+- `[결정]` 격리 = **브랜치에서 SQL 로 만든 role**(그 브랜치에만 존재 — main 접속 불가 🟡 실물 확인은 TASK-15 뒤). 가드: role 이름 · 접속해서 `neon_superuser` 비소속 · 대기 호스트 ≠ prod 호스트 · 대기 DB ≠ prod DB · **prod 좌표를 모르면 덮어쓰지 않는다**(전환 전 `neon-source-url`, 뒤엔 환경변수).
+- `[해결]` docker 테스트 ⑫ 9건(정상·`--clean` 재복원·prod 무변경·비번 미출력·같은 호스트·같은 DB·다른 role·neon_superuser 소속·prod 좌표 없음) → 47/47. 반증 순서: ⑧⑨ 가 최신 `.counts` 를 변조하므로 ⑫ 를 그 앞에 둔다.

@@ -162,6 +162,32 @@ out=$(RUN restore-check.sh); rc=$?
 [ $rc -eq 0 ] && ok "잘린 덤프를 건너뛰고 통과" || { bad "잘린 덤프를 골랐다(rc=$rc)"; echo "$out" | tail -3; }
 X 'rm -f /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump'
 
+echo "── ⑫ standby-restore — 최신 덤프를 Neon 대기 DB(별도 호스트·별도 DB·브랜치 전용 role)에 덮어쓰고 값 판정"
+echo "   (무엇의 실패를 잡나: 🔴 계정 밖 사본 복원이 prod Neon 을 덮어쓰는 것 — B6-1)"
+for s in "CREATE ROLE devquest_standby LOGIN PASSWORD 'sb_pw'" "CREATE DATABASE standby OWNER devquest_standby"; do Q postgres "$s" >/dev/null; done
+setsb() { X "printf '%s' '$1' > /mock-ssm/devquest/prod/db/neon-standby-url"; }
+# prod = localhost/neonsrc (neon-source-url), 대기 = 127.0.0.1/standby — 호스트 문자열이 다르다
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?
+[ $rc -eq 0 ] && ok "대기 복원·판정 통과" || { bad "rc=$rc"; echo "$out" | tail -6; }
+out=$(RUN standby-restore.sh); rc=$?
+[ $rc -eq 0 ] && ok "두 번째(덮어쓰기 --clean) 통과" || { bad "재복원 rc=$rc"; echo "$out" | tail -4; }
+[ "$(Q neonsrc 'SELECT count(*) FROM users')" = 50 ] && ok "prod(neonsrc) 무변경" || bad "🔴 prod 가 바뀌었다"
+echo "$out" | grep -q 'sb_pw' && bad "🔴 비밀번호 출력" || ok "출력에 비밀번호 없음"
+setsb 'postgresql://devquest_standby:sb_pw@localhost:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; [ $rc -ne 0 ] && echo "$out" | grep -q 'prod 호스트와 같다' && ok "같은 호스트 거부" || bad "🔴 prod 호스트로 진행(rc=$rc)"
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/neonsrc?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; [ $rc -ne 0 ] && echo "$out" | grep -q 'DB 이름이 prod' && ok "같은 DB 이름 거부" || bad "🔴 prod DB 이름으로 진행(rc=$rc)"
+setsb 'postgresql://devquest_ro:p%40ss%3Aw%25rd@127.0.0.1:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; [ $rc -ne 0 ] && echo "$out" | grep -q '브랜치 전용 role 만' && ok "다른 role 거부" || bad "다른 role 로 진행(rc=$rc)"
+Q postgres "CREATE ROLE neon_superuser NOLOGIN" >/dev/null; Q postgres "GRANT neon_superuser TO devquest_standby" >/dev/null
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?; [ $rc -ne 0 ] && echo "$out" | grep -q 'neon_superuser 소속' && ok "neon_superuser 소속 role 거부(콘솔 role 실수)" || bad "🔴 superuser 계열로 진행(rc=$rc)"
+Q postgres "REVOKE neon_superuser FROM devquest_standby" >/dev/null
+X 'mv /mock-ssm/devquest/prod/db/neon-source-url /tmp/src.bak'
+out=$(RUN standby-restore.sh); rc=$?; [ $rc -ne 0 ] && echo "$out" | grep -q 'prod Neon 좌표를 모른다' && ok "prod 좌표 없으면 거부(대조 없이 덮어쓰지 않음)" || bad "🔴 좌표 없이 진행(rc=$rc)"
+X 'mv /tmp/src.bak /mock-ssm/devquest/prod/db/neon-source-url'
+
 echo "── ⑧ 반증: 행 수 파일을 바꾸면 복원 판정이 실패해야 한다 + 실패해도 스크래치 삭제"
 X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); sed -i "s/^public.users|50$/public.users|49/" "$f"; grep -q "users|49" "$f"' \
   || bad "반증 준비 실패 — 바꿀 줄을 못 찾았다"
