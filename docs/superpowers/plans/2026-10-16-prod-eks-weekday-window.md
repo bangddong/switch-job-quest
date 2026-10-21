@@ -102,7 +102,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** (계획 2026-10-20 — 아래 「6번」: 리허설 원천 = Neon prod 덤프(읽기 전용, **7번 이전 리허설 겸함**) · Neon 자동 복원은 **7번 전환 후부터** · 실행 = EC2 systemd timer + SSM 설치) | N-9 · U-3 · N-15 · B-13 · B-16 · N-19 | 5 |
 | 7 | **Neon → EC2 DB 전환** (계획 2026-10-21 — 아래 「7번」: **DB 전환만**, JWT 통일·레이트 리밋 공유는 **10번 직전**으로) | U-4 · B5-8 · B5-12 · B6-18 · B7 | 1a · 6 |
-| 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크, **CI 클러스터 dead man's switch**(off 경로 반복 — 4번에서 이관, 「4번」 B4 표) | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
+| 8 | **전환 워크플로** (계획 2026-10-21 — 아래 「8번」: **트래픽 없이 먼저** — 8-0 실측 → 8-A EKS prod 수준 → 8-B on/off·안전장치(트래픽 0) → 8-C 트래픽 전환) | U-7 · U-20 · U-22 · N-3 · N-13 · N-14 · B4 · B8 | 2 · 3 · 4 · 7 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
 
@@ -411,6 +411,70 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 | B7-25 | ⚪ | 전환 뒤 거짓이 되는 서술 다수 | 7-C |
 | B7-27 | 🔴 | (QA 7-A F-1) `CodingQuestService.generateProblem`·`submitCode` 가 `@Transactional` 안에서 LLM·Judge0 를 순차 호출 — DB 커넥션을 수십 초 쥔다. idle-in-tx 제한을 걸면 500(그래서 7-A 는 안 건다), 안 걸어도 **풀 10 을 외부 호출이 잡아먹는** 구조(다른 서비스는 이미 트랜잭션을 걷어냈다) | **BE 백로그**(10번 직전 커넥션 예산 때 함께) — 7-A 는 제한을 걸지 않는 것으로 회피 |
 | B7-26 | 🟡 | (7-0 실측) Fly→EC2 **새 접속의 처음 1~2회가 2~3초**(이후 0.28s) — TCP 재전송(1s·2s) 모양, ICMP 손실 7% 와 부합. CPU 크레딧 217(스로틀 아님). `minimum-idle: 0` + suspend 면 깨어난 첫 요청이 이 지연을 그대로 맞는다 | 7-A — Fly 풀 `minimum-idle ≥ 1`·keepalive 검토 + 전환 뒤 실측(Hikari 획득 시간) |
+
+## 8번 — 전환 워크플로 (2026-10-21 계획)
+
+### 결정 (사용자 10-21 — 세 질문 모두 추천안)
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 순서 | **트래픽 없이 먼저**: 8-0 실측 → 8-A EKS 를 prod 수준으로 → 8-B on/off·CI 안전장치를 **트래픽 전환 없이** 검증(켜고 직접 스모크 후 끔) → 8-C 트래픽 전환을 마지막에 | EKS 가 prod 를 대신할 준비가 안 됐다(B8-1·B8-3·B8-4). 시험마다 EKS 비용(≈ $0.22/h)만 들고 사용자 영향 0 |
+| 앱 키 | **SSM 에 넣어 완전 동작** — 사용자가 각 콘솔에서 받아 AWS 콘솔로 SSM 에(값은 대화를 거치지 않는다), EKS 는 ESO 로 | Fly 시크릿은 write-only(B8-1). 키 회전 시 두 곳 — 런북에 명시 |
+| 트래픽 전환 방식 | **8-0 실측 후 결정** — ① Cloudflare DNS 를 Fly↔ALB 로 뒤집기(api.quest ACM 인증서 = 설계 변경, Fly 인증서 갱신 영향) vs ② Cloudflare 프록시 + Origin Rule 로 원본만 바꾸기(새 인증서 불필요, 무료 플랜 가능 여부 미확인) | 레포 근거 0(B8-11) |
+
+### 8-0 실측 — 1차(2026-10-21, 읽기만, $0)
+
+```
+api.quest.dhbang.co.kr  CNAME devquest-api.fly.dev  TTL 300  (DNS only — 공개 DNS 에 CNAME 이 그대로 보인다)
+quest.dhbang.co.kr      A 172.67.x / 104.21.x      (Cloudflare 프록시 — FE·Vercel)
+eks.quest               레코드 없음(ACM 인증서만, 세션 때만 레코드)
+CAA                     없음 · NS = Cloudflare
+Fly 인증서              api.quest · source Fly · Issued · 만료 ≈ 2개월 뒤(검증 방식은 출력에 안 나옴)
+Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_KEY · MAIL_ENABLED · GRAFANA_API_KEY ·
+                        GRAFANA_LOKI_INSTANCE_ID · GRAFANA_LOKI_URL · SENTRY_DSN · GITHUB_CLIENT_ID · GITHUB_CLIENT_SECRET ·
+                        JWT_SECRET · DB_* · STORAGE_DATASOURCE_CORE_*   (값은 write-only — 이름만)
+```
+→ ①이면 TTL 300 = 최대 5분 배수(B8-12)·Fly 인증서는 CNAME 이 하루 6h 떨어져도 갱신이 재시도되는지 확인 필요(DNS-01 `_acme-challenge` 위임이 대안). ②면 api.quest 를 proxied 로 바꾸는 순간 Fly 앞단이 Cloudflare 로 바뀐다(Fly 는 그대로 원본).
+**2차(남은 것)**: Cloudflare API 토큰(존 범위·최소 권한)으로 Origin Rule 가능 여부·레코드 수정 API · tofu 1.8.5 ↔ 1.12.4 state(B4-10) · CI 경로 소요 시간 · Vercel rewrite 의 `Origin` 전달(B8-2).
+
+### 순서
+
+| 단계 | 내용 | 비용 | 승인 |
+|:-:|---|---|---|
+| **8-0** | 실측 2차(위) + TASK-17(앱 키 → SSM) | $0 | — |
+| **8-A** | EKS prod 수준: 앱 키 ExternalSecret(B8-1)·`CORS_ALLOWED_ORIGINS`(B8-2)·Ingress·LBC 배포 경로(ArgoCD 앱 안 — B4-2 선삭제 순서 포함, B8-4)·Ingress `host`·ArgoCD path 를 `argocd_apps_path` 로(B8-6)·이미지 태그 = **be-cd 성공 sha**(B8-7)·`node_desired_size=3`(B8-5)·metrics-server 고정 재판단(B8-8)·1b 폐기(B8-24)·풀 상한 EKS 25(B7-21) | $0(코드) | — |
+| **8-B** | on/off 워크플로 + CI dead man's switch — **트래픽 전환 없음**: on = apply → ArgoCD Healthy 판정 → 직접 스모크(eks.quest 또는 `--resolve`) / off = Application·Ingress 선삭제(B4-2)·LB 0 확인 → destroy → 고아 ALB·SG 검사(B8-16). 공용 concurrency 는 pending 교체 함정(B8-15) 회피 설계. OIDC 세션 1h(B8-9) 안에 들게 단계 분리. 계정 ID 마스킹(B4-9). 예산 게이트(Q-3, B8-22). `guard-local-layers` 재정의(N-3). 로컬 apply 차단 표식(B8-21) | 시험마다 ≈ $0.22/h | 첫 실행 전 사용자 |
+| **8-C** | 트래픽 전환(8-0 결과로 방식 확정) · 배수 대기(B8-12) · 응답 백엔드 식별 헤더(B8-14) · 실패 시 Fly 복귀 | — | 🔴 사용자 |
+| 10 직전 | JWT 통일(B7-15·B7-17) · 레이트 리밋 IP 헤더(B7-19) · OAuth(B7-16) · B7-27 · 창 중 Fly 정책(9번 — **메일은 EKS 에서 꺼져 있어 U-5 전제가 거꾸로**, B8-19) · 관측(B8-18) · 스키마 스큐(B8-20) | | |
+
+### 8번 Blindspot (2026-10-21, Explore 읽기 전용) — 목적지
+
+| ID | 확도 | 요지 | 목적지 |
+|---|:-:|---|---|
+| B8-1 | 🔴 | EKS 에 prod 런타임 키(Anthropic·Judge0·Resend·Grafana) 경로 없음 — D-008 배선이 D-016 계획에서 빠짐 | ✅ 결정(SSM) → TASK-17 · 8-A |
+| B8-2 | 🟡 | EKS `CORS_ALLOWED_ORIGINS` 없음 | 8-A |
+| B8-3 | 🔴 | api.quest TLS 인증서 없음(ACM 은 eks.quest 하나, 검증 규칙이 prod DNS 금지) | 8-0 결과로(방식 ① 이면 설계 변경) |
+| B8-4 | 🔴 | Ingress·LBC 배포 경로 미정(base 에서 빠짐, helm 손 설치), host 규칙 없음 | 8-A |
+| B8-5 | 🔴 | `node_desired_size` 기본 1 — LBC 가 core-api 선점 | 8-A(`-var`·기본값) |
+| B8-6 | 🟡 | ArgoCD path 리터럴·targetRevision main 자동 sync·retry 소진 | 8-A·8-B |
+| B8-7 | 🔴 | 태그 규칙 빈틈 — `-x test` 이미지라 be-cd 실패 sha 도 ECR 에 있다, dispatch 는 서비스 하나 | 8-A(be-cd 성공 sha 기준) |
+| B8-8 | 🟡 | metrics-server `.11` 고정이 매일 on 을 깰 수 있음 | 8-A |
+| B8-9 | 🟡 | OIDC 세션 1h | 8-B(잡 분리·`max_session_duration`) |
+| B8-10 | ⚪ | 노드 단일 AZ | 10 직전(external 모드면 고정 해제 검토) |
+| B8-11 | 🔴 | api.quest 레코드 근거 0 | ✅ 8-0 1차(CNAME → fly.dev, DNS only, TTL 300) |
+| B8-12 | 🟡 | off 배수 대기 없음 | 8-C |
+| B8-13 | 🟡 | Cloudflare 토큰 범위·보관(PR 에서 읽힘) | 8-0 2차·8-C |
+| B8-14 | 🟡 | 스모크로 백엔드 구분 불가 | 8-B·8-C |
+| B8-15 | 🔴 | concurrency pending 교체가 off 를 조용히 취소 | 8-B |
+| B8-16 | 🟡 | 리퍼 로직 그대로 재사용 금지(kubeconfig 실패=없음, Ingress 실패에도 destroy), LBC SG 누적 | 8-B |
+| B8-17 | 🟡 | ALB 매일 삭제로 LCU 실측 소실 | 8-B(off 가 LB 식별자 기록) |
+| B8-18 | 🟡 | 창 관측 공백(GRAFANA 키 없음, service.name 충돌) | TASK-17(키) + 10 직전(리소스 속성) |
+| B8-19 | 🟡 | U-5 전제가 거꾸로(EKS 는 메일 꺼짐) | 9번 |
+| B8-20 | 🟡 | 창 중 be 머지가 EKS 아래 스키마를 바꿈 | 9번(be-cd 창 중 정책) |
+| B8-21 | 🟡 | 로컬 apply 가 창 중 prod 클러스터를 기본값으로 덮음 | 8-B(표식·가드) |
+| B8-22 | ⚪ | Budgets 게이트 값·이름·지연 | 8-B |
+| B8-23 | 🟡 | D-016 영향 목록 누락 | 8-A |
+| B8-24 | ⚪ | 1b 폐기 후보 | 8-A(폐기 판정) |
 
 ## 이번 범위에서 하지 않는 것
 

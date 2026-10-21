@@ -5774,3 +5774,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` GitHub 시크릿의 옛 값(2026-03-28)이 `claude-auth-token` 과 같은 것인지는 확인하지 않았다(자격증명 파일을 더 뒤지지 않았다) — 새 토큰으로 덮어써 무관해졌다.
 - `[결정]` SSM `neon-source-url`(읽기 전용 role)·`/devquest/ops/neon-app-url`(production 쓰기 role — 중단용) 삭제. 전환 뒤 production 으로 되돌리면 EC2 쓰기를 잃으므로 중단 경로가 의미를 잃었다. 대기 가드는 `neon-prod-coords` 로 동작.
 - `[결정]` B7-25 서술 갱신: 루트 README(배포 표·구성도·prod DB 안내) · TASK-6 *"prod는 Fly+Neon이라 무영향"* · 비용 모델 *"계정 폐쇄돼도 prod 무영향"* · D-016 비교표 · 튜토리얼 · 원장 SSM 행.
+
+## 2026-10-21 — 📌D-016 순서표 8: 계획 + 8-0 1차 실측 ($0)
+
+- `[메모]` 7-C 후속: 사용자가 Neon `devquest_ro` 삭제 — 첫 시도 `DROP ROLE` 실패(GRANT·기본 권한 의존) → `SET default_transaction_read_only = off; GRANT devquest_ro TO CURRENT_USER; DROP OWNED BY devquest_ro; DROP ROLE devquest_ro;` 로 성공.
+- `[결정]` 사용자(세 질문 추천안): ①**트래픽 없이 먼저**(8-0 → 8-A → 8-B 트래픽 0 검증 → 8-C 전환) ②앱 키는 **SSM 에 넣어 완전 동작**(TASK-17) ③전환 방식은 **8-0 실측 후**.
+- `[막힘]` Blindspot B8 24건 — 가장 큰 것: EKS 에 prod 런타임 키(Anthropic·Judge0·Resend·Grafana) 경로가 없다(B8-1, D-008 배선이 D-016 계획에서 빠졌다) · api.quest 인증서 없음(B8-3) · Ingress·LBC 배포 경로 없음(B8-4) · 태그 규칙이 `-x test` 이미지라 be-cd 실패 sha 도 고른다(B8-7) · concurrency pending 교체가 off 를 조용히 취소(B8-15).
+- `[메모]` 8-0 1차(읽기만): `api.quest.dhbang.co.kr CNAME devquest-api.fly.dev TTL 300`(DNS only) · `quest` 는 Cloudflare 프록시 · CAA 없음 · NS Cloudflare · Fly 인증서 `Issued`, 만료 ≈ 2개월 뒤 · Fly 시크릿 **이름**: ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_KEY · MAIL_ENABLED · GRAFANA_API_KEY · GRAFANA_LOKI_INSTANCE_ID · GRAFANA_LOKI_URL · SENTRY_DSN · GITHUB_CLIENT_ID/SECRET · JWT_SECRET · DB_* · STORAGE_DATASOURCE_CORE_*.
