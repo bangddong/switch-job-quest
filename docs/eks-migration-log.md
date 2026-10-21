@@ -5699,3 +5699,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` QA(6-C standby) MEDIUM 2·LOW 5: **F-1 호스트 가드가 문자열 비교** — 같은 엔드포인트의 대소문자·pooler 변형으로 우회되고, 테스트의 "다른 호스트" 도 같은 서버의 별칭(localhost/127.0.0.1)이었다. → 엔드포인트 ID 정규화 + **격리를 직접 증명**: 대기 자격증명으로 prod 엔드포인트에 붙어 **실패해야 통과**(인증·role 부재·hba 거부만 인정, DNS·타임아웃은 중단). TASK-15 에서 브랜치를 안 바꾸고 main 에 role 을 만든 실수를 기계가 잡는다. · F-2 `--clean` 은 덤프에 있는 객체만 지워 옛 스키마 잔여가 판정을 영구 실패시킨다 → `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` + 덤프 SQL 을 `psql -1` 한 트랜잭션으로(실패 시 이전 복원본 보존 — 테스트로 확인) · F-4 env·SSM prod 좌표 **둘 다** 대조 · F-5 `pg_has_role(… 'MEMBER')` 로 상속 소속 + superuser 계열 속성 · F-6 테스트 ⑫ 14건(52/52). F-3(7번 뒤 대기 = 옛 prod 면 가드 모델 재정의)은 7번으로.
 - `[막힘]` 사용자 TASK-15 2단계: `ERROR: must be able to SET ROLE "devquest_standby" (SQLSTATE 42501)` — PG16+ 는 남을 소유자로 `CREATE DATABASE … OWNER` 하려면 그 role 로 SET ROLE 할 수 있어야 한다(CREATE ROLE 한 쪽도 자동으로 받지 않는다). → `GRANT devquest_standby TO CURRENT_USER` → CREATE → `REVOKE`. 기본 브랜치 이름은 `main` 이 아니라 **`production`**(사용자) — 가드는 이름이 아니라 엔드포인트로 대조하므로 영향 없음.
 - `[해결]` 재QA F-9: 목차는 멀쩡하고 꼬리만 잘린 `-Fc` 덤프는 `pg_restore -l` 을 통과하고, 스트리밍(`pg_restore -f - | psql -1`)이면 EOF 뒤 COMMIT 으로 *DROP SCHEMA + 반쪽 복원* 이 이전 복원본을 대체할 수 있다 → **SQL 로 끝까지 변환한 뒤** 적재. 테스트: 3/4 지점에서 자른 덤프(`pg_restore -l` 통과 확인) → 실패 + 이전 복원본 50행 보존. 반증: 옛 스트리밍 형태로 되돌리면 이 케이스가 실패(53/54). · F-8 런북 서술을 코드에 맞춤. 54/54.
+
+## 2026-10-21 — 📌D-016 6-C 완료: Neon 콜드 대기 복원 리허설
+
+- `[메모]` 사용자 TASK-15: 브랜치 `standby-rehearsal`(parent `production`) + SQL role `devquest_standby` + DB `standby`. SSM 에 넣은 URL 의 DB 가 `neondb`(Connect 창 기본값)라 가드 ③(대기 DB ≠ prod DB)에 걸릴 상태였다 → 값 출력 없이 파이프로 `/neondb?` → `/standby?` 교체(버전 2).
+- `[해결]` 사전 실측(로컬 docker psql, 값 미출력): 대기 엔드포인트 ≠ production · 대기 브랜치 `standby` 소유자 `devquest_standby`·테이블 0·neon_superuser false · **대기 자격증명으로 production 엔드포인트 접속 → `ERROR: password authentication failed`** — 브랜치 role 격리가 실제로 성립한다(🟡 → 🔴 확인).
+- `[해결]` EC2 실행(SSM): `격리 확인` → 복원 대상 `devquest-20261020T184009Z.dump` → **11초**, 테이블 14, Flyway 이력 일치, 헬스 키 `health/standby/…_secs=11_tables=14`.
+- `[메모]` 그 덤프는 **첫 자동 백업**(timer 18:40 UTC = 03:40 KST)이다 — 밤새 timer 가 실제로 돌았다.
