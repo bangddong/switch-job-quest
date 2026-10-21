@@ -5706,3 +5706,9 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` 사전 실측(로컬 docker psql, 값 미출력): 대기 엔드포인트 ≠ production · 대기 브랜치 `standby` 소유자 `devquest_standby`·테이블 0·neon_superuser false · **대기 자격증명으로 production 엔드포인트 접속 → `ERROR: password authentication failed`** — 브랜치 role 격리가 실제로 성립한다(🟡 → 🔴 확인).
 - `[해결]` EC2 실행(SSM): `격리 확인` → 복원 대상 `devquest-20261020T184009Z.dump` → **11초**, 테이블 14, Flyway 이력 일치, 헬스 키 `health/standby/…_secs=11_tables=14`.
 - `[메모]` 그 덤프는 **첫 자동 백업**(timer 18:40 UTC = 03:40 KST)이다 — 밤새 timer 가 실제로 돌았다.
+
+## 2026-10-21 — 📌D-016 순서표 7: 전환 계획 ($0)
+
+- `[결정]` 사용자: ①**DB 전환만**(JWT 통일·레이트 리밋 공유는 10번 직전) ②Neon 콜드 대기 = **전용 대기 브랜치**(production 은 동결 사본) ③Fly 토큰 교체는 *"노출이 너한테만 된 거면 나중에"* — 노출 범위는 이 세션 대화 기록뿐이라 전환 뒤 유지 ④RPO = **백업 6시간마다**.
+- `[막힘]` Blindspot B7 25건 — 가장 큰 것: 계획 순서가 되돌릴 수 없는 `--cutover-done` 을 실패하기 쉬운 Fly 전환 **앞**에 두고 중단 절차가 없었다(B7-1) · Fly 를 내리지 않고 Neon 쓰기를 멈추는 방법이 없었다(B7-2) · 앱 이미지로 EC2 에 붙어 본 적이 없다(5-0 은 psql, B7-5) · 커넥션 최악 합이 `max_connections` 에 닿는다(B7-21) · production 브랜치엔 대기 복원이 소유권 때문에 성립하지 않는다(B7-9).
+- `[결정]` 순서: 7-0 실측(일회용 Fly 앱 + prod 이미지) → 7-A 준비(EC2 튜닝·감시·가드 재정의·런북, prod 무변경) → 7-B 전환(🔴 승인, 점검 창: be-cd 동결 → Neon 쓰기 동결 → import → Fly 시크릿 → EC2 쓰기 확인 → **그 뒤** cutover-done) → 7-C 정리.

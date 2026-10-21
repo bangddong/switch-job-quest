@@ -101,7 +101,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | 4 | ✅ **리퍼·마커 정책** — 2026-10-20 **4a**: 로컬 리퍼·리마인더·session-status 가 *이 마커가 만든 클러스터* 만 자기 것으로 본다(createdAt 소유 판정). CI 클러스터의 dead man's switch 는 **8번으로 이관**(Fly 복귀 필요 — B4-1). 아래 「4번」 | N-4 · U-12 · U-13 | 3 |
 | 5 | **DB 층** (계획 2026-10-19 — 아래 「5번」: Fly 경로 = 6PN WireGuard 피어, 비번 = SSM·EC2 생성, TLS require, 5-0 실측부터) — auto-apply 밖 별도 레이어 or `prevent_destroy`·데이터 볼륨 분리·`ignore_changes=[ami]`, SG(`vpc_cidr` + Fly 이그레스), TLS verify-full, 자격증명 0-bootstrap + `db_mode=external`, kustomization 정리 | N-5~N-8 · U-1 · U-10 · U-18 · N-19 | 0 |
 | 6 | **백업·복구 도구 + 계정 밖 사본 + 리허설** (계획 2026-10-20 — 아래 「6번」: 리허설 원천 = Neon prod 덤프(읽기 전용, **7번 이전 리허설 겸함**) · Neon 자동 복원은 **7번 전환 후부터** · 실행 = EC2 systemd timer + SSM 설치) | N-9 · U-3 · N-15 · B-13 · B-16 · N-19 | 5 |
-| 7 | **Neon → EC2 데이터 이전**(리허설은 6-C 가 겸한다 — 10-20), JWT 키 통일(Fly 1회 회전), 레이트 리밋 공유(BE), **전환 직후 Neon 콜드 대기 매일 복원 켜기**(6번에서 미룸) · 🔴 **트래픽을 EC2 로 돌리기 *전에* `scripts/prod-db/deploy.sh --cutover-done`**(데이터 볼륨 표식 — 이후 `neon-import` 영구 거부, QA 6-A F-2) | U-11 · U-6 · U-4 · B6-1 | 1a · 6 (1b 는 prod 모드 불필요 — 10-20) |
+| 7 | **Neon → EC2 DB 전환** (계획 2026-10-21 — 아래 「7번」: **DB 전환만**, JWT 통일·레이트 리밋 공유는 **10번 직전**으로) | U-4 · B5-8 · B5-12 · B6-18 · B7 | 1a · 6 |
 | 8 | **전환 워크플로** — on/off/dispatch, 공용 concurrency, Cloudflare API, 실패 시 Fly 복귀, 창 안 스모크, **CI 클러스터 dead man's switch**(off 경로 반복 — 4번에서 이관, 「4번」 B4 표) | U-7 · U-20 · U-22 · **N-3**(가드 재정의, 3번에서 이관 — B3-13·B3-14) · N-13 · N-14 | 2 · 3 · 4 |
 | 9 | **창 중 Fly 정책** — 0대/1대 + `be-cd` 창 중 차단 | N-11 · U-21 | 8 |
 | 10 | 첫 창 (ALB LCU 실측 시작) | N-12 | 전부 |
@@ -359,6 +359,56 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 | B6-35 | 🟡 | GitHub Actions + SSM Run Command 대안 | ❌ 기각(결정) |
 | B6-36 | 🟡 | DLM 스냅샷 | ❌ 기각(결정) |
 | B6-37 | ⚪ | EC2→S3 동일 리전 무료, EC2→Neon 인터넷 송신 | **7번** 실측 |
+
+## 7번 — Neon → EC2 DB 전환 (2026-10-21 계획)
+
+### 결정 (사용자 10-21)
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 범위 | **DB 전환만.** JWT 통일(U-11)·레이트 리밋 공유(U-6)는 **10번(첫 창) 직전** | 재시작이 겹치면 실패 원인을 못 가른다(B7-15). 둘 다 EKS 가 prod 를 서빙할 때만 필요하다. 레이트 리밋은 IP 헤더 우회(B7-19)가 선결 |
+| Neon 콜드 대기 | **전용 대기 브랜치**(6-C 의 `standby-rehearsal` 방식 + `devquest_standby`). `production` 브랜치는 전환 시점 사본으로 **동결** | production 에 덮어쓰면 소유권 때문에 적재·마이그레이션이 막힌다(B7-9·B7-10). 대기 role 이 객체 소유자라 복귀 시 Fly 가 그 자격증명으로 migrate 가능. 복귀 자격증명은 **Neon 콘솔에서 언제든 재설정** — 계정이 닫혀도 산다(B7-11) |
+| Fly 토큰(TASK-13) | **전환 뒤 교체 유지** — 사용자: *"노출이 너한테만 된 거면 나중에"*. 노출 범위 = 이 세션의 대화 기록(로컬 transcript·Anthropic)뿐, 레포·CI 로그·PR 에는 없다 | B7-18 의 위험은 *토큰을 가진 제3자* 전제 |
+| RPO | **백업 6시간마다**(24h → 6h) | 전환 뒤 Neon PITR 이 사라진다(B7-14). 덤프 73KB × 4/일 — 비용 ≈ 0. 감시 기준도 함께 조정 |
+
+### 순서
+
+| 단계 | 내용 | 비용 | 승인 |
+|:-:|---|---|---|
+| **7-0** | **실측** — ① prod Fly 머신 수(`fly status`, 읽기) ② **일회용 Fly 앱 + prod 이미지**로 EC2 피어 IPv6 JDBC(TLS·scram) 접속과 release(migrate) 경로 끝까지(B7-5, 지금까지 psql 로만 확인) ③ 일회용 앱에서 `fly secrets set` 이 release_command 를 도는지(B7-3) ④ 5-0 의 ping 손실 20% 재측정 | ≈ $0.01 | 일회용 앱만 — prod 앱은 읽기 |
+| **7-A** | **전환 준비**($0, prod 무변경): EC2 튜닝 conf(`max_connections`·`shared_buffers`·keepalive — 재시작 필요한 것은 **지금**, 아무도 안 붙어 있을 때, B7-21·B7-22) · Fly Hikari 풀 상한 · 백업 6h + 감시 기준 · 대기 복원 timer·감시(B7-13)·가드 재정의(L-76·B7-8·B7-12 — 신호 = EC2 `pg_stat_activity` 의 `fdaa:` 클라이언트) · DB 감시(B7-23: WireGuard 재해석·DB 접속 스모크) · 시퀀스 판정(B7-24) · 런북 L-75 · **전환·중단 절차 런북** | $0 | — |
+| **7-B** | 🔴 **전환**(점검 창, 사용자 승인): ① be-cd 동결(B7-7) ② **Neon 쓰기 동결** — 앱 role `default_transaction_read_only` + 기존 세션 종료(B7-2), 몇 분간 쓰기 실패 ③ `neon-import --reset` + 판정(시퀀스 포함) ④ `fly secrets set DB_*`(IPv6 리터럴은 따옴표, B7-6) ⑤ EC2 에 `fdaa:` 클라이언트·쓰기 확인 ⑥ **그 뒤에** `deploy.sh --cutover-done`(B7-1 — 순서를 바꿨다: Fly 확인 전엔 되돌릴 수 있게) ⑦ 대기 복원 켜기 · **중단 절차**: ⑤ 전 실패 → Fly 시크릿 되돌림 + Neon 동결 해제(쓰기 유실 0) | 상시분만 | 🔴 사용자 |
+| **7-C** | 정리: 서술 갱신(B7-25 — "prod 는 Fly+Neon" 류), `neon-source-url`·`devquest_ro` 삭제(가드 입력은 7-A 에서 대체), TASK-13 | $0 | — |
+
+### 7번 Blindspot (2026-10-21, Explore 읽기 전용) — 목적지
+
+| ID | 확도 | 요지 | 목적지 |
+|---|:-:|---|---|
+| B7-1 | 🔴 | `--cutover-done` 이 Fly 전환 앞 — 되돌릴 수 없는 단계가 실패하기 쉬운 단계 앞, 중단 절차 없음 | ✅ 7-B 순서 변경 + 중단 절차 |
+| B7-2 | 🔴 | Fly 를 내리지 않고 Neon 쓰기 동결 방법 없음(auto_start, scale 0 금지) | 7-B ② (read_only + 세션 종료) |
+| B7-3 | 🟡 | `fly secrets set` 이 release 를 도는지 미확인 | 7-0 ③ |
+| B7-4 | 🟡 | 롤링 중 두 DB 로 쓰기 분기·스케줄러(00:00·09:00) | 7-0 ①(머신 수) + 7-B 시각(00:00·03:30·09:00 회피) |
+| B7-5 | 🟡 | 앱 이미지로 EC2 피어 접속 실측 0건, ping 손실 20% 누락 | 7-0 ②④ |
+| B7-6 | ⚪ | zsh 에서 `[fdaa:…]` glob | 7-B ④ 따옴표 |
+| B7-7 | 🟡 | 전환 중 be-cd 가 돌 수 있음 | 7-B ① |
+| B7-8 | 🔴 | 런북 "neon-source-url 삭제" ↔ standby 가드 입력 | 7-A 가드 재정의 |
+| B7-9 | 🔴 | production 브랜치엔 standby 적재 방식이 성립 안 함 | ✅ 결정(전용 대기 브랜치) |
+| B7-10 | 🔴 | 복귀 시 migrate 소유권 | ✅ 결정(대기 role = 소유자, 복귀 자격증명도 그 role) |
+| B7-11 | 🔴 | Neon 자격증명 보관처가 계정과 함께 사라짐 | ✅ 결정(Neon 콘솔 재설정이 원천) |
+| B7-12 | 🟡 | L-76 제안 신호(Fly DB_HOST)를 EC2 가 못 읽음 | 7-A — `pg_stat_activity` `fdaa:` 클라이언트 |
+| B7-13 | 🟡 | 대기 복원 감시·유닛 없음 | 7-A |
+| B7-14 | 🟡 | RPO 미정의(PITR 상실) | ✅ 결정(6h) → 7-A |
+| B7-15 | 🟡 | JWT 회전 = 로그아웃 + FE 로컬 진행 캐시 소실, 되돌릴 수 없음 | **10번 직전**(결정) — 공지 문구 포함 |
+| B7-16 | 🟡 | EKS 키 일치가 `-var environment=prod`·`db_mode=external` 둘에 달림, prod OAuth 자리표시 | **8번**(on 잡의 `-var`) + 10번 직전(OAuth 재판정) |
+| B7-17 | 🟡 | JWT 값 이동 경로(출력 없이 `fly secrets import`) | **10번 직전** |
+| B7-18 | 🟡 | 노출 토큰으로 전환 작업 | ✅ 결정(교체는 전환 뒤 유지 — 노출 범위가 이 세션뿐) |
+| B7-19 | 🔴 | 레이트 리밋 키 = IP, EKS 에선 `Fly-Client-IP` 위조로 무한 우회 | **10번 직전**(BE) |
+| B7-20 | 🟡 | 공유 저장소 설계 미정(core/daily 의미 다름) | **10번 직전** |
+| B7-21 | 🔴 | 커넥션 최악 합이 `max_connections` 97 에 닿음, 튜닝 0, swap 없음 | 7-A(EC2 conf + Fly 풀 상한). EKS 쪽 상한은 10번 직전 |
+| B7-22 | 🟡 | Fly suspend 유령 세션(keepalive 기본 7200s) | 7-A |
+| B7-23 | 🟡 | 전환 뒤 DB 장애 감시 없음(`/health` 상수, WireGuard Endpoint 재해석 없음) | 7-A |
+| B7-24 | ⚪ | 판정에 시퀀스 값 없음 | 7-A(`counts_sql` 에 `last_value`) |
+| B7-25 | ⚪ | 전환 뒤 거짓이 되는 서술 다수 | 7-C |
 
 ## 이번 범위에서 하지 않는 것
 
