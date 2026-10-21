@@ -9,9 +9,13 @@
 
 | 무엇 | 언제 | 어디서 | 결과 |
 |---|---|---|---|
-| 백업 `backup.sh` | 매일 03:30 KST(±10분) | EC2 systemd `devquest-db-backup.timer` | `s3://devquest-eks-backups-seoul/prod-db/dumps/devquest-<UTC>.{dump,counts}` + `health/backup/<UTC>_disk=_bytes=_tables=` |
+| 백업 `backup.sh` | **6시간마다** 03:30 · 09:30 · 15:30 · 21:30 KST(±5분) — RPO 6h | EC2 systemd `devquest-db-backup.timer` | `s3://devquest-eks-backups-seoul/prod-db/dumps/devquest-<UTC>.{dump,counts}` + `health/backup/<UTC>_disk=_bytes=_tables=` |
 | 복원 판정 `restore-check.sh` | 매주 일 04:30 KST | EC2 systemd `devquest-db-restore-check.timer` | 최신 덤프 → 스크래치 DB → 행 수·Flyway 이력 **값 비교** → `health/restore/<UTC>_secs=_tables=` |
-| 감시 `watch.sh` | 매일 11:00 KST | GitHub Actions `Prod DB Backup Watch`(읽기 전용 역할) | 헬스 키 신선도(백업 26h · 복원 160h)·디스크 80%·테이블 ≥1. **빨강 = 실패 메일** — 도달 확인: 수동 실행 `inject_failure` |
+| Neon 대기 복원 `standby-restore.sh` | 매일 04:30 KST — **전환 뒤에만**(install 이 `CUTOVER_DONE=1` 일 때 켠다) | EC2 systemd `devquest-db-standby.timer` | 최신 덤프 → Neon 전용 대기 브랜치 → 값·시퀀스 판정 → `health/standby/` |
+| WireGuard 감시 `wg-watch.sh` | 3분마다 | EC2 systemd `devquest-db-wg-watch.timer` | Endpoint 재해석 + 핸드셰이크 600s 넘게 끊기면 `wg-quick@fly0` 재기동(B7-23) |
+| 감시 `watch.sh` | 매일 11:00 KST | GitHub Actions `Prod DB Backup Watch`(읽기 전용 역할) | 헬스 키 신선도(백업 **8h** · 복원 160h · **전환 뒤 대기 30h**)·디스크 80%·테이블 ≥1. **빨강 = 실패 메일** — 도달 확인: 수동 실행 `inject_failure` |
+
+> 튜닝(📌D-016 7-A): `postgres/20-devquest-tuning.conf` — `max_connections=50`(커넥션 예산: Fly 10 + release 10, EKS 는 10번에서 25 이하로), keepalive 60s, swap 1GiB(`/swapfile`). install 은 **reload 만** 하고 재시작 필요 항목을 출력한다.
 
 > ⚠️ **실패 메일은 네이버에서 스팸함으로 갔다**(2026-10-20 실측). 제목 `[bangddong/switch-job-quest] Run failed: Prod DB Backup Watch …`, 발신 `notifications@github.com` — 수신 허용에 등록해 둔다.
 > 메일 주소를 바꾸거나 새 기기·계정에서 다시 확인할 땐 Actions 화면 *Run workflow* → `inject_failure` 체크로 일부러 빨갛게 만든다.
@@ -89,8 +93,9 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
    ```
    ⚠️ **2단계 뒤 어디서든 실패하면 되돌린다**(QA F-9·F-10·F-11). 🔴 **남겨 둔 `$OLD` 가 실제로 있을 때만** 새 `$DB` 를 지운다 —
    2단계의 RENAME 이 실패했으면 원본은 아직 `$DB` 이름 그대로라, 확인 없이 DROP 하면 **원본을 지운다**(문장별 autocommit 이라
-   `ON_ERROR_STOP` 이 이미 끝난 DROP 을 되돌리지 못한다). 셸을 잃어 `$OLD` 가 비었으면 먼저 찾는다:
-   `runuser -u postgres -- psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'devquest_broken_%'"`
+   `ON_ERROR_STOP` 이 이미 끝난 DROP 을 되돌리지 못한다). 셸을 잃어 `$OLD` 가 비었으면 먼저 찾는다 — 🔴 **여러 개면 멈춘다**(옛 시도의 잔여를 고르면 원본을 지우고 옛 데이터로 되돌린다, 원장 L-75).
+   이름 끝의 시각(UTC `YYYYmmddHHMM`)이 **이번 사고 시각**인 하나만 쓴다:
+   `runuser -u postgres -- psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'devquest\_broken\_%' ORDER BY datname DESC"`
    ```bash
    if [ -n "${OLD:-}" ] && [ -n "${DB:-}" ] && \
       [ "$(runuser -u postgres -- psql -X -d postgres -Atc "SELECT 1 FROM pg_database WHERE datname = '$OLD'")" = 1 ]; then
@@ -100,7 +105,8 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
    ALTER DATABASE $DB ALLOW_CONNECTIONS true;
    SQL
    else
-     echo "남겨 둔 DB '${OLD:-?}' 가 없다 — RENAME 이 안 됐다. 원본은 아직 '${DB:-devquest}' 다. 접속만 다시 연다:"
+     echo "남겨 둔 DB '${OLD:-?}' 를 찾지 못했다(없거나 조회 실패) — RENAME 이 안 됐을 가능성이 크다. 원본은 '${DB:-devquest}' 일 것이다."
+     echo "  먼저 확인: runuser -u postgres -- psql -d postgres -Atc \"SELECT datname FROM pg_database\"  — 확인 뒤 접속만 다시 연다:"
      echo "  runuser -u postgres -- psql -d postgres -c 'ALTER DATABASE ${DB:-devquest} ALLOW_CONNECTIONS true'"
    fi
    ```
@@ -114,7 +120,9 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
 
 최신 덤프(`.counts` 짝)를 SQL 로 **끝까지 변환한 뒤**, Neon 대기 DB 의 `public` 스키마를 **한 트랜잭션으로 통째 교체**하고 값으로 판정한다
 (변환이 실패하면 대기 DB 를 건드리지 않는다 · 적재가 실패하면 이전 복원본이 남는다 · 옛 스키마 잔여 객체도 지워진다). 헬스 키 `health/standby/<UTC>_secs=_tables=`.
-- 6-C: 브랜치 `standby-rehearsal` 에 손으로 1회(`systemctl` 없이 `/opt/devquest-db/standby-restore.sh`). 7번 전환 뒤: 매일 timer(7번에서 배선).
+- 6-C: 브랜치 `standby-rehearsal` 에 손으로 1회. **전환 뒤: 매일 timer**(install 이 `CUTOVER_DONE=1` 일 때만 켠다). 대기 = **전용 브랜치**(📌D-016 7 결정) — `production` 은 전환 시점 사본으로 동결.
+- prod 좌표: 전환 전엔 `neon-source-url`, 그 뒤엔 비밀이 아닌 SSM **`neon-prod-coords`**(String, `호스트/DB`) — source-url 을 지워도 가드가 산다(B7-8).
+- 판정에 **시퀀스**도 본다 — 소유 시퀀스의 `last_value ≥ max(컬럼)`(B7-24). 행 수만 맞고 setval 이 틀리면 복귀 후 첫 INSERT 가 충돌한다.
 - 🔴 가드: role 이 `devquest_standby`(브랜치에서 **SQL 로** 만든 것) · 접속해서 `neon_superuser` **상속까지** 비소속·superuser 계열 속성 없음 · 대기 엔드포인트 ≠ prod 엔드포인트(대소문자·pooler 정규화) · 대기 DB ≠ prod DB · **대기 자격증명으로 prod 엔드포인트에 붙어 거부되는지 직접 확인**(접속되면 = role 이 prod 에도 있음 → 중단, 거부 사유가 모호해도 중단) · **prod 좌표를 모르면 덮어쓰지 않는다**(SSM `neon-source-url` 과 `NEON_PROD_HOST`·`NEON_PROD_DB` 를 **모두** 대조).
 - 접속 정보: SSM `/devquest/prod/db/neon-standby-url` — 사용자가 콘솔로 넣는다(TASKS 의 TASK-15).
 
@@ -131,11 +139,29 @@ systemctl restart postgresql@17-main && systemctl is-active postgresql@17-main
 
 커널 패치로 재부팅이 필요하면(`/var/run/reboot-required`) 같은 창에서 `reboot` — 부팅 후 WireGuard·Postgres 가 자동으로 뜬다(systemd enable). 설정 튜닝은 재시작이 아니라 **별도 `conf.d` 파일 + `pg_ctlcluster 17 main reload`**.
 
+## 🔴 전환(7-B) 절차 — Neon → EC2 (점검 창, 사용자 승인)
+
+**시각**: 00:00(레이트 리밋 초기화) · 03:30/09:30/15:30/21:30(백업) · 09:00(메일) KST 를 피한다. prod Fly 는 **머신 1대**라 롤링 분기는 없다(7-0).
+**사전**: TASK-16(사용자) — Neon **앱이 쓰는** 접속 문자열을 SSM **`/devquest/ops/neon-app-url`** 에(중단·복귀용). EC2 역할은 `/devquest/prod/db/*` 만 읽으므로 이 경로는 못 읽는다 — 쓰기 권한 자격증명을 EC2 에 두지 않는다(B6-12).
+
+| # | 무엇 | 어디서 | 확인 |
+|:-:|---|---|---|
+| 0 | `gh workflow disable be-cd.yml` — 전환 중 BE 배포 금지(B7-7) | 로컬 | `gh workflow list` 에 disabled |
+| 1 | **Neon 쓰기 동결**: `ALTER ROLE <앱 role> SET default_transaction_read_only = on;` → `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '<앱 role>' AND pid <> pg_backend_pid();` (앱 role 확인: `SELECT DISTINCT usename, client_addr FROM pg_stat_activity WHERE datname = 'neondb';`) | Neon SQL Editor(`production`) | 이 순간부터 **쓰기 실패**(몇 분) — 읽기는 된다 |
+| 2 | `/opt/devquest-db/neon-import.sh --reset` | EC2(SSM) | `✅ … 판정 통과`(행 수·Flyway·**시퀀스**) |
+| 3 | `fly secrets import -a devquest-api` ← stdin: `DB_HOST=[<피어 IPv6>]` · `DB_NAME=devquest` · `DB_USERNAME=devquest` · `DB_PASSWORD=<SSM password>` · `STORAGE_DATASOURCE_CORE_MINIMUMIDLE=1` · `STORAGE_DATASOURCE_CORE_KEEPALIVETIME=120000`(B7-26) — **값은 파이프로**(출력 금지). 머신 재시작만, release 는 안 돈다(7-0) | 로컬 | `fly status` started |
+| 4 | EC2 에 Fly 가 붙었나: `SELECT client_addr, state FROM pg_stat_activity WHERE client_addr::text LIKE 'fdaa:%';` + 앱 쓰기 1건(로그인 등) 뒤 그 행이 EC2 에 있는가 | EC2 | ≥1 행 · 새 행 존재 |
+| 5 | **그 뒤에** `deploy.sh --cutover-done` — 표식(neon-import 영구 거부) + 대기 timer + `health/cutover/` | 로컬 | `[install] 전환 헬스 키 기록` |
+| 6 | 대기 복원 1회 `systemctl start devquest-db-standby.service` · `gh workflow enable be-cd.yml` · `gh workflow run prod-smoke-daily.yml` | EC2 · 로컬 | `✅ Neon 대기 복원 판정 통과` · 스모크 초록 |
+
+**중단(4번 전에 실패하면 — 쓰기 유실 0)**: ① `fly secrets import -a devquest-api` ← `/devquest/ops/neon-app-url` 을 `DB_*` 4개로(파이프) ② Neon: `SET default_transaction_read_only = off; ALTER ROLE <앱 role> RESET default_transaction_read_only;` — 🔴 앱 role 이 SQL Editor 의 role 과 같으면 새 세션이 읽기 전용이라 **`SET … off` 를 먼저** 쳐야 `ALTER ROLE` 이 된다 ③ `gh workflow enable be-cd.yml`. 표식(5번)을 안 남겼으므로 다시 시도할 수 있다.
+**4번 뒤**(EC2 에 새 쓰기가 생긴 뒤)엔 Neon 으로 되돌리면 그 쓰기를 잃는다 — 되돌리지 말고 EC2 에서 고친다.
+
 ## 전환(7번) 뒤
 
-- 🔴 트래픽을 EC2 로 돌리기 **전에** `deploy.sh --cutover-done` — 데이터 볼륨에 표식을 남겨 `neon-import.sh` 를 영구히 막는다(인스턴스를 교체해도).
-- Neon 읽기 전용 role(`devquest_ro`)과 SSM `neon-source-url` 은 쓸 일이 없어진다 — 삭제.
-- Neon 콜드 대기 매일 복원을 켠다(7번 범위).
+- Neon `production` 브랜치는 **읽기 전용으로 동결된 전환 시점 사본** — 지우지 않는다(01-15 이후 탈출 경로 판단 때까지).
+- Neon 읽기 전용 role(`devquest_ro`)과 SSM `neon-source-url` 은 쓸 일이 없어진다 — 삭제. 가드 좌표는 `neon-prod-coords` 가 맡는다.
+- **계정이 닫혔을 때(복귀)**: Neon 콘솔에서 `devquest_standby` 비밀번호 재설정 → Fly `DB_*` 를 대기 브랜치로 → 스키마가 이미지보다 낮으면 `fly deploy --image <현재>` 로 migrate(시크릿 교체로는 release 가 안 돈다, 7-0). AWS 에 의존하는 단계가 없다(B7-11).
 
 ## 테스트
 

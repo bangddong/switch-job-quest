@@ -1,0 +1,11 @@
+# 매일 04:30 KST(= 19:30 UTC) — 03:30 백업 뒤.
+[Unit]
+Description=daily devquest Neon cold standby restore
+
+[Timer]
+OnCalendar=*-*-* 19:30:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

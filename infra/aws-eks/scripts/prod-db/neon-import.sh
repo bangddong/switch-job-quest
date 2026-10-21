@@ -74,6 +74,7 @@ SECS=$(( $(date +%s) - START ))
 
 local_counts "$DB" > "$TMP/actual"
 diff -u "$TMP/expected" "$TMP/actual" >&2 || die "EC2 복원본이 Neon 스냅샷과 다르다(위 diff: - Neon, + EC2)"
+local_seq_check "$DB" || die "가져온 DB 의 시퀀스가 데이터보다 뒤처졌다(위) — 전환하면 첫 INSERT 가 id 충돌한다"
 TABLES=$(grep -vc '^flyway|' "$TMP/actual" || true)
 health neon-import "secs=$SECS" "tables=$TABLES"
 log "✅ Neon → EC2 가져오기 판정 통과 — ${SECS}s, 테이블 ${TABLES}개, Flyway 이력 일치"

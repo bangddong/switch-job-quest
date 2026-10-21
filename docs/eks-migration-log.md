@@ -5726,3 +5726,14 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 터널: `ping -6 -c 100` → **7% packet loss**, RTT 32.3/32.8/34.7ms(5-0 은 10회 중 8회 = 20%). psql(`postgres:17-alpine`) 접속 10회 `/usr/bin/time`: `2.38s · 3.34s · 0.29 · 0.29 · 0.28 · 0.27 · 0.29 · 0.29 · 0.27 · 0.29` — 전부 TLSv1.3, 실패 0. **처음 두 번만 느리다**(TCP SYN 재전송 1s·2s 모양). EC2 CPUCreditBalance 217 — CPU 스로틀 아님. → B7-26(7-A: `minimum-idle ≥ 1`).
 - `[막힘]` 첫 측정 스크립트 실패 두 번: `fly machine run IMAGE sh -c "…"` 가 머신을 안 만들었다(인자 파싱) → `--file-local` + `--entrypoint` 로. busybox `date +%N` 미지원으로 0ms → `/usr/bin/time -f`.
 - `[메모]` 정리: 일회용 앱 destroy, 잔존 0. prod 피어 `devquest-prod-db` 는 유지(6-B 자산).
+
+## 2026-10-21 — 📌D-016 7-A: 전환 준비 ($0, prod 무변경)
+
+- `[결정]` EC2 튜닝 `postgres/20-devquest-tuning.conf` — `max_connections=50`(커넥션 예산 47 = Fly 앱 10 + release 10, **EKS 는 10번에서 25 이하**), `shared_buffers=128MB`, `work_mem=4MB`, `tcp_keepalives_idle=60`(Fly suspend 유령 세션, B7-22), `idle_in_transaction_session_timeout=60s`. **swap 1GiB**(`/swapfile`, swappiness 10 — 904MB 에 swap 0 이면 OOM-killer 가 Postgres 를 죽인다, B7-21). install 은 **reload 만** 하고 재시작 필요 항목을 출력한다 — 재시작은 지금(아무도 안 붙어 있을 때) 손으로.
+- `[결정]` 백업 6h(00/06/12/18:30 UTC = 09:30·15:30·21:30·03:30 KST), 감시 기준 26h → 8h. 대기 복원 timer 는 **install 이 `CUTOVER_DONE=1` 일 때만** 켠다. 처음 전환 표식을 남길 때 `health/cutover/` 키 → watch 가 이것을 보면 대기 30h 를 요구(B7-13).
+- `[결정]` L-76 해소 — 결정(전용 대기 브랜치)으로 "대기 ≠ production" 모델이 전환 뒤에도 유효. 입력만 바꿨다: 비밀이 아닌 SSM `neon-prod-coords`(호스트/DB). L-75 해소 — 런북 되돌리기 잔여 조회 `ORDER BY` + 여러 개면 멈춤 + else 문구.
+- `[결정]` `wg-watch.sh`(3분) — Endpoint 재해석 + 핸드셰이크 600s 넘게 끊기면 `wg-quick@fly0` 재기동(B7-23).
+- `[결정]` 시퀀스 판정(B7-24): 원천과 값 비교는 하지 않는다(시퀀스는 트랜잭션 밖이라 스냅샷과 어긋난다). 복원본의 **소유 시퀀스 `last_value ≥ max(컬럼)`** 을 본다. 조회 실패는 빈 출력으로 읽지 않게 rc 를 직접 확인(`… || die` 문맥에선 set -e 가 꺼진다).
+- `[해결]` docker 테스트 54 → 62: ⑥e 시퀀스(`setval(…,1)` → `users_id_seq last=1 max=50` 검출 · 정상화 뒤 통과 — 검사를 지우면 이 케이스만 실패 61/62) · coords 만으로 가드·격리·같은 엔드포인트 거부 · 전환 전엔 대기 나이 무관 / 전환 키 생기면 31h 빨강 · cutover 헬스 키는 처음 한 번.
+- `[결정]` 런북 「전환(7-B) 절차」: be-cd 동결 → Neon `default_transaction_read_only` + 세션 종료 → `neon-import --reset` → `fly secrets import`(stdin, `MINIMUMIDLE=1`·`KEEPALIVETIME` 포함 — 같은 재시작에 묶어 B7-26 을 별도 재배포 없이) → EC2 에 `fdaa:` 클라이언트·새 행 확인 → **그 뒤** `--cutover-done`. 중단 절차(4번 전, 쓰기 유실 0)와 *"앱 role 이 SQL Editor role 과 같으면 `SET … off` 를 먼저"* 함정.
+- `[결정]` TASK-16: Neon 앱 접속 문자열을 **`/devquest/ops/`**(EC2 가 못 읽는 경로)에 — 중단·복귀용(B5-12). Fly 시크릿은 write-only 라 미리 보관할 수밖에 없다.

@@ -11,7 +11,7 @@
 #      prod-db/health/restore/<UTC>_secs=<n>_tables=<n>
 #
 # 판정 (하나라도 어기면 exit 1):
-#   ① 최신 backup 헬스 키 나이 ≤ MAX_BACKUP_AGE_H(26h — 매일 03:3x KST + 지연·랜덤 10분 여유)
+#   ① 최신 backup 헬스 키 나이 ≤ MAX_BACKUP_AGE_H(8h — 6시간 주기 + 지연·랜덤 여유. 📌D-016 7 결정 RPO 6h)
 #   ② 그 키의 disk ≤ MAX_DISK_PCT(80 — 데이터 볼륨 10GiB 고정·자동 확장 없음, N-19)
 #   ③ tables ≥ MIN_TABLES(1 — 0 이면 DB 가 비었다는 뜻: 백업은 "성공" 해도 지킬 게 없다)
 #   ④ 최신 restore 헬스 키 나이 ≤ MAX_RESTORE_AGE_H(160h). 복원은 토 19:30 UTC, 감시는 매일 02:00 UTC 라
@@ -23,7 +23,8 @@ set -euo pipefail
 BUCKET="${BUCKET:-devquest-eks-backups-seoul}"
 PREFIX="${PREFIX:-prod-db/}"
 REGION="${AWS_REGION:-ap-northeast-2}"
-MAX_BACKUP_AGE_H="${MAX_BACKUP_AGE_H:-26}"
+MAX_BACKUP_AGE_H="${MAX_BACKUP_AGE_H:-8}"
+MAX_STANDBY_AGE_H="${MAX_STANDBY_AGE_H:-30}"
 MAX_DISK_PCT="${MAX_DISK_PCT:-80}"
 MIN_TABLES="${MIN_TABLES:-1}"
 MAX_RESTORE_AGE_H="${MAX_RESTORE_AGE_H:-160}"
@@ -82,6 +83,20 @@ else
   RAGE_H=$(( (NOW - RT) / 3600 )); RSECS=$(field "$Rk" secs)
   if [ "$RAGE_H" -le "$MAX_RESTORE_AGE_H" ]; then good "restore ${RAGE_H}h 전 (${RSECS}s)"; summary "| ✅ 복원 판정 | ${RAGE_H}h 전 · ${RSECS}s | ≤ ${MAX_RESTORE_AGE_H}h |"
   else bad "복원 판정이 ${RAGE_H}h 전이 마지막(기준 ${MAX_RESTORE_AGE_H}h) — 백업이 복원되는지 모른다"; summary "| ❌ 복원 판정 | ${RAGE_H}h 전 | ≤ ${MAX_RESTORE_AGE_H}h |"; fi
+fi
+
+# ⑤ 전환(7번) 뒤에만 — `health/cutover/` 키가 있으면 Neon 대기 복원도 신선해야 한다(B7-13). 전환 전엔 대기가 의미 없다.
+CUT=$(latest cutover)
+if [[ "$CUT" =~ ^[0-9]{8}T[0-9]{6}Z ]]; then
+  SB=$(latest standby)
+  if [[ ! "$SB" =~ ^[0-9]{8}T[0-9]{6}Z_ ]]; then
+    bad "전환 뒤인데 Neon 대기 복원 헬스 키가 없다 — 계정 밖 사본이 안 만들어지고 있다"; summary "| ❌ Neon 대기 | ${SB:-없음} | 헬스 키 존재 |"
+  else
+    ST=$(stamp_epoch "${SB%%_*}") || { bad "standby 스탬프 해석 실패: $SB"; ST=0; }
+    SAGE_H=$(( (NOW - ST) / 3600 ))
+    if [ "$SAGE_H" -le "$MAX_STANDBY_AGE_H" ]; then good "standby ${SAGE_H}h 전"; summary "| ✅ Neon 대기 | ${SAGE_H}h 전 | ≤ ${MAX_STANDBY_AGE_H}h |"
+    else bad "Neon 대기 복원이 ${SAGE_H}h 전이 마지막(기준 ${MAX_STANDBY_AGE_H}h) — 계정이 닫히면 돌아갈 곳이 낡았다"; summary "| ❌ Neon 대기 | ${SAGE_H}h 전 | ≤ ${MAX_STANDBY_AGE_H}h |"; fi
+  fi
 fi
 
 [ "$FAIL" -eq 0 ] && echo "── 백업 감시 통과" || echo "── 🔴 백업 감시 실패"

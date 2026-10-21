@@ -1,0 +1,7 @@
+# 📌D-016 7-A (B7-23) — WireGuard 터널 감시. Endpoint 호스트를 다시 해석하고, 핸드셰이크가 오래 끊기면 재기동.
+[Unit]
+Description=devquest Fly 6PN WireGuard watchdog
+
+[Service]
+Type=oneshot
+ExecStart=/opt/devquest-db/wg-watch.sh

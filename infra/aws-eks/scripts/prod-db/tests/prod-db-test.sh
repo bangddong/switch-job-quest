@@ -143,6 +143,15 @@ out=$(RUN neon-import.sh --reset); rc=$?
 [ $rc -eq 0 ] && ok "인코딩 비번 디코딩" || { bad "rc=$rc"; echo "$out" | tail -4; }
 echo "$out" | grep -q 'p@ss\|p%40ss' && bad "🔴 비밀번호가 출력에 나왔다" || ok "출력에 비밀번호 없음"
 
+echo "── ⑥e 시퀀스가 데이터보다 뒤처진 덤프는 가져오기 거부 (📌D-016 7-A, B7-24)"
+echo "   (무엇의 실패를 잡나: 행 수·Flyway 는 일치하는데 setval 이 틀려 전환 직후 첫 INSERT 가 id 충돌)"
+Q neonsrc "SELECT setval('users_id_seq', 1)" >/dev/null
+out=$(RUN neon-import.sh --reset); rc=$?
+[ $rc -ne 0 ] && echo "$out" | grep -q '시퀀스가 데이터보다 뒤처졌다' && echo "$out" | grep -q 'users_id_seq last=1 max=50' && ok "뒤처진 시퀀스 검출(users_id_seq last=1 max=50)" || { bad "🔴 시퀀스 불일치를 통과(rc=$rc)"; echo "$out" | tail -3; }
+Q neonsrc "SELECT setval('users_id_seq', (SELECT max(id) FROM users))" >/dev/null
+out=$(RUN neon-import.sh --reset); rc=$?
+[ $rc -eq 0 ] && ok "시퀀스 정상화 뒤 가져오기 통과" || { bad "rc=$rc"; echo "$out" | tail -3; }
+
 echo "── ⑦ 쓰기가 계속되는 중에 백업 → 복원 판정 통과 (스냅샷 일관성)"
 echo "   (무엇의 실패를 잡나: 덤프와 행 수를 다른 시점에 세면 정상 백업이 불일치로 판정된다)"
 X "for i in \$(seq 1 400); do runuser -u postgres -- psql -X -q -d devquest -c 'INSERT INTO quest_progress(user_id,xp) VALUES (1,1)' >/dev/null; done" &
@@ -216,6 +225,15 @@ setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/standby?sslmode=requir
 out=$(docker exec -i -e NEON_PROD_HOST=no-such-host.invalid -e NEON_PROD_DB=other "$C" bash /opt/src/standby-restore.sh 2>&1); rc=$?; ALL="$ALL$out"
 [ $rc -ne 0 ] && echo "$out" | grep -q '사유가 모호하다' && ok "prod 접속 거부 사유가 모호하면(DNS 실패) 중단 — fail-closed" || bad "🔴 모호한 실패를 격리로 쳤다(rc=$rc)"
 echo "$ALL" | grep -q 'sb_pw' && bad "🔴 어느 경로에선가 비밀번호 출력" || ok "모든 실행 경로에서 비밀번호 미출력(QA F-6)"
+# 전환 뒤: neon-source-url(비밀)을 지워도 neon-prod-coords(비밀 아님)로 가드가 산다(B7-8·L-76)
+X 'mv /mock-ssm/devquest/prod/db/neon-source-url /tmp/src.bak; printf "localhost/neonsrc" > /mock-ssm/devquest/prod/db/neon-prod-coords'
+out=$(RUN standby-restore.sh); rc=$?
+[ $rc -eq 0 ] && echo "$out" | grep -q '격리 확인' && ok "source-url 없이 neon-prod-coords 로 가드·격리 확인 통과" || { bad "coords 경로 실패 rc=$rc"; echo "$out" | tail -3; }
+setsb 'postgresql://devquest_standby:sb_pw@localhost:5432/standby?sslmode=require'
+out=$(RUN standby-restore.sh); rc=$?
+[ $rc -ne 0 ] && echo "$out" | grep -q '엔드포인트가 prod 와 같다' && ok "coords 만으로도 같은 엔드포인트 거부" || bad "🔴 coords 가드 공허(rc=$rc)"
+setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/standby?sslmode=require'
+X 'mv /tmp/src.bak /mock-ssm/devquest/prod/db/neon-source-url; rm -f /mock-ssm/devquest/prod/db/neon-prod-coords'
 
 echo "── ⑧ 반증: 행 수 파일을 바꾸면 복원 판정이 실패해야 한다 + 실패해도 스크래치 삭제"
 X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); sed -i "s/^public.users|50$/public.users|49/" "$f"; grep -q "users|49" "$f"' \
@@ -244,12 +262,22 @@ out=$(WN -e PREFIX=nothing/); rc=$?
 [ $rc -eq 1 ] && echo "$out" | grep -q '헬스 키가 없거나' && ok "헬스 키 없음 → 빨강" || bad "🔴 키 없음을 통과시켰다(rc=$rc)"
 out=$(WN -e MIN_TABLES=999); rc=$?
 [ $rc -eq 1 ] && ok "테이블 기준 → 빨강" || bad "🔴 테이블 판정 공허(rc=$rc)"
+# 전환 전엔 대기 복원 나이를 보지 않는다 / 전환 키가 생기면 본다(B7-13)
+out=$(WN -e MAX_BACKUP_AGE_H=9999 -e MAX_RESTORE_AGE_H=9999 -e WATCH_NOW=$((NOW+31*3600))); rc=$?
+[ $rc -eq 0 ] && ok "전환 전: 대기 나이 무관" || { bad "전환 전인데 대기를 요구(rc=$rc)"; echo "$out" | tail -3; }
+X 'mkdir -p /mock-s3/bkt/prod-db/health/cutover && : > /mock-s3/bkt/prod-db/health/cutover/20261021T000000Z'
+out=$(WN -e MAX_BACKUP_AGE_H=9999 -e MAX_RESTORE_AGE_H=9999 -e WATCH_NOW=$((NOW+31*3600))); rc=$?
+[ $rc -eq 1 ] && echo "$out" | grep -q 'Neon 대기 복원이 3[0-9]h 전' && ok "전환 뒤: 대기 31h → 빨강" || { bad "🔴 전환 뒤 낡은 대기를 놓쳤다(rc=$rc)"; echo "$out" | tail -3; }
+out=$(WN); rc=$?
+[ $rc -eq 0 ] && ok "전환 뒤: 대기 신선 → 통과" || { bad "rc=$rc"; echo "$out" | tail -3; }
+X 'rm -rf /mock-s3/bkt/prod-db/health/cutover'
 
 echo "── ⑩ install.sh — CUTOVER_DONE 은 내려가지 않는다 (systemctl 목)"
 X 'printf "#!/bin/sh\nexit 0\n" > /usr/local/bin/systemctl; chmod +x /usr/local/bin/systemctl'
 X 'bash /opt/src/install.sh --region r --bucket b --prefix prod-db/ --cutover-done >/dev/null && bash /opt/src/install.sh --region r --bucket b --prefix prod-db/ >/dev/null'
 X 'grep -qx CUTOVER_DONE=1 /etc/devquest-db.env' && ok "재설치 뒤에도 CUTOVER_DONE=1" || bad "🔴 CUTOVER_DONE 이 0 으로 내려갔다"
 X 'test -s /var/lib/postgresql/.devquest-cutover-done' && ok "--cutover-done 이 데이터 볼륨 표식을 만든다" || bad "표식 없음"
+[ "$(X 'ls /mock-s3/b/prod-db/health/cutover 2>/dev/null | wc -l')" = 1 ] && ok "처음 전환 때만 cutover 헬스 키 1개" || bad "cutover 헬스 키 개수 이상: $(X 'ls /mock-s3/b/prod-db/health/cutover 2>/dev/null | wc -l')"
 X 'rm -f /etc/devquest-db.env && bash /opt/src/install.sh --region r --bucket b --prefix prod-db/ >/dev/null && grep -qx CUTOVER_DONE=1 /etc/devquest-db.env' \
   && ok "/etc 가 사라져도(인스턴스 교체) 표식에서 1 복원" || bad "🔴 인스턴스 교체 뒤 가드가 열렸다"
 X 'bash /opt/src/install.sh --region r --bucket b --prefix postgres/ >/dev/null 2>&1' && bad "학습 prefix 를 받았다(B6-6)" || ok "학습 prefix postgres/ 거부"
