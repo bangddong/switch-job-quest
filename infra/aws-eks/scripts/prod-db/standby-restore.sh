@@ -4,13 +4,15 @@
 #   6-C(2026-10-20): Neon **브랜치** `standby-rehearsal` 에 손으로 1회 — 도구 리허설.
 #   7번 전환 뒤: 매일 timer 로(옛 prod Neon 이 계정 밖 사본이 된다). 그 배선은 7번 범위.
 #
-# 🔴 prod Neon(main 브랜치)을 덮어쓰지 않는 것이 이 스크립트의 전부다(B6-1). 가드:
-#    ① 접속 role 이름이 `devquest_standby` + 접속해 보니 **neon_superuser 소속이 아님** — Neon 브랜치에서
-#       **SQL 로 만든** role 은 그 브랜치에만 있다(콘솔 role 은 neon_superuser 자동 소속 — 6-0 실측)
-#    ② 대기 호스트 ≠ prod 호스트 — 브랜치마다 엔드포인트가 다르다. 같은 호스트면 prod 일 수 있다
-#    ③ 대기 DB 이름 ≠ prod DB 이름
-#    prod 좌표는 전환(7번) 전엔 SSM `neon-source-url` 에서, 그 파라미터를 지운 뒤엔 `NEON_PROD_HOST`·`NEON_PROD_DB` 로.
-#    **좌표를 모르면 덮어쓰지 않는다**(대조 없이 진행하지 않는다).
+# 🔴 prod Neon(기본 브랜치 — 이 프로젝트에선 `production`)을 덮어쓰지 않는 것이 이 스크립트의 전부다(B6-1). 가드:
+#    ① role 이름 `devquest_standby` + 접속해서 `neon_superuser` **상속까지** 비소속·superuser 계열 속성 없음
+#       (브랜치에서 **SQL 로** 만든 role 만 — 콘솔 role 은 neon_superuser 자동 소속, 6-0 실측)
+#    ② 대기 엔드포인트 ≠ prod 엔드포인트(소문자·끝 점·`-pooler` 정규화) · 대기 DB ≠ prod DB
+#    ③ **격리 직접 증명** — 대기 자격증명으로 prod 엔드포인트에 붙어 **거부돼야** 진행(접속되면 = role 이 prod 에도 있다).
+#       거부 사유가 인증·role 부재·hba 일 때만 통과, DNS·타임아웃 같은 모호한 실패는 중단
+#    ④ prod 좌표는 SSM `neon-source-url` 과 `NEON_PROD_HOST`·`NEON_PROD_DB` 를 **모두** 모아 대조. **하나도 없으면 덮어쓰지 않는다**
+#    적재: 덤프를 SQL 로 **끝까지 변환한 뒤** public 스키마를 한 트랜잭션으로 통째 교체(실패 시 이전 복원본 보존).
+#    ⚠️ 7번 전환 뒤 대기 = 옛 prod 가 되면 ②③이 항상 막는다 — 가드 재정의는 7번(원장 L-76).
 # 접속 정보: SSM `<SSM_PREFIX>/neon-standby-url`. 값은 argv·로그에 두지 않는다(neon-import.sh 와 같은 방식).
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
