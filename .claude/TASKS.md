@@ -100,21 +100,6 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 2. `fly tokens list` 에서 옛 토큰 찾아 `fly tokens revoke`
 3. `.claude/settings.local.json` 에서 토큰이 박힌 권한 규칙 삭제(gitignore 파일 — 근본 원인)
 
-### TASK-16: Neon 앱 접속 문자열을 SSM(운영 전용 경로)에 — 📌D-016 7-B 전환 **전에**
-
-**왜**: 전환(7-B)이 중간에 실패하면 Fly 를 Neon 으로 **되돌려야** 한다. 그런데 Fly 시크릿은 write-only 라 지금 Fly 가 쓰는
-Neon 접속 정보를 아무도 꺼낼 수 없다(B5-12). 그래서 미리 보관해 둔다. 🔴 경로가 `/devquest/prod/db/` 가 **아니다** —
-EC2 역할은 그 아래만 읽으므로, 쓰기 권한이 있는 prod 자격증명을 EC2 가 읽지 못하게 따로 둔다(B6-12).
-
-1. **Neon 콘솔** → 프로젝트 → **Connect** — branch **`production`**, DB `neondb`, role 은 **앱이 쓰는 role**(보통 `neondb_owner` —
-   확인: SQL Editor 에서 `SELECT DISTINCT usename FROM pg_stat_activity WHERE datname = 'neondb' AND usename <> current_user;` 에 나오는 것),
-   **pooling 은 Fly 가 쓰는 것과 같게**(모르면 끈 직접 호스트). 비밀번호가 보이게 해서 복사.
-   🔴 **비밀번호를 재설정(Reset)하지 마라** — 하는 순간 지금 prod(Fly)가 끊긴다.
-2. **AWS 콘솔**(서울) → Parameter Store → Create — Name `/devquest/ops/neon-app-url` · **SecureString** · Value = 위 문자열
-3. Claude 에게 "넣었다"고만 — Claude 가 값 출력 없이 형식만 확인한다(접속 시험은 하지 않는다 — prod 쓰기 role 이다)
-
-**나중에**: 전환이 끝나고 되돌릴 일이 없어지면(7-C) 삭제.
-
 ## 완료된 항목
 
 ### TASK-10: ACM 인증서 DNS 검증 → **완료 (2026-09-16)**

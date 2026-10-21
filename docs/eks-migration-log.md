@@ -5747,3 +5747,8 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 백업 timer 를 6h 로 바꾸자 `Persistent=true` 가 놓친 회차로 보고 **즉시 1회 실행**(02:47 UTC) — 끝난 뒤 다음 06:33 UTC.
 - `[해결]` 원격 접속 0 확인 후 `systemctl restart postgresql@17-main` → `max_connections=50 · shared_buffers=128MB · work_mem=4MB · idle_in_transaction_session_timeout=0`. `tcp_keepalives_idle` 은 로컬 소켓 세션에서 `0` 으로 보인다(TCP 접속에만 적용되는 값 — 정상).
 - `[메모]` SSM `/devquest/prod/db/neon-prod-coords`(String, 호스트/DB) 생성 — source-url 에서 호스트/DB 만 파이프로(비밀번호 미출력).
+
+## 2026-10-21 — 📌D-016 TASK-16 (Neon 앱 접속 정보 보관)
+
+- `[막힘]` 첫 입력 검증(값 출력 없이 엔드포인트 첫 라벨만): `neon-app-url → ep-misty-bar-…` = **standby-rehearsal 브랜치**, production 은 `ep-morning-term-…`. Connect 창의 브랜치 선택이 대기 브랜치에 남아 있었다. 브랜치 생성 때 role 이 복사돼 그 주소로도 **접속은 된다** — 그래서 중단 때 Fly 를 이것으로 돌리면 에러 없이 **어제 사본에 쓰는** 조용한 분기가 된다.
+- `[해결]` 사용자가 production 으로 다시 넣음(버전 2) → `ep-morning-term-…` = production, role `neondb_owner`, DB `neondb`. 런북 전환 절차에 **사전 점검 -1**(neon-app-url 엔드포인트 = neon-prod-coords) 추가. TASK-16 완료.
