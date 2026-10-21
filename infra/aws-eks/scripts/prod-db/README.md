@@ -148,6 +148,7 @@ systemctl restart postgresql@17-main && systemctl is-active postgresql@17-main
 
 | # | 무엇 | 어디서 | 확인 |
 |:-:|---|---|---|
+| -1 | **사전 점검** — `neon-app-url` 의 엔드포인트가 **production** 엔드포인트(`neon-prod-coords`)와 같은가(값 출력 없이 첫 라벨만 비교). 🔴 Connect 창의 브랜치 선택이 다른 브랜치에 남아 있으면 대기 브랜치 주소가 들어간다 — 그 값으로 중단하면 Fly 가 **어제 사본**에 쓴다(2026-10-21 실제로 1회 발생, 다시 넣어 해결) | 로컬 | 같음 |
 | 0 | `gh workflow disable be-cd.yml` — 전환 중 BE 배포 금지(B7-7) | 로컬 | `gh workflow list` 에 disabled |
 | 1 | **Neon 쓰기 동결**: `ALTER ROLE <앱 role> SET default_transaction_read_only = on;` → `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '<앱 role>' AND pid <> pg_backend_pid();` (앱 role 확인: `SELECT DISTINCT usename, client_addr FROM pg_stat_activity WHERE datname = 'neondb';`) | Neon SQL Editor(`production`) | 이 순간부터 **쓰기 실패**(몇 분) — 읽기는 된다 |
 | 1b | **동결 검증**(QA 7-A F-7) — 앱 자격증명으로 **새 세션**을 열어 `SHOW transaction_read_only;` 가 `on` 인지(`/devquest/ops/neon-app-url` 을 파이프로, 값 출력 금지). `off` 면 동결이 안 됐다 → 2번으로 가지 마라 | 로컬(docker psql) | `on` |
