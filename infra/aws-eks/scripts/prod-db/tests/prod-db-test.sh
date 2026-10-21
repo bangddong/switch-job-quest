@@ -186,6 +186,12 @@ X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); head -c 200 "${
 out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"
 [ $rc -ne 0 ] && [ "$(Q standby 'SELECT count(*) FROM users')" = 50 ] && ok "복원 실패 시 이전 복원본 보존" || bad "🔴 실패했는데 대기 DB 가 비었거나 통과(rc=$rc)"
 X 'rm -f /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.*'
+# 목차는 멀쩡하고 **뒤쪽(데이터)만** 잘린 덤프 — `pg_restore -l` 은 통과한다(QA F-9)
+X 'f=$(ls /mock-s3/bkt/prod-db/dumps/*.counts | sort | tail -1); d="${f%.counts}.dump"; n=$(( $(stat -c %s "$d") * 3 / 4 )); head -c $n "$d" > /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump; cp "$f" /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.counts; pg_restore -l /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.dump >/dev/null && echo 목차통과' | grep -q 목차통과 \
+  && ok "(준비) 꼬리 잘린 덤프가 pg_restore -l 을 통과한다 — 반증 조건 성립" || bad "반증 준비 실패"
+out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"
+[ $rc -ne 0 ] && [ "$(Q standby 'SELECT count(*) FROM users')" = 50 ] && ok "꼬리 잘린 덤프 → 실패 + 이전 복원본 보존(QA F-9)" || bad "🔴 반쪽 복원이 이전 복원본을 대체(rc=$rc)"
+X 'rm -f /mock-s3/bkt/prod-db/dumps/devquest-29991231T000000Z.*'
 setsb 'postgresql://devquest_standby:sb_pw@LOCALHOST.:5432/standby?sslmode=require'
 out=$(RUN standby-restore.sh); rc=$?; ALL="$ALL$out"; [ $rc -ne 0 ] && echo "$out" | grep -q '엔드포인트가 prod 와 같다' && ok "대소문자·끝 점 변형도 같은 엔드포인트로 거부(QA F-1a)" || bad "🔴 호스트 변형으로 통과(rc=$rc)"
 setsb 'postgresql://devquest_standby:sb_pw@127.0.0.1:5432/neonsrc?sslmode=require'

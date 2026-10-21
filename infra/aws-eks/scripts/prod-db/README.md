@@ -112,9 +112,10 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
 
 ## Neon 콜드 대기 복원 `standby-restore.sh` (📌D-016 Q-2)
 
-최신 덤프(`.counts` 짝)를 **Neon 대기 DB** 에 `--clean` 으로 덮어쓰고 값으로 판정한다. 헬스 키 `health/standby/<UTC>_secs=_tables=`.
+최신 덤프(`.counts` 짝)를 SQL 로 **끝까지 변환한 뒤**, Neon 대기 DB 의 `public` 스키마를 **한 트랜잭션으로 통째 교체**하고 값으로 판정한다
+(변환이 실패하면 대기 DB 를 건드리지 않는다 · 적재가 실패하면 이전 복원본이 남는다 · 옛 스키마 잔여 객체도 지워진다). 헬스 키 `health/standby/<UTC>_secs=_tables=`.
 - 6-C: 브랜치 `standby-rehearsal` 에 손으로 1회(`systemctl` 없이 `/opt/devquest-db/standby-restore.sh`). 7번 전환 뒤: 매일 timer(7번에서 배선).
-- 🔴 가드: role 이 `devquest_standby`(브랜치에서 **SQL 로** 만든 것 — 접속해서 `neon_superuser` 비소속 확인) · 대기 호스트 ≠ prod 호스트 · 대기 DB ≠ prod DB · **prod 좌표를 모르면 덮어쓰지 않는다**(전환 전엔 `neon-source-url`, 그 뒤엔 `NEON_PROD_HOST`·`NEON_PROD_DB`).
+- 🔴 가드: role 이 `devquest_standby`(브랜치에서 **SQL 로** 만든 것) · 접속해서 `neon_superuser` **상속까지** 비소속·superuser 계열 속성 없음 · 대기 엔드포인트 ≠ prod 엔드포인트(대소문자·pooler 정규화) · 대기 DB ≠ prod DB · **대기 자격증명으로 prod 엔드포인트에 붙어 거부되는지 직접 확인**(접속되면 = role 이 prod 에도 있음 → 중단, 거부 사유가 모호해도 중단) · **prod 좌표를 모르면 덮어쓰지 않는다**(SSM `neon-source-url` 과 `NEON_PROD_HOST`·`NEON_PROD_DB` 를 **모두** 대조).
 - 접속 정보: SSM `/devquest/prod/db/neon-standby-url` — 사용자가 콘솔로 넣는다(TASKS 의 TASK-15).
 
 ## 패치 (B5-8)

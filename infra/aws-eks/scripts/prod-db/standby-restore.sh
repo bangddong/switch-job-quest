@@ -85,10 +85,13 @@ START=$(date +%s)
 #   `pg_restore --clean` 은 덤프에 **있는** 객체만 지운다 → 나중 마이그레이션이 DROP 한 테이블이 대기 DB 에 남아
 #   판정 diff 가 영구 실패한다(QA F-2). 그래서 스키마째 교체한다(대기 DB·public 소유자가 이 role).
 aws s3 cp --region "$REGION" --only-show-errors "s3://$BUCKET/${CKEY%.counts}.dump" "$TMP/d.dump"
-pg_restore -l "$TMP/d.dump" >/dev/null || die "덤프 목차를 읽지 못했다(잘린 파일?) — 대기 DB 는 건드리지 않았다"
-{ echo "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
-  pg_restore --no-owner --no-acl -f - "$TMP/d.dump"
-} | ( standby_env; psql -X -q -1 -v ON_ERROR_STOP=1 >/dev/null )
+# 🔴 덤프를 **먼저 SQL 파일로 끝까지 변환**한다(QA F-9). 스트리밍(`pg_restore -f - | psql -1`)이면 덤프 중간이 깨졌을 때
+#    psql 이 EOF 뒤 COMMIT 을 보내 *DROP SCHEMA + 반쪽 복원* 이 이전 복원본을 대체할 수 있다. `-Fc` 는 목차가 앞에 있어
+#    `pg_restore -l` 만으로는 꼬리·데이터 블록 손상을 못 잡는다. 변환이 끝까지 성공해야만 대기 DB 를 건드린다.
+pg_restore --no-owner --no-acl -f "$TMP/restore.sql" "$TMP/d.dump" \
+  || die "덤프를 SQL 로 변환하지 못했다(손상·잘림) — 대기 DB 는 건드리지 않았다"
+{ echo "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"; cat "$TMP/restore.sql"; } \
+  | ( standby_env; psql -X -q -1 -v ON_ERROR_STOP=1 >/dev/null )
 SECS=$(( $(date +%s) - START ))
 
 ( standby_env; counts_sql | psql -X -q -A -t -v ON_ERROR_STOP=1 ) > "$TMP/actual"
