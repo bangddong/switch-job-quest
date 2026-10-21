@@ -5752,3 +5752,18 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 
 - `[막힘]` 첫 입력 검증(값 출력 없이 엔드포인트 첫 라벨만): `neon-app-url → ep-misty-bar-…` = **standby-rehearsal 브랜치**, production 은 `ep-morning-term-…`. Connect 창의 브랜치 선택이 대기 브랜치에 남아 있었다. 브랜치 생성 때 role 이 복사돼 그 주소로도 **접속은 된다** — 그래서 중단 때 Fly 를 이것으로 돌리면 에러 없이 **어제 사본에 쓰는** 조용한 분기가 된다.
 - `[해결]` 사용자가 production 으로 다시 넣음(버전 2) → `ep-morning-term-…` = production, role `neondb_owner`, DB `neondb`. 런북 전환 절차에 **사전 점검 -1**(neon-app-url 엔드포인트 = neon-prod-coords) 추가. TASK-16 완료.
+
+## 2026-10-21 — 📌D-016 7-B: Neon → EC2 전환 (🔴 prod 변경, 사용자 승인·동석)
+
+- `[메모]` 14:45 KST 사전 점검: `neon-app-url` = production 엔드포인트 OK · Fly 머신 1대 started · EC2 원격 접속 0 · 백업 비활성 · WireGuard 핸드셰이크 66s 전. 다음 백업 15:30.
+- `[메모]` 0) `gh workflow disable be-cd.yml` → `BE CD disabled_manually`, 진행 중 배포 0.
+- `[막힘]` 1) 앱 role 확인 쿼리(`pg_stat_activity WHERE datname='neondb'`)가 **결과 없음** — prod 앱은 `minimum-idle: 0` 이라 유휴 때 Neon 커넥션을 다 닫는다. 앱 role 을 세션으로 확정할 수 없었다.
+- `[해결]` 동결을 role 단위에서 **DB 단위**로: `ALTER DATABASE neondb SET default_transaction_read_only = on;` + 남은 세션 종료(0). role 과 무관하게 새 세션이 전부 읽기 전용. 1b 검증(앱 자격증명 새 세션, 값 미출력): `transaction_read_only = on` · `ERROR: cannot execute CREATE TABLE in a read-only transaction`.
+- `[해결]` 2) `neon-import --reset` 14:48: 9s · 테이블 14 · Flyway 일치 · 시퀀스 통과. 2b) `--verify`: `✅ 검증: 지금의 Neon = EC2`.
+- `[결정]` 3) EC2 쓰기 기준 `n_tup 합 533` 기록 → `fly secrets import`(stdin: `DB_HOST=[피어 IPv6]`·`DB_NAME`·`DB_USERNAME`·`DB_PASSWORD`(SSM)·`STORAGE_DATASOURCE_CORE_MINIMUMIDLE=1`·`KEEPALIVETIME=120000`) → `✔ Machine … update succeeded` 14:49. `/health` 200 14:49:39, `HikariPool-1 - Added connection` · `Started DevQuestApplicationKt in 27.693 seconds`.
+- `[막힘]` 4) EC2 `fdaa:` 접속 1(ssl true)인데, 사용자 로그인 뒤에도 `n_tup 합 533` 그대로 — **기존 사용자 로그인은 DB 에 쓰지 않는다**(OAuth → JWT 발급만). 런북의 "로그인 1회" 예시가 틀렸다.
+- `[해결]` 사용자가 진행 저장 → `n_tup 합 534`, 앱 로그 ERROR 0 → **Fly 가 EC2 에 쓴다** 확정.
+- `[결정]` 5) **그 뒤에** `deploy.sh --cutover-done` 14:58 → `[install] 전환 헬스 키 기록 · CUTOVER_DONE=1`, standby timer 등록(매일 19:33 UTC).
+- `[해결]` 6) 백업 1회(73,038 bytes) · **Neon 대기 복원 11s** · `neon-import --reset` 재시도 → `❌ … CUTOVER_DONE=1 … 가져오기 금지`(가드 실물 동작) · be-cd 재활성 · prod 스모크 `success` · `watch.sh` 전부 ✅(standby 0h 포함).
+- `[비용]` 추가 비용 0 — prod DB 상시분(≈$12.9/월)만. **Neon 은 이제 콜드 대기**(production = 동결 사본, standby-rehearsal = 매일 복원 대상).
+- `[메모]` 쓰기 중단 창 ≈ 11분(14:48 동결 ~ 14:59). 대부분은 4번 확인 대기(로그인이 쓰기를 안 만들어 한 번 더 요청)였다.

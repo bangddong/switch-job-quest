@@ -521,7 +521,7 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 > ⚠️ 위 두 마커는 버킷 이름 **복제 두 곳**(0-bootstrap 실물 · 1-network 인스턴스 권한)을 같은 리터럴로 잠근다(QA F-8). 이름을 바꾸면 둘 다 바꾸고 마커도 바꾼다.
 <!-- verify: .github/workflows/infra-deploy.yml ~ paths: \["infra/aws-eks/0-bootstrap/\*\*", "infra/aws-eks/1-network/\*\*"\] -->
 
-> 🚧 **순서표 7 「Neon → EC2 전환」 (2026-10-21)** — **DB 전환만**(JWT·레이트 리밋은 10번 직전). 7-0 실측: prod 이미지가 피어 IPv6 로 EC2 에 TLS 접속·migrate 통과.
+> ✅ **순서표 7 「Neon → EC2 전환」 (2026-10-21 14:59 KST 완료 — Fly prod 는 EC2 를 쓴다, Neon = 콜드 대기)** — **DB 전환만**(JWT·레이트 리밋은 10번 직전). 7-0 실측: prod 이미지가 피어 IPv6 로 EC2 에 TLS 접속·migrate 통과.
 > 7-A: EC2 `max_connections=50`(Fly 10 + release 10 → **EKS 는 25 이하**) + swap, 백업 6h, 대기 복원은 전환 뒤 timer(전용 Neon 브랜치), 시퀀스 판정, WireGuard 감시, 런북 전환·중단 절차.
 > 🔴 `--cutover-done` 은 **Fly 가 EC2 에 쓰는 것을 확인한 뒤**(그 전 실패는 쓰기 유실 없이 되돌린다).
 <!-- verify: infra/aws-eks/scripts/prod-db/postgres/20-devquest-tuning.conf ~ ^max_connections = 50$ -->
