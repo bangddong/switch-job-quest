@@ -100,28 +100,6 @@ ECR이 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 2. `fly tokens list` 에서 옛 토큰 찾아 `fly tokens revoke`
 3. `.claude/settings.local.json` 에서 토큰이 박힌 권한 규칙 삭제(gitignore 파일 — 근본 원인)
 
-### TASK-15: Neon 대기 브랜치·전용 role 을 SSM 에 넣기 (📌D-016 6-C — 콜드 대기 복원 리허설)
-
-**왜**: 계정 밖 사본(Neon 콜드 대기) 복원 도구를 prod Neon(main)을 건드리지 않고 시험한다. **브랜치에서 SQL 로 만든 role 은
-그 브랜치에만 있어** main 에 접속할 수 없다 — 이것이 격리다. 콘솔에서 만든 role 은 `neon_superuser` 자동 소속이라 쓰지 않는다(6-0 교훈).
-
-1. **Neon 콘솔** → Branches → **New branch** — 이름 `standby-rehearsal`, parent = 기본 브랜치(**이 프로젝트에선 이름이 `production`**)
-2. **SQL Editor** — 🔴 위쪽 브랜치 선택을 **`standby-rehearsal`** 로 바꾼 뒤(`production` 이 아니다), DB `neondb` 에서:
-   ```sql
-   CREATE ROLE devquest_standby LOGIN PASSWORD '새비밀번호(영문·숫자 20자 이상)';
-   GRANT devquest_standby TO CURRENT_USER;          -- PG16+: 남을 소유자로 DB 를 만들려면 그 role 로 SET ROLE 할 수 있어야 한다
-   CREATE DATABASE standby OWNER devquest_standby;
-   REVOKE devquest_standby FROM CURRENT_USER;
-   ```
-   ⚠️ `GRANT` 없이 하면 `ERROR: must be able to SET ROLE "devquest_standby" (SQLSTATE 42501)` — 2026-10-20 실측.
-3. 접속 문자열을 만든다 — **Connect** 창에서 branch `standby-rehearsal` 를 고르고 pooling **끈** 상태의 **호스트**(`ep-…`)만 복사.
-   (role 목록에 `devquest_standby` 가 보이면 그대로 골라 DB `standby` 로 복사해도 된다)
-   `postgresql://devquest_standby:<새비밀번호>@<브랜치 호스트>/standby?sslmode=require`
-4. **AWS 콘솔**(서울) → Parameter Store → Create — Name `/devquest/prod/db/neon-standby-url`, **SecureString**, Value = 위 문자열
-5. Claude 에게 "넣었다"고만 — Claude 가 값 출력 없이 형식·격리(main 접속 불가)를 확인하고 복원을 돌린다
-
-**나중에**: 7번 전환 뒤 대기 대상이 옛 prod(main)로 바뀌면 이 브랜치는 삭제한다.
-
 ## 완료된 항목
 
 ### TASK-10: ACM 인증서 DNS 검증 → **완료 (2026-09-16)**
