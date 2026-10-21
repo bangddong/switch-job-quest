@@ -23,6 +23,7 @@ kind: Kustomization
 resources:
   - ../apps
   - secretstore-parameterstore.yaml
+  - externalsecret-runtime.yaml   # 📌D-016 8-A — 앱 외부 키(TASK-17)
 
 patches:
   # ① ② — 삭제
@@ -78,3 +79,18 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: { name: DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP, value: "false" }
+      # ⑤ 📌D-016 8-A — Fly(be/fly.toml [env])와 같은 값. 없으면 `application.yml` 기본(localhost:5173)이라 FE 의
+      #    POST 가 CORS 로 403 이 될 수 있다(B8-2).
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: CORS_ALLOWED_ORIGINS, value: "https://quest.dhbang.co.kr" }
+      # ⑥ 메일은 **Fly 만** 보낸다 — 창 중에도 Fly 가 살아 있고(9번), 두 곳이 보내면 중복 발송이다(B8-19·U-5).
+      #    기본값도 false 지만 명시한다(TASK-17 로 RESEND 키가 들어와도 EKS 는 보내지 않게).
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: { name: MAIL_ENABLED, value: "false" }
+      # ⑦ 앱 외부 키(externalsecret-runtime.yaml). optional — TASK-17 전이거나 동기화가 실패해도 파드는 뜬다
+      #    (AI·채점만 실패한다 — 기동을 막는 것보다 낫다. 판정은 on 잡의 스모크 몫).
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value: { secretRef: { name: core-api-runtime, optional: true } }

@@ -349,3 +349,24 @@ variable "prod_db_password_parameter" {
     error_message = "prod_db_password_parameter must start with \"/\"."
   }
 }
+
+# ── 📌D-016 8-A (2026-10-21): `prod.auto.tfvars.json` ─────────────────────────────────────────────
+# 이 클러스터는 이제 **prod 창 전용**이다(Q-1 — 학습 세션 종료). 같은 디렉터리의 `prod.auto.tfvars.json`
+# (db_mode=external · environment=prod · node_desired_size=3)을 tofu 가 **자동으로** 읽는다 → 로컬·CI 어느 apply/destroy
+# 도 같은 값을 쓴다. `-var` 를 빠뜨려 창 중 prod 클러스터를 학습 기본값으로 덮는 사고(B8-21)와 노드 1대(B8-5)를 막는다.
+# 변수 **기본값은 그대로**(in-cluster·learning·1) — 튜토리얼 verify 마커(B5-15). 학습 모드로 재현하려면 그 파일을 치운다.
+# .tfvars.json 은 `.gitignore` 의 `*.tfvars` 에 걸리지 않는다(비밀 없음 — 커밋한다).
+
+# 📌D-016 8-A — EKS 창 동안 앱이 쓰는 외부 키(Anthropic·Judge0·Resend·Grafana·Sentry)의 SSM 경로(사용자가 콘솔로 넣는다 — TASK-17).
+#   ESO 가 이 prefix 아래를 **경로째**(GetParametersByPath) 읽어 Secret `core-api-runtime` 을 만든다(k8s/gitops/apps-external).
+variable "prod_app_parameter_prefix" {
+  type        = string
+  description = "prod 앱 외부 키 SSM 경로 prefix (db_mode=external, 끝은 /)"
+  default     = "/devquest/prod/app/"
+
+  validation {
+    condition     = startswith(var.prod_app_parameter_prefix, "/") && endswith(var.prod_app_parameter_prefix, "/")
+    error_message = "prod_app_parameter_prefix must start and end with \"/\"."
+  }
+}
+
