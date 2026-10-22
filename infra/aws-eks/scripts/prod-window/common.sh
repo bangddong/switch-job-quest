@@ -74,7 +74,7 @@ win_lease_delete() {
 #   🔑 **Healthy 만으로 ok 가 아니다** — 2026-10-22 첫 실행에서 health=Healthy 대기가 6초 만에 통과했다. 리소스가 아직 없는(또는
 #      렌더가 실패해 비교 대상이 0개인) Application 도 Healthy 다. 그래서 세 값이 **동시에** 맞아야 ok.
 #   fail 은 *"기다려도 안 풀린다"* 쪽만: operation Failed/Error · ComparisonError(렌더 실패)·InvalidSpecError·SyncError.
-#      ⚠️ ComparisonError 는 repo 첫 fetch 중 잠깐 뜰 수 있다 — 호출자가 **연속 n회**일 때만 멈춘다.
+#      ⚠️ ComparisonError 는 repo 첫 fetch 중 잠깐 뜰 수 있다 — 호출자가 **3분 연속**일 때만 멈춘다(on.sh ⑤).
 win_app_verdict() {
   local sync health phase conds
   read -r sync health phase conds <<<"$1"

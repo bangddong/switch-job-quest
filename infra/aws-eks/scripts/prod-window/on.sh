@@ -38,18 +38,6 @@ REGISTRY="$ACCT.dkr.ecr.$WIN_REGION.amazonaws.com"
 
 aws eks update-kubeconfig --region "$WIN_REGION" --name "$WIN_CLUSTER" >/dev/null
 
-# ── ① 관문 ────────────────────────────────────────────────────────────────
-wlog "① metrics-server · openapi 관문"
-kubectl wait --for=condition=Available apiservice/v1beta1.metrics.k8s.io --timeout=300s
-kubectl proxy --port=8771 >/dev/null 2>&1 & PROXY=$!
-trap 'kill $PROXY 2>/dev/null || true' EXIT
-CODE=000
-for _ in $(seq 1 30); do
-  CODE=$(curl -s -o /dev/null -w '%{http_code}' \
-           -H 'Accept: application/com.github.proto-openapi.spec.v2@v1.0+protobuf' localhost:8771/openapi/v2) || CODE=000
-  [ "$CODE" = 200 ] && break; sleep 2
-done
-kill $PROXY 2>/dev/null || true; trap - EXIT
 # 실패하면 그 시점의 상태를 로그에 남긴다 — off 잡이 곧 클러스터를 지우므로 **이것이 원인을 볼 유일한 기회**다.
 #   2026-10-22 첫 실행은 이게 없어서 *"Synced 120초 초과"* 한 줄만 남았다(원인 미확정, 일지). 출력은 워크플로의 sed 가 계정 ID 를 가린다.
 diag() {
@@ -64,8 +52,27 @@ diag() {
   kubectl get events -A --sort-by=.lastTimestamp --request-timeout=20s 2>/dev/null | tail -25 >&2 || true
   kubectl top nodes --request-timeout=20s >&2 || true
 }
-on_exit() { local rc=$?; [ "$rc" = 0 ] || diag; exit "$rc"; }
+# 트랩은 ① **앞에** 건다 — 관문 실패(metrics-server 300s·openapi)도 진단을 남긴다(QA F-2). proxy 정리도 여기서 한다.
+PROXY=""
+on_exit() {
+  local rc=$?
+  if [ -n "$PROXY" ]; then kill "$PROXY" 2>/dev/null || true; fi
+  [ "$rc" = 0 ] || diag
+  exit "$rc"
+}
 trap on_exit EXIT
+
+# ── ① 관문 ────────────────────────────────────────────────────────────────
+wlog "① metrics-server · openapi 관문"
+kubectl wait --for=condition=Available apiservice/v1beta1.metrics.k8s.io --timeout=300s
+kubectl proxy --port=8771 >/dev/null 2>&1 & PROXY=$!
+CODE=000
+for _ in $(seq 1 30); do
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+           -H 'Accept: application/com.github.proto-openapi.spec.v2@v1.0+protobuf' localhost:8771/openapi/v2) || CODE=000
+  [ "$CODE" = 200 ] && break; sleep 2
+done
+kill "$PROXY" 2>/dev/null || true; PROXY=""
 [ "$CODE" = 200 ] || { wlog "🔴 /openapi/v2 protobuf = $CODE — ArgoCD 가 클러스터를 못 읽는다(5e-0). 끈다"; exit 1; }
 
 # ── ② LBC ─────────────────────────────────────────────────────────────────
@@ -116,21 +123,25 @@ LEFT=$(kubectl -n argocd get application devquest-apps -o yaml | grep -c 'PLACEH
 # 🔴 `kubectl wait --for=jsonpath=…Healthy` 를 따로 쓰지 않는다 — 2026-10-22 첫 실행에서 **6초 만에 통과**했다(리소스가 아직 없거나
 #    렌더가 실패한 Application 도 Healthy). 세 값을 **한 번에** 읽어 win_app_verdict(common.sh)로 판정한다. 회귀는 window-test.sh.
 wlog "⑤ Application 동기화 완료 대기(최대 15분 — Synced·Healthy·Succeeded 동시)"
-ST="- - - -"; VERDICT="wait"; FAILS=0
+ST="- - - -"; VERDICT="wait"; FAILS=0; PREV=""; T0=$(date +%s)
 for _ in $(seq 1 90); do
   ST=$(kubectl -n argocd get application devquest-apps -o json --request-timeout=20s 2>/dev/null | jq -r '[
          .status.sync.status // "-", .status.health.status // "-", .status.operationState.phase // "-",
          ((.status.conditions // []) | map(.type) | join(",") | if . == "" then "-" else . end)] | join(" ")') || ST="- - - -"
   [ -n "$ST" ] || ST="- - - -"
   VERDICT=$(win_app_verdict "$ST")
+  # 상태가 바뀔 때만 경과 초와 함께 남긴다 — 성공해도 웨이브가 몇 분 걸렸는지가 timeout 튜닝 재료다(QA F-3)
+  [ "$ST" = "$PREV" ] || { wlog "  +$(( $(date +%s) - T0 ))s  $ST"; PREV="$ST"; }
   case "$VERDICT" in
     ok)   break ;;
-    fail) FAILS=$((FAILS + 1)); [ "$FAILS" -ge 6 ] && break ;;   # 1분 연속 — repo 첫 fetch 의 일시 ComparisonError 는 넘긴다
+    # 3분 연속일 때만 — repo-server 콜드 fetch(차트+git)의 일시 ComparisonError 를 실패로 오판하지 않게(QA F-1).
+    #   일찍 멈춰 아끼는 건 많아야 십여 분(≈ $0.1)이라 오판 비용이 더 크다
+    fail) FAILS=$((FAILS + 1)); [ "$FAILS" -ge 18 ] && break ;;
     *)    FAILS=0 ;;
   esac
   sleep 10
 done
-wlog "Application: $ST → $VERDICT"
+wlog "Application: $ST → $VERDICT (+$(( $(date +%s) - T0 ))s)"
 [ "$VERDICT" = ok ] || { wlog "🔴 Application 이 Synced+Healthy+Succeeded 가 되지 않았다 — 아래 진단"; exit 1; }
 kubectl wait externalsecret --all -n default --for=condition=Ready --timeout=120s
 # 키 **이름**만 센다 — 값은 읽지 않는다
