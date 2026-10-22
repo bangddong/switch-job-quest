@@ -475,7 +475,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | AWS 쪽 독립 백스톱(B4-21) | 18:00 off·watchdog 이 **둘 다 GitHub cron** — Actions 장애·schedule 자동 비활성(60일)에 함께 걸린다. 대안(EventBridge + Lambda destroy)은 Lambda 가 tofu state·LB 정리를 해야 해 규모가 크다. 지금 백스톱은 Cost Anomaly(일 단위) | 10번 첫 창 전 재판단 — 최소안: EventBridge 가 *"클러스터 나이 > 12h"* 면 SNS 메일만 |
 | ~~첫 실행 실측~~ | ✅ 2026-10-22 — 소요(on 16분·off 7분 → OIDC 1h 여유, B8-9 닫힘)·LCU 기록·자동 off(실패 경로)·수동 off 전부 실측. 숫자는 일지 10-22 | — |
 | **3노드 메모리 88%** | 트래픽 0 에서 `1208Mi(88%) · 1089Mi(79%) · 893Mi(65%)`. 8-B·8-C 는 트래픽이 없거나 짧아 지금 바꿀 근거가 없다 | **10번(실트래픽) 첫 창 전** — 노드 크기/수·ArgoCD 컴포넌트 축소 중 택일, 창 중 `top nodes` 실측 후 |
-| **watchdog schedule 미확인** | 머지 후 2.5시간 동안 `17 * * * *` 회차 run 0건(다른 schedule 은 지연되더라도 돈다). 등록 지연인지 미확인 | **다음 세션 시작 시** `gh run list --workflow eks-window.yml --event schedule` — 18:00 off·watchdog 회차가 없으면 dead man's switch 가 없는 것이다(B4-21 과 함께 재판단) |
+| **watchdog schedule 미확인 · cron 지연** | 머지 후 4시간 동안 `17 * * * *` 회차 run 0건. 같은 레포 다른 cron 실측 지연 **3~5시간**(Backup Watch 5h+, Smoke ~3h) → 지연일 가능성 🟡. 🔴 그 경우 *"취소된 off 상한 = 임대 + 1h"* 가정이 깨진다(실제 임대 + 수 시간). **당분간 창은 수동 off 로 닫고 success 확인** | **다음 세션 시작 시** `gh run list --workflow eks-window.yml --event schedule` — 회차가 찍혔으면 지연 시간을 재고, 없으면 등록 문제. 어느 쪽이든 **B4-21(AWS 쪽 독립 백스톱)을 10번 전이 아니라 8-C 전으로 당길지** 재판단 |
 | 빈 state destroy(클러스터 없는데 off) | 오늘 두 번 다 클러스터가 있을 때만 off 가 돌았다. 18:00 cron 회차가 첫 실측이 된다 | 위 항목과 같이 확인 |
 | 8-0 2차(Cloudflare 토큰 · Vercel Origin) | 8-C 의 입력이다 | 8-C 착수 때 |
 
