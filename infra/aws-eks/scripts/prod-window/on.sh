@@ -6,7 +6,7 @@
 # 하는 일 (튜토리얼 5e-1~5e-4 + Stage 4 의 CI 판):
 #   ① 관문: metrics-server APIService Available + `/openapi/v2` protobuf 200(5e-2 — `.12` 503 이면 ArgoCD 가 클러스터를 못 읽는다)
 #   ② LBC(helm, Stage 4 인자 그대로) → ③ ArgoCD(helm, values 파일) → ④ Application(prod: apps-external·리비전 고정·이미지 태그)
-#   ⑤ 판정: Application Synced+Healthy · ExternalSecret 전부 Ready · `core-api-runtime` 키 수 > 0(8-A QA F-2 — optional envFrom 은
+#   ⑤ 판정: Application Synced+Healthy+Succeeded **동시**(win_app_verdict) · ExternalSecret 전부 Ready · `core-api-runtime` 키 수 > 0(8-A QA F-2 — optional envFrom 은
 #      Secret 이 비어도 파드를 띄운다) · Ingress 주소
 #   ⑥ 스모크: ALB IP 로 `--resolve <학습 도메인>`(DNS 를 안 바꾼다 — 트래픽 0) · daily-question 200+question · core-api 보호 경로 403
 #
@@ -50,6 +50,22 @@ for _ in $(seq 1 30); do
   [ "$CODE" = 200 ] && break; sleep 2
 done
 kill $PROXY 2>/dev/null || true; trap - EXIT
+# 실패하면 그 시점의 상태를 로그에 남긴다 — off 잡이 곧 클러스터를 지우므로 **이것이 원인을 볼 유일한 기회**다.
+#   2026-10-22 첫 실행은 이게 없어서 *"Synced 120초 초과"* 한 줄만 남았다(원인 미확정, 일지). 출력은 워크플로의 sed 가 계정 ID 를 가린다.
+diag() {
+  wlog "── 진단(실패 시점 — off 가 곧 지운다)"
+  kubectl -n argocd get application devquest-apps -o json --request-timeout=20s 2>/dev/null | jq -c '{
+      sync: .status.sync.status, health: .status.health.status, phase: .status.operationState.phase,
+      opmsg: ((.status.operationState.message // "") | .[0:600]),
+      conditions: [.status.conditions[]? | {type, message: ((.message // "") | .[0:600])}],
+      notReady: [.status.resources[]? | select(.status != "Synced" or ((.health.status // "Healthy") != "Healthy"))
+                 | {kind, name, status, health: .health.status, msg: ((.health.message // "") | .[0:200])}]}' >&2 || true
+  kubectl get pods -A --request-timeout=20s >&2 || true
+  kubectl get events -A --sort-by=.lastTimestamp --request-timeout=20s 2>/dev/null | tail -25 >&2 || true
+  kubectl top nodes --request-timeout=20s >&2 || true
+}
+on_exit() { local rc=$?; [ "$rc" = 0 ] || diag; exit "$rc"; }
+trap on_exit EXIT
 [ "$CODE" = 200 ] || { wlog "🔴 /openapi/v2 protobuf = $CODE — ArgoCD 가 클러스터를 못 읽는다(5e-0). 끈다"; exit 1; }
 
 # ── ② LBC ─────────────────────────────────────────────────────────────────
@@ -97,9 +113,25 @@ LEFT=$(kubectl -n argocd get application devquest-apps -o yaml | grep -c 'PLACEH
 [ "$LEFT" = 0 ] || { wlog "🔴 Application 에 자리표시자 ${LEFT}개가 남았다"; exit 1; }
 
 # ── ⑤ 판정 ────────────────────────────────────────────────────────────────
-wlog "⑤ Application Synced + Healthy 대기(최대 15분)"
-kubectl -n argocd wait application/devquest-apps --for=jsonpath='{.status.health.status}'=Healthy --timeout=900s
-kubectl -n argocd wait application/devquest-apps --for=jsonpath='{.status.sync.status}'=Synced --timeout=120s
+# 🔴 `kubectl wait --for=jsonpath=…Healthy` 를 따로 쓰지 않는다 — 2026-10-22 첫 실행에서 **6초 만에 통과**했다(리소스가 아직 없거나
+#    렌더가 실패한 Application 도 Healthy). 세 값을 **한 번에** 읽어 win_app_verdict(common.sh)로 판정한다. 회귀는 window-test.sh.
+wlog "⑤ Application 동기화 완료 대기(최대 15분 — Synced·Healthy·Succeeded 동시)"
+ST="- - - -"; VERDICT="wait"; FAILS=0
+for _ in $(seq 1 90); do
+  ST=$(kubectl -n argocd get application devquest-apps -o json --request-timeout=20s 2>/dev/null | jq -r '[
+         .status.sync.status // "-", .status.health.status // "-", .status.operationState.phase // "-",
+         ((.status.conditions // []) | map(.type) | join(",") | if . == "" then "-" else . end)] | join(" ")') || ST="- - - -"
+  [ -n "$ST" ] || ST="- - - -"
+  VERDICT=$(win_app_verdict "$ST")
+  case "$VERDICT" in
+    ok)   break ;;
+    fail) FAILS=$((FAILS + 1)); [ "$FAILS" -ge 6 ] && break ;;   # 1분 연속 — repo 첫 fetch 의 일시 ComparisonError 는 넘긴다
+    *)    FAILS=0 ;;
+  esac
+  sleep 10
+done
+wlog "Application: $ST → $VERDICT"
+[ "$VERDICT" = ok ] || { wlog "🔴 Application 이 Synced+Healthy+Succeeded 가 되지 않았다 — 아래 진단"; exit 1; }
 kubectl wait externalsecret --all -n default --for=condition=Ready --timeout=120s
 # 키 **이름**만 센다 — 값은 읽지 않는다
 KEYS=$(kubectl get secret core-api-runtime -n default -o json | jq -r '.data // {} | keys | join(",")')
@@ -107,6 +139,9 @@ KEYS=$(kubectl get secret core-api-runtime -n default -o json | jq -r '.data // 
 wlog "앱 외부 키: $KEYS"
 wsummary "- 앱 외부 키(이름): $KEYS"
 kubectl rollout status deploy/core-api -n default --timeout=300s
+# 3노드 메모리(ArgoCD + LBC + 앱) — 첫 실측 대상(계획서 8-B). 실패해도 판정에 쓰지 않는다
+TOP=$(kubectl top nodes --no-headers --request-timeout=20s 2>/dev/null | awk '{printf "%s %s(%s) · ", $1, $4, $5}' || true)
+wlog "노드 메모리: ${TOP:-조회 실패}"; wsummary "- 노드 메모리: ${TOP:-조회 실패}"
 
 HOST=""
 for _ in $(seq 1 60); do

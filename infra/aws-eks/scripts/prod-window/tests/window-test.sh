@@ -71,6 +71,16 @@ e=$(echo "$v" | sed -nE 's/^expires=([0-9]+) .*/\1/p'); now=$(date +%s); [ -n "$
 reset; ( PATH="$M:$PATH"; . "$HERE/common.sh"; win_lease_put 6x ) 2>/dev/null; rc=$?; [ $rc -ne 0 ] && [ ! -f "$M/lease_put" ] && ok "시간이 정수가 아니면 쓰지 않는다" || bad "rc=$rc"
 reset; ( PATH="$M:$PATH"; . "$HERE/common.sh"; win_lease_expire ) 2>/dev/null; grep -q '^expires=0 ' "$M/lease_put" && ok "off 착수 → expires=0(실패해도 watchdog 이 다시 돈다)" || bad "$(cat "$M/lease_put" 2>/dev/null)"
 
+echo "── Application 판정(on.sh ⑤ — 2026-10-22 첫 실행: Healthy 대기가 6초 만에 통과하고 Synced 에서 죽었다)"
+v(){ ( . "$HERE/common.sh"; win_app_verdict "$1" ); }
+[ "$(v 'Synced Healthy Succeeded -')" = ok ] && ok "Synced+Healthy+Succeeded → ok" || bad "$(v 'Synced Healthy Succeeded -')"
+[ "$(v 'OutOfSync Healthy - -')" = wait ] && ok "🔑 Healthy 만으로는 ok 가 아니다(동기화 전 빈 앱도 Healthy)" || bad "🔴 공허한 Healthy 를 통과시킴"
+[ "$(v 'Unknown Healthy - ComparisonError')" = fail ] && ok "ComparisonError(렌더 실패) → fail" || bad "$(v 'Unknown Healthy - ComparisonError')"
+[ "$(v 'OutOfSync Missing Failed -')" = fail ] && ok "operation Failed → fail" || bad "$(v 'OutOfSync Missing Failed -')"
+[ "$(v 'Synced Progressing Running -')" = wait ] && ok "웨이브 진행 중 → wait" || bad "$(v 'Synced Progressing Running -')"
+[ "$(v 'Synced Healthy Succeeded OrphanedResourceWarning')" = ok ] && ok "경고 condition 은 막지 않는다" || bad "$(v 'Synced Healthy Succeeded OrphanedResourceWarning')"
+[ "$(v 'OutOfSync Healthy Running SyncError')" = fail ] && ok "SyncError → fail" || bad "$(v 'OutOfSync Healthy Running SyncError')"
+
 echo "── off-pre (destroy 전 — LB 0 이 합격)"
 reset 1; MOCK_CLUSTER=yes run off-pre.sh >/dev/null; rc=$?
 a=$(grep -n 'delete application' "$CALLS" | cut -d: -f1 | head -1); i=$(grep -n 'delete ingress' "$CALLS" | cut -d: -f1 | head -1)

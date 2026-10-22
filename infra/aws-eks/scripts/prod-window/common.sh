@@ -69,6 +69,20 @@ win_lease_delete() {
   wlog "임대 삭제 오류: ${err:0:200}"; return 1
 }
 
+# ArgoCD Application 판정 — $1 = "<sync> <health> <operation phase> <condition types(,)>" (on.sh ⑤ 가 jq 로 만든다, 빈 값은 "-").
+#   stdout ok | wait | fail.
+#   🔑 **Healthy 만으로 ok 가 아니다** — 2026-10-22 첫 실행에서 health=Healthy 대기가 6초 만에 통과했다. 리소스가 아직 없는(또는
+#      렌더가 실패해 비교 대상이 0개인) Application 도 Healthy 다. 그래서 세 값이 **동시에** 맞아야 ok.
+#   fail 은 *"기다려도 안 풀린다"* 쪽만: operation Failed/Error · ComparisonError(렌더 실패)·InvalidSpecError·SyncError.
+#      ⚠️ ComparisonError 는 repo 첫 fetch 중 잠깐 뜰 수 있다 — 호출자가 **연속 n회**일 때만 멈춘다.
+win_app_verdict() {
+  local sync health phase conds
+  read -r sync health phase conds <<<"$1"
+  case "$phase" in Failed|Error) echo fail; return 0 ;; esac
+  case ",${conds:-}," in *,ComparisonError,*|*,InvalidSpecError,*|*,SyncError,*) echo fail; return 0 ;; esac
+  if [ "$sync" = Synced ] && [ "$health" = Healthy ] && [ "$phase" = Succeeded ]; then echo ok; else echo wait; fi
+}
+
 # 리전의 로드밸런서 수 — 이 계정엔 **영속 LB 가 없다**(SOP §9: 0 이 합격). 오류는 rc≠0.
 win_lb_count() {
   aws elbv2 describe-load-balancers --region "$WIN_REGION" --query 'length(LoadBalancers)' --output text
