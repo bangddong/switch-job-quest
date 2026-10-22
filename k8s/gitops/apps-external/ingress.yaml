@@ -1,0 +1,53 @@
+# prod 창의 ALB Ingress — 📌D-016 8-B (Blindspot B8-4·B4-2).
+#
+# 📖 annotation 하나하나의 이유(target-type ip · 헬스체크 /health · HTTPS 세 줄 · 경로 순서)는
+#    **`k8s/base/ingress.yaml`** 에 있다. 이 파일은 그 내용을 prod 창에 맞게 옮긴 것이고, 다른 점만 적는다:
+#
+#   ① **ArgoCD 가 소유한다** — 학습 경로는 사람이 `sed | kubectl apply` 했다(튜토리얼 4-4). prod 는 on 잡이 손으로
+#      치는 단계를 줄이려고 Application 안에 넣었다. 대가: off 는 **Application 을 먼저 지워야** 한다(selfHeal 이 Ingress
+#      삭제를 되살린다 — SOP §8 ⓪). `scripts/prod-window/off-pre.sh` ② 가 그 순서다.
+#   ② 인증서 ARN 은 **Application 의 kustomize 패치**가 넣는다(`scripts/prod-window/on.sh` ④) — ARN 에 계정 ID 가 있어
+#      git 에 둘 수 없다. on 잡은 Application 의 자리표시자를 검사하고, 렌더된 이 Ingress 의 인증서는 ALB 주소가 붙은 뒤
+#      **형태로 다시 본다**(on.sh ⑤ — 패치가 대상을 못 찾으면 글자 그대로 남는다, QA F-6).
+#   ③ 왜 base 파일을 그대로 쓰지 않나: base 의 kustomization 은 ingress.yaml 을 **포함하지 않고**(학습 경로는 손으로 apply),
+#      kustomize 는 자기 폴더 밖 **파일**을 참조하지 못한다(LoadRestrictionsRootOnly — ArgoCD 기본). base 에 넣으면
+#      in-cluster 학습 경로(`../apps`)에도 ALB 가 생긴다.
+#   ④ 태그 `Stage=prod-window` — 고아가 됐을 때 학습 세션 ALB(`Stage=4`)와 구분된다.
+#   ⑤ wave 5 — 앱(3·4)이 Healthy 가 된 뒤에 ALB 를 만든다. 타깃이 없는 ALB 를 먼저 띄우면 헬스체크 실패만 쌓인다.
+#
+# ⚠️ host 규칙이 없다 — 8-B 는 DNS 를 바꾸지 않고 `--resolve` 로 ALB 를 직접 찌른다. 8-C(트래픽 전환)에서 정한다.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devquest
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/certificate-arn: CERT_ARN_PLACEHOLDER
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/tags: Project=devquest,Stage=prod-window,Persistent=false
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          # 순서가 의미를 갖는다 — 구체적인 것 먼저(base/ingress.yaml 「경로 순서」)
+          - path: /api/v1/daily-question
+            pathType: Prefix
+            backend:
+              service:
+                name: daily-api
+                port:
+                  number: 8082
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: core-api
+                port:
+                  number: 8080

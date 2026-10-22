@@ -5791,3 +5791,16 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 1b(EKS 마이그레이션 Job) **폐기**(B8-24). tfsec(자동 tfvars 로드 포함) 문제 없음.
 - `[메모]` Ingress·LBC 배포 경로(B8-4)·metrics-server `.11` 사전 점검(B8-8)은 on 경로와 한 몸이라 **8-B** 로.
 - `[해결]` QA(8-A) **HIGH F-1**: ExternalSecret `find.name.regexp: ^[A-Z0-9_]+$` 는 ESO 가 **전체 경로**(`/devquest/prod/app/…`)에 매칭해 0건 → 에러 없이 **빈 Secret** — TASK-17 키가 조용히 안 들어갈 뻔했다(렌더 검증만으로는 못 잡는다). → 전체 경로 앵커 + **허용 목록**(F-3 envFrom 덮어쓰기 차단). F-2 "동기화 실패해도 파드는 뜬다" 주석 정정(실패면 wave 1 Degraded — 8-B 판정) · F-4 경로 3곳 복제 주석 · F-5 튜토리얼 안내 오타·헤딩 복구, 학습 재현은 파일 이동 대신 `-var` 3개 · F-6 ecr-push 옛 정본 규칙에 대체 표시, k8s README·overlay 머리말 · F-7 ECR 권한 오류를 "없음" 이 아니라 rc 2, 손 `fly deploy` 전제 명시, 테스트 9건.
+
+## 2026-10-22 — 📌D-016 TASK-17(앱 키) + 8-B: on/off 워크플로 (코드, $0)
+
+- `[결정]` TASK-17 범위 축소(사용자 *"너무 많다, 다 기억 못 해"*): **필수 2개**(`ANTHROPIC_API_KEY` · `JUDGE0_API_KEY`)만 지금. `RESEND` 는 EKS 가 메일을 안 보내 불필요, Grafana 3종·Sentry 는 관측용이라 10번 직전. Anthropic 은 **EKS 전용 새 키**(Fly 와 분리 — 폐기가 쉽다), Judge0 는 RapidAPI 앱 키(= `X-RapidAPI-Key` 와 같은 값)를 복사.
+- `[메모]` 사용자 질문 — Anthropic 콘솔이 권하는 **Workload Identity Federation**: 고정 키 대신 워크로드의 OIDC 토큰(EKS 서비스어카운트·GitHub Actions)을 단기 토큰으로 교환(IRSA 와 같은 원리). 지금은 기각 — 🟡 EKS OIDC 발급자 URL 에 클러스터 ID 가 들어가 **매일 재생성되는 클러스터마다 신뢰 규칙이 깨진다** · Fly 는 어차피 키를 쓴다 · ⚪ BE 의 토큰 교환 지원 미확인. 상시 클러스터가 되면 재검토.
+- `[막힘]` SSM 확인(이름·유형만, `describe-parameters`): `/devquest/prod/app/JUDGEO_API_KEY` — **숫자 0 자리에 알파벳 O**. 8-A 허용 목록 regexp 에 안 걸려 **에러 없이 빠졌을 것**이다(8-A QA F-1 과 같은 "조용한 0건" 모양).
+- `[해결]` 값을 출력하지 않고 올바른 이름으로 복사(`get-parameter --with-decryption | jq → 0600 임시 파일 → put-parameter --cli-input-json`, 임시 파일 즉시 삭제) → SHA-256 해시 일치 확인 → 오타 이름 삭제 → 허용 목록 일치 **2/2**. ⚠️ 첫 시도 `--cli-input-json file:///dev/stdin` 은 macOS 에서 `Invalid JSON received`.
+- `[결정]` 8-B 설계(계획서 「8-B 결정」 표): 워크플로 하나(`eks-window.yml`) · **임대**(SSM String, on 이 apply 전에 씀) + **매시 watchdog** = CI 클러스터의 dead man's switch · off 착수 즉시 임대 만료(off 가 죽어도 다음 시간에 재시도) · 리비전 = 실행 커밋 고정 · Application 은 원본을 yq 로 덮음(사본 없음) · Ingress 는 apps-external 에 ArgoCD 소유 · 스모크는 ALB IP `--resolve`(DNS 미변경) · tofu 1.12.4(로컬과 통일, B4-10).
+- `[메모]` 예산 게이트 재료를 Budgets 가 아니라 **`aws freetier get-account-plan-state`(무료)** 로: `accountPlanRemainingCredits 191.73 USD · 만료 2027-01-15` → 가용 $118.73(예비 $30 · 상시 $0.5/일 × 86일 제외) ≥ 6h × $0.35. 누적 소진 ≈ $8.27(= 200 − 191.73).
+- `[막힘]` 스모크 기대값을 401 로 적었다가 Fly prod 실측: `curl https://api.quest.dhbang.co.kr/api/v1/progress` → **403**. SecurityConfig 에 authenticationEntryPoint 가 없어 기본 403. → 403 으로.
+- `[막힘]` 새 guard(N-3) 첫 실행이 **자기 자신**(infra-ci.yml)에 걸렸다 — 검사 문구에 `2-cluster` 와 `tofu … apply` 가 다 들어 있다. → infra-ci.yml 제외(자격증명 없음). 반증 중 하나(⑤ apply 소실)는 단계 이름 "tofu apply (💰…)" 에 걸려 **공허하게 통과** → 명령 형태 `tofu apply -auto-approve` 로 좁혔다.
+- `[해결]` 검증: 목 회귀 31건 + **변이 4종**(watchdog 표·임대 삭제 조건·Application/Ingress 순서·예산 비교식)을 실제 스크립트에 주입해 전부 빨강 확인 · guard 반증 5종 + 오탐 1종 · actionlint 0 · shellcheck 0 · ArgoCD 와 같은 kustomize 렌더를 임시 overlay 로 재현(이미지 3종·인증서 패치·Ingress wave 5) · verify 마커 반증.
+- `[비용]` $0(코드·조회만). 첫 on→off 실행(≈ 30~40분, ≈ $0.2~0.5)은 사용자 승인 후.

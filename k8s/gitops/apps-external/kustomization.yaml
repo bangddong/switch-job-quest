@@ -24,6 +24,7 @@ resources:
   - ../apps
   - secretstore-parameterstore.yaml
   - externalsecret-runtime.yaml   # 📌D-016 8-A — 앱 외부 키(TASK-17)
+  - ingress.yaml                  # 📌D-016 8-B — prod 창 ALB(인증서는 Application 패치, off 는 Application 먼저)
 
 patches:
   # ① ② — 삭제

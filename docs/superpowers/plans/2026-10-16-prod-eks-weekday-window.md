@@ -443,9 +443,38 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 |:-:|---|---|---|
 | **8-0** | 실측 2차(위) + TASK-17(앱 키 → SSM) | $0 | — |
 | **8-A** | 🚧 **2026-10-21 코드** — `prod.auto.tfvars.json`(external·prod·노드 3 — 로컬·CI 공통 자동 로드, B8-5·B8-21) · 앱 키 ExternalSecret `core-api-runtime`(SSM `/devquest/prod/app/` 경로째, ESO IRSA 는 그 경로만) · CORS·MAIL_ENABLED=false · `pick-image-tag.sh`(**마지막 성공 be-cd sha**, 이미지 없으면 **be/ 트리가 같은** 태그 — 실측: Fly 커밋 `f9ba8038` 은 ECR 에 없고 같은 트리 `e2647873` 이 있다) · 1b 폐기. **Ingress·LBC·metrics-server 사전 점검은 8-B**(on 경로와 한 몸). 원문: EKS prod 수준: 앱 키 ExternalSecret(B8-1)·`CORS_ALLOWED_ORIGINS`(B8-2)·Ingress·LBC 배포 경로(ArgoCD 앱 안 — B4-2 선삭제 순서 포함, B8-4)·Ingress `host`·ArgoCD path 를 `argocd_apps_path` 로(B8-6)·이미지 태그 = **be-cd 성공 sha**(B8-7)·`node_desired_size=3`(B8-5)·metrics-server 고정 재판단(B8-8)·1b 폐기(B8-24)·풀 상한 EKS 25(B7-21) | $0(코드) | — |
-| **8-B** | on/off 워크플로 + CI dead man's switch — **트래픽 전환 없음**: on = apply → ArgoCD Healthy 판정 → 직접 스모크(eks.quest 또는 `--resolve`) / off = Application·Ingress 선삭제(B4-2)·LB 0 확인 → destroy → 고아 ALB·SG 검사(B8-16). 공용 concurrency 는 pending 교체 함정(B8-15) 회피 설계. OIDC 세션 1h(B8-9) 안에 들게 단계 분리. 계정 ID 마스킹(B4-9). 예산 게이트(Q-3, B8-22). `guard-local-layers` 재정의(N-3). 로컬 apply 차단 표식(B8-21) | 시험마다 ≈ $0.22/h | 첫 실행 전 사용자 |
+| **8-B** | 🚧 **2026-10-22 코드** — 아래 「8-B 결정」. `EKS Window` 워크플로 + `scripts/prod-window/`(목 회귀 32건, 변이 4종 반증) · Infra CI guard 재정의(반증 7종 · QA LOW 5 fixed · F-5 → L-77) · apps-external Ingress. **첫 실행(≈ $0.5)은 사용자 승인 후**. 원문: on/off 워크플로 + CI dead man's switch — **트래픽 전환 없음**: on = apply → ArgoCD Healthy 판정 → 직접 스모크(eks.quest 또는 `--resolve`) / off = Application·Ingress 선삭제(B4-2)·LB 0 확인 → destroy → 고아 ALB·SG 검사(B8-16). 공용 concurrency 는 pending 교체 함정(B8-15) 회피 설계. OIDC 세션 1h(B8-9) 안에 들게 단계 분리. 계정 ID 마스킹(B4-9). 예산 게이트(Q-3, B8-22). `guard-local-layers` 재정의(N-3). 로컬 apply 차단 표식(B8-21) | 시험마다 ≈ $0.22/h | 첫 실행 전 사용자 |
 | **8-C** | 트래픽 전환(8-0 결과로 방식 확정) · 배수 대기(B8-12) · 응답 백엔드 식별 헤더(B8-14) · 실패 시 Fly 복귀 | — | 🔴 사용자 |
 | 10 직전 | JWT 통일(B7-15·B7-17) · 레이트 리밋 IP 헤더(B7-19) · OAuth(B7-16) · B7-27 · 창 중 Fly 정책(9번 — **메일은 EKS 에서 꺼져 있어 U-5 전제가 거꾸로**, B8-19) · 관측(B8-18) · 스키마 스큐(B8-20) | | |
+
+### 8-B 결정 (2026-10-22 — 사용자 *"응 해줘"*, 아래는 보수적 기본값으로 정했다. 첫 실행 전 바꿀 수 있다)
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 워크플로 | **하나** `eks-window.yml` — dispatch(on/off·hours) + cron 18:00 KST(off) + 매시 17분(watchdog) · concurrency 그룹 하나 | on·off·watchdog 이 같은 state 락을 다툰다(B4-11). 대기 중 실행이 새 실행에 취소되는 함정(B8-15)은 **취소돼도 되게** 설계: 취소된 off 의 상한 = 임대 + 1h(파일 머리말 표) |
+| dead man's switch | **임대(lease)** SSM String `/devquest/ops/eks-window/lease` — on 이 **apply 전에** 쓰고, off 는 착수 즉시 만료로 바꾸고 꺼짐 확인 뒤 지운다. watchdog = *클러스터 있음 + 임대 없음/만료 → off* | B4-1·B4-5. 로컬 리퍼는 CI 클러스터를 못 본다(B4-22). off 실패 시 임대가 "유효" 로 남으면 watchdog 이 재시도하지 않는 구멍을 *착수 즉시 만료* 로 막았다 |
+| watchdog 의 범위 | **누가 켰는지 묻지 않는다** — 임대 없는 클러스터는 로컬이어도 끈다 | Q-1(prod 전용·학습 세션 종료). 로컬에서 켜야 하면 워크플로 Disable 또는 임대 직접 쓰기(런북) |
+| 실패한 on | 임대를 쓴 뒤 실패하면 **같은 실행의 off 잡**이 끈다 | 8-B 는 트래픽 0 — 망가진 창을 살려 둘 이유가 없다. **8-C 이후엔 다시 판단**(트래픽이 붙은 뒤의 실패는 Fly 복귀가 먼저) |
+| 매니페스트 리비전 | **실행 커밋 sha 로 고정**(targetRevision: main 아님) | B8-6 — 창 중 main 머지가 prod EKS 에 그대로 sync 된다 |
+| 이미지 | `pick-image-tag.sh` → Application `kustomize.images` 로 세 서비스 태그 | git 커밋 없이 그날 Fly 커밋을 따른다(8-A) |
+| Application | 원본 `application.yaml` 을 **yq 로 덮는다**(path·리비전·images·Ingress 인증서 패치) — prod 사본 파일 없음 | 두 벌이 어긋나지 않게. 렌더를 로컬에서 ArgoCD 와 같은 kustomize 로 재현해 확인 |
+| Ingress | `apps-external/ingress.yaml`(ArgoCD 소유, wave 5, host 없음, `Stage=prod-window`) | B8-4. base 의 ingress 는 kustomize 루트 밖 파일이라 참조 불가 + base 에 넣으면 학습 경로에도 ALB. host 는 8-C |
+| 설치 | LBC 3.5.0 · ArgoCD 10.10.2 helm(튜토리얼 값 그대로). **Fluent Bit·Karpenter 안 함** | prod 로그는 앱이 Grafana 로 보낸다(키는 10번 직전). CloudWatch 수집은 학습용이었다 |
+| 스모크 | ALB IP 로 `--resolve eks.quest…`: daily-question **200 + question**, `/api/v1/progress` **403** | DNS 를 안 바꾼다(트래픽 0). 403 = SecurityConfig 기본 entry point(Fly prod 실측 403). 응답 백엔드 식별(B8-14)은 `--resolve` 가 대신한다 |
+| 예산 게이트 | `aws freetier`(무료) 잔여 − 예비 $30 − 상시 $0.5/일 × 남은 일수 ≥ hours × $0.35 | Q-3·B8-22. 오늘 실측: 잔여 $191.73 · 86일 → 가용 $118.73 ≥ $2.10 통과. ⚠️ **창 전체 계획(평일 × 6h)을 예약하지 않는다** — 그건 이미 계획 산술이 소유한다. 이 게이트는 *파국 방지* 다 |
+| tofu | **1.12.4**(로컬과 같다) | B4-10 — 버전 호환 실측 대신 통일. infra-deploy 는 1.8.5 그대로(0-bootstrap·1-network 는 CI 만 쓴다) |
+| guard(N-3) | *"2-cluster apply·destroy 워크플로는 eks-window.yml 하나 · 트리거 dispatch·schedule 만 · apply 잡은 dispatch+on 만 · prod-window 스크립트는 tofu apply/destroy 금지"* | 원래 뜻(*머지가 컨트롤플레인을 띄우지 않는다*)을 D-016 아래에서 다시 적었다. 반증 5종(새 워크플로·push 트리거·if 제거·스크립트 destroy·apply 소실) + 오탐 1종(주석) 확인. 자기참조 오탐(가드 문구)을 실측으로 발견해 infra-ci.yml 제외 |
+| off 의 LB 판정 | **AWS 에 LB 수 0** 을 묻는다. 남으면 LBC 를 0 으로 줄이고 aws CLI 로 지운다. 그래도 남으면 destroy 하지 않고 빨강 | B4-3·B8-16 — kubectl 실패를 "없음" 으로 읽지 않는다. 이 계정에 영속 LB 는 없다(SOP §9) |
+| LCU 기록 | off 가 LB 이름·생성 시각·`ConsumedLCUs` 합계를 Step Summary 에 | B8-17 — 10번의 LCU 실측 재료. ALB 는 매일 지워진다 |
+
+### 8-B 에서 미룬 것 — 목적지
+
+| 항목 | 왜 지금 안 하나 | 언제 |
+|---|---|---|
+| 로컬 도구가 임대를 읽어 *"임대 있음 = foreign"* (QA 4번 F-2 · B4-5 후반) | 성립 조건 = 로컬 마커 직후 Stop 훅 미실행 + 1h 안 CI on. Q-1 로 로컬 학습 세션이 끝나 마커가 생길 일이 거의 없다. 하네스(`.claude/scripts/lib`) 변경 + 리퍼 테스트 목 갱신이 따라온다 | 로컬에서 2-cluster 를 다시 apply 하게 되면 그 PR 에서 |
+| AWS 쪽 독립 백스톱(B4-21) | 18:00 off·watchdog 이 **둘 다 GitHub cron** — Actions 장애·schedule 자동 비활성(60일)에 함께 걸린다. 대안(EventBridge + Lambda destroy)은 Lambda 가 tofu state·LB 정리를 해야 해 규모가 크다. 지금 백스톱은 Cost Anomaly(일 단위) | 10번 첫 창 전 재판단 — 최소안: EventBridge 가 *"클러스터 나이 > 12h"* 면 SNS 메일만 |
+| 첫 실행 실측 | 코드 단계는 $0. on→off 왕복 1회 ≈ 30~40분 ≈ $0.2~0.5 | **사용자 승인 후** — 실측할 것: apply·sync·ALB·destroy 소요, 3노드 메모리(ArgoCD+LBC+앱 동시 — 학습 때 조합 미실측), OIDC 1h 안에 드는지(B8-9) |
+| 8-0 2차(Cloudflare 토큰 · Vercel Origin) | 8-C 의 입력이다 | 8-C 착수 때 |
 
 ### 8번 Blindspot (2026-10-21, Explore 읽기 전용) — 목적지
 
@@ -459,20 +488,20 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | B8-6 | 🟡 | ArgoCD path 리터럴·targetRevision main 자동 sync·retry 소진 | 8-A·8-B |
 | B8-7 | 🔴 | 태그 규칙 빈틈 — `-x test` 이미지라 be-cd 실패 sha 도 ECR 에 있다, dispatch 는 서비스 하나 | 8-A(be-cd 성공 sha 기준) |
 | B8-8 | 🟡 | metrics-server `.11` 고정이 매일 on 을 깰 수 있음 | 8-A |
-| B8-9 | 🟡 | OIDC 세션 1h | 8-B(잡 분리·`max_session_duration`) |
+| B8-9 | 🟡 | OIDC 세션 1h | ✅ 8-B 코드 — on·off 를 잡으로 나눠 각자 assume, 잡당 50분 제한(첫 실행에서 소요 실측) |
 | B8-10 | ⚪ | 노드 단일 AZ | 10 직전(external 모드면 고정 해제 검토) |
 | B8-11 | 🔴 | api.quest 레코드 근거 0 | ✅ 8-0 1차(CNAME → fly.dev, DNS only, TTL 300) |
 | B8-12 | 🟡 | off 배수 대기 없음 | 8-C |
 | B8-13 | 🟡 | Cloudflare 토큰 범위·보관(PR 에서 읽힘) | 8-0 2차·8-C |
 | B8-14 | 🟡 | 스모크로 백엔드 구분 불가 | 8-B·8-C |
-| B8-15 | 🔴 | concurrency pending 교체가 off 를 조용히 취소 | 8-B |
-| B8-16 | 🟡 | 리퍼 로직 그대로 재사용 금지(kubeconfig 실패=없음, Ingress 실패에도 destroy), LBC SG 누적 | 8-B |
-| B8-17 | 🟡 | ALB 매일 삭제로 LCU 실측 소실 | 8-B(off 가 LB 식별자 기록) |
+| B8-15 | 🔴 | concurrency pending 교체가 off 를 조용히 취소 | ✅ 8-B 코드 — 취소돼도 되게(임대 + 매시 watchdog, 상한 = 임대 + 1h) |
+| B8-16 | 🟡 | 리퍼 로직 그대로 재사용 금지(kubeconfig 실패=없음, Ingress 실패에도 destroy), LBC SG 누적 | ✅ 8-B 코드 — AWS LB 0 판정이 최종, 남으면 destroy 안 함 · LBC SG 정리·판정 |
+| B8-17 | 🟡 | ALB 매일 삭제로 LCU 실측 소실 | ✅ 8-B 코드 — off 가 LB 이름·생성 시각·ConsumedLCUs 합을 Summary 에 |
 | B8-18 | 🟡 | 창 관측 공백(GRAFANA 키 없음, service.name 충돌) | TASK-17(키) + 10 직전(리소스 속성) |
 | B8-19 | 🟡 | U-5 전제가 거꾸로(EKS 는 메일 꺼짐) | 9번 |
 | B8-20 | 🟡 | 창 중 be 머지가 EKS 아래 스키마를 바꿈 | 9번(be-cd 창 중 정책) |
-| B8-21 | 🟡 | 로컬 apply 가 창 중 prod 클러스터를 기본값으로 덮음 | 8-B(표식·가드) |
-| B8-22 | ⚪ | Budgets 게이트 값·이름·지연 | 8-B |
+| B8-21 | 🟡 | 로컬 apply 가 창 중 prod 클러스터를 기본값으로 덮음 | ✅ 기본값 문제는 8-A `prod.auto.tfvars.json` 이 닫았다. 로컬 도구의 임대 읽기는 「8-B 에서 미룬 것」 |
+| B8-22 | ⚪ | Budgets 게이트 값·이름·지연 | ✅ 8-B 코드 — Budgets 대신 `aws freetier`(무료·잔여 크레딧 직접). 지연은 🟡 하루 단위로 보여 단가를 보수적으로 |
 | B8-23 | 🟡 | D-016 영향 목록 누락 | 8-A |
 | B8-24 | ⚪ | 1b 폐기 후보 | 8-A(폐기 판정) |
 
