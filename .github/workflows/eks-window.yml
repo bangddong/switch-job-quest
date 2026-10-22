@@ -17,8 +17,11 @@ on:
       action:
         description: "on = 켜기(트래픽은 Fly 그대로) · off = 끄기"
         type: choice
-        options: [on, off]
-        default: on
+        # 🔴 따옴표 필수 — 맨 on/off 는 GitHub 의 입력 검증기가 YAML 1.1 불리언(true/false)으로 읽는다(2026-10-22 실측:
+        #    `-f action=on` → HTTP 422 "not in the list of allowed values", `-f action=true` 는 통과하고 두 잡 다 skipped).
+        #    actionlint(YAML 1.2)는 못 잡는다. 아래 `needs: "on"` 도 같은 이유.
+        options: ["on", "off"]
+        default: "on"
       hours:
         description: "임대 시간(1~10). 지나면 매시 watchdog 이 끈다. 18:00 KST off 는 이와 무관하게 돈다"
         type: string
@@ -155,7 +158,7 @@ jobs:
 
   off:
     name: EKS Window / off
-    needs: on
+    needs: "on"
     # schedule·수동 off — 그리고 **on 이 임대를 쓴 뒤 실패**하면 같은 실행에서 끈다(8-B 는 트래픽 0 이라 즉시 끄는 게 안전).
     if: >-
       always() && (
