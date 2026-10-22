@@ -37,6 +37,11 @@ jobs:
         with:
           working_directory: infra/aws-eks
           # 발견 시 종료코드 비0 → PR 체크 실패 (근거 없는 취약점은 머지 차단)
+          # 🔑 액션이 tfsec 바이너리를 GitHub API 로 내려받는다. 토큰이 없으면 **익명(러너 IP 당 60회/h)** 이라
+          #    공유 러너 IP 가 한도에 차 있으면 검사 전에 죽는다 — 2026-10-22 실측:
+          #    `curl: (22) … error: 403` · `API rate limit exceeded for 172.185.x.x` (#490 첫 실행, 다음 실행은 통과).
+          #    GITHUB_TOKEN 은 이 워크플로의 읽기 권한 토큰이다(쓰기 권한·AWS 자격증명 아님).
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   guard-local-layers:
     name: Infra CI / guard (로컬 전용 레이어 apply 차단)
