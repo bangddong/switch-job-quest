@@ -55,3 +55,12 @@ c8954f53fdc9206098d3c79fa0d9397505bd3358:docs/eks-migration-log.md:generic-api-k
 #   ※ 유발 문자열은 인용하지 않는다 — 인용 자체가 재검출된다(64a0bd8 전례).
 0c3ca73c5b6bde906951ba53cba38a33ae11efe6:k8s/gitops/apps/kustomization.yaml:generic-api-key:32
 2071daadf5ae9bc9c497e00bf836b301caeb4dc2:k8s/gitops/apps/kustomization.yaml:generic-api-key:42
+
+# docs/eks-migration-log.md (generic-api-key) — 2026-10-22, PR #493
+#   → on.sh 로그의 **키 이름 목록**(쉼표로 이은 환경변수 이름 둘)을 일지에 옮긴 것. 값이 아니다.
+#     규칙이 `api_key` 를 키워드로 보고 뒤따르는 이름을 값으로 잡았다.
+#   → 현재 트리에서는 **유발 형태 자체를 제거**했다(이름을 풀어 썼다). 아래 지문은 수정 전 커밋 3443a46 의 blob 하나만 억제한다.
+#     히스토리 재작성은 force push 가 필요해 이 레포에서 금지된 우회다(08-31·09-04 와 동일 판단).
+#   ⚠️ squash merge 후 main 에는 3443a46 이 없으므로 이 줄은 **사문**이 된다.
+#   ※ 유발 문자열은 인용하지 않는다 — 인용 자체가 재검출된다(64a0bd8 전례).
+3443a46080161ad8e2ef7ee2a572c36c3f0ac61f:docs/eks-migration-log.md:generic-api-key:5814
