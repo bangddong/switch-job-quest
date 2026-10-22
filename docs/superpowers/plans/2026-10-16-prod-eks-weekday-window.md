@@ -443,7 +443,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 |:-:|---|---|---|
 | **8-0** | 실측 2차(위) + TASK-17(앱 키 → SSM) | $0 | — |
 | **8-A** | 🚧 **2026-10-21 코드** — `prod.auto.tfvars.json`(external·prod·노드 3 — 로컬·CI 공통 자동 로드, B8-5·B8-21) · 앱 키 ExternalSecret `core-api-runtime`(SSM `/devquest/prod/app/` 경로째, ESO IRSA 는 그 경로만) · CORS·MAIL_ENABLED=false · `pick-image-tag.sh`(**마지막 성공 be-cd sha**, 이미지 없으면 **be/ 트리가 같은** 태그 — 실측: Fly 커밋 `f9ba8038` 은 ECR 에 없고 같은 트리 `e2647873` 이 있다) · 1b 폐기. **Ingress·LBC·metrics-server 사전 점검은 8-B**(on 경로와 한 몸). 원문: EKS prod 수준: 앱 키 ExternalSecret(B8-1)·`CORS_ALLOWED_ORIGINS`(B8-2)·Ingress·LBC 배포 경로(ArgoCD 앱 안 — B4-2 선삭제 순서 포함, B8-4)·Ingress `host`·ArgoCD path 를 `argocd_apps_path` 로(B8-6)·이미지 태그 = **be-cd 성공 sha**(B8-7)·`node_desired_size=3`(B8-5)·metrics-server 고정 재판단(B8-8)·1b 폐기(B8-24)·풀 상한 EKS 25(B7-21) | $0(코드) | — |
-| **8-B** | 🚧 **2026-10-22 코드** — 아래 「8-B 결정」. `EKS Window` 워크플로 + `scripts/prod-window/`(목 회귀 32건, 변이 4종 반증) · Infra CI guard 재정의(반증 7종 · QA LOW 5 fixed · F-5 → L-77) · apps-external Ingress. **첫 실행(≈ $0.5)은 사용자 승인 후**. 원문: on/off 워크플로 + CI dead man's switch — **트래픽 전환 없음**: on = apply → ArgoCD Healthy 판정 → 직접 스모크(eks.quest 또는 `--resolve`) / off = Application·Ingress 선삭제(B4-2)·LB 0 확인 → destroy → 고아 ALB·SG 검사(B8-16). 공용 concurrency 는 pending 교체 함정(B8-15) 회피 설계. OIDC 세션 1h(B8-9) 안에 들게 단계 분리. 계정 ID 마스킹(B4-9). 예산 게이트(Q-3, B8-22). `guard-local-layers` 재정의(N-3). 로컬 apply 차단 표식(B8-21) | 시험마다 ≈ $0.22/h | 첫 실행 전 사용자 |
+| **8-B** | 🚧 **2026-10-22 코드** — 아래 「8-B 결정」. `EKS Window` 워크플로 + `scripts/prod-window/`(목 회귀 32건, 변이 4종 반증) · Infra CI guard 재정의(반증 7종 · QA LOW 5 fixed · F-5 → L-77) · apps-external Ingress. ✅ **2026-10-22 실측 왕복 통과**(2회차 — 1회차는 dispatch 422(#491)·ArgoCD 대기 공허(#492)로 실패 후 자동 off). on 16분(apply 9.5·설치 2·sync 156초) · off 7분 · 스모크 200/403 · 두 창 ≈ $0.2. 원문: on/off 워크플로 + CI dead man's switch — **트래픽 전환 없음**: on = apply → ArgoCD Healthy 판정 → 직접 스모크(eks.quest 또는 `--resolve`) / off = Application·Ingress 선삭제(B4-2)·LB 0 확인 → destroy → 고아 ALB·SG 검사(B8-16). 공용 concurrency 는 pending 교체 함정(B8-15) 회피 설계. OIDC 세션 1h(B8-9) 안에 들게 단계 분리. 계정 ID 마스킹(B4-9). 예산 게이트(Q-3, B8-22). `guard-local-layers` 재정의(N-3). 로컬 apply 차단 표식(B8-21) | 시험마다 ≈ $0.22/h | 첫 실행 전 사용자 |
 | **8-C** | 트래픽 전환(8-0 결과로 방식 확정) · 배수 대기(B8-12) · 응답 백엔드 식별 헤더(B8-14) · 실패 시 Fly 복귀 | — | 🔴 사용자 |
 | 10 직전 | JWT 통일(B7-15·B7-17) · 레이트 리밋 IP 헤더(B7-19) · OAuth(B7-16) · B7-27 · 창 중 Fly 정책(9번 — **메일은 EKS 에서 꺼져 있어 U-5 전제가 거꾸로**, B8-19) · 관측(B8-18) · 스키마 스큐(B8-20) | | |
 
@@ -473,7 +473,10 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 |---|---|---|
 | 로컬 도구가 임대를 읽어 *"임대 있음 = foreign"* (QA 4번 F-2 · B4-5 후반) | 성립 조건 = 로컬 마커 직후 Stop 훅 미실행 + 1h 안 CI on. Q-1 로 로컬 학습 세션이 끝나 마커가 생길 일이 거의 없다. 하네스(`.claude/scripts/lib`) 변경 + 리퍼 테스트 목 갱신이 따라온다 | 로컬에서 2-cluster 를 다시 apply 하게 되면 그 PR 에서 |
 | AWS 쪽 독립 백스톱(B4-21) | 18:00 off·watchdog 이 **둘 다 GitHub cron** — Actions 장애·schedule 자동 비활성(60일)에 함께 걸린다. 대안(EventBridge + Lambda destroy)은 Lambda 가 tofu state·LB 정리를 해야 해 규모가 크다. 지금 백스톱은 Cost Anomaly(일 단위) | 10번 첫 창 전 재판단 — 최소안: EventBridge 가 *"클러스터 나이 > 12h"* 면 SNS 메일만 |
-| 첫 실행 실측 | 코드 단계는 $0. on→off 왕복 1회 ≈ 30~40분 ≈ $0.2~0.5 | **사용자 승인 후** — 실측할 것: apply·sync·ALB·destroy 소요, 3노드 메모리(ArgoCD+LBC+앱 동시 — 학습 때 조합 미실측), OIDC 1h 안에 드는지(B8-9) |
+| ~~첫 실행 실측~~ | ✅ 2026-10-22 — 소요(on 16분·off 7분 → OIDC 1h 여유, B8-9 닫힘)·LCU 기록·자동 off(실패 경로)·수동 off 전부 실측. 숫자는 일지 10-22 | — |
+| **3노드 메모리 88%** | 트래픽 0 에서 `1208Mi(88%) · 1089Mi(79%) · 893Mi(65%)`. 8-B·8-C 는 트래픽이 없거나 짧아 지금 바꿀 근거가 없다 | **10번(실트래픽) 첫 창 전** — 노드 크기/수·ArgoCD 컴포넌트 축소 중 택일, 창 중 `top nodes` 실측 후 |
+| **watchdog schedule 미확인** | 머지 후 2.5시간 동안 `17 * * * *` 회차 run 0건(다른 schedule 은 지연되더라도 돈다). 등록 지연인지 미확인 | **다음 세션 시작 시** `gh run list --workflow eks-window.yml --event schedule` — 18:00 off·watchdog 회차가 없으면 dead man's switch 가 없는 것이다(B4-21 과 함께 재판단) |
+| 빈 state destroy(클러스터 없는데 off) | 오늘 두 번 다 클러스터가 있을 때만 off 가 돌았다. 18:00 cron 회차가 첫 실측이 된다 | 위 항목과 같이 확인 |
 | 8-0 2차(Cloudflare 토큰 · Vercel Origin) | 8-C 의 입력이다 | 8-C 착수 때 |
 
 ### 8번 Blindspot (2026-10-21, Explore 읽기 전용) — 목적지
