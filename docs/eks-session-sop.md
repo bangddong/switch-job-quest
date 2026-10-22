@@ -448,8 +448,10 @@
 >   클러스터가 없으면 이번 apply 가 새로 만들 것이라 새 시각. 한 턴 안 destroy→재apply 대비, QA F-1). 두 번째 apply 가
 >   덮어쓰면 자기 클러스터가 foreign 이 되어 dead man's switch 가 조용히 꺼진다.
 > - 마커 정규식은 **조이지 않았다** — L-22(*조일 때마다 새 우회*). 마커가 아니라 destroy 대상을 판정한다.
-> - **CI 가 켠 클러스터의 dead man's switch 는 로컬 리퍼가 아니다** — Fly 복귀를 포함한 off 경로를 반복 실행하는
->   워크플로로 **순서표 8번에서** 만든다(로컬 리퍼는 맥이 깨어 있을 때만 돌고, 원격 세션의 마커는 보지도 못한다).
+> - **CI 가 켠 클러스터의 dead man's switch 는 로컬 리퍼가 아니다** — `EKS Window` 워크플로의 **매시 watchdog** 이다
+>   (📌D-016 8-B, 2026-10-22: 임대 없거나 만료된 클러스터 → off 경로 전체. 런북 `infra/aws-eks/scripts/prod-window/README.md`).
+>   로컬 리퍼는 맥이 깨어 있을 때만 돌고, 원격 세션의 마커는 보지도 못한다. ⚠️ 8-C(트래픽 전환) 뒤엔 off 경로에 Fly 복귀가 들어간다.
+>   🔴 watchdog 은 **누가 켰는지 묻지 않는다** — 로컬에서 2-cluster 를 apply 하면 임대가 없어 한 시간 안에 꺼진다(런북 「로컬에서」).
 > - 회귀: `bash .claude/scripts/tests/reaper-alb-test.sh` ⑧~⑯ (무과금 목. CI 미편입 — 수동 실행).
 
 **동작 요지**: 네가 Claude로 작업 중이면 매 턴 하트비트가 갱신돼 리퍼가 안 건드린다.

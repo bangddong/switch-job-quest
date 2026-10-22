@@ -438,7 +438,7 @@ Fly·EKS 두 core-api 가 `migrate-on-startup: true`(`application-prod.yml:37`)�
 > 위 k3s 행은 그 지점을 등재해둔 것이다. 되살릴 때는 `design-change-procedure.md` 전 단계를 밟을 것.
 
 #### 평일 창 동안 EKS 가 prod 를 서빙한다 — DB 는 EC2 자가 운영 Postgres
-> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/infra-deploy.yml`, `.github/workflows/ecr-push.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`, `docs/eks-tutorial-steps.md`, `k8s/README.md`, `k8s/gitops/apps-external`, `infra/aws-eks/2-cluster/secrets.tf`, `infra/aws-eks/2-cluster/irsa-eso.tf`, `infra/aws-eks/1-network/db.tf`, `.claude/scripts/lib/eks-cluster-owner.sh`, `.claude/scripts/eks-session-marker.sh`, `.claude/scripts/eks-heartbeat-reminder.sh`, `.claude/scripts/session-status.sh`, `.claude/scripts/tests/reaper-alb-test.sh`, `infra/aws-eks/scripts/prod-db`, `infra/aws-eks/0-bootstrap/s3-backups.tf`, `.github/workflows/prod-db-backup-watch.yml`, `infra/aws-eks/2-cluster/prod.auto.tfvars.json`, `infra/aws-eks/2-cluster/irsa-eso.tf`, `k8s/gitops/apps-external`, `infra/aws-eks/scripts/prod-window`, `k8s/base/ingress.yaml`, `k8s/gitops/application.yaml`, `infra/aws-eks/0-bootstrap/acm.tf`, `fe/vercel.json`, `.github/workflows/prod-smoke-daily.yml`, `infra/aws-eks/scripts/db-restore.sh`
+> 📌 **D-016** · 상태 `🚧진행중` · 영향 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md`, `docs/eks-cost-model.md`, `docs/eks-session-sop.md`, `.claude/scripts/eks-reaper.sh`, `.github/workflows/infra-ci.yml`, `.github/workflows/infra-deploy.yml`, `.github/workflows/ecr-push.yml`, `.github/workflows/be-cd.yml`, `infra/aws-eks/0-bootstrap/iam-github-oidc.tf`, `infra/aws-eks/1-network`, `infra/aws-eks/2-cluster/access.tf`, `infra/aws-eks/0-bootstrap/variables.tf`, `infra/aws-eks/scripts/db-backup.sh`, `be/fly.toml`, `infra/aws-eks/PERSISTENT-RESOURCES.md`, `.claude/CONTEXT.md`, `docs/eks-tutorial-steps.md`, `k8s/README.md`, `k8s/gitops/apps-external`, `infra/aws-eks/2-cluster/secrets.tf`, `infra/aws-eks/2-cluster/irsa-eso.tf`, `infra/aws-eks/1-network/db.tf`, `.claude/scripts/lib/eks-cluster-owner.sh`, `.claude/scripts/eks-session-marker.sh`, `.claude/scripts/eks-heartbeat-reminder.sh`, `.claude/scripts/session-status.sh`, `.claude/scripts/tests/reaper-alb-test.sh`, `infra/aws-eks/scripts/prod-db`, `infra/aws-eks/0-bootstrap/s3-backups.tf`, `.github/workflows/prod-db-backup-watch.yml`, `.github/workflows/eks-window.yml`, `infra/aws-eks/2-cluster/prod.auto.tfvars.json`, `infra/aws-eks/2-cluster/irsa-eso.tf`, `k8s/gitops/apps-external`, `infra/aws-eks/scripts/prod-window`, `k8s/base/ingress.yaml`, `k8s/gitops/application.yaml`, `infra/aws-eks/0-bootstrap/acm.tf`, `fe/vercel.json`, `.github/workflows/prod-smoke-daily.yml`, `infra/aws-eks/scripts/db-restore.sh`
 
 **결정 (2026-10-20 추가)** 순서표 4 — 아래 「순서표 4」 절.
 
@@ -525,6 +525,14 @@ t4g.micro $0.0104/h · t4g.nano $0.0052/h · t4g.small $0.0208/h · 퍼블릭 IP
 > 이미지 태그 = **마지막으로 성공한 be-cd 의 커밋**(Fly 와 같은 스키마) — ECR 기준이 아니다(`-x test` 빌드라 실패 커밋도 이미지가 있다). 없으면 be/ 트리가 같은 태그.
 <!-- verify: infra/aws-eks/2-cluster/prod.auto.tfvars.json ~ "db_mode": "external" -->
 <!-- verify: infra/aws-eks/scripts/prod-window/pick-image-tag.sh ~ actions/workflows/be-cd\.yml/runs\?branch=main&status=success -->
+
+> 🚧 **순서표 8 「전환 워크플로」 8-B (2026-10-22, 코드 — 첫 실행 전)** — `EKS Window` 워크플로가 2-cluster 를 켜고 끈다. **트래픽 전환 없음**(DNS 는 Fly 그대로, 스모크는 ALB 를 `--resolve` 로 직접).
+> 켜기 = 수동 dispatch 만(예산 게이트 → 이미지 태그 → **임대를 apply 전에** → apply → LBC·ArgoCD → Application(리비전 = 실행 커밋 고정) → 판정·스모크, 실패하면 같은 실행에서 끔).
+> 끄기 = 18:00 KST cron · 수동 · **매시 watchdog**(임대 없거나 만료된 클러스터) — Application 먼저 → Ingress → **AWS 에 LB 0 을 묻고** destroy → AWS 로 꺼짐 판정 → 임대 삭제.
+> 🔴 2-cluster 를 apply 하는 워크플로는 이것 하나·수동 on 잡뿐 — Infra CI guard 가 강제한다(N-3 재정의). tofu 는 로컬과 같은 1.12.4.
+<!-- verify: .github/workflows/eks-window.yml ~ group: eks-window$ -->
+<!-- verify: .github/workflows/infra-ci.yml ~ 2-cluster 를 켜는 워크플로는 eks-window\.yml 하나 -->
+<!-- verify: infra/aws-eks/scripts/prod-window/off-pre.sh ~ -n argocd delete application devquest-apps -->
 
 > ✅ **순서표 7 「Neon → EC2 전환」 (2026-10-21 14:59 KST 완료 — Fly prod 는 EC2 를 쓴다, Neon = 콜드 대기)** — **DB 전환만**(JWT·레이트 리밋은 10번 직전). 7-0 실측: prod 이미지가 피어 IPv6 로 EC2 에 TLS 접속·migrate 통과.
 > 7-A: EC2 `max_connections=50`(Fly 10 + release 10 → **EKS 는 25 이하**) + swap, 백업 6h, 대기 복원은 전환 뒤 timer(전용 Neon 브랜치), 시퀀스 판정, WireGuard 감시, 런북 전환·중단 절차.
