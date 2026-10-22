@@ -114,6 +114,9 @@ for _ in $(seq 1 60); do
   [ -n "$HOST" ] && break; sleep 5
 done
 [ -n "$HOST" ] || { wlog "🔴 Ingress 에 ALB 주소가 5분 안에 안 붙었다 — kubectl describe ingress devquest 의 Events"; exit 1; }
+# 렌더된 Ingress 의 인증서 — Application 검사는 패치 **값**만 본다. 패치가 대상을 못 찾으면 글자가 그대로 남는다(QA F-6)
+ING_CERT=$(kubectl get ingress devquest -n default -o jsonpath='{.metadata.annotations.alb\.ingress\.kubernetes\.io/certificate-arn}')
+case "$ING_CERT" in "arn:aws:acm:$WIN_REGION:"*":certificate/"*) ;; *) wlog "🔴 Ingress 인증서 annotation 형태 이상 — Application 패치가 안 먹었다"; exit 1 ;; esac
 
 # ── ⑥ 스모크 (DNS 안 바꿈) ────────────────────────────────────────────────
 IP=""

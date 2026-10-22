@@ -7,7 +7,8 @@
 #      치는 단계를 줄이려고 Application 안에 넣었다. 대가: off 는 **Application 을 먼저 지워야** 한다(selfHeal 이 Ingress
 #      삭제를 되살린다 — SOP §8 ⓪). `scripts/prod-window/off-pre.sh` ② 가 그 순서다.
 #   ② 인증서 ARN 은 **Application 의 kustomize 패치**가 넣는다(`scripts/prod-window/on.sh` ④) — ARN 에 계정 ID 가 있어
-#      git 에 둘 수 없다. 여기 `CERT_ARN_PLACEHOLDER` 가 남아 있으면 on 잡의 자리표시자 검사가 실패한다.
+#      git 에 둘 수 없다. on 잡은 Application 의 자리표시자를 검사하고, 렌더된 이 Ingress 의 인증서는 ALB 주소가 붙은 뒤
+#      **형태로 다시 본다**(on.sh ⑤ — 패치가 대상을 못 찾으면 글자 그대로 남는다, QA F-6).
 #   ③ 왜 base 파일을 그대로 쓰지 않나: base 의 kustomization 은 ingress.yaml 을 **포함하지 않고**(학습 경로는 손으로 apply),
 #      kustomize 는 자기 폴더 밖 **파일**을 참조하지 못한다(LoadRestrictionsRootOnly — ArgoCD 기본). base 에 넣으면
 #      in-cluster 학습 경로(`../apps`)에도 ALB 가 생긴다.

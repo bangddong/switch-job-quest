@@ -20,10 +20,11 @@ set -uo pipefail
 . "$(dirname "$0")/common.sh"
 MODE="${1:?force|watchdog}"
 
-C=$(win_cluster_exists) || exit 2
+# force 는 조회하지 않고 act — 일시 오류 한 번이 끄기를 막지 않게(QA 8-B F-1). 꺼져 있으면 destroy 가 no-op 이다
 if [ "$MODE" = force ]; then
-  wlog "force — 클러스터 $C → act"; echo act; exit 0
+  wlog "force → act"; echo act; exit 0
 fi
+C=$(win_cluster_exists) || exit 2
 [ "$MODE" = watchdog ] || { wlog "알 수 없는 모드: $MODE"; exit 2; }
 
 L=$(win_lease_state) || exit 2

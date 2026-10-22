@@ -77,8 +77,14 @@ jobs:
           for f in .github/workflows/*.yml .github/workflows/*.yaml; do
             [ -f "$f" ] || continue
             [ "$(basename "$f")" = eks-window.yml ] && continue
-            # 이 파일 자신은 검사 문구에 두 단어가 다 들어 있어 자기 자신에 걸린다(실측). AWS 자격증명(id-token)이 없어 apply 불가
-            [ "$(basename "$f")" = infra-ci.yml ] && continue
+            # 이 파일 자신은 검사 문구에 두 단어가 다 들어 있어 자기 자신에 걸린다(실측). 대신 **AWS 자격증명을 못 받는지**를 본다(QA F-4)
+            if [ "$(basename "$f")" = infra-ci.yml ]; then
+              # 앵커 필수 — 이 검사의 문구 자체가 자기 자신에 걸렸다(실측 두 번째)
+              if grep -qE '^[[:space:]]*id-token:[[:space:]]*write|uses:[[:space:]]+aws-actions/configure-aws-credentials' "$f"; then
+                echo "::error file=$f::infra-ci 는 PR 트리거다 — AWS 자격증명을 받으면 위 검사의 자기 제외가 구멍이 된다"; FAIL=1
+              fi
+              continue
+            fi
             if nc "$f" | grep -q '2-cluster' && nc "$f" | grep -qE 'tofu[^#]*[[:space:]](apply|destroy)'; then
               echo "::error file=$f::2-cluster 를 apply·destroy 하는 워크플로는 eks-window.yml 하나여야 한다(📌D-016 8-B)"; FAIL=1
             fi
@@ -86,9 +92,10 @@ jobs:
           W=.github/workflows/eks-window.yml
           TRIG=$(yq '.on | keys | .[]' "$W" | sort | tr '\n' ' ')
           [ "$TRIG" = "schedule workflow_dispatch " ] || { echo "::error file=$W::트리거는 schedule·workflow_dispatch 만 — 실제: $TRIG"; FAIL=1; }
+          # 정확히 일치 — 부분 문자열이면 `… || true` 를 덧붙여도 통과한다(QA F-4). 바꾸려면 이 줄도 함께 바꾼다
           IF=$(yq '.jobs.on.if' "$W")
-          case "$IF" in *"github.event_name == 'workflow_dispatch'"*"inputs.action == 'on'"*) ;;
-            *) echo "::error file=$W::on 잡(apply)은 workflow_dispatch + action == 'on' 일 때만 — 실제 if: $IF"; FAIL=1 ;; esac
+          [ "$IF" = "github.event_name == 'workflow_dispatch' && inputs.action == 'on'" ] \
+            || { echo "::error file=$W::on 잡(apply)은 workflow_dispatch + action == 'on' 일 때만 — 실제 if: $IF"; FAIL=1; }
           # 명령 형태로 본다 — 단계 이름("tofu apply (💰 …)")에도 걸려 apply 가 사라져도 통과하던 것을 반증으로 확인했다
           nc "$W" | grep -q 'tofu apply -auto-approve' || { echo "::error file=$W::apply 명령이 사라졌다 — 이 검사를 함께 고쳐라"; FAIL=1; }
           # ④ prod-window 스크립트는 tofu apply/destroy 를 부르지 않는다(위 ① 의 사각지대를 닫는다)
