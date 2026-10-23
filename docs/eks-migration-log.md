@@ -5824,3 +5824,12 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   - 매시 watchdog(`17 * * * *`) → 14:17~23:17 **슬롯 10개 중 run 1개**(39761526112, 10:13:52Z = 19:13 KST, `MODE: watchdog`, 클러스터 no·임대 none → skip). 나머지 9개는 **run 이 생성조차 안 됐다**(cancelled 도 아님 — concurrency 취소가 아니다).
   - 비교 기준(같은 레포): Prod Smoke 60회 지연 중앙 162분·p90 231분·최대 480분 · Claude Batch Fix(`0 9 * * 1`, 같은 09:00 UTC) 8월 26~32분 → 9월 이후 **5.5~9시간**.
 - `[결정 필요]` ⇒ **GitHub cron 은 dead man's switch 로 못 쓴다.** watchdog 은 사실상 10시간에 한 번, 18:00 off 는 자정 근처. 18:00 슬롯마저 누락되면(watchdog 처럼) 다음 날 밤까지 ≈ 30시간 ≈ **$7.5**. 대안은 계획서 B4-21 행(사용자 결정 대기).
+
+## 2026-10-23 — 📌D-016 B4-21: 18:00 off·watchdog 을 AWS EventBridge 로 (코드, $0)
+
+- `[결정]` 사용자 *"우린 제대로 했음에도 github 예약 실행이 문제였다면 A"* → 확인: ① 설정 정상(두 cron 이 각각 `MODE: force`·`MODE: watchdog` 로 분기, `state: active`, 빠진 9슬롯은 run 자체가 없어 concurrency 취소 아님) ② 같은 레포 다른 cron 3개도 3~9h 지연 ③ GitHub 문서 *"If the load is sufficiently high enough, some queued jobs may be dropped."* ④ 공개 사례 community #201738(2026-07, 일일 cron 8~14h 지연·1회 누락, `:00`→`:07` 이동 무효)·#202602(2026-07, 신규 레포 schedule 0회). ⇒ **ⓐ 채택.** 기각: ⓑ 메일만(끄지 않음) · ⓒ 현행+수동 규칙(최악 ≈ $7.5/일).
+- `[결정]` 구현 수단 = **기본 버스 scheduled rule → API destination → GitHub `workflow_dispatch`**. 계획서 후보 문구의 *EventBridge Scheduler* 는 기각 — AWS 문서상 API destination 은 *"event bus rule or pipe"* 의 대상이고 Scheduler 대상은 AWS API 뿐이다(Scheduler → 버스 → rule 로 한 단 더). scheduled rule 은 AWS 가 "legacy" 라 부르지만 지원 유지, UTC, 지연 *"several seconds"*(문서).
+- `[결정]` PAT 는 **레포·state 밖**: connection 을 placeholder 로 만들고 `ignore_changes=[auth_parameters]`, 실제 값은 사용자가 콘솔에서. 권한 = fine-grained, 이 레포만, `Actions: Read and write`.
+- `[결정]` Blindspot(Explore) 반영 — U1 action 기본값 `on` → **`off`**(AWS 가 넣는 입력의 오타가 매시 켜기가 되는 경로 차단) · U4 재시도 기본 24h/185회 → off 30분·watchdog 15분(늦은 force off 가 18:00 이후 창을 끄지 않게) + **GitHub `0 9 * * *` cron 삭제**(같은 이유, watchdog cron 은 임대를 존중하므로 보조로 유지) · U2 SNS 토픽 tfsec HIGH(`aws-sns-enable-topic-encryption`) → ignore + 근거(관리형 키면 CloudWatch 알람이 publish 못 함, CMK $1+/월). 변이 확인: ignore 줄을 지우면 HIGH 1건.
+- `[메모]` 검증(로컬, 무과금): `tofu validate` ✅ · `tofu fmt` ✅ · tfsec `critical 0 high 0` · 설계 무결성 ✅(verify 마커 2개 추가, 구 main 파일에선 불일치 확인).
+- `[비용]` 호출 하루 25회 × $0.20/백만 ≈ $0 · 알람 2·SNS 이메일 = 무료 한도. connection 시크릿의 Secrets Manager 과금은 문서에 명시 없음 → 상한 $0.40/월로 원장에 🟡.

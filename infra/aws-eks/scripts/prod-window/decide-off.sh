@@ -2,8 +2,8 @@
 # off 를 실제로 돌지 정한다 — 📌D-016 8-B. 사용: decide-off.sh <force|watchdog>
 # stdout 마지막 줄: "act" | "skip". 조회 오류는 rc 2(워크플로가 빨개진다 = 메일).
 #
-#   force    — 18:00 KST cron · 수동 off. **언제나 act**(Q-3: 끄기는 자동 + 수동 언제든). 꺼져 있으면 destroy 가 no-op 이다.
-#   watchdog — 매시 cron. CI 클러스터의 dead man's switch(B4-1·B4-5):
+#   force    — 18:00 KST off(EventBridge dispatch, B4-21) · 수동 off. **언제나 act**(Q-3: 끄기는 자동 + 수동 언제든). 꺼져 있으면 destroy 가 no-op 이다.
+#   watchdog — 매시(EventBridge :17 · GitHub cron :47 보조). CI 클러스터의 dead man's switch(B4-1·B4-5):
 #
 #     클러스터 \ 임대 │ 유효        │ 만료·없음
 #     ───────────────┼─────────────┼──────────────────────────────

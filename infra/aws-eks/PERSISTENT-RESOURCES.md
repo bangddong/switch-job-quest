@@ -42,6 +42,8 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 
 **합계 ≈ $14.02/월** (ECR **$0.23** + 학습 EBS $0.91 + S3 백업 ~$0.00 + **ACM $0.00** + **로그 그룹 ~$0.00** + **prod DB $12.88** = EC2 $7.59 + IPv4 $3.65 + 데이터 EBS $0.91 + 루트 EBS $0.73). 남은 3개월 ≈ $42
 
+> ℹ️ **2026-10-23 EventBridge 디스패치 행 추가(B4-21) — 재검산: 합계 $14.02 그대로 + 🟡 최대 $0.40.** 호출·알람·SNS 는 반올림하면 $0 다. connection 이 만든 Secrets Manager 시크릿만 과금 여부가 문서로 확인되지 않아 $0.40 을 상한으로 따로 적는다 — apply 후 다음 달 청구서로 확정한다. QA F-6 규칙대로 *재검산함* 을 명시한다.
+
 > ℹ️ **2026-10-20 prod DB 켬(📌D-016 6-B, 사용자 승인) — 재검산: $1.14 → $14.02.** ⏸ 6행을 실물 행으로 바꿨다.
 > **영속 EBS 기대값 = 2개**(학습 10GiB `postgres-data` + prod DB 데이터 10GiB, 둘 다 `Persistent=true`). 루트 EBS 는 `Persistent` 태그가 없다(인스턴스와 수명이 같다).
 
@@ -85,6 +87,8 @@ destroy-after-use 규율은 **"세션이 끝나면 전부 사라진다"** 를 �
 | **ACM** 인증서 `eks.quest.dhbang.co.kr` | 0-bootstrap | 검증이 **Cloudflare 수동 CNAME** 이라 세션마다 재발급하면 사람이 매번 DNS 를 넣어야 한다. 수명이 클러스터가 아니라 **도메인**에 묶인다(D-004·L-14 5번째 적용 — **레이어만**, 래치는 아님) | 🔒 **리소스 1개 · `for_each` 없음.** 환경 축을 복사하면 prod 인증서가 검증 불가로 `VALIDATION_TIMED_OUT` 된다(`acm.tf` 「차이 ②」) | **$0** ※ | 2026-09-15 | **2027-04-02 만료** |
 | **CloudWatch 로그 그룹** ×2 `/devquest/eks-learning/containers` · `/devquest/eks-learning/events` | 0-bootstrap | 학습 클러스터의 컨테이너 로그·K8s 이벤트를 **클러스터가 destroy 된 뒤에도** 읽기 위한 통(Stage 5d). 2-cluster 에 두면 destroy 가 그룹째 지운다(D-004·L-14 6번째 적용) | 🔒 **보존 30일** — 세션이 멈추면 30일 뒤 0 으로 수렴. 🔒 그룹은 **이 2개뿐**: 수집기 IRSA 에 `CreateLogGroup` 없음 + 설정 `auto_create_group Off` | ~$0 (저장 $0.0314/GB-월 · 세션당 수십 MB 🟡 5d P6 실측 전) ※ 수집은 세션 비용($0.76/GB) | 5d 세션 전 apply | 2027-01-15 |
 | **CloudWatch 로그 그룹** `/aws/eks/devquest-eks/cluster` | 0-bootstrap | EKS **컨트롤플레인** 로그(api · audit · authenticator · controllerManager · scheduler, Stage 5f). 🔴 이름은 EKS 가 정한다 — 없으면 EKS 가 **보존 무기한 · state 밖** 그룹을 스스로 만들므로 미리 만든다. 수집기 맵과 분리(수집기에 쓰기 권한 없음) | 🔒 **보존 30일**. 🔒 기본은 로그 **끔**(`2-cluster` `var.control_plane_log_types = []`), 켜도 이름이 어긋나면 plan 의 precondition 이 막는다 | ~$0 (빈 그룹 $0) ※ 수집은 세션 비용 | 5f 세션 전 apply | 2027-01-15 |
+| **EventBridge** 규칙 ×2 `devquest-eks-window-off`·`-watchdog` · API destination `devquest-eks-window-dispatch` · connection `devquest-eks-window-github` · **IAM** 역할 `devquest-eks-window-dispatch` · **SNS** `devquest-eks-window-alarm`(+이메일 구독) · **CloudWatch 알람** ×2 `devquest-eks-window-{off,watchdog}-dispatch-failed` | 0-bootstrap | 📌D-016 B4-21(2026-10-23) — EKS 창 18:00 off·매시 watchdog 을 **정시에** GitHub `workflow_dispatch` 로 부른다. GitHub cron 이 5시간 지연·누락(10-22 실측)이라 dead man's switch 로 못 쓴다. **클러스터가 없을 때도 돌아야** 하니 2-cluster 에 둘 수 없다 | 🔒 **고정 개수**(`for_each` = 상수 맵 2키). 호출 = 하루 25회 고정(off 1 + watchdog 24), 재시도 상한 20회·off 30분·watchdog 15분 | 🟡 **≈ $0~0.40** — 호출 월 ~750회 × $0.20/백만 ≈ $0 · 알람 2개·SNS 이메일 = 무료 한도 안 · connection 시크릿의 Secrets Manager 과금 여부 **미확인**(문서에 명시 없음, 최대 $0.40) | 2026-10-23(코드) | 2027-01-15 |
+| **Secrets Manager** `events!connection/devquest-eks-window-github/…` — **IaC 밖·태그 없음** | — (EventBridge 가 생성) | 위 connection 의 인증값(GitHub fine-grained PAT, 이 레포·Actions RW). 🔴 **값은 콘솔에서 사람이 넣는다** — tofu 는 placeholder 로 만들고 `ignore_changes`(state 에 PAT 를 두지 않는다). connection 이름이 바뀌면 교체되며 placeholder 로 **조용히** 돌아간다 → 401 → 알람 | 1개(connection 과 수명 같음) | 위 행에 포함 | 2026-10-23 | **PAT 만료일** |
 
 > prod DB 행은 2026-10-20 6-B 에서 켰다(그 전엔 ⏸ — 코드만).
 > 제거 절차: `disable_api_termination` 끄기 → `prevent_destroy` 제거 PR → **데이터 반출(Q-2 Neon) 확인 뒤** apply. SSM 은 `aws ssm delete-parameter`, 피어는 `fly wireguard remove personal devquest-prod-db`.
@@ -298,6 +302,15 @@ aws lambda list-functions --region $R --query 'length(Functions)' --output text 
 #   ③ 그 밖의 그룹 **0개** — 특히 ①′ 가 아닌 `/aws/eks/…`(클러스터 이름이 어긋난 채 로깅이 켜졌다) · `/aws/containerinsights/…`
 #      · `/aws/eks/fluentbit-cloudwatch/…`(aws-for-fluent-bit 차트 기본값)이 보이면 state 밖에서 자동 생성된 것이다
 # ⚠️ 옛 판정식 *"로그 그룹이 나오는데 Lambda 함수가 0이면 = 고아"* 는 **폐기** — ①을 매번 고아로 오판한다.
+
+# ── EKS 창 디스패치(B4-21, 2026-10-23) — 합격 기준: 규칙 2개 ENABLED · connection AUTHORIZED · 알람 2개 · 구독 확인됨 ──
+aws events list-rules --region $R --name-prefix devquest-eks-window --query 'Rules[].[Name,State,ScheduleExpression]' --output table
+aws events describe-connection --region $R --name devquest-eks-window-github --query '[ConnectionState,AuthorizationType]' --output text
+aws cloudwatch describe-alarms --region $R --alarm-name-prefix devquest-eks-window --query 'MetricAlarms[].[AlarmName,StateValue]' --output table
+# 구독: SubscriptionArn 이 "PendingConfirmation" 이면 메일이 안 온다 — 확인 링크를 누른다
+aws sns list-subscriptions --region $R --query "Subscriptions[?contains(TopicArn,'devquest-eks-window-alarm')].SubscriptionArn" --output text | sed -E 's/[0-9]{12}/<account>/g'
+# ⚠️ connection 이 AUTHORIZED 여도 **PAT 가 진짜인지는 모른다**(API_KEY 방식은 값을 검증하지 않는다 🟡 — apply 직후 placeholder 상태로 실측할 것). 진짜 확인 =
+#    매시 17분 뒤 `gh run list --workflow eks-window.yml --event workflow_dispatch -L 3` 에 새 실행이 생기는가.
 
 # 🔴 S3 는 SOP §9 고아 검사 대상이 **아니다**(세션과 함께 사라지는 물건이 아니므로).
 #    그래서 여기 안 적으면 신설 버킷은 원장 대조에서 **영원히 안 보인다.**
