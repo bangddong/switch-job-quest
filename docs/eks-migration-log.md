@@ -5833,3 +5833,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` Blindspot(Explore) 반영 — U1 action 기본값 `on` → **`off`**(AWS 가 넣는 입력의 오타가 매시 켜기가 되는 경로 차단) · U4 재시도 기본 24h/185회 → off 30분·watchdog 15분(늦은 force off 가 18:00 이후 창을 끄지 않게) + **GitHub `0 9 * * *` cron 삭제**(같은 이유, watchdog cron 은 임대를 존중하므로 보조로 유지) · U2 SNS 토픽 tfsec HIGH(`aws-sns-enable-topic-encryption`) → ignore + 근거(관리형 키면 CloudWatch 알람이 publish 못 함, CMK $1+/월). 변이 확인: ignore 줄을 지우면 HIGH 1건.
 - `[메모]` 검증(로컬, 무과금): `tofu validate` ✅ · `tofu fmt` ✅ · tfsec `critical 0 high 0` · 설계 무결성 ✅(verify 마커 2개 추가, 구 main 파일에선 불일치 확인).
 - `[비용]` 호출 하루 25회 × $0.20/백만 ≈ $0 · 알람 2·SNS 이메일 = 무료 한도. connection 시크릿의 Secrets Manager 과금은 문서에 명시 없음 → 상한 $0.40/월로 원장에 🟡.
+- `[메모]` PR #496 머지 → CI apply(run 39881080661) `Apply complete! Resources: 12 added, 0 changed, 0 destroyed.` 09:57 KST 상태: 규칙 2개 `ENABLED` · connection `AUTHORIZED API_KEY` · 알람 `INSUFFICIENT_DATA` · SNS 구독 `PendingConfirmation`.
+- `[메모]` ⚠️ **connection 은 placeholder 값으로도 `AUTHORIZED` 다**(실측). 상태는 API key 를 검증하지 않는다 — PAT 가 맞는지는 dispatch 실행으로만 안다.
+- `[메모]` **알람 경로 실측(placeholder = 실패 재현기)**: 10:17 watchdog 규칙 → `TriggeredRules 1`·`Invocations 1`·`FailedInvocations 1`(10:14 5분 버킷) · `RetryInvocationAttempts` **데이터 없음** → 알람 `devquest-eks-window-watchdog-dispatch-failed` **OK → ALARM 10:18:59 KST**(실패 ≈ 2분 뒤).
+- `[메모]` 🟡 **예상과 다름**: 설계 메모는 *"401 이면 max_age(15분)까지 재시도한 뒤 FailedInvocations"* 였다(AWS 문서는 401 을 재시도 대상으로 적는다). 실측은 **재시도 0회·즉시 실패**. GitHub 이 401 이 아닌 코드(예: 잘못된 토큰에 404)를 줬을 가능성 — API destination 은 응답 코드를 남기지 않아 미확인. 결과적으로 알람은 15분이 아니라 **≈2분**에 울린다(안전 쪽).
+- `[메모]` SNS 구독이 pending 이라 이 ALARM 메일은 **발송되지 않았다** — 설계 메모대로(구독 확인 전엔 무음).
+- `[해결]` 사용자 TASK-19 완료(fine-grained PAT → 콘솔 connection 수정 11:15:17 KST · SNS 구독 확인). 11:17 KST watchdog 규칙 → run 39888735075 **created 02:17:10Z(≈10초 뒤)** · `event: workflow_dispatch` · `headBranch: main` · off 잡 success / on 잡 skipped · 로그 `MODE: watchdog` → `[eks-window] watchdog — 클러스터 no · 임대 none` → `모드 watchdog → skip (rc 0)`. 같은 회차 `FailedInvocations` 데이터 없음, 알람 둘 다 `OK`.
+- `[메모]` 비교: 같은 슬롯(`:17`)의 GitHub cron 은 10-22 에 10슬롯 중 1개만 생성됐다 → EventBridge 는 첫 회차부터 10초. ⇒ **TASK-19 게이트 통과 — `on` 해도 된다.** 남은 실측: 18:00 KST off 회차(`MODE: force`, 빈 state destroy).
+- `[비용]` $0 — 클러스터 0, 위 호출·알람은 무료 한도.

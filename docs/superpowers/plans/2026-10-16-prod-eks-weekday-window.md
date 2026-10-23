@@ -223,7 +223,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B4-17 | 🟡 | `infra/aws-eks/**` 문서만 바꿔도 머지 시 1-network apply — 6번(`db_enabled=true`) 이후엔 prod DB 레이어 apply | **6번** — 켜기 전에 paths 필터를 `*.tf`/`*.tftpl` 로 좁힐지 판단 |
 | B4-18 | 🟡 | `guard-local-layers` 가 새 워크플로를 못 본다 | **8번**(N-3, 이미 이관) |
 | B4-20 | 🟡 | 생존 판정 OR 에 EC2 를 넣으면 상시 prod-db 로 영구 destroy 루프 | 유지 — 넣지 않았다. 넣을 일이 생기면 `Role=prod-db` 제외(SOP §8b 선례) |
-| B4-21 | 🟡 | off 와 dead man's switch 가 둘 다 GitHub cron — 같은 장애에 함께 걸림. AWS 쪽 독립 백스톱 0 | **8번** — 설계 시 독립 경로 검토(Budgets·Anomaly 는 일 단위라 느리다) 🔄 **2026-10-23 부분 해소** — 18:00 off·매시 watchdog 의 시각을 AWS EventBridge 예약 규칙이 지킨다(`0-bootstrap/eks-window-dispatch.tf` → `workflow_dispatch`). cron 지연·누락·60일 비활성은 해소, **GitHub Actions 장애 자체에는 여전히 함께 걸린다**(dispatch 는 받아도 run 이 안 돌 수 있다) |
+| B4-21 | 🟡 | off 와 dead man's switch 가 둘 다 GitHub cron — 같은 장애에 함께 걸림. AWS 쪽 독립 백스톱 0 | **8번** — 설계 시 독립 경로 검토(Budgets·Anomaly 는 일 단위라 느리다) 🔄 **2026-10-23 부분 해소** — 18:00 off·매시 watchdog 의 시각을 AWS EventBridge 예약 규칙이 지킨다(`0-bootstrap/eks-window-dispatch.tf` → `workflow_dispatch`). cron 지연·누락·60일 비활성은 해소, **GitHub Actions 장애 자체에는 여전히 함께 걸린다**(dispatch 는 받아도 run 이 안 돌 수 있다) ✅ **2026-10-23 실측** — 11:17 KST 규칙 → run 생성 **약 10초 뒤**(`workflow_dispatch`, `MODE: watchdog` → skip). 알람 경로: placeholder dispatch 10:17 → ALARM 10:18:59 |
 | B4-22 | 🟡 | 로컬 리퍼는 맥이 깨어 있을 때만, 원격 세션 마커는 못 본다 | **8번** 근거(CI 쪽에 둔다) |
 | B4-23 | ⚪ | 스케줄 워크플로 실패 메일 수신 전제 미확인 | **8번** — 첫 실패 주입 때 실측 → 🔄 **2026-10-20 6-D 로 당김**(QA 6-D F-3) — 백업 감시가 이 메일을 유일한 알림으로 쓴다. 머지 직후 `Prod DB Backup Watch` 를 `inject_failure=true` 로 수동 실행해 메일 도달을 사용자가 확인 → ✅ **2026-10-20 확인 — 메일은 오지만 네이버가 스팸함으로 보냈다**(2회 주입, 실행자 본인). 수신 허용 등록으로 해결. 🔑 *"메일이 안 온다"* 는 *"안 보냈다"* 가 아니었다 |
 | B4-24 | 🔴 | 마커가 클러스터를 식별하지 못한다 | ✅ 이번 PR — createdAt 비교가 그 식별 |
