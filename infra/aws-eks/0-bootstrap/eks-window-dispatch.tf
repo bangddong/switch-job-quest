@@ -15,8 +15,10 @@
 #   · **PAT 는 레포·tofu state 어디에도 없다.** connection 을 placeholder 로 만들고 `ignore_changes` 로 손을 뗀다.
 #     실제 값은 사람이 AWS 콘솔에서 넣는다(EventBridge → Connections → 편집). 넣은 값은 EventBridge 가 만든
 #     Secrets Manager 시크릿(`events!connection/...`)에 산다 — state 밖·태그 없음(PERSISTENT-RESOURCES.md).
-#   · PAT 권한 = **이 레포 하나 · Actions: Read and write 하나**(fine-grained). 유출되면 eks-window on 을 누를 수 있다
-#     → 예산 게이트(budget-gate.sh)가 그 대가의 상한이다. ⚠️ main 역할(Admin)로 도는 워크플로는 이 시크릿을 읽을 수
+#   · PAT 권한 = **이 레포 하나 · Actions: Read and write 하나**(fine-grained). 🔴 반경은 eks-window 만이 아니다 —
+#     이 레포의 **모든 workflow_dispatch 워크플로**(ecr-push·claude-batch-fix·prod-smoke-daily·prod-db-backup-watch 등)를
+#     main 에서 실행할 수 있고, 실행 취소·재실행·로그 삭제도 된다(QA F-3). 예산 게이트(budget-gate.sh)는 eks-window on 만 막는다.
+#     코드는 못 바꾼다(Contents 권한 없음) — 돌릴 수 있는 것은 main 에 이미 있는 정의뿐이다. ⚠️ main 역할(Admin)로 도는 워크플로는 이 시크릿을 읽을 수
 #     있다(PR plan 역할은 DenyContentReads 로 못 읽는다) — 원래 AWS 전권을 가진 역할이라 경계가 새로 넓어지진 않는다.
 #
 # 🔴 connection 의 **name 을 바꾸지 마라.** 이름 변경 = 교체(replace) → 콘솔에서 넣은 PAT 가 **조용히 placeholder 로

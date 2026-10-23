@@ -19,7 +19,7 @@
 |---|---|---|
 | 18:00 KST off | 매일(주말 포함) — **AWS EventBridge 가 정시에 dispatch**(`action=off`) | 무조건 off. 꺼져 있으면 no-op |
 | 수동 off | 언제든 | 무조건 off |
-| **매시 watchdog** | 매시 17분 — **EventBridge dispatch**(`action=watchdog`) + GitHub cron(보조) | 클러스터가 있는데 **임대가 없거나 만료**면 off · 클러스터가 없는데 **LB 가 남았으면 빨강**(고아 ALB) |
+| **매시 watchdog** | 매시 17분 — **EventBridge dispatch**(`action=watchdog`) · 매시 47분 — GitHub cron(보조, 지연·누락 잦음) | 클러스터가 있는데 **임대가 없거나 만료**면 off · 클러스터가 없는데 **LB 가 남았으면 빨강**(고아 ALB) |
 
 > 🔴 **시각을 지키는 것은 AWS 다(B4-21, 2026-10-23).** GitHub cron 은 10-22 실측에서 18:00 off 가 **5시간 24분 늦었고**
 > 매시 watchdog 은 **10슬롯 중 1개만** 생겼다. 그래서 `0-bootstrap/eks-window-dispatch.tf` 의 예약 규칙 2개가

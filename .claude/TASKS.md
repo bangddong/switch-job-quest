@@ -104,6 +104,15 @@ ECR도 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 3. **메일 확인 링크**: "AWS Notification - Subscription Confirmation" 메일의 Confirm subscription 클릭(⚠️ 스팸함 확인)
 4. 완료라고 알려주면 — 다음 매시 17분 dispatch 실행이 생기는지 내가 확인한다.
 
+🔴 **게이트: 4번에서 EventBridge 발 dispatch 실행을 눈으로 보기 전에는 `on` 을 누르지 않는다** (QA F-1).
+GitHub 18:00 cron 을 지웠으므로, PAT 가 없거나 틀리면 **18:00 자동 off 가 0** 이다 — 남는 것은 임대 만료 뒤 watchdog 뿐이고
+그 보조(GitHub cron)는 10-22 실측 10슬롯 중 1개였다. 확인 명령: `gh run list --workflow eks-window.yml --event workflow_dispatch -L 3`
+
+**알람 경로 실측 (내가 한다, 머지 직후 PAT 입력 전)**: placeholder 상태는 401 재현기다 — 17분 dispatch 가 401 로 재시도되다
+max_age(15분) 뒤 `FailedInvocations` → 알람 `devquest-eks-window-watchdog-dispatch-failed` 가 **ALARM** 이 되는지
+`aws cloudwatch describe-alarms --alarm-name-prefix devquest-eks-window` 로 본다. 안 울리면 알람 설계 가정이 틀린 것 → PR 로 고친다.
+⚠️ 그래서 순서를 바꿀 수 있다: 알람 실측을 먼저 보고 싶으면 PAT 입력을 그 뒤(머지 + 최대 ~1시간)로 미룬다. 그 사이 클러스터는 0 이라 비용 위험은 없다.
+
 ### TASK-17: EKS 창용 **관측** 키를 SSM 에 (📌D-016 — **첫 창(10번) 직전까지**, 급하지 않음)
 
 > ✅ **필수 2개는 끝났다 (2026-10-22)** — `ANTHROPIC_API_KEY`(EKS 전용 새 키) · `JUDGE0_API_KEY`(RapidAPI 앱 키).
