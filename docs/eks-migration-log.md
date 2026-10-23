@@ -5840,6 +5840,7 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` SNS 구독이 pending 이라 이 ALARM 메일은 **발송되지 않았다** — 설계 메모대로(구독 확인 전엔 무음).
 - `[해결]` 사용자 TASK-19 완료(fine-grained PAT → 콘솔 connection 수정 11:15:17 KST · SNS 구독 확인). 11:17 KST watchdog 규칙 → run 39888735075 **created 02:17:10Z(≈10초 뒤)** · `event: workflow_dispatch` · `headBranch: main` · off 잡 success / on 잡 skipped · 로그 `MODE: watchdog` → `[eks-window] watchdog — 클러스터 no · 임대 none` → `모드 watchdog → skip (rc 0)`. 같은 회차 `FailedInvocations` 데이터 없음, 알람 둘 다 `OK`.
 - `[메모]` 비교: 같은 슬롯(`:17`)의 GitHub cron 은 10-22 에 10슬롯 중 1개만 생성됐다 → EventBridge 는 첫 회차부터 10초. ⇒ **TASK-19 게이트 통과 — `on` 해도 된다.** 남은 실측: 18:00 KST off 회차(`MODE: force`, 빈 state destroy).
+- `[해결]` **18:00 off 첫 EventBridge 회차**: run 39928689709 created **09:00:17Z(18:00:17 KST, 17초)** · `workflow_dispatch`·main · `MODE: force` → `act` → `✅ 로드밸런서 0` → `No changes. No objects need to be destroyed.` · `Destroy complete! Resources: 0 destroyed.` → off-verify 전부 ✅ · `꺼짐 확인 · 임대 삭제`. 전날 GitHub cron 같은 슬롯은 5h24m 지연이었다. ⇒ B4-21 두 규칙(off·watchdog) 모두 실측 통과.
 - `[비용]` $0 — 클러스터 0, 위 호출·알람은 무료 한도.
 
 ## 2026-10-23 — Neon 콜드 대기 브랜치 자동 삭제 → 백업 감시 실패 → 재생성
