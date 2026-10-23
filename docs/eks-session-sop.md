@@ -450,6 +450,8 @@
 > - 마커 정규식은 **조이지 않았다** — L-22(*조일 때마다 새 우회*). 마커가 아니라 destroy 대상을 판정한다.
 > - **CI 가 켠 클러스터의 dead man's switch 는 로컬 리퍼가 아니다** — `EKS Window` 워크플로의 **매시 watchdog** 이다
 >   (📌D-016 8-B, 2026-10-22: 임대 없거나 만료된 클러스터 → off 경로 전체. 런북 `infra/aws-eks/scripts/prod-window/README.md`).
+>   🔴 **매시를 지키는 것은 AWS EventBridge 다**(B4-21, 2026-10-23) — GitHub cron 은 10-22 실측에서 watchdog 10슬롯 중 1개만
+>   생겼다. 예약 규칙이 정시에 `workflow_dispatch`(action=watchdog)를 부른다(`0-bootstrap/eks-window-dispatch.tf`). GitHub cron 은 보조.
 >   로컬 리퍼는 맥이 깨어 있을 때만 돌고, 원격 세션의 마커는 보지도 못한다. ⚠️ 8-C(트래픽 전환) 뒤엔 off 경로에 Fly 복귀가 들어간다.
 >   🔴 watchdog 은 **누가 켰는지 묻지 않는다** — 로컬에서 2-cluster 를 apply 하면 임대가 없어 한 시간 안에 꺼진다(런북 「로컬에서」).
 > - 회귀: `bash .claude/scripts/tests/reaper-alb-test.sh` ⑧~⑯ (무과금 목. CI 미편입 — 수동 실행).

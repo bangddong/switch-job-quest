@@ -223,7 +223,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | B4-17 | 🟡 | `infra/aws-eks/**` 문서만 바꿔도 머지 시 1-network apply — 6번(`db_enabled=true`) 이후엔 prod DB 레이어 apply | **6번** — 켜기 전에 paths 필터를 `*.tf`/`*.tftpl` 로 좁힐지 판단 |
 | B4-18 | 🟡 | `guard-local-layers` 가 새 워크플로를 못 본다 | **8번**(N-3, 이미 이관) |
 | B4-20 | 🟡 | 생존 판정 OR 에 EC2 를 넣으면 상시 prod-db 로 영구 destroy 루프 | 유지 — 넣지 않았다. 넣을 일이 생기면 `Role=prod-db` 제외(SOP §8b 선례) |
-| B4-21 | 🟡 | off 와 dead man's switch 가 둘 다 GitHub cron — 같은 장애에 함께 걸림. AWS 쪽 독립 백스톱 0 | **8번** — 설계 시 독립 경로 검토(Budgets·Anomaly 는 일 단위라 느리다) |
+| B4-21 | 🟡 | off 와 dead man's switch 가 둘 다 GitHub cron — 같은 장애에 함께 걸림. AWS 쪽 독립 백스톱 0 | **8번** — 설계 시 독립 경로 검토(Budgets·Anomaly 는 일 단위라 느리다) 🔄 **2026-10-23 부분 해소** — 18:00 off·매시 watchdog 의 시각을 AWS EventBridge 예약 규칙이 지킨다(`0-bootstrap/eks-window-dispatch.tf` → `workflow_dispatch`). cron 지연·누락·60일 비활성은 해소, **GitHub Actions 장애 자체에는 여전히 함께 걸린다**(dispatch 는 받아도 run 이 안 돌 수 있다) |
 | B4-22 | 🟡 | 로컬 리퍼는 맥이 깨어 있을 때만, 원격 세션 마커는 못 본다 | **8번** 근거(CI 쪽에 둔다) |
 | B4-23 | ⚪ | 스케줄 워크플로 실패 메일 수신 전제 미확인 | **8번** — 첫 실패 주입 때 실측 → 🔄 **2026-10-20 6-D 로 당김**(QA 6-D F-3) — 백업 감시가 이 메일을 유일한 알림으로 쓴다. 머지 직후 `Prod DB Backup Watch` 를 `inject_failure=true` 로 수동 실행해 메일 도달을 사용자가 확인 → ✅ **2026-10-20 확인 — 메일은 오지만 네이버가 스팸함으로 보냈다**(2회 주입, 실행자 본인). 수신 허용 등록으로 해결. 🔑 *"메일이 안 온다"* 는 *"안 보냈다"* 가 아니었다 |
 | B4-24 | 🔴 | 마커가 클러스터를 식별하지 못한다 | ✅ 이번 PR — createdAt 비교가 그 식별 |
@@ -451,7 +451,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 
 | 결정 | 선택 | 근거 |
 |---|---|---|
-| 워크플로 | **하나** `eks-window.yml` — dispatch(on/off·hours) + cron 18:00 KST(off) + 매시 17분(watchdog) · concurrency 그룹 하나 | on·off·watchdog 이 같은 state 락을 다툰다(B4-11). 대기 중 실행이 새 실행에 취소되는 함정(B8-15)은 **취소돼도 되게** 설계: 취소된 off 의 상한 = 임대 + 1h(파일 머리말 표) |
+| 워크플로 | **하나** `eks-window.yml` — dispatch(on/off·hours) + cron 18:00 KST(off) + 매시 17분(watchdog) · concurrency 그룹 하나 | on·off·watchdog 이 같은 state 락을 다툰다(B4-11). 대기 중 실행이 새 실행에 취소되는 함정(B8-15)은 **취소돼도 되게** 설계: 취소된 off 의 상한 = 임대 + 1h(파일 머리말 표) 🔄 **2026-10-23**: dispatch 선택지에 `watchdog` 추가·기본값 `off`(AWS 가 입력을 넣으므로 실수 방향을 끄기로) · GitHub 18:00 cron **삭제**(늦게 온 force off 가 18:00 이후 창을 끈다) · watchdog cron 은 보조. ⚠️ *"취소된 off 상한 = 임대 + 1h"* 는 10-22 엔 거짓이었다(watchdog 10슬롯 중 1개) — EventBridge 경로가 생긴 뒤에야 성립 |
 | dead man's switch | **임대(lease)** SSM String `/devquest/ops/eks-window/lease` — on 이 **apply 전에** 쓰고, off 는 착수 즉시 만료로 바꾸고 꺼짐 확인 뒤 지운다. watchdog = *클러스터 있음 + 임대 없음/만료 → off* | B4-1·B4-5. 로컬 리퍼는 CI 클러스터를 못 본다(B4-22). off 실패 시 임대가 "유효" 로 남으면 watchdog 이 재시도하지 않는 구멍을 *착수 즉시 만료* 로 막았다 |
 | watchdog 의 범위 | **누가 켰는지 묻지 않는다** — 임대 없는 클러스터는 로컬이어도 끈다 | Q-1(prod 전용·학습 세션 종료). 로컬에서 켜야 하면 워크플로 Disable 또는 임대 직접 쓰기(런북) |
 | 실패한 on | 임대를 쓴 뒤 실패하면 **같은 실행의 off 잡**이 끈다 | 8-B 는 트래픽 0 — 망가진 창을 살려 둘 이유가 없다. **8-C 이후엔 다시 판단**(트래픽이 붙은 뒤의 실패는 Fly 복귀가 먼저) |
@@ -472,11 +472,12 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | 항목 | 왜 지금 안 하나 | 언제 |
 |---|---|---|
 | 로컬 도구가 임대를 읽어 *"임대 있음 = foreign"* (QA 4번 F-2 · B4-5 후반) | 성립 조건 = 로컬 마커 직후 Stop 훅 미실행 + 1h 안 CI on. Q-1 로 로컬 학습 세션이 끝나 마커가 생길 일이 거의 없다. 하네스(`.claude/scripts/lib`) 변경 + 리퍼 테스트 목 갱신이 따라온다 | 로컬에서 2-cluster 를 다시 apply 하게 되면 그 PR 에서 |
-| AWS 쪽 독립 백스톱(B4-21) | 18:00 off·watchdog 이 **둘 다 GitHub cron** — Actions 장애·schedule 자동 비활성(60일)에 함께 걸린다. 대안(EventBridge + Lambda destroy)은 Lambda 가 tofu state·LB 정리를 해야 해 규모가 크다. 지금 백스톱은 Cost Anomaly(일 단위) | 10번 첫 창 전 재판단 — 최소안: EventBridge 가 *"클러스터 나이 > 12h"* 면 SNS 메일만 |
+| AWS 쪽 독립 백스톱(B4-21) | 18:00 off·watchdog 이 **둘 다 GitHub cron** — Actions 장애·schedule 자동 비활성(60일)에 함께 걸린다. 대안(EventBridge + Lambda destroy)은 Lambda 가 tofu state·LB 정리를 해야 해 규모가 크다. 지금 백스톱은 Cost Anomaly(일 단위) | 10번 첫 창 전 재판단 — 최소안: EventBridge 가 *"클러스터 나이 > 12h"* 면 SNS 메일만 ✅ **2026-10-23 → 아래 행으로 해소** |
 | ~~첫 실행 실측~~ | ✅ 2026-10-22 — 소요(on 16분·off 7분 → OIDC 1h 여유, B8-9 닫힘)·LCU 기록·자동 off(실패 경로)·수동 off 전부 실측. 숫자는 일지 10-22 | — |
 | **3노드 메모리 88%** | 트래픽 0 에서 `1208Mi(88%) · 1089Mi(79%) · 893Mi(65%)`. 8-B·8-C 는 트래픽이 없거나 짧아 지금 바꿀 근거가 없다 | **10번(실트래픽) 첫 창 전** — 노드 크기/수·ArgoCD 컴포넌트 축소 중 택일, 창 중 `top nodes` 실측 후 |
-| **🔴 GitHub cron 실측 — dead man's switch 불가** | 10-22 실측: 18:00 off 슬롯 **5시간 24분 지연**(23:24 KST 실행, 빈 state destroy 정상) · 매시 watchdog **슬롯 10개 중 1개만 생성**. 같은 레포 cron 9월 이후 5.5~9시간 지연. 18:00 슬롯이 누락되면 최악 ≈ 30h ≈ $7.5 | **8-C 전 — B4-21 을 앞당긴다(사용자 결정 대기).** 후보: ⓐ EventBridge Scheduler(정시) → API Destination → GitHub `workflow_dispatch`(off) — dispatch 는 지연이 없었다(실측 수 초), destroy 로직은 워크플로 그대로, 대가 = GitHub 토큰을 AWS 에 보관(Secrets Manager ≈ $0.40/월)·토큰 만료 관리 ⓑ EventBridge *"클러스터 나이 > N h"* → SNS 메일만(끄지는 않음) ⓒ 현행 유지 + 수동 off 규칙. 당분간 규칙: **창은 수동 off 로 닫고 success 확인** |
-| 빈 state destroy(클러스터 없는데 off) | 오늘 두 번 다 클러스터가 있을 때만 off 가 돌았다. 18:00 cron 회차가 첫 실측이 된다 | 위 항목과 같이 확인 |
+| **🔴 GitHub cron 실측 — dead man's switch 불가** | 10-22 실측: 18:00 off 슬롯 **5시간 24분 지연**(23:24 KST 실행, 빈 state destroy 정상) · 매시 watchdog **슬롯 10개 중 1개만 생성**. 같은 레포 cron 9월 이후 5.5~9시간 지연. 18:00 슬롯이 누락되면 최악 ≈ 30h ≈ $7.5 | ✅ **2026-10-23 사용자 결정: ⓐ** — 사유: *"우리는 제대로 했는데 GitHub 예약 실행이 문제"* 를 확인(설정·분기 정상, 같은 레포 다른 cron 3~9h 지연, 공개 사례 community #201738 8~14h·`:07` 로 옮겨도 무효 · #202602 0회). 구현: ⚠️ 후보 문구의 *"EventBridge **Scheduler**"* 는 틀렸다 — Scheduler 는 API destination 을 직접 부르지 못한다(대상 = AWS API). **기본 버스 scheduled rule** → API destination 으로 했다. 이하는 결정 당시 후보 원문: 후보: ⓐ EventBridge Scheduler(정시) → API Destination → GitHub `workflow_dispatch`(off) — dispatch 는 지연이 없었다(실측 수 초), destroy 로직은 워크플로 그대로, 대가 = GitHub 토큰을 AWS 에 보관(Secrets Manager ≈ $0.40/월)·토큰 만료 관리 ⓑ EventBridge *"클러스터 나이 > N h"* → SNS 메일만(끄지는 않음) ⓒ 현행 유지 + 수동 off 규칙. 당분간 규칙: **창은 수동 off 로 닫고 success 확인** |
+| 빈 state destroy(클러스터 없는데 off) | 오늘 두 번 다 클러스터가 있을 때만 off 가 돌았다. 18:00 cron 회차가 첫 실측이 된다 | 위 항목과 같이 확인 ✅ 10-22 23:24 실측 — `Resources: 0 destroyed`, off-verify 전부 ✅, 39초 |
+| B4-21 구현에서 미룬 것 (2026-10-23 Blindspot) | ① 알람은 **dispatch 실패만** 본다 — run 실패·취소(F-2)는 GitHub 메일 몫. "규칙이 꺼져서 아예 안 불렀다" 는 못 잡는다(실패 0 = 데이터 없음) ② connection 이름 변경 = 교체 → PAT 가 placeholder 로 조용히 돌아감(알람이 401 로 잡는다 — 그래서 `prevent_destroy` 는 안 붙였다) ③ `budget-gate.sh` 의 상시분 근거 *"영속 $1.14/월"* 이 낡았다(원장 $14.02) — 새 리소스는 반올림 안 ④ connection 시크릿의 Secrets Manager 과금 여부 미확인(≤ $0.40) — 다음 달 청구서 | ① 8-C 전 재판단(Invocations=0 알람 추가 여부) ② 현행 유지 ③ 10번 전 예산 게이트 재검토 때 ④ 11월 청구서 |
 | 8-0 2차(Cloudflare 토큰 · Vercel Origin) | 8-C 의 입력이다 | 8-C 착수 때 |
 
 ### 8번 Blindspot (2026-10-21, Explore 읽기 전용) — 목적지

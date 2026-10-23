@@ -89,6 +89,21 @@ ECR도 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 간격 반복,
       로그인·DB·RPG XP 연동. **지금은 보류이고, 판단은 사용자 몫이다.**
 
+### TASK-19: EKS 창 자동 off 용 GitHub 토큰 → AWS 콘솔 (📌D-016 B4-21 — **0-bootstrap PR 머지 직후**, 브라우저만)
+
+머지(= CI apply) 전까지는 connection 이 placeholder 라 매시 dispatch 가 401 로 실패한다 — 토큰을 먼저 만들어 두면 공백이 몇 분이다.
+
+1. **GitHub 토큰 만들기**: GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token
+   - Repository access: **Only select repositories** → `switch-job-quest` 하나
+   - Repository permissions: **Actions → Read and write** (나머지는 건드리지 않는다. Metadata: Read 는 자동)
+   - Expiration: 원하는 기간(만료 7일 전 GitHub 이 메일을 보낸다 → 이 TASK 를 다시 한다)
+   - 🔴 토큰 값을 채팅·레포·메모에 붙여넣지 않는다 — 아래 2번 칸에만
+2. **AWS 콘솔(서울)** → Amazon EventBridge → Integration → **Connections** → `devquest-eks-window-github` → Edit
+   - API key name: `Authorization` (그대로)
+   - Value: `Bearer ` + 토큰 (Bearer 뒤 공백 한 칸)
+3. **메일 확인 링크**: "AWS Notification - Subscription Confirmation" 메일의 Confirm subscription 클릭(⚠️ 스팸함 확인)
+4. 완료라고 알려주면 — 다음 매시 17분 dispatch 실행이 생기는지 내가 확인한다.
+
 ### TASK-17: EKS 창용 **관측** 키를 SSM 에 (📌D-016 — **첫 창(10번) 직전까지**, 급하지 않음)
 
 > ✅ **필수 2개는 끝났다 (2026-10-22)** — `ANTHROPIC_API_KEY`(EKS 전용 새 키) · `JUDGE0_API_KEY`(RapidAPI 앱 키).

@@ -17,9 +17,15 @@
 
 | | 언제 | 무엇을 |
 |---|---|---|
-| 18:00 KST cron | 매일(주말 포함) | 무조건 off. 꺼져 있으면 no-op |
+| 18:00 KST off | 매일(주말 포함) — **AWS EventBridge 가 정시에 dispatch**(`action=off`) | 무조건 off. 꺼져 있으면 no-op |
 | 수동 off | 언제든 | 무조건 off |
-| **매시 watchdog** | 매시 17분 | 클러스터가 있는데 **임대가 없거나 만료**면 off · 클러스터가 없는데 **LB 가 남았으면 빨강**(고아 ALB) |
+| **매시 watchdog** | 매시 17분 — **EventBridge dispatch**(`action=watchdog`) + GitHub cron(보조) | 클러스터가 있는데 **임대가 없거나 만료**면 off · 클러스터가 없는데 **LB 가 남았으면 빨강**(고아 ALB) |
+
+> 🔴 **시각을 지키는 것은 AWS 다(B4-21, 2026-10-23).** GitHub cron 은 10-22 실측에서 18:00 off 가 **5시간 24분 늦었고**
+> 매시 watchdog 은 **10슬롯 중 1개만** 생겼다. 그래서 `0-bootstrap/eks-window-dispatch.tf` 의 예약 규칙 2개가
+> 정시에 이 워크플로를 `workflow_dispatch` 로 부른다(인증 = GitHub fine-grained PAT, 콘솔에서 넣는다).
+> GitHub 의 18:00 cron 은 **지웠다** — 늦게 오는 force off 는 18:00 이후 정당하게 켠 창을 끈다. watchdog cron 만 보조로 남겼다.
+> dispatch 가 실패하면(PAT 만료 401 · 워크플로 Disable · 입력 오류 422) **CloudWatch 알람이 메일**을 보낸다(SNS 구독 확인 필요).
 
 - **임대**는 on 이 apply **전에** 쓴다(`expires = 지금 + hours`). off 는 착수하자마자 만료로 바꾸고, AWS 로 꺼짐을 확인한 뒤 지운다.
   그래서 off 가 중간에 죽어도 다음 시간 watchdog 이 다시 돈다.
@@ -29,14 +35,22 @@
 ## ⚠️ 로컬에서 2-cluster 를 apply 할 일이 생기면
 
 watchdog 은 **누가 켰는지 묻지 않는다** — 임대 없는 클러스터는 한 시간 안에 꺼진다(Q-1: 이 클러스터는 prod 전용, 학습 세션은 끝났다).
-로컬에서 꼭 켜야 하면 먼저 Actions 화면에서 **EKS Window 를 Disable** 하거나, 임대를 직접 쓴다:
+로컬에서 꼭 켜야 하면 **임대를 직접 쓴다**(권장). Actions 화면에서 EKS Window 를 Disable 하는 방법도 있지만,
+그러면 EventBridge dispatch 가 매시 실패해 **알람 메일이 반복된다** — Disable 할 거면 규칙도 함께 끄고, 끝나면 둘 다 켠다:
+
+```bash
+for n in off watchdog; do aws events disable-rule --region ap-northeast-2 --name devquest-eks-window-$n; done   # 끝나면 enable-rule
+```
+> ⚠️ 규칙을 끈 채 두면 **다음 0-bootstrap apply 가 다시 켠다**(state = ENABLED). 의도된 동작이다 — 꺼진 안전장치가 잊히지 않게.
+
+임대 직접 쓰기:
 
 ```bash
 aws ssm put-parameter --region ap-northeast-2 --name /devquest/ops/eks-window/lease --type String --overwrite \
   --value "expires=$(( $(date +%s) + 3*3600 )) run=local started=$(date +%s)"
 ```
 
-끝나면 지운다(`aws ssm delete-parameter …`). 18:00 cron 은 임대와 무관하게 끈다.
+끝나면 지운다(`aws ssm delete-parameter …`). 18:00 off 는 임대와 무관하게 끈다.
 > 반대 방향 — **로컬 도구(리퍼·리마인더)는 아직 임대를 읽지 않는다.** CI 클러스터는 createdAt 소유 판정으로 foreign 이 된다(4번).
 > 남은 틈(QA 4번 F-2)은 계획서 8-B 「미룬 것」.
 

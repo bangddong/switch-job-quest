@@ -2,33 +2,45 @@ name: EKS Window
 
 # 📌D-016 순서표 8-B — prod 평일 창의 EKS 를 켜고 끈다. **트래픽 전환은 없다**(8-C 몫): 켜서 ALB 를 직접 찔러 보고 끈다.
 #   Q-3(2026-10-16): 켜기 = **수동만**(이 화면의 Run workflow 또는 `gh workflow run eks-window.yml -f action=on`)
-#                    끄기 = 18:00 KST cron 자동 + 수동 off 언제든
+#                    끄기 = 18:00 KST 자동 + 수동 off 언제든
 #   + 매시 watchdog = CI 클러스터의 dead man's switch(B4-1). 로컬 리퍼는 맥이 깨어 있을 때만 돌고 CI·원격 클러스터를 못 본다.
+#
+# 🔑 자동 off·watchdog 의 **주 경로는 AWS EventBridge** 다(B4-21, 2026-10-23 — `0-bootstrap/eks-window-dispatch.tf`).
+#    예약 규칙이 정시에 이 워크플로를 workflow_dispatch 로 부른다(action=off · action=watchdog).
+#    계기 = 10-22 실측: GitHub cron 18:00 off 슬롯 **5시간 24분 지연**, 매시 watchdog **10슬롯 중 1개만 생성**.
+#    dispatch 는 수 초 안에 시작됐다. 아래 GitHub schedule 은 **watchdog 보조만** 남겼다.
 #
 # 🔴 이 파일은 2-cluster 를 apply·destroy 하는 **유일한** 워크플로다 — Infra CI 의 guard-local-layers 가 그걸 강제한다(N-3).
 #    트리거에 push·pull_request 를 넣지 마라: 머지 한 번이 컨트롤플레인을 띄운다(그 guard 가 막는다).
 #
 # 💰 on 한 번 = apply ~10분 + 설치·sync ~10분 + 창 시간. 시간당 ≈ $0.25(+LCU). 예산 게이트가 잔여 크레딧으로 거부할 수 있다.
-# ⚠️ GitHub cron 은 UTC·지연·누락이 있고 레포 활동이 60일 없으면 schedule 이 꺼진다(N-13). 18:00 off 가 늦어도
-#    watchdog 이 임대 만료로 다시 끈다 — 둘 다 GitHub cron 이라 **같은 장애에 함께 걸린다**(B4-21, 계획서 8-B 남은 위험).
+# ⚠️ GitHub cron 은 UTC·지연·누락이 있고 레포 활동이 60일 없으면 schedule 이 꺼진다(N-13). 그래서 보조다.
+#    ⚠️ EventBridge 경로도 **GitHub Actions 장애에는 함께 걸린다**(dispatch 는 받아도 run 이 안 돌 수 있다) —
+#    B4-21 은 cron 지연·60일 비활성만 해소했다. dispatch 실패(401·422 등)는 CloudWatch 알람이 메일로 알린다.
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: "on = 켜기(트래픽은 Fly 그대로) · off = 끄기"
+        description: "on = 켜기(트래픽은 Fly 그대로) · off = 끄기 · watchdog = 임대 없거나 만료일 때만 끄기(EventBridge 매시)"
         type: choice
         # 🔴 따옴표 필수 — 맨 on/off 는 GitHub 의 입력 검증기가 YAML 1.1 불리언(true/false)으로 읽는다(2026-10-22 실측:
         #    `-f action=on` → HTTP 422 "not in the list of allowed values", `-f action=true` 는 통과하고 두 잡 다 skipped).
         #    actionlint(YAML 1.2)는 못 잡는다. 아래 `needs: "on"` 도 같은 이유.
-        options: ["on", "off"]
-        default: "on"
+        options: ["on", "off", "watchdog"]
+        # 🔴 기본값은 "off" — 이 입력을 이제 **AWS 가 기계적으로** 넣는다. EventBridge input 의 키를 잘못 쓰면
+        #    (`inputs` 오타 등) 기본값이 적용되는데, "on" 이면 매시 클러스터를 켜고 6시간 임대까지 써서 watchdog 도 못 끈다
+        #    (Blindspot U1). 실수의 방향을 **켜기 → 끄기** 로 돌린다. 켜기는 Q-3 대로 사람이 명시적으로 고른다.
+        default: "off"
       hours:
-        description: "임대 시간(1~10). 지나면 매시 watchdog 이 끈다. 18:00 KST off 는 이와 무관하게 돈다"
+        description: "임대 시간(1~10, on 에서만). 지나면 매시 watchdog 이 끈다. 18:00 KST off 는 이와 무관하게 돈다"
         type: string
         default: "6"
   schedule:
-    - cron: "0 9 * * *"   # 18:00 KST — 매일(주말 포함) 무조건 off. 꺼져 있으면 no-op(Q-3)
-    - cron: "17 * * * *"  # 매시 watchdog — 클러스터가 있는데 임대가 없거나 만료면 off. 정시는 GitHub 혼잡 시간이라 피했다
+    # 🔴 18:00 off(`0 9 * * *`)는 **지웠다** — EventBridge 가 정시에 부른다. GitHub 판은 늦게 오면 해롭다:
+    #    5시간 늦은 schedule off 는 force 라 **18:00 이후 사람이 정당하게 켠 창을 끈다**(Blindspot U4). watchdog 은 임대를
+    #    존중하므로 늦게 와도 안전하다 → 그것만 보조로 남긴다. ⚠️ infra-ci guard 가 트리거 키 `schedule workflow_dispatch`
+    #    를 요구한다 — 이 줄까지 지우면 guard 도 함께 고쳐야 한다.
+    - cron: "17 * * * *"  # 매시 watchdog(보조) — 클러스터가 있는데 임대가 없거나 만료면 off. 정시는 GitHub 혼잡 시간이라 피했다
 
 # 🔑 그룹 하나 — on·off·watchdog 이 동시에 돌면 같은 state 를 두고 락을 다툰다(B4-11).
 #   ⚠️ GitHub concurrency 는 **대기 중인 실행을 새 실행이 취소한다**(B8-15). 그래서 취소돼도 되게 설계했다:
@@ -37,7 +49,11 @@ on:
 #     · 대기 중 on 이 off·watchdog 에 밀려 취소 → 켜지지 않는다(cancelled 로 보인다). 다시 누르면 된다.
 #     · 🔴 대기 중 **수동 off·18:00 off 가 뒤에 온 watchdog 에 밀려 취소**(QA F-2) → 그 watchdog 은 임대가 유효하면 skip 한다.
 #       명시적 off 가 조용히 사라지는 유일한 경우다. 상한은 같다(임대 만료 + 1h). off 를 눌렀으면 cancelled 가 아닌지 한 번 본다.
+#       ⚠️ watchdog 이 EventBridge 정시 + GitHub 보조로 두 배라 이 경로가 전보다 잦다. 예: on 이 17:57~18:00 에 시작해
+#       18:17 까지 도는 동안 18:00 off 가 대기 → 18:17 watchdog 에 밀려 취소. 그래도 임대 만료 뒤 watchdog 이 끈다.
 #   즉 **"취소된 off" 의 비용 상한 = 임대 시간 + 1시간**이다. 진행 중 실행은 취소하지 않는다(state 꼬임).
+#   ⚠️ 이 상한은 **watchdog 이 매시 실제로 돌 때만** 참이다 — GitHub cron 만 있던 10-22 엔 거짓이었다(10슬롯 중 1개).
+#      EventBridge 경로가 생긴 뒤에야 성립한다.
 concurrency:
   group: eks-window
   cancel-in-progress: false
@@ -100,10 +116,10 @@ jobs:
           echo "KST $(TZ=Asia/Seoul date '+%m-%d %H:%M') · 임대 ${HOURS}h"
           # Q-3 — 켜는 시각이 비용을 정한다. 창 기본안은 12~18 KST
           [ "$H" -ge 12 ] || echo "::warning::12:00 KST 이전 on — 창 기본안(12~18)보다 이르다. 18:00 off 까지 비용이 그만큼 는다"
-          [ "$H" -lt 18 ] || echo "::warning::18:00 KST 이후 on — 18:00 off cron 이 지났으니 임대(${HOURS}h) 만료 후 watchdog 이 끈다"
+          [ "$H" -lt 18 ] || echo "::warning::18:00 KST 이후 on — 18:00 off(EventBridge)가 지났으니 임대(${HOURS}h) 만료 후 watchdog 이 끈다"
           M=$(TZ=Asia/Seoul date +%-M)
           # QA F-3 — on 이 끝나기까지 ~20분: 17:35 이후면 대기 중이던 18:00 off 가 켜자마자 닫는다
-          if [ "$H" -eq 17 ] && [ "$M" -ge 35 ]; then echo "::warning::17:35 이후 on — 켜지는 즈음 18:00 off cron 이 바로 끈다. 18:00 이후에 다시 켜는 편이 낫다"; fi
+          if [ "$H" -eq 17 ] && [ "$M" -ge 35 ]; then echo "::warning::17:35 이후 on — 켜지는 즈음 18:00 off(EventBridge)가 바로 끈다. 18:00 이후에 다시 켜는 편이 낫다"; fi
           # QA F-3 — 09:00 을 가로지르면 EKS core-api 의 09:00 스케줄러(오늘 질문 생성)가 Fly 와 함께 돈다(메일은 EKS 에서 꺼짐 — 9번)
           [ "$H" -ge 9 ] || echo "::warning::09:00 KST 이전 on — 09:00 스케줄러가 Fly·EKS 양쪽에서 돈다(같은 커밋이라 동치로 판단, 9번에서 정리)"
 
@@ -159,11 +175,12 @@ jobs:
   off:
     name: EKS Window / off
     needs: "on"
-    # schedule·수동 off — 그리고 **on 이 임대를 쓴 뒤 실패**하면 같은 실행에서 끈다(8-B 는 트래픽 0 이라 즉시 끄는 게 안전).
+    # schedule·off·watchdog dispatch — 그리고 **on 이 임대를 쓴 뒤 실패**하면 같은 실행에서 끈다(8-B 는 트래픽 0 이라 즉시 끄는 게 안전).
     if: >-
       always() && (
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.action == 'off') ||
+        (github.event_name == 'workflow_dispatch' && inputs.action == 'watchdog') ||
         (github.event_name == 'workflow_dispatch' && inputs.action == 'on' && needs.on.result != 'success' && needs.on.outputs.leased == 'true')
       )
     runs-on: ubuntu-latest
@@ -199,8 +216,9 @@ jobs:
         id: decide
         shell: bash
         env:
-          # 매시 cron 만 watchdog. 18:00 cron·수동 off·on 실패 = force
-          MODE: ${{ github.event_name == 'schedule' && github.event.schedule == '17 * * * *' && 'watchdog' || 'force' }}
+          # watchdog = 매시 cron(보조) 또는 dispatch action=watchdog(EventBridge 매시). off(EventBridge 18:00·수동)·on 실패 = force
+          # 🔴 dispatch watchdog 을 여기 빠뜨리면 force 로 떨어져 **창 중에도 매시 클러스터를 끈다**.
+          MODE: ${{ ((github.event_name == 'schedule' && github.event.schedule == '17 * * * *') || (github.event_name == 'workflow_dispatch' && inputs.action == 'watchdog')) && 'watchdog' || 'force' }}
         run: |
           set -uo pipefail
           OUT=$(bash infra/aws-eks/scripts/prod-window/decide-off.sh "$MODE"); rc=$?
