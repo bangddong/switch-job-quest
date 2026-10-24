@@ -121,6 +121,13 @@ bash infra/aws-eks/scripts/prod-db/watch.sh        # 로컬(자격증명 필요)
 최신 덤프(`.counts` 짝)를 SQL 로 **끝까지 변환한 뒤**, Neon 대기 DB 의 `public` 스키마를 **한 트랜잭션으로 통째 교체**하고 값으로 판정한다
 (변환이 실패하면 대기 DB 를 건드리지 않는다 · 적재가 실패하면 이전 복원본이 남는다 · 옛 스키마 잔여 객체도 지워진다). 헬스 키 `health/standby/<UTC>_secs=_tables=`.
 - 6-C: 브랜치 `standby-rehearsal` 에 손으로 1회. **전환 뒤: 매일 timer**(install 이 `CUTOVER_DONE=1` 일 때만 켠다). 대기 = **전용 브랜치**(📌D-016 7 결정) — `production` 은 전환 시점 사본으로 동결.
+- 🔴 **Neon 콘솔에서 브랜치를 만들 때 "Automatically delete branch after" 체크를 해제한다.** 기본값이 **체크 · 1일**이고
+  삭제는 영구다(엔드포인트째). 2026-10-21 에 만든 `standby-rehearsal` 이 하루 뒤 사라져 10-23 04:40 복원이 실패했다.
+  ⚠️ **오류가 원인을 가린다** — 엔드포인트가 없어도 Neon 은 `password authentication failed` 를 준다(존재하지 않는 `ep-` 로 같은 응답 실측).
+  인증 실패가 나면 비밀번호보다 **브랜치가 콘솔에 있는지** 먼저 본다. (아카이빙은 다르다 — 14일·24h 미접속이면 옮길 뿐, 접속하면 자동 복구)
+- **브랜치를 다시 만들었으면** 호스트(`ep-…`)가 바뀌므로 SSM `neon-standby-url` 을 반드시 갱신한다 — 비밀번호를 같게 넣어도 마찬가지.
+  Connect 창 기본값은 `neondb_owner`/`neondb` 다 — **role 을 `devquest_standby`, DB 를 `standby`** 로 바꿔 넣는다(`neondb_owner` 는 production 에도 쓰기 접속되는 자격증명이다).
+  child 브랜치는 production 의 `default_transaction_read_only = on` 을 물려받으므로 SQL Editor 에서 `SET default_transaction_read_only = off;` 를 먼저 실행한다.
 - prod 좌표: 전환 전엔 `neon-source-url`, 그 뒤엔 비밀이 아닌 SSM **`neon-prod-coords`**(String, `호스트/DB`) — source-url 을 지워도 가드가 산다(B7-8).
 - 판정에 **시퀀스**도 본다 — 소유 시퀀스의 `last_value ≥ max(컬럼)`(B7-24). 행 수만 맞고 setval 이 틀리면 복귀 후 첫 INSERT 가 충돌한다.
 - 🔴 가드: role 이 `devquest_standby`(브랜치에서 **SQL 로** 만든 것) · 접속해서 `neon_superuser` **상속까지** 비소속·superuser 계열 속성 없음 · 대기 엔드포인트 ≠ prod 엔드포인트(대소문자·pooler 정규화) · 대기 DB ≠ prod DB · **대기 자격증명으로 prod 엔드포인트에 붙어 거부되는지 직접 확인**(접속되면 = role 이 prod 에도 있음 → 중단, 거부 사유가 모호해도 중단) · **prod 좌표를 모르면 덮어쓰지 않는다**(SSM `neon-source-url` 과 `NEON_PROD_HOST`·`NEON_PROD_DB` 를 **모두** 대조).

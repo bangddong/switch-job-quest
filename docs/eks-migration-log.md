@@ -5840,4 +5840,18 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` SNS 구독이 pending 이라 이 ALARM 메일은 **발송되지 않았다** — 설계 메모대로(구독 확인 전엔 무음).
 - `[해결]` 사용자 TASK-19 완료(fine-grained PAT → 콘솔 connection 수정 11:15:17 KST · SNS 구독 확인). 11:17 KST watchdog 규칙 → run 39888735075 **created 02:17:10Z(≈10초 뒤)** · `event: workflow_dispatch` · `headBranch: main` · off 잡 success / on 잡 skipped · 로그 `MODE: watchdog` → `[eks-window] watchdog — 클러스터 no · 임대 none` → `모드 watchdog → skip (rc 0)`. 같은 회차 `FailedInvocations` 데이터 없음, 알람 둘 다 `OK`.
 - `[메모]` 비교: 같은 슬롯(`:17`)의 GitHub cron 은 10-22 에 10슬롯 중 1개만 생성됐다 → EventBridge 는 첫 회차부터 10초. ⇒ **TASK-19 게이트 통과 — `on` 해도 된다.** 남은 실측: 18:00 KST off 회차(`MODE: force`, 빈 state destroy).
+- `[해결]` **18:00 off 첫 EventBridge 회차**: run 39928689709 created **09:00:17Z(18:00:17 KST, 17초)** · `workflow_dispatch`·main · `MODE: force` → `act` → `✅ 로드밸런서 0` → `No changes. No objects need to be destroyed.` · `Destroy complete! Resources: 0 destroyed.` → off-verify 전부 ✅ · `꺼짐 확인 · 임대 삭제`. 전날 GitHub cron 같은 슬롯은 5h24m 지연이었다. ⇒ B4-21 두 규칙(off·watchdog) 모두 실측 통과.
 - `[비용]` $0 — 클러스터 0, 위 호출·알람은 무료 한도.
+
+## 2026-10-23 — Neon 콜드 대기 브랜치 자동 삭제 → 백업 감시 실패 → 재생성
+
+- `[막힘]` 16:01 KST `Prod DB Backup Watch`(run 39915133603) 실패 메일: `❌ Neon 대기 복원이 35h 전이 마지막(기준 30h) — 계정이 닫히면 돌아갈 곳이 낡았다`. 나머지 ✅(backup 0h · disk 1% · tables 14 · restore 71h).
+- `[막힘]` EC2 journal: 10-22 19:40:13Z `devquest-db-standby.service` → `psql: error: connection to server at "ep-<id>.ap-southeast-1.aws.neon.tech" … ERROR:  password authentication failed for user 'devquest_standby'` → `❌ Neon 대기 DB 접속 실패(호스트·비번·네트워크)`. 하루 전(10-21 19:39Z)은 같은 단위가 ✅ 11s. SSM `neon-standby-url` 은 10-21 09:59 이후 변경 없음(v2).
+- `[메모]` 사용자: Neon 콘솔에 `production` 브랜치 하나만 보이고 "곧 아카이브" 예고가 떠 있다 — *"자동 아카이빙한 거 아냐? 지운 적 없다"*.
+- `[해결]` 원인 = **아카이빙이 아니라 브랜치 만료(자동 삭제)**. Neon 문서: 콘솔 브랜치 생성 시 *"Automatically delete branch after" is checked by default with 1 day selected* · *"Branch deletion is permanent and cannot be recovered."* 시점이 맞는다 — 10-21 오전 생성 → 19h 뒤 복원 ✅ → 하루가 넘은 다음 회차 ❌. 아카이빙(14일↑·24h 미접속, 데이터 보존·접속 시 자동 복구)은 `production` 에 대한 별개 예고이고 무해하다(동결 사본).
+- `[메모]` ⚠️ **오류가 원인을 가렸다**: 존재하지 않는 가짜 엔드포인트(`ep-bogus-…`)로 접속해도 Neon 은 `password authentication failed for user 'devquest_standby'` 를 준다(로컬 docker psql 실측). "비번 문제"로 읽기 쉽다 → 런북에 "브랜치 존재부터 확인" 추가.
+- `[해결]` 사용자 재생성(자동 삭제 해제) → SSM v3(17:20)은 Connect 창 기본값 `neondb_owner`/`neondb` 로 들어가 있었다(접속 `neondb_owner|neondb|on`, 엔드포인트 ≠ prod) — 대기 가드가 role 불일치로 막았을 상태. 새 브랜치에 `devquest_standby` role·`standby` DB(소유자 devquest_standby)는 정상 생성 확인. v2 비번 + 새 호스트 조합은 인증 실패(새 비번). → 사용자가 v4(17:33)로 수정: `devquest_standby|standby|neon_superuser f|super f`, 엔드포인트 ≠ prod·직접 호스트.
+- `[해결]` 사용자 승인으로 EC2 즉시 실행(SSM): 08:34:57Z `Neon 대기 접속 확인 — … prod 엔드포인트는 이 자격증명을 거부(격리 확인)` → 복원 대상 `devquest-20261023T063409Z.dump` → `✅ Neon 대기 복원 판정 통과 — 11s, 테이블 14개, Flyway 이력 일치` · 헬스 키 `health/standby/20261023T083512Z_secs=11_tables=14`.
+- `[메모]` 🔴 `neondb_owner`(모든 브랜치에 있는 콘솔 role — production 에도 접속) 자격증명이 SSM `neon-standby-url` **이전 버전 v3** 에 남는다(EC2 역할이 읽을 수 있는 경로). 사용자 결정: **비밀번호 재설정 안 함**. production 은 DB 단위 읽기 전용 동결이지만 owner 는 세션에서 풀 수 있다 — 계정 밖 사본의 위험으로 남긴다.
+- `[메모]` 공백: 대기 사본 부재 ≈ 10-22 오전(삭제) ~ 10-23 17:35 KST. 그동안 계정 탈출 경로가 없었다. 감시는 기준 30h 라 삭제 뒤 ~30h 에야 울렸다.
+- `[비용]` $0.
