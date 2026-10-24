@@ -5855,3 +5855,12 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[메모]` 🔴 `neondb_owner`(모든 브랜치에 있는 콘솔 role — production 에도 접속) 자격증명이 SSM `neon-standby-url` **이전 버전 v3** 에 남는다(EC2 역할이 읽을 수 있는 경로). 사용자 결정: **비밀번호 재설정 안 함**. production 은 DB 단위 읽기 전용 동결이지만 owner 는 세션에서 풀 수 있다 — 계정 밖 사본의 위험으로 남긴다.
 - `[메모]` 공백: 대기 사본 부재 ≈ 10-22 오전(삭제) ~ 10-23 17:35 KST. 그동안 계정 탈출 경로가 없었다. 감시는 기준 30h 라 삭제 뒤 ~30h 에야 울렸다.
 - `[비용]` $0.
+
+## 2026-10-24 — 📌D-016 8-C 방식 결정: Cloudflare 프록시 + CNAME 뒤집기
+
+- `[메모]` 밤새 실측: Neon 대기 자동 복원 04:32 KST ✅(`health/standby/20261023T193258Z_secs=11_tables=14`, 새 브랜치 첫 자동 회차) · backup 09:34 KST ✅ · EventBridge 경로 10-23 18:00 이후 dispatch run 21회 전부 success(off 1 + watchdog 20, 누락 0) · 같은 기간 보조 GitHub cron(`:47`) run 5회.
+- `[메모]` 경로 확인(코드): 브라우저 → `quest.dhbang.co.kr`(Cloudflare 프록시 → Vercel) → `fe/vercel.json` rewrite `/api/(.*)` → `https://api.quest.dhbang.co.kr/api/$1`. 즉 api.quest 의 클라이언트는 **Vercel 서버**다. 레이트 리밋 IP 는 `Fly-Client-IP` → `X-Forwarded-For` 첫 값 → remoteAddr(B7-19, 10번 직전).
+- `[결정]` 후보 ②(Cloudflare Origin Rule 로 원본만 바꾸기)는 **무료 플랜 불가** — Cloudflare 문서 표: Free = `Override Host header No · Override SNI No · Override DNS records No · Override destination port Yes`(규칙 10개).
+- `[결정]` 사용자: **③ 프록시 켜고 CNAME 뒤집기**(추천안). api.quest 를 프록시(주황)로 바꾼 뒤 창마다 원본 CNAME 만 `fly.dev` ↔ ALB. 기각 ①(DNS only 뒤집기): TTL 300 + Vercel DNS 캐시(미확인) → 전환·복귀가 분 단위. ③의 대가: 창 밖에도 Fly 앞에 Cloudflare(prod 경로 변경 1회) · Fly 인증서는 `_fly-ownership` TXT(Fly 문서: 프록시 도메인에 권장, HTTP-01 은 Cloudflare 설정에 따라 막힐 수 있음) · ALB 에 api.quest ACM 인증서(①·③ 공통).
+- `[메모]` 다음: TASK-18 토큰(권한 Zone Read · DNS Edit · Zone Settings Read — Origin Rules 권한은 빠짐) → C-0 실측(SSL 모드·Always Use HTTPS·레코드). 단계 C-0~C-4 는 계획서 8번 결정 표.
+- `[비용]` $0.

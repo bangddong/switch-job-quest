@@ -105,10 +105,20 @@ AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS �
 🔴 **이름은 대소문자·숫자까지 정확히** — 허용 목록과 다르면 **에러 없이 빠진다**. 넣었으면 "넣었다"고만(Claude 가 이름만 확인).
 JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).
 
-### TASK-18: Cloudflare API 토큰을 SSM 에 (📌D-016 8-C 착수 때 — 지금은 불필요)
+### TASK-18: Cloudflare API 토큰을 SSM 에 (📌D-016 8-C — **지금**, 브라우저만)
 
-8-C(트래픽 전환) 방식 결정용 실측(8-0 2차)에 필요하다. Cloudflare → My Profile → API Tokens → Create — 존 `dhbang.co.kr` 한정,
-권한 **Zone · DNS · Read** + **Zone · Origin Rules · Edit**(최소) → AWS 콘솔 SSM `/devquest/ops/cloudflare-token`(SecureString).
+8-C 방식 ③(프록시 + CNAME 뒤집기, 2026-10-24 결정)의 실측(C-0)과 창마다 CNAME 교체에 쓴다. Origin Rules 권한은 **필요 없어졌다**(무료 플랜 불가).
+
+1. Cloudflare → My Profile → API Tokens → **Create Token** → Create Custom Token
+   - Token name: `devquest-eks-window-dns`
+   - Permissions: **Zone · Zone · Read** · **Zone · DNS · Edit** · **Zone · Zone Settings · Read**
+   - Zone Resources: **Include · Specific zone · `dhbang.co.kr`**
+   - TTL(만료): 2027-01-15
+   - 🔴 토큰 값을 채팅·레포에 붙이지 않는다
+2. AWS 콘솔(서울) → Parameter Store → Create — `/devquest/ops/cloudflare-token`, **SecureString**, KMS 기본값
+3. "넣었다"고만 — Claude 가 값 출력 없이 읽기 실측(C-0)을 한다
+
+⚠️ 반경: DNS Edit 는 레코드 단위로 못 좁힌다 — **이 존의 모든 레코드**(블로그 `dhbang.co.kr` 포함)를 바꿀 수 있다. 읽는 주체 = main 역할로 도는 워크플로·로컬 관리자(B8-13).
 
 ## 완료된 항목
 
