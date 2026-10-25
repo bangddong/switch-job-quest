@@ -45,6 +45,7 @@ Route 가 무중단·즉시 복귀라 유리하지만 문서 권장과 어긋난
 
 1. 🟡 SPA 처리: `assets.not_found_handling = "single-page-application"` + `/api/*` 는 Worker 가 먼저 받아야 한다(`run_worker_first`) — 설정 키 이름은 V-1 에서 문서로 재확인.
 2. **workers.dev 에서는 GitHub 로그인이 안 된다** — OAuth 앱의 콜백 URL 이 `quest.dhbang.co.kr` 로 등록돼 있다. V-2 스모크는 비로그인 경로 + `/api` 공개 엔드포인트로 한다. 로그인 확인은 V-3 직후.
+2-1. 🔴 **workers.dev 에서는 쓰기 요청(POST/PUT/DELETE)이 BE CORS 에 막힌다 (V-1 QA F-1).** Worker 가 Host 를 `api.quest` 로 바꾸므로 브라우저 `Origin: …workers.dev` 는 BE 기준 교차 출처이고, `CORS_ALLOWED_ORIGINS` 에 없다 → 403. 브라우저는 같은 출처 GET 에는 Origin 을 대개 안 실어서 **GET 은 통과한다.** "같은 출처라 CORS 변경 없음" 은 **prod 도메인에서만** 참이다(Vercel 때도 같은 메커니즘으로 `quest.dhbang.co.kr` 이 허용 목록에 있어서 됐다). ⇒ V-2 = GET 스모크만. **body 중계(POST) 검증은 V-3 직후 첫 스모크 항목**이고 실패 시 즉시 복귀. 대안: V-2 동안 Fly `CORS_ALLOWED_ORIGINS` 에 workers.dev 를 임시 추가 — Fly 재시작이 따르므로 🔴 사용자 결정.
 3. **실제 IP 헤더(B7-19)**: Worker → `api.quest` 요청에서 Fly 가 보는 클라이언트는 Cloudflare 이그레스다(지금 Vercel IP 를 보는 것과 같은 문제). Worker 에서 `X-Forwarded-For` 에 `CF-Connecting-IP` 를 실어 보낼 수는 있지만, BE 는 `Fly-Client-IP` 를 **먼저** 읽는다(`AbstractRateLimitInterceptor`) → BE 수정 없이는 효과가 없다. **V 범위 밖 — B7-19 로 둔다.** (Worker 가 헤더를 싣는 것까지는 V-1 에 넣어도 무해)
 4. 🔴 `CLOUDFLARE_ACCOUNT_ID` 는 레포·`wrangler.toml` 에 적지 않는다 — GitHub secret 으로만.
 5. Vercel 배포 단계는 V-4 까지 지우지 않는다(복귀 경로).
