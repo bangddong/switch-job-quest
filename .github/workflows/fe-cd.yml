@@ -36,3 +36,46 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # Vercel 제거(V-1): Cloudflare Workers 에 병행 배포한다. 지금은 *.workers.dev 만 — prod 도메인은 V-3 에서 전환.
+  # 별도 job 이라 Workers 배포가 실패해도(예: secrets 미등록) 위 Vercel prod 배포는 막히지 않는다.
+  deploy-workers:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fe
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # wrangler 4.152 는 Node >= 22 를 요구한다 (위 Vercel job 의 Node 20 과 별개).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: fe/package-lock.json
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # secrets 가 없으면 조용히 건너뛰지 않고 여기서 실패시킨다 (누락이 보여야 한다).
+      - name: Check Cloudflare secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secret 이 등록되지 않았습니다 (TASK-20)."
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # wranglerVersion 을 생략하면 npm ci 로 설치된 fe 의 wrangler(package.json 에 고정)를 그대로 쓴다.
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: fe
+          command: deploy

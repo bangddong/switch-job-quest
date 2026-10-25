@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && tsc -p worker/tsconfig.json && vite build",
     "preview": "vite preview",
-    "lint": "eslint src",
+    "lint": "eslint src worker",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -26,6 +26,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20261025.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/recharts": "^1.8.29",
@@ -36,6 +37,7 @@
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.57.2",
     "vite": "^6.0.0",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "wrangler": "4.152.0"
   }
 }
