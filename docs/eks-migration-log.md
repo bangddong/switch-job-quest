@@ -5864,3 +5864,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 사용자: **③ 프록시 켜고 CNAME 뒤집기**(추천안). api.quest 를 프록시(주황)로 바꾼 뒤 창마다 원본 CNAME 만 `fly.dev` ↔ ALB. 기각 ①(DNS only 뒤집기): TTL 300 + Vercel DNS 캐시(미확인) → 전환·복귀가 분 단위. ③의 대가: 창 밖에도 Fly 앞에 Cloudflare(prod 경로 변경 1회) · Fly 인증서는 `_fly-ownership` TXT(Fly 문서: 프록시 도메인에 권장, HTTP-01 은 Cloudflare 설정에 따라 막힐 수 있음) · ALB 에 api.quest ACM 인증서(①·③ 공통).
 - `[메모]` 다음: TASK-18 토큰(권한 Zone Read · DNS Edit · Zone Settings Read — Origin Rules 권한은 빠짐) → C-0 실측(SSL 모드·Always Use HTTPS·레코드). 단계 C-0~C-4 는 계획서 8번 결정 표.
 - `[비용]` $0.
+
+## 2026-10-24 — Vercel 제거를 8-C 보다 먼저 (벤더 정리)
+
+- [결정] 사용자 *"서비스가 너무 많이 엮여 있어서 버셀이 하던 걸 클라우드 플레어 하나로"* → FE 를 Cloudflare Workers(정적 자산 + `/api` 중계)로 옮기고 Vercel 을 걷어낸다. **8-C 보다 먼저.** 계획: `docs/superpowers/plans/2026-10-24-vercel-to-cloudflare-workers.md`
+- [메모] 블로그 `dhbang.co.kr` 은 Vercel 무관 — Cloudflare 프록시 → GitHub Pages(`x-github-request-id`). `quest.dhbang.co.kr` 만 Vercel(`x-vercel-id`).
+- [결정] Cloudflare 토큰 **분리**: FE 배포(Workers Scripts·Routes Edit → GitHub secret, TASK-20) / 8-C DNS(DNS Edit → SSM, TASK-18). DNS Edit 가 존 전체(블로그 포함)라 매 FE 배포 secret 에 섞지 않는다.
+- [메모] 기각: Cloudflare Pages — `_redirects` 가 외부 도메인 프록시 불가("You cannot proxy external domains").
