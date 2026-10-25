@@ -30,6 +30,7 @@ hs_err_pid*
 # === Node / Frontend ===
 node_modules/
 dist/
+.wrangler/
 *.local
 .env
 .env.*

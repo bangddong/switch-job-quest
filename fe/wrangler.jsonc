@@ -1,0 +1,19 @@
+{
+  // Vercel 대체용 Cloudflare Worker: 정적 자산(dist/) + /api 중계.
+  // account_id 는 여기에 적지 않는다 — CI 에서 CLOUDFLARE_ACCOUNT_ID 환경변수로만 주입한다.
+  // routes / 커스텀 도메인은 넣지 않는다 (V-3 에서 별도 승인 후 연결). 지금은 *.workers.dev 만.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devquest-fe",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-24",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    "API_ORIGIN": "https://api.quest.dhbang.co.kr"
+  }
+}

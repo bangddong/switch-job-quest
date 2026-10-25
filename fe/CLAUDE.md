@@ -28,6 +28,14 @@
   **지금 테스트를 붙일 대상은 순수 함수·유틸**(정규화, 검증, 변환, 계산)이다.
 - 컴포넌트를 바꿨다면 테스트 대신 `npx tsc --noEmit` + `npm run build`로 검증한다.
 
+## Cloudflare Worker (`fe/worker/`)
+
+- `fe/worker/` = Cloudflare Worker — 정적 자산 서빙 + `/api/*` 중계. 계획서: `docs/superpowers/plans/2026-10-24-vercel-to-cloudflare-workers.md`
+- **별도 tsconfig** (`worker/tsconfig.json`, DOM 없음)이며 `npm run build`에 포함된다. lint 범위는 `src worker`.
+- **`export default` 예외는 `worker/index.ts` 하나뿐** (Workers 모듈 형식). 그 외는 named export 규칙 그대로.
+- 테스트는 vitest `node` 환경이라 **workerd 고유 동작은 검증되지 않는다** — workers.dev 스모크로 확인할 것.
+- ⚠️ **로컬 `wrangler deploy` 금지** — 실배포다. 배포는 `fe-cd.yml`의 `deploy-workers` job만 한다.
+
 ## API 패턴
 
 - `lib/apiClient.ts`: `callAiCheck<T>(endpoint, body, userId)` — fetch + `ApiResponse<T>` 파싱

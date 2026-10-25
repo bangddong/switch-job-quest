@@ -119,6 +119,7 @@ JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).
    - TTL(만료): 2027-01-15
    - 🔴 토큰 값을 채팅·레포에 붙이지 않는다
 2. Cloudflare 대시보드 → 아무 도메인 Overview 오른쪽 아래 **Account ID** 복사
+   - 같은 김에 **Workers & Pages** 메뉴에 한 번 들어가 **workers.dev 서브도메인**이 등록돼 있는지 확인(없으면 등록 화면이 뜬다 — 이름 아무거나). 🟡 미등록이면 CI 첫 배포가 비대화형이라 실패할 수 있다(QA F-3c)
 3. GitHub → `bangddong/switch-job-quest` → Settings → Secrets and variables → Actions → **New repository secret** 두 개
    - `CLOUDFLARE_API_TOKEN` = 1번 토큰
    - `CLOUDFLARE_ACCOUNT_ID` = 2번 값
