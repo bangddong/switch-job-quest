@@ -6,6 +6,17 @@ export interface Env {
 
 const API_PREFIX = '/api/'
 
+// 클라이언트가 위조할 수 있는 IP 헤더 — 업스트림에 중계하지 않는다.
+// BE(AbstractRateLimitInterceptor)는 Fly-Client-IP 를 먼저 믿고, 나머지는 현재 미사용이지만 방어적으로 제거한다.
+// X-Forwarded-For 는 아래에서 CF-Connecting-IP 값으로 다시 쓴다.
+const STRIPPED_CLIENT_IP_HEADERS = [
+  'Fly-Client-IP',
+  'X-Real-IP',
+  'Forwarded',
+  'True-Client-IP',
+  'X-Client-IP',
+] as const
+
 export function isApiPath(pathname: string): boolean {
   return pathname.startsWith(API_PREFIX)
 }
@@ -25,8 +36,9 @@ export function buildUpstreamRequest(request: Request, apiOrigin: string): Reque
   // 원본 Host 를 넘기지 않는다 — fetch 가 업스트림 URL 의 호스트로 채운다.
   headers.delete('Host')
 
-  // BE(AbstractRateLimitInterceptor)가 Fly-Client-IP 를 먼저 믿으므로 클라이언트 값은 제거한다.
-  headers.delete('Fly-Client-IP')
+  for (const name of STRIPPED_CLIENT_IP_HEADERS) {
+    headers.delete(name)
+  }
 
   const clientIp = request.headers.get('CF-Connecting-IP')
   if (clientIp) {

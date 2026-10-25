@@ -113,6 +113,21 @@ describe('handleRequest — /api 중계', () => {
     expect(sentRequest(upstream).headers.get('fly-client-ip')).toBeNull()
   })
 
+  it.each(['X-Real-IP', 'Forwarded', 'True-Client-IP', 'X-Client-IP'])(
+    '클라이언트가 보낸 %s 를 제거한다',
+    async (name) => {
+      const upstream = stubUpstream()
+      await handleRequest(
+        new Request('https://quest.dhbang.co.kr/api/v1/x', {
+          headers: { [name]: '6.6.6.6' },
+        }),
+        makeEnv(),
+      )
+
+      expect(sentRequest(upstream).headers.get(name)).toBeNull()
+    },
+  )
+
   it('X-Forwarded-Proto 는 https, X-Forwarded-Host 는 원래 호스트로 채운다', async () => {
     const upstream = stubUpstream()
     await handleRequest(

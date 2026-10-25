@@ -48,6 +48,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # secrets 가 없으면 조용히 건너뛰지 않고 여기서 실패시킨다 (누락이 보여야 한다). npm ci·build 전에 점검해 빨리 실패한다.
+      - name: Check Cloudflare secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secret 이 등록되지 않았습니다 (TASK-20)."
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       # wrangler 4.152 는 Node >= 22 를 요구한다 (위 Vercel job 의 Node 20 과 별개).
       - uses: actions/setup-node@v6
         with:
@@ -59,17 +70,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      # secrets 가 없으면 조용히 건너뛰지 않고 여기서 실패시킨다 (누락이 보여야 한다).
-      - name: Check Cloudflare secrets
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secret 이 등록되지 않았습니다 (TASK-20)."
-            exit 1
-          fi
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       # wranglerVersion 을 생략하면 npm ci 로 설치된 fe 의 wrangler(package.json 에 고정)를 그대로 쓴다.
       - name: Deploy to Cloudflare Workers
