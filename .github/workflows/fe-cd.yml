@@ -37,7 +37,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-  # Vercel 제거(V-1): Cloudflare Workers 에 병행 배포한다. 지금은 *.workers.dev 만 — prod 도메인은 V-3 에서 전환.
+  # Vercel 제거: Workers 가 quest.dhbang.co.kr/* route 로 prod 를 서빙한다(V-3). 위 Vercel job 은 V-4 까지 복귀 경로로 유지한다.
   # 별도 job 이라 Workers 배포가 실패해도(예: secrets 미등록) 위 Vercel prod 배포는 막히지 않는다.
   deploy-workers:
     runs-on: ubuntu-latest
