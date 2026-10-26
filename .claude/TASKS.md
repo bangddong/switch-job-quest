@@ -105,28 +105,6 @@ AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS �
 🔴 **이름은 대소문자·숫자까지 정확히** — 허용 목록과 다르면 **에러 없이 빠진다**. 넣었으면 "넣었다"고만(Claude 가 이름만 확인).
 JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).
 
-### TASK-20: Cloudflare **Workers 배포** 토큰을 GitHub secrets 에 (Vercel 제거 V-0 — **지금**, 브라우저만)
-
-계획: `docs/superpowers/plans/2026-10-24-vercel-to-cloudflare-workers.md`. 8-C 용 DNS 토큰(TASK-18)과 **분리**한다 — FE 배포 secret 에 존 전체 DNS 권한을 섞지 않으려고.
-
-1. Cloudflare → My Profile → API Tokens → **Create Token** → Create Custom Token
-   - Token name: `devquest-fe-workers-deploy`
-   - Permissions:
-     - **Account · Workers Scripts · Edit**
-     - **Zone · Workers Routes · Edit**
-   - Account Resources: **Include · (본인 계정)**
-   - Zone Resources: **Include · Specific zone · `dhbang.co.kr`**
-   - TTL(만료): 2027-01-15
-   - 🔴 토큰 값을 채팅·레포에 붙이지 않는다
-2. Cloudflare 대시보드 → 아무 도메인 Overview 오른쪽 아래 **Account ID** 복사
-   - 같은 김에 **Workers & Pages** 메뉴에 한 번 들어가 **workers.dev 서브도메인**이 등록돼 있는지 확인(없으면 등록 화면이 뜬다 — 이름 아무거나). 🟡 미등록이면 CI 첫 배포가 비대화형이라 실패할 수 있다(QA F-3c)
-3. GitHub → `bangddong/switch-job-quest` → Settings → Secrets and variables → Actions → **New repository secret** 두 개
-   - `CLOUDFLARE_API_TOKEN` = 1번 토큰
-   - `CLOUDFLARE_ACCOUNT_ID` = 2번 값
-4. "넣었다"고만 — Claude 가 `gh secret list` 로 **이름만** 확인
-
-🟡 wrangler 가 배포 중 권한 부족을 내면(예: User Details Read) 그때 그 권한 하나만 추가한다 — 템플릿 "Edit Cloudflare Workers" 는 KV·R2·Tail 까지 줘서 쓰지 않는다.
-
 ### TASK-18: Cloudflare API 토큰을 SSM 에 (📌D-016 8-C — **8-C 착수 때**, Vercel 제거 뒤. 브라우저만)
 
 8-C 방식 ③(프록시 + CNAME 뒤집기, 2026-10-24 결정)의 실측(C-0)과 창마다 CNAME 교체에 쓴다. Origin Rules 권한은 **필요 없어졌다**(무료 플랜 불가).
@@ -135,7 +113,7 @@ JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).
    - Token name: `devquest-eks-window-dns`
    - Permissions: **Zone · Zone · Read** · **Zone · DNS · Edit** · **Zone · Zone Settings · Read**
    - Zone Resources: **Include · Specific zone · `dhbang.co.kr`**
-   - TTL(만료): 2027-01-15
+   - 토큰 만료: 🔴 **프리셋 버튼(`90일`)을 쓴다 — 날짜를 직접 고르지 마라.** 2026-10-26 실측: 새 UI 에서 날짜(2027-01-15)를 고르자 `not_before` 까지 같은 날로 저장돼 **그날 하루만 유효한 토큰**이 됐다(지금은 무효 → wrangler `Authentication error [10000]`). 만든 뒤 토큰 상세의 `not_before` 가 없거나 오늘인지 확인
    - 🔴 토큰 값을 채팅·레포에 붙이지 않는다
 2. AWS 콘솔(서울) → Parameter Store → Create — `/devquest/ops/cloudflare-token`, **SecureString**, KMS 기본값
 3. "넣었다"고만 — Claude 가 값 출력 없이 읽기 실측(C-0)을 한다

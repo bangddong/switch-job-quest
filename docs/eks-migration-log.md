@@ -5871,3 +5871,28 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] 블로그 `dhbang.co.kr` 은 Vercel 무관 — Cloudflare 프록시 → GitHub Pages(`x-github-request-id`). `quest.dhbang.co.kr` 만 Vercel(`x-vercel-id`).
 - [결정] Cloudflare 토큰 **분리**: FE 배포(Workers Scripts·Routes Edit → GitHub secret, TASK-20) / 8-C DNS(DNS Edit → SSM, TASK-18). DNS Edit 가 존 전체(블로그 포함)라 매 FE 배포 secret 에 섞지 않는다.
 - [메모] 기각: Cloudflare Pages — `_redirects` 가 외부 도메인 프록시 불가("You cannot proxy external domains").
+
+## 2026-10-26 — Vercel 제거 V-0·V-2: Workers 첫 배포 · 토큰 시작일 함정
+
+- [막힘] #501 머지 후 `deploy-workers` 1회차: secrets 미등록 → 점검 step 이 의도대로 실패(`secret 이 등록되지 않았습니다 (TASK-20)`). Vercel `deploy` job 은 독립이라 성공.
+- [막힘] secrets 등록 후 재실행 2회 실패, 원문:
+  ```
+  A request to the Cloudflare API (/accounts/***/workers/services/devquest-fe) failed.
+    Authentication error [code: 10000]
+  A request to the Cloudflare API (/accounts) failed.
+    Invalid access token [code: 9109]
+  ```
+  오진 2회: ① *"Scripts 권한이 존에 묶였다"* ② *"토큰 값 자체가 무효"*. 둘 다 근거 없는 추정이었다 — 사용자가 토큰 상세(페이로드)를 붙여서야 확정됐다.
+- [해결] 원인 🔴 = 토큰 `not_before: 2027-01-14T15:00:00Z` · `expires_on: 2027-01-15T14:59:59Z`. 새 토큰 UI 에서 만료 **날짜를 직접 고르자 시작 시각까지 같은 날로** 저장돼 *"2027-01-15 하루만 유효"* 한 토큰이 됐다(UI 에 시작일 칸은 없다). 프리셋 `90일` 로 바꾸자 재실행 성공. 권한 구성(계정 정책 Workers Scripts + 존 정책 Workers Routes)은 처음부터 맞았다.
+  - 🔑 `last_used_on` 이 찍혀도 유효한 토큰이라는 뜻이 아니다 — 무효 기간의 시도도 기록된다.
+- [메모] 배포: `Read 7 files … Uploaded 6 files` → `devquest-fe.<sub>.workers.dev`.
+- [메모] V-2 GET 스모크(workers.dev vs prod Vercel):
+  ```
+  /                          200 text/html
+  /quest/abc/def             200 text/html          (SPA 폴백)
+  /assets/index-*.css        200 text/css
+  /api/v1/daily-question     vercel 200 278B  ·  worker 200 278B   (공개 GET)
+  /api/v1/quests             vercel 403       ·  worker 403        (인증 필요 — 같은 응답)
+  /api/v1/does-not-exist     응답 헤더 fly-request-id 있음 → Fly 까지 중계됨
+  ```
+  쓰기(POST)는 workers.dev 에서 BE CORS 에 막혀 검증 불가(QA F-1) → V-3 직후 첫 스모크.
