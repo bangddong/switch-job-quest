@@ -1,12 +1,15 @@
 {
   // Vercel 대체용 Cloudflare Worker: 정적 자산(dist/) + /api 중계.
   // account_id 는 여기에 적지 않는다 — CI 에서 CLOUDFLARE_ACCOUNT_ID 환경변수로만 주입한다.
-  // routes / 커스텀 도메인은 넣지 않는다 (V-3 에서 별도 승인 후 연결). 지금은 *.workers.dev 만.
+  // prod 연결(V-3): zone route 로 quest.dhbang.co.kr/* 를 이 Worker 가 가로챈다. 기존 Vercel 행 CNAME(프록시됨)은 그대로 둔다.
+  // 복귀: Cloudflare 대시보드에서 route 삭제(즉시 반영) 후 이 routes 키를 제거하는 PR 을 올린다.
+  // Custom Domain 은 쓰지 않는다 — 기존 CNAME 삭제가 필요해 전환 중 공백이 생기고 복귀도 느리다.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "devquest-fe",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-24",
   "workers_dev": true,
+  "routes": [{ "pattern": "quest.dhbang.co.kr/*", "zone_name": "dhbang.co.kr" }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
