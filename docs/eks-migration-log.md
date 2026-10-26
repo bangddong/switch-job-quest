@@ -5896,3 +5896,20 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   /api/v1/does-not-exist     응답 헤더 fly-request-id 있음 → Fly 까지 중계됨
   ```
   쓰기(POST)는 workers.dev 에서 BE CORS 에 막혀 검증 불가(QA F-1) → V-3 직후 첫 스모크.
+
+## 2026-10-26 — Vercel 제거 V-3: prod FE 를 Worker 로 전환 (#503)
+
+- [결정] 연결 방식 = **zone route** `quest.dhbang.co.kr/*`(zone_name `dhbang.co.kr`). Custom Domain 기각 — 기존 CNAME 삭제가 필요해 전환·복귀 때 공백. route 는 기존 프록시 CNAME(→ Vercel)을 그대로 두고 가로챈다.
+- [막힘→해결, 사전] QA F-1: `zone_name` 은 배포 때 zone 조회 → 토큰에 존 **Zone Read** 필요. 머지 전 사용자가 추가. QA F-2: 대시보드에서 route 만 지우면 다음 `fe/**` 배포가 다시 만든다 → 복귀 순서를 `wrangler.jsonc` 주석에 명시.
+- [메모] 배포 로그: `Deployed devquest-fe triggers … quest.dhbang.co.kr/* (zone name: dhbang.co.kr)`. `--dry-run` 에는 route 가 안 나온다(트리거 게시를 건너뜀).
+- [메모] 전환 직후 스모크(prod 도메인):
+  ```
+  응답 헤더           x-vercel-id 소멸 · server: cloudflare
+  /  /quest/abc/def  /auth/callback      200 text/html 412B
+  /assets/index-*.js 200 1.4MB · *.css 200
+  /api/v1/daily-question   200 278B (전환 전과 동일) · fly-request-id 있음
+  /api/v1/quests           403 (인증 필요 — 전환 전과 동일)
+  POST /api/v1/daily-question/evaluate (Origin=prod, 빈 body) → 400  (CORS 통과, 입력 검증에서 거절)
+  ```
+  사용자 확인: 로그인·AI 평가 정상("잘 되긴 하는데").
+- [메모] 남은 것: V-4(며칠 안정 후 Vercel job·`vercel.json`·`VERCEL_*` secrets·Vercel 프로젝트 삭제). B7-19(BE 가 `Fly-Client-IP` 를 먼저 믿음 → 지금은 Cloudflare 이그레스 IP 가 레이트 리밋 키)는 그대로.
