@@ -5939,6 +5939,7 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   HTTP/1.1 520 <none>          server: cloudflare   (원본 응답 없음)
   ```
   → 죽은 레코드. 삭제는 DNS 쓰기라 사용자 확인 후.
+- [메모] Vercel API 로 재확인(사용자가 토큰 제공, 로컬 키체인 보관 — 레포 무관): `api.request` 는 Vercel 의 어느 프로젝트 도메인·별칭·환경변수에도 **없다**. 대신 Cloudflare 레코드 값이 `devquest-api.fly.dev` 의 현재 IPv4 와 **같다**(04-03 생성) → Vercel 경유용이 아니라 **Fly 직결 레코드**였다(api.quest 이전의 시도로 보임 ⚪). Fly 에 그 이름 인증서가 없어 원본 직결(`--resolve`, SNI `api.request`)도 실패. 사용자 기억("Vercel 이 백단 찌를 때")과 실측이 달랐다. Vercel 의 switch-job-quest 프로젝트 = 도메인 `quest.dhbang.co.kr` 하나 · env `VITE_GITHUB_CLIENT_ID` 하나(V-4 정리 대상 목록).
 - [막힘] 🔴 **방식 ③ 의 C-2 가 그대로는 안 된다.** 위 핸드셰이크 실패의 원인을 보다가 발견:
   ```
   $ openssl s_client -connect quest.dhbang.co.kr:443 ... | openssl x509 -noout -ext subjectAltName
