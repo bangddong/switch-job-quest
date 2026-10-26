@@ -5913,3 +5913,21 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
   사용자 확인: 로그인·AI 평가 정상("잘 되긴 하는데").
 - [메모] 남은 것: V-4(며칠 안정 후 Vercel job·`vercel.json`·`VERCEL_*` secrets·Vercel 프로젝트 삭제). B7-19(BE 가 `Fly-Client-IP` 를 먼저 믿음 → 지금은 Cloudflare 이그레스 IP 가 레이트 리밋 키)는 그대로.
+
+## 2026-10-26 — 📌D-016 8-C C-0: Cloudflare 읽기 실측
+
+- [메모] TASK-18 완료: 계정 API 토큰 `devquest-eks-window-dns`(존 `dhbang.co.kr` · Zone Read · DNS Edit · Zone Settings Read, 만료 프리셋 90일) → SSM `/devquest/ops/cloudflare-token`(SecureString, `alias/aws/ssm`, v1). 값은 출력 없이 파이프로만 사용.
+- [메모] 실측(읽기 전용 API):
+  ```
+  token verify   status active · not_before null · expires_on 2027-01-24T14:59:59Z   (← V-0 의 날짜 함정 회피 확인)
+  zone           dhbang.co.kr · active · plan "Free Website"
+  ssl            full            (strict 아님)
+  always_use_https off · automatic_https_rewrites on · min_tls_version 1.0 · tls_1_3 on
+  api.quest      CNAME devquest-api.fly.dev  dns-only  TTL auto
+  quest          CNAME cname.vercel-dns.com  proxied   (route 가 가로챔 — V-3)
+  dhbang.co.kr / * / www → GitHub Pages, proxied
+  eks.quest ACM 검증 CNAME  dns-only
+  ```
+- [결정] SSL 모드를 존 전체 strict 로 올리지 않는다 — 블로그 원본(GitHub Pages)이 프록시 뒤에서 유효 인증서를 갖는지 미확인. `full` 로도 Fly·ALB(공인 인증서)는 동작한다. api.quest 만 strict 가 필요하면 호스트 단위 규칙으로.
+- [메모] 정체 모를 레코드 `api.request.dhbang.co.kr`(A, 프록시) — 레포에 흔적 없음. 사용자 확인 전 손대지 않는다.
+- [메모] DNS Edit 권한은 쓰기를 안 해봐서 미검증 — 첫 쓰기에서 확인.
