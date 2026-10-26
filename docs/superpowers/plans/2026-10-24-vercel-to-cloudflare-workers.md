@@ -23,7 +23,7 @@ Vercel 이 하는 일은 `fe/vercel.json` 두 줄과 `fe-cd.yml` 의 `npx vercel
 | **V-0** | ✅ 2026-10-26 — Workers 배포 토큰 → GitHub secrets(TASK-20). 계정 API 토큰: 계정 정책 `Workers Scripts` + 존 정책 `Workers Routes`(V-3 용) | 없음 | 사용자(브라우저) |
 | **V-1** | ✅ #501 (2026-10-25) — `fe/` 에 Worker 설정: 정적 자산(`dist/`) + SPA 처리 + `/api/*` 를 `api.quest` 로 중계하는 Worker 코드. `fe-cd.yml` 은 **Vercel 배포를 유지한 채** wrangler 배포를 추가(→ `*.workers.dev`) | 없음 | fe 빌더 → QA → PR |
 | **V-2** | ✅ 2026-10-26 GET 스모크 통과(일지) — workers.dev 에서 스모크: 첫 화면 · 새로고침(SPA 경로) · `/api/v1/...` 응답 · 정적 자산 캐시 헤더 | 없음 | — |
-| **V-3** | `quest.dhbang.co.kr` 을 Worker 로 연결 | 🔴 prod FE 전환 | 🔴 사용자 승인 |
+| **V-3** | ✅ #503 (2026-10-26) — zone route `quest.dhbang.co.kr/*` 로 연결(기존 CNAME 유지, 복귀 = 대시보드 route 삭제 → routes 제거 PR, 그 사이 `fe/**` 머지 금지). 배포 토큰에 Zone Read 필요(`zone_name` 조회) | 🔴 prod FE 전환 | 🔴 사용자 승인 |
 | **V-4** | 며칠 안정 → `fe-cd.yml` 의 Vercel 단계 · `vercel.json` · `VERCEL_*` secrets · Vercel 프로젝트 삭제 | 없음 | 사용자(Vercel 콘솔) |
 
 > 리스크: V-3 에서 Cloudflare Worker 장애 = prod FE 장애. 지금도 Cloudflare 프록시 뒤라 **새로 편입되는 의존은 Workers 런타임 하나**다.
