@@ -20,9 +20,9 @@ Vercel 이 하는 일은 `fe/vercel.json` 두 줄과 `fe-cd.yml` 의 `npx vercel
 
 | 단계 | 내용 | 사용자 영향 | 게이트 |
 |---|---|---|---|
-| **V-0** | Workers 배포 토큰 → GitHub secrets(TASK-20) | 없음 | 사용자(브라우저) |
-| **V-1** | `fe/` 에 Worker 설정: 정적 자산(`dist/`) + SPA 처리 + `/api/*` 를 `api.quest` 로 중계하는 Worker 코드. `fe-cd.yml` 은 **Vercel 배포를 유지한 채** wrangler 배포를 추가(→ `*.workers.dev`) | 없음 | fe 빌더 → QA → PR |
-| **V-2** | workers.dev 에서 스모크: 첫 화면 · 새로고침(SPA 경로) · `/api/v1/...` 응답 · 정적 자산 캐시 헤더 | 없음 | — |
+| **V-0** | ✅ 2026-10-26 — Workers 배포 토큰 → GitHub secrets(TASK-20). 계정 API 토큰: 계정 정책 `Workers Scripts` + 존 정책 `Workers Routes`(V-3 용) | 없음 | 사용자(브라우저) |
+| **V-1** | ✅ #501 (2026-10-25) — `fe/` 에 Worker 설정: 정적 자산(`dist/`) + SPA 처리 + `/api/*` 를 `api.quest` 로 중계하는 Worker 코드. `fe-cd.yml` 은 **Vercel 배포를 유지한 채** wrangler 배포를 추가(→ `*.workers.dev`) | 없음 | fe 빌더 → QA → PR |
+| **V-2** | ✅ 2026-10-26 GET 스모크 통과(일지) — workers.dev 에서 스모크: 첫 화면 · 새로고침(SPA 경로) · `/api/v1/...` 응답 · 정적 자산 캐시 헤더 | 없음 | — |
 | **V-3** | `quest.dhbang.co.kr` 을 Worker 로 연결 | 🔴 prod FE 전환 | 🔴 사용자 승인 |
 | **V-4** | 며칠 안정 → `fe-cd.yml` 의 Vercel 단계 · `vercel.json` · `VERCEL_*` secrets · Vercel 프로젝트 삭제 | 없음 | 사용자(Vercel 콘솔) |
 
