@@ -111,6 +111,7 @@ JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).
 
 `devquest-eks-window-dns` 에 Account · Workers KV Storage · Edit 추가 → SSM 토큰으로 KV 목록 조회 `success: true`(값 미출력).
 권한만 바꿔 토큰 값 불변 🔴 실측(SSM 그대로 동작). FE 배포 토큰에도 같은 권한을 추가(바인딩 배포용, 실효는 머지 후 첫 배포).
+🟡 **남은 확인 (Claude, 사용자 작업 아님)**: 바인딩 PR 머지 후 fe-cd `deploy-workers` success + 로그에 `env.SWITCH … KV Namespace` → FE 배포 토큰 권한 실효. 실패 시 prod 는 이전 Worker 유지, 토큰에 권한 재확인 후 재실행. 결과는 계획서 8-C 행 C-1 표기로.
 ⚠️ 처음엔 FE 배포 토큰에만 넣어서 8-C 토큰은 `10000` 이었다 — **토큰 두 개가 다르다**(V 계획 「토큰을 둘로 나누는 이유」).
 
 ### TASK-10: ACM 인증서 DNS 검증 → **완료 (2026-09-16)**
