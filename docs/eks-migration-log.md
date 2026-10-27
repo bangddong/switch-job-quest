@@ -5949,3 +5949,13 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
   Universal SSL 와일드카드는 **한 단계**만 덮는다. `api.quest.dhbang.co.kr` 은 두 단계 → 프록시를 켜는 순간 엣지가 줄 인증서가 없다 = prod API 장애. `api.request` 가 바로 그 상태로 살아 있는 증거. C-0 은 SSL **모드**(엣지↔원본)만 봤고 **엣지 인증서 범위**(브라우저↔엣지)를 안 봤다 — 검사가 주장보다 헐거웠다. 인증서 팩 API 는 토큰 권한 밖(`9109`)이라 SAN 실측으로 판단.
 - [메모] 대안: ⓐ API 를 한 단계 호스트로 ⓑ 전환 지점을 DNS 대신 Worker `API_ORIGIN` 으로 ⓒ Advanced Certificate Manager $10/월 ⓓ 방식 ①. 사용자 결정 대기 — 계획서 「C-2 차단」 행.
+
+## 2026-10-27 — 📌D-016 8-C 방식 재결정: ③ → ⓑ Worker 스위치
+
+- [결정] 사용자: ⓑ. 갈림길을 DNS(`api.quest`) 가 아니라 **Worker 안**에 둔다. V-3 이후 브라우저의 `/api` 는 전부 `quest.dhbang.co.kr/api/*` → Worker 를 지나므로, Worker 가 요청마다 Cloudflare KV 스위치를 읽어 Fly(`api.quest`) 또는 EKS(`eks.quest`)로 보낸다. 스위치를 쓰는 건 eks-window 뿐.
+- [결정] 스위치 값 = `{target, until}`. `until` 경과·값 없음·읽기 실패 = **Fly**. → off 가 실패해도 임대 만료 시각에 트래픽이 스스로 Fly 로 돌아온다(지금 watchdog 은 클러스터는 끄지만 트래픽을 되돌리는 장치가 아니었다).
+- [결정] 스위치를 Worker 변수(`vars`)로 두지 않는다 — `fe/**` 머지마다 fe-cd 가 재배포하며 값을 되돌린다. KV 는 배포와 독립.
+- [결정] 자동 장애 전환(EKS 실패 → Fly 재시도) 안 넣는다 — POST(AI 평가) 이중 처리 위험. GET 한정은 C-4 이후 재검토.
+- [메모] 옛 C-1(ACM `api.quest`) 이 사라졌다: ALB 는 이미 영속 ACM `eks.quest`(0-bootstrap `learning`)를 쓴다(`k8s/gitops/apps-external/ingress.yaml` `certificate-arn`). 창마다 필요한 DNS 쓰기는 `eks.quest` CNAME → 새 ALB(DNS only, Worker 만 씀) 하나. B8-3 해소.
+- [메모] 전제 실측: Worker 가 같은 존의 DNS only 호스트로 fetch → 지금 prod 가 `api.quest`(DNS only)로 그렇게 돌고 있다. 남은 🟡: KV 전파 ≤ 60s(배수 기준이 TTL 300 → 60s), 토큰 권한 편집 시 값 불변, KV 바인딩 배포에 fe-cd 토큰 권한이 충분한지.
+- [메모] 새 단계: C-1 Worker 스위치(fe PR, 배포 직후 동작 불변) · C-2 eks-window 배선(on: 스모크 → `eks.quest` upsert → KV eks / off: KV fly 먼저 → 배수 → 레코드 삭제) · C-3 트래픽 0 왕복 · C-4 첫 창(🔴). 👤 TASK-21(토큰에 KV Edit).
