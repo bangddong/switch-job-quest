@@ -64,4 +64,48 @@ describe('decideBackend — 안전 기본값은 모두 fly', () => {
     expect(decideBackend(lease(NOW + HOUR), NOW, '   ')).toBe('fly')
     expect(decideBackend(lease(NOW + HOUR), NOW, undefined)).toBe('fly')
   })
+
+  it.each(['eks.quest.dhbang.co.kr', 'http://eks.quest.dhbang.co.kr', 'ftp://eks.quest.dhbang.co.kr', 'not a url', '://'])(
+    'EKS_ORIGIN 이 https URL 이 아니면(%s) fly',
+    (origin) => {
+      expect(decideBackend(lease(NOW + HOUR), NOW, origin)).toBe('fly')
+    },
+  )
+})
+
+describe('decideBackend — until 은 타임존이 있는 ISO 8601 만 받는다', () => {
+  function leaseRaw(until: string): string {
+    return JSON.stringify({ target: 'eks', until })
+  }
+
+  it('Z 형식이면 eks (소수 초 포함)', () => {
+    expect(decideBackend(leaseRaw('2026-10-27T12:00:00Z'), NOW, EKS_ORIGIN)).toBe('eks')
+    expect(decideBackend(leaseRaw('2026-10-27T12:00:00.000Z'), NOW, EKS_ORIGIN)).toBe('eks')
+  })
+
+  it('±HH:MM 오프셋이면 eks 이고 같은 순간으로 판정된다', () => {
+    // 2026-10-27T12:00:00Z == 2026-10-27T21:00:00+09:00 == 2026-10-27T07:00:00-05:00
+    const asKst = leaseRaw('2026-10-27T21:00:00+09:00')
+    const asUtc = leaseRaw('2026-10-27T12:00:00Z')
+    const asUs = leaseRaw('2026-10-27T07:00:00-05:00')
+    expect(decideBackend(asKst, NOW, EKS_ORIGIN)).toBe('eks')
+    expect(decideBackend(asUs, NOW, EKS_ORIGIN)).toBe('eks')
+    // 경계로 같은 순간임을 확인: 12h 창의 끝(NOW+12h = 22:00Z = 07:00+09:00 다음날)
+    expect(decideBackend(leaseRaw('2026-10-27T22:00:00Z'), NOW, EKS_ORIGIN)).toBe('eks')
+    expect(decideBackend(leaseRaw('2026-10-28T07:00:00+09:00'), NOW, EKS_ORIGIN)).toBe('eks')
+    expect(decideBackend(leaseRaw('2026-10-28T07:00:01+09:00'), NOW, EKS_ORIGIN)).toBe('fly')
+    expect(decideBackend(asUtc, NOW, EKS_ORIGIN)).toBe('eks')
+  })
+
+  it('타임존 없는 ISO 는 로컬 시간으로 해석되므로 fly', () => {
+    expect(decideBackend(leaseRaw('2026-10-27T12:00:00'), NOW, EKS_ORIGIN)).toBe('fly')
+    expect(decideBackend(leaseRaw('2026-10-27T12:00:00.000'), NOW, EKS_ORIGIN)).toBe('fly')
+  })
+
+  it('날짜만 있거나 비-ISO 문자열이면 fly', () => {
+    expect(decideBackend(leaseRaw('2026-10-27'), NOW, EKS_ORIGIN)).toBe('fly')
+    expect(decideBackend(leaseRaw('Oct 27 2026 12:00:00 GMT'), NOW, EKS_ORIGIN)).toBe('fly')
+    expect(decideBackend(leaseRaw('Tue, 27 Oct 2026 12:00:00 GMT'), NOW, EKS_ORIGIN)).toBe('fly')
+    expect(decideBackend(leaseRaw('2026/10/27 12:00:00Z'), NOW, EKS_ORIGIN)).toBe('fly')
+  })
 })
