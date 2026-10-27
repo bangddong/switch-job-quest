@@ -34,6 +34,10 @@
 - **별도 tsconfig** (`worker/tsconfig.json`, DOM 없음)이며 `npm run build`에 포함된다. lint 범위는 `src worker`.
 - **`export default` 예외는 `worker/index.ts` 하나뿐** (Workers 모듈 형식). 그 외는 named export 규칙 그대로.
 - 테스트는 vitest `node` 환경이라 **workerd 고유 동작은 검증되지 않는다** — workers.dev 스모크로 확인할 것.
+- **백엔드 스위치 (`worker/switch.ts`)**: `/api/*` 요청마다 KV(`SWITCH` 바인딩, 키 `api-target`, 값 `{"target":"eks","until":"<ISO>"}`)를 읽어 Fly(`API_ORIGIN`) 또는 EKS(`EKS_ORIGIN`)로 중계한다. 값을 쓰는 것은 eks-window 워크플로뿐, Worker 는 읽기만 한다. 정적 자산 경로는 KV 를 읽지 않는다.
+  - **안전 기본값 = Fly**: 바인딩 없음 · 키 없음 · KV 예외 · JSON 오류/객체 아님 · `target !== 'eks'` · `until` 없음/파싱 불가/만료 · `until > 지금+12h` · `EKS_ORIGIN` 비어 있음. 임대 만료 시각에 스스로 Fly 로 돌아오는 dead man's switch.
+  - 응답에 `X-DevQuest-Backend: fly|eks` 헤더(502 포함). **자동 장애 전환 없음** — EKS 실패는 그대로 502 (POST 이중 처리 방지).
+  - `wrangler.jsonc` 에 `kv_namespaces` 가 없으면 항상 Fly. KV 는 `fe/**` 재배포와 독립이라 창 중 머지가 스위치를 되돌리지 않는다.
 - ⚠️ **로컬 `wrangler deploy` 금지** — 실배포다. 배포는 `fe-cd.yml`의 `deploy-workers` job만 한다.
 
 ## API 패턴

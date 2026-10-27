@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { handleRequest, type Env } from './proxy'
 
 const API_ORIGIN = 'https://api.quest.dhbang.co.kr'
+const EKS_ORIGIN = 'https://eks.quest.dhbang.co.kr'
 
 function makeEnv(assetsFetch = vi.fn()): Env {
   return {
     API_ORIGIN,
+    EKS_ORIGIN,
     ASSETS: { fetch: assetsFetch } as unknown as Fetcher,
   }
 }
@@ -210,5 +212,136 @@ describe('handleRequest — 정적 자산', () => {
 
     expect(assetsFetch).toHaveBeenCalledOnce()
     expect(upstream).not.toHaveBeenCalled()
+  })
+})
+
+/** 가짜 KV — get 호출 인자를 검증할 수 있게 vi.fn 으로 만든다. */
+function fakeKv(value: string | null | Error) {
+  const get = vi.fn(async () => {
+    if (value instanceof Error) throw value
+    return value
+  })
+  return { kv: { get } as unknown as KVNamespace, get }
+}
+
+function envWithSwitch(value: string | null | Error, assetsFetch = vi.fn()) {
+  const { kv, get } = fakeKv(value)
+  return { env: { ...makeEnv(assetsFetch), SWITCH: kv }, get }
+}
+
+function activeLease(): string {
+  return JSON.stringify({ target: 'eks', until: new Date(Date.now() + 60 * 60 * 1000).toISOString() })
+}
+
+describe('handleRequest — 백엔드 스위치(Fly/EKS)', () => {
+  const apiRequest = () => new Request('https://quest.dhbang.co.kr/api/v1/x?y=1')
+
+  it('SWITCH 바인딩이 없으면 Fly 로 보내고 X-DevQuest-Backend: fly 를 붙인다', async () => {
+    const upstream = stubUpstream()
+    const res = await handleRequest(apiRequest(), makeEnv())
+
+    expect(sentRequest(upstream).url).toBe('https://api.quest.dhbang.co.kr/api/v1/x?y=1')
+    expect(res.headers.get('X-DevQuest-Backend')).toBe('fly')
+  })
+
+  it('유효한 eks 임대가 있으면 EKS_ORIGIN 으로 보내고 X-DevQuest-Backend: eks 를 붙인다', async () => {
+    const upstream = stubUpstream()
+    const { env, get } = envWithSwitch(activeLease())
+    const res = await handleRequest(apiRequest(), env)
+
+    expect(get).toHaveBeenCalledWith('api-target', { type: 'text' })
+    expect(sentRequest(upstream).url).toBe('https://eks.quest.dhbang.co.kr/api/v1/x?y=1')
+    expect(res.headers.get('X-DevQuest-Backend')).toBe('eks')
+  })
+
+  it('EKS 로 보낼 때도 IP 헤더 정리는 동일하게 적용된다', async () => {
+    const upstream = stubUpstream()
+    const { env } = envWithSwitch(activeLease())
+    await handleRequest(
+      new Request('https://quest.dhbang.co.kr/api/v1/x', {
+        headers: { 'Fly-Client-IP': '6.6.6.6', 'X-Forwarded-For': '9.9.9.9', 'CF-Connecting-IP': '203.0.113.7' },
+      }),
+      env,
+    )
+
+    const sent = sentRequest(upstream)
+    expect(sent.headers.get('Fly-Client-IP')).toBeNull()
+    expect(sent.headers.get('X-Forwarded-For')).toBe('203.0.113.7')
+    expect(sent.headers.get('X-Forwarded-Host')).toBe('quest.dhbang.co.kr')
+  })
+
+  it('업스트림 응답이 immutable 헤더여도 백엔드 헤더를 붙이고 상태·Location 은 보존한다', async () => {
+    stubUpstream(Response.redirect('https://example.com/next', 302))
+    const res = await handleRequest(apiRequest(), makeEnv())
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location')).toBe('https://example.com/next')
+    expect(res.headers.get('X-DevQuest-Backend')).toBe('fly')
+  })
+
+  it('EKS 업스트림 실패 시 502 + eks 헤더이고 Fly 로 재시도하지 않는다', async () => {
+    const upstream = stubUpstream(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { env } = envWithSwitch(activeLease())
+    const res = await handleRequest(apiRequest(), env)
+
+    expect(res.status).toBe(502)
+    expect(res.headers.get('X-DevQuest-Backend')).toBe('eks')
+    expect(upstream).toHaveBeenCalledOnce()
+  })
+
+  it('Fly 업스트림 실패 502 에도 fly 헤더가 붙는다', async () => {
+    stubUpstream(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await handleRequest(apiRequest(), makeEnv())
+
+    expect(res.status).toBe(502)
+    expect(res.headers.get('X-DevQuest-Backend')).toBe('fly')
+  })
+
+  it('정적 자산 경로는 KV 를 읽지 않는다', async () => {
+    stubUpstream()
+    const assetsFetch = vi.fn(async () => new Response('<html></html>'))
+    const { env, get } = envWithSwitch(activeLease(), assetsFetch)
+
+    await handleRequest(new Request('https://quest.dhbang.co.kr/quest/abc'), env)
+
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  describe('안전 기본값 — 아래는 모두 Fly 로 간다', () => {
+    const hour = 60 * 60 * 1000
+    const iso = (offset: number) => new Date(Date.now() + offset).toISOString()
+
+    const cases: Array<[string, string | null | Error]> = [
+      ['키 없음(null)', null],
+      ['KV get 예외', new Error('kv down')],
+      ['JSON 파싱 실패', '{broken'],
+      ['객체 아님', '"eks"'],
+      ['target 이 eks 아님', JSON.stringify({ target: 'fly', until: iso(hour) })],
+      ['until 없음', JSON.stringify({ target: 'eks' })],
+      ['until 파싱 불가', JSON.stringify({ target: 'eks', until: 'soon' })],
+      ['until 만료', JSON.stringify({ target: 'eks', until: iso(-1000) })],
+      ['until 이 12시간 초과', JSON.stringify({ target: 'eks', until: iso(13 * hour) })],
+    ]
+
+    it.each(cases)('%s', async (_name, value) => {
+      const upstream = stubUpstream()
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { env } = envWithSwitch(value)
+      const res = await handleRequest(apiRequest(), env)
+
+      expect(sentRequest(upstream).url).toBe('https://api.quest.dhbang.co.kr/api/v1/x?y=1')
+      expect(res.headers.get('X-DevQuest-Backend')).toBe('fly')
+    })
+
+    it('EKS_ORIGIN 이 비어 있음', async () => {
+      const upstream = stubUpstream()
+      const { env } = envWithSwitch(activeLease())
+      const res = await handleRequest(apiRequest(), { ...env, EKS_ORIGIN: '' })
+
+      expect(sentRequest(upstream).url).toBe('https://api.quest.dhbang.co.kr/api/v1/x?y=1')
+      expect(res.headers.get('X-DevQuest-Backend')).toBe('fly')
+    })
   })
 })
