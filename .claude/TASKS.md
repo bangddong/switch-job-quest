@@ -105,17 +105,14 @@ AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS �
 🔴 **이름은 대소문자·숫자까지 정확히** — 허용 목록과 다르면 **에러 없이 빠진다**. 넣었으면 "넣었다"고만(Claude 가 이름만 확인).
 JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).
 
-### TASK-21: 8-C DNS 토큰에 **KV 쓰기** 권한 추가 (📌D-016 8-C 방식 ⓑ — **C-1 착수 전**)
-
-방식 ⓑ 는 eks-window 가 Cloudflare KV 의 스위치를 바꾼다. 지금 토큰(`devquest-eks-window-dns`, SSM `/devquest/ops/cloudflare-token`)엔
-Zone Read · DNS Edit · Zone Settings Read 만 있다.
-
-1. Cloudflare → Manage Account → **Account API Tokens** → `devquest-eks-window-dns` → **Edit**
-2. 권한 한 줄 추가: **Account · Workers KV Storage · Edit**
-3. 🔴 **만료일은 건드리지 마라** — 날짜 선택기를 누르면 시작일이 같은 날로 잡혀 하루짜리 토큰이 된다(V-0 함정). 기존 값 그대로 저장.
-4. 권한만 바꾸면 토큰 **값은 그대로**라(🟡) SSM 은 손댈 필요 없다. "추가했어"라고만 하면 Claude 가 값 출력 없이 KV 목록 조회로 확인한다.
-
 ## 완료된 항목
+
+### TASK-21: 8-C DNS 토큰에 KV 쓰기 권한 추가 → **완료 (2026-10-27)**
+
+`devquest-eks-window-dns` 에 Account · Workers KV Storage · Edit 추가 → SSM 토큰으로 KV 목록 조회 `success: true`(값 미출력).
+권한만 바꿔 토큰 값 불변 🔴 실측(SSM 그대로 동작). FE 배포 토큰에도 같은 권한을 추가(바인딩 배포용, 실효는 머지 후 첫 배포).
+🟡 **남은 확인 (Claude, 사용자 작업 아님)**: 바인딩 PR 머지 후 fe-cd `deploy-workers` success + 로그에 `env.SWITCH … KV Namespace` → FE 배포 토큰 권한 실효. 실패 시 prod 는 이전 Worker 유지, 토큰에 권한 재확인 후 재실행. 결과는 계획서 8-C 행 C-1 표기로.
+⚠️ 처음엔 FE 배포 토큰에만 넣어서 8-C 토큰은 `10000` 이었다 — **토큰 두 개가 다르다**(V 계획 「토큰을 둘로 나누는 이유」).
 
 ### TASK-10: ACM 인증서 DNS 검증 → **완료 (2026-09-16)**
 
