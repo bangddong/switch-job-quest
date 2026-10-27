@@ -5969,3 +5969,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [막힘] TASK-21 "권한 추가했어" 후 8-C 토큰으로 KV 목록 → `{"code":10000,"message":"Authentication error"}`. 원인: **FE 배포 토큰**에 추가했다(토큰이 둘이다 — FE 배포 = GitHub secret, 8-C = SSM). 8-C 토큰에 다시 추가 → `success: true`.
   - 🔑 권한 편집 후 토큰 **값 불변** 🔴 실측(SSM 손대지 않고 동작). FE 배포 토큰의 KV 권한은 바인딩 배포에 필요할 수 있어(🟡) 그대로 둔다.
 - [메모] KV 네임스페이스 `devquest-backend-switch` 생성(8-C 토큰, 비어 있음) → `fe/wrangler.jsonc` `kv_namespaces: SWITCH` 바인딩 PR. `wrangler deploy --dry-run` 에 `env.SWITCH … KV Namespace` 확인. 키가 없으므로 배포 후에도 동작 불변(Fly).
+- [해결] 바인딩 #508 머지 → fe-cd `deploy-workers` success. 로그 원문:
+  ```
+  env.SWITCH (be53c1e01dca47d3801137649f2a3d7a)          KV Namespace
+  Uploaded devquest-fe (2.57 sec)
+  Deployed devquest-fe triggers (3.78 sec)
+  ```
+  FE 배포 토큰의 KV 권한 🔴 실측 확인. prod: `/api/v1/daily-question` 200 · `/api/v1/quests` 403 · 둘 다 `x-devquest-backend: fly` — 키 없음 = Fly, 동작 불변. **C-1 완료.** 다음 = C-2 eks-window 배선.
