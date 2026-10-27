@@ -5959,3 +5959,13 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] 옛 C-1(ACM `api.quest`) 이 사라졌다: ALB 는 이미 영속 ACM `eks.quest`(0-bootstrap `learning`)를 쓴다(`k8s/gitops/apps-external/ingress.yaml` `certificate-arn`). 창마다 필요한 DNS 쓰기는 `eks.quest` CNAME → 새 ALB(DNS only, Worker 만 씀) 하나. B8-3 해소.
 - [메모] 전제 실측: Worker 가 같은 존의 DNS only 호스트로 fetch → 지금 prod 가 `api.quest`(DNS only)로 그렇게 돌고 있다. 남은 🟡: KV 전파 ≤ 60s(배수 기준이 TTL 300 → 60s), 토큰 권한 편집 시 값 불변, KV 바인딩 배포에 fe-cd 토큰 권한이 충분한지.
 - [메모] 새 단계: C-1 Worker 스위치(fe PR, 배포 직후 동작 불변) · C-2 eks-window 배선(on: 스모크 → `eks.quest` upsert → KV eks / off: KV fly 먼저 → 배수 → 레코드 삭제) · C-3 트래픽 0 왕복 · C-4 첫 창(🔴). 👤 TASK-21(토큰에 KV Edit).
+- [해결] C-1 코드 #507 머지 → fe-cd `deploy-workers`·`deploy` 성공. prod 스모크(KV 바인딩 없음 상태):
+  ```
+  /api/v1/daily-question   200   x-devquest-backend: fly   fly-request-id: …-nrt
+  /api/v1/quests           403   x-devquest-backend: fly   (인증 필요 — api.quest 직접도 403, V-2 와 동일)
+  /                        200
+  ```
+  B8-14(스모크로 백엔드 구분 불가) 해소 — 헤더로 구분된다.
+- [막힘] TASK-21 "권한 추가했어" 후 8-C 토큰으로 KV 목록 → `{"code":10000,"message":"Authentication error"}`. 원인: **FE 배포 토큰**에 추가했다(토큰이 둘이다 — FE 배포 = GitHub secret, 8-C = SSM). 8-C 토큰에 다시 추가 → `success: true`.
+  - 🔑 권한 편집 후 토큰 **값 불변** 🔴 실측(SSM 손대지 않고 동작). FE 배포 토큰의 KV 권한은 바인딩 배포에 필요할 수 있어(🟡) 그대로 둔다.
+- [메모] KV 네임스페이스 `devquest-backend-switch` 생성(8-C 토큰, 비어 있음) → `fe/wrangler.jsonc` `kv_namespaces: SWITCH` 바인딩 PR. `wrangler deploy --dry-run` 에 `env.SWITCH … KV Namespace` 확인. 키가 없으므로 배포 후에도 동작 불변(Fly).
