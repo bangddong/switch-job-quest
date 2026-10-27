@@ -18,7 +18,9 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  // 백엔드 스위치(KV 바인딩 SWITCH)는 네임스페이스 생성 후 kv_namespaces 로 추가한다. 바인딩이 없으면 Worker 는 늘 Fly 로 중계한다.
   "vars": {
-    "API_ORIGIN": "https://api.quest.dhbang.co.kr"
+    "API_ORIGIN": "https://api.quest.dhbang.co.kr",
+    "EKS_ORIGIN": "https://eks.quest.dhbang.co.kr"
   }
 }
