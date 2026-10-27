@@ -24,7 +24,7 @@ Vercel 이 하는 일은 `fe/vercel.json` 두 줄과 `fe-cd.yml` 의 `npx vercel
 | **V-1** | ✅ #501 (2026-10-25) — `fe/` 에 Worker 설정: 정적 자산(`dist/`) + SPA 처리 + `/api/*` 를 `api.quest` 로 중계하는 Worker 코드. `fe-cd.yml` 은 **Vercel 배포를 유지한 채** wrangler 배포를 추가(→ `*.workers.dev`) | 없음 | fe 빌더 → QA → PR |
 | **V-2** | ✅ 2026-10-26 GET 스모크 통과(일지) — workers.dev 에서 스모크: 첫 화면 · 새로고침(SPA 경로) · `/api/v1/...` 응답 · 정적 자산 캐시 헤더 | 없음 | — |
 | **V-3** | ✅ #503 (2026-10-26) — zone route `quest.dhbang.co.kr/*` 로 연결(기존 CNAME 유지, 복귀 = 대시보드 route 삭제 → routes 제거 PR, 그 사이 `fe/**` 머지 금지). 배포 토큰에 Zone Read 필요(`zone_name` 조회) | 🔴 prod FE 전환 | 🔴 사용자 승인 |
-| **V-4** | 며칠 안정 → `fe-cd.yml` 의 Vercel 단계 · `vercel.json` · `VERCEL_*` secrets · Vercel 프로젝트 삭제 | 없음 | 사용자(Vercel 콘솔) |
+| **V-4** | 며칠 안정 → `fe-cd.yml` 의 Vercel 단계 · `vercel.json` · `VERCEL_*` secrets · Vercel 프로젝트 삭제. ⚠️ `quest` 레코드는 지금도 `CNAME cname.vercel-dns.com`(프록시) — route 가 가로채서 원본은 안 쓰이지만, Vercel 프로젝트를 지우면 **끊긴 원본을 가리키는 레코드**가 된다 → 원본 없는 프록시 레코드(`AAAA 100::`, Cloudflare 문서의 Worker 전용 패턴 🟡)로 교체 | 없음 | 사용자(Vercel 콘솔) |
 
 > 리스크: V-3 에서 Cloudflare Worker 장애 = prod FE 장애. 지금도 Cloudflare 프록시 뒤라 **새로 편입되는 의존은 Workers 런타임 하나**다.
 > 전제 조건: Worker 무료 플랜 한도(비자산 요청 = `/api/*` 호출 100k/일, CPU 10ms — `fetch` 대기 시간은 CPU 에 안 잡힘)가 현재 트래픽에 충분하다.

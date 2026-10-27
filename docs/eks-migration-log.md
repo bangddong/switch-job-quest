@@ -5913,3 +5913,39 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
   사용자 확인: 로그인·AI 평가 정상("잘 되긴 하는데").
 - [메모] 남은 것: V-4(며칠 안정 후 Vercel job·`vercel.json`·`VERCEL_*` secrets·Vercel 프로젝트 삭제). B7-19(BE 가 `Fly-Client-IP` 를 먼저 믿음 → 지금은 Cloudflare 이그레스 IP 가 레이트 리밋 키)는 그대로.
+
+## 2026-10-26 — 📌D-016 8-C C-0: Cloudflare 읽기 실측
+
+- [메모] TASK-18 완료: 계정 API 토큰 `devquest-eks-window-dns`(존 `dhbang.co.kr` · Zone Read · DNS Edit · Zone Settings Read, 만료 프리셋 90일) → SSM `/devquest/ops/cloudflare-token`(SecureString, `alias/aws/ssm`, v1). 값은 출력 없이 파이프로만 사용.
+- [메모] 실측(읽기 전용 API):
+  ```
+  token verify   status active · not_before null · expires_on 2027-01-24T14:59:59Z   (← V-0 의 날짜 함정 회피 확인)
+  zone           dhbang.co.kr · active · plan "Free Website"
+  ssl            full            (strict 아님)
+  always_use_https off · automatic_https_rewrites on · min_tls_version 1.0 · tls_1_3 on
+  api.quest      CNAME devquest-api.fly.dev  dns-only  TTL auto
+  quest          CNAME cname.vercel-dns.com  proxied   (route 가 가로챔 — V-3)
+  dhbang.co.kr / * / www → GitHub Pages, proxied
+  eks.quest ACM 검증 CNAME  dns-only
+  ```
+- [결정] SSL 모드를 존 전체 strict 로 올리지 않는다 — 블로그 원본(GitHub Pages)이 프록시 뒤에서 유효 인증서를 갖는지 미확인. `full` 로도 Fly·ALB(공인 인증서)는 동작한다. api.quest 만 strict 가 필요하면 호스트 단위 규칙으로.
+- [메모] 정체 모를 레코드 `api.request.dhbang.co.kr`(A, 프록시) — 레포에 흔적 없음. 사용자 확인 전 손대지 않는다.
+- [메모] DNS Edit 권한은 쓰기를 안 해봐서 미검증 — 첫 쓰기에서 확인.
+- [메모] `api.request` 정체: 사용자 *"Vercel 에서 백단 찌를 때 쓴 도메인"*. 레포엔 없음 — `fe/vercel.json` 은 최초 커밋(`1f6d3b7`, 03-19)부터 `api.quest` 로 rewrite. 레포 밖(Vercel 대시보드 시절 설정)에서 쓰였던 것으로 보인다(⚪).
+  ```
+  $ curl -sSI https://api.request.dhbang.co.kr/
+  curl: (35) ... sslv3 alert handshake failure
+  $ curl -sSI http://api.request.dhbang.co.kr/
+  HTTP/1.1 520 <none>          server: cloudflare   (원본 응답 없음)
+  ```
+  → 죽은 레코드. 삭제는 DNS 쓰기라 사용자 확인 후.
+- [메모] Vercel API 로 재확인(사용자가 토큰 제공, 로컬 키체인 보관 — 레포 무관): `api.request` 는 Vercel 의 어느 프로젝트 도메인·별칭·환경변수에도 **없다**. 대신 Cloudflare 레코드 값이 `devquest-api.fly.dev` 의 현재 IPv4 와 **같다**(04-03 생성) → Vercel 경유용이 아니라 **Fly 직결 레코드**였다(api.quest 이전의 시도로 보임 ⚪). Fly 에 그 이름 인증서가 없어 원본 직결(`--resolve`, SNI `api.request`)도 실패. 사용자 기억("Vercel 이 백단 찌를 때")과 실측이 달랐다. Vercel 의 switch-job-quest 프로젝트 = 도메인 `quest.dhbang.co.kr` 하나 · env `VITE_GITHUB_CLIENT_ID` 하나(V-4 정리 대상 목록).
+- [막힘] 🔴 **방식 ③ 의 C-2 가 그대로는 안 된다.** 위 핸드셰이크 실패의 원인을 보다가 발견:
+  ```
+  $ openssl s_client -connect quest.dhbang.co.kr:443 ... | openssl x509 -noout -ext subjectAltName
+  DNS:*.dhbang.co.kr, DNS:dhbang.co.kr        issuer Let's Encrypt
+  $ openssl s_client -connect api.request.dhbang.co.kr:443 -servername api.request.dhbang.co.kr
+  ... ssl/tls alert handshake failure ... SSL alert number 40
+  ```
+  Universal SSL 와일드카드는 **한 단계**만 덮는다. `api.quest.dhbang.co.kr` 은 두 단계 → 프록시를 켜는 순간 엣지가 줄 인증서가 없다 = prod API 장애. `api.request` 가 바로 그 상태로 살아 있는 증거. C-0 은 SSL **모드**(엣지↔원본)만 봤고 **엣지 인증서 범위**(브라우저↔엣지)를 안 봤다 — 검사가 주장보다 헐거웠다. 인증서 팩 API 는 토큰 권한 밖(`9109`)이라 SAN 실측으로 판단.
+- [메모] 대안: ⓐ API 를 한 단계 호스트로 ⓑ 전환 지점을 DNS 대신 Worker `API_ORIGIN` 으로 ⓒ Advanced Certificate Manager $10/월 ⓓ 방식 ①. 사용자 결정 대기 — 계획서 「C-2 차단」 행.
