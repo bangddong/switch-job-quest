@@ -5991,3 +5991,45 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] Blindspot 부수 발견: 계획서의 *"prod-smoke-daily 는 api.quest 직접이라 늘 Fly"* 는 **틀렸다** — `quest.dhbang.co.kr`(Worker) 경유. 05:23 KST 를 덮는 eks 창이면 EKS 를 스모크한다(기본 창 12~18 엔 해당 없음). 계획서 정정.
 - [메모] 목 회귀 `window-test.sh` ✅ 67 · 🔴 0(목 curl·sleep 추가). shellcheck 경고 0(info 1, 로컬 실행).
 - [해결] QA LOW 3건 수정: F-1 재 on 의 임대 조회 오류 = 표식 유지 · 표식 있으면 만료를 앞당기지 않음 / F-2 DNS 조회를 클라이언트에서도 이름 정확 일치(ACM 검증 CNAME 보호) / F-3 KV 쓰기 실패를 Summary 에 남김. 목 회귀 ✅ 71 · 🔴 0. 실 Cloudflare 읽기 전용 재확인(`api.quest` 1건 CNAME 유지 · `eks.quest` 0건).
+
+## 2026-10-28 — 📌D-016 8-C C-3 트래픽 0 왕복 (첫 Cloudflare 쓰기)
+
+- [비용] 10:48 KST on dispatch(`hours=1 traffic=fly`, #510 머지 커밋 `7b63939`) → 11:07 on 성공 → 11:08 off dispatch → 11:15 off 성공. 클러스터 가동 ≈ 27분 × 3노드 $0.1865/h ≈ **$0.08** + ALB ≈ 11분(LCU 0). 산정치 — 표에는 다음 세션 `budgets describe-budgets` 조회값으로.
+- [해결] on 의 새 단계(`switch-on.sh`, Linux 러너 첫 실행):
+  ```
+  [eks-window] DNS eks.quest.dhbang.co.kr → k8s-default-devquest-3675af8c03-….ap-northeast-2.elb.amazonaws.com (DNS only · TTL 60)
+  [eks-window] ✅ eks.quest.dhbang.co.kr 실제 이름으로 200
+  [eks-window] traffic=fly — 사용자 트래픽은 Fly 그대로
+  ```
+  🔴 실측: **DNS Edit 권한 첫 사용 성공**(C-0 이후 🟡) · Linux 러너의 `-H @<(…)` 토큰 전달 동작 · DoH 확인 통과.
+- [메모] 창 중 맥에서: `https://eks.quest…/api/v1/daily-question` **200** · `dig @1.1.1.1 CNAME` = 새 ALB · `quest.dhbang.co.kr` 헤더 `x-devquest-backend: fly` · 임대 값에 `traffic=eks` 표식 **없음**(의도).
+- [해결] off 의 새 단계(`switch-off.sh`):
+  ```
+  [eks-window] force → act
+  [eks-window] KV 직전 값: 없음
+  [eks-window] ✅ eks.quest.dhbang.co.kr 삭제(또는 없음)
+  ```
+  직전 값이 없어서 240s 배수 대기는 건너뛰었다(의도). 그 뒤 기존 경로(LB 기록 LCU=0 → LB 0 → destroy → off-verify 전부 0 · 임대 삭제).
+- [메모] **C-3 완료 기준 전부 통과**(계획서 C-2 행): 로컬에서 KV 직접 조회 `{"target":"fly"}`(= **KV 쓰기 첫 실측 성공**) · `eks.quest` 레코드 0건 · `api.quest` CNAME 유지 · 클러스터 0 · LB 0 · 임대 없음 · prod 헤더 `fly` · off 로그에 `KV 쓰기 실패` 0회.
+- [메모] 로그 마스킹: on·off 로그에서 32자 이상 hex 문자열은 전부 40자 커밋 SHA(on 11건, off 0건 — 비SHA 0) → Cloudflare 계정·존 ID 노출 없음. 토큰 문자열·`Authorization` 0건.
+- [메모] 미검증으로 남은 것(C-4 몫): 실제 트래픽 전환(KV eks), 240s 배수 대기 경로, 한국 엣지 전파 시간.
+
+## 2026-10-28 — 📌D-016 8-C C-4 첫 트래픽 창 (1차, 12분 만에 중단)
+
+- [비용] on run 40630206388 (13:04 dispatch → 13:21 완료, `hours=2 traffic=eks`) · off run 40632912972 (13:32 → 13:44). 클러스터 ≈40분 ≈ $0.12(추정).
+- [메모] on 로그: `KV → eks (until 2026-10-28T06:04:37Z = 임대 만료)` → `✅ 트래픽 → EKS (… x-devquest-backend: eks)`. 맥(HKG 엣지)에서도 `eks` 200 확인. 노드 메모리 65%·80%·**89%**.
+- [막힘] 13:3x 사용자 보고: **"github 로그인시 404 뜬다"**. 재현(잘못된 code 로 `POST /api/v1/auth/github`):
+  ```
+  quest(→eks)  500 {"code":"DEFAULT","message":"알 수 없는 오류가 발생했습니다"}
+  eks.quest    500 (동일)
+  api.quest    400 {"code":"INVALID_REQUEST"}   ← Fly
+  ```
+  core-api 로그: `Unexpected error: 404 Not Found: "{"error":"Not Found"}"` (ApiControllerAdvice) — GitHub `login/oauth/access_token` 이 **client_id 를 모를 때 404** 를 돌려준다.
+- [해결] 원인 🔴: `2-cluster/secrets.tf` 가 `GITHUB_CLIENT_ID/SECRET` 에 `var.github_client_*_placeholder` 를 넣는다(Secret `core-api-app`, 값 길이 41 — 실제 client id 형식 아님). 설계대로다(학습 클러스터에 prod OAuth 금지). **계획서 「10 직전」 선결 항목 OAuth(B7-16)·JWT 통일(U-11/B7-15) 을 이행하지 않은 채 첫 창을 열었다** — C-4 를 추천하면서 그 목록을 다시 열어보지 않았다(내 실수).
+- [해결] 13:32:38 off dispatch → 13:33:25 prod 헤더 `fly`(HKG). 로그 `KV 직전 값: {"target":"eks",…}` → `배수 대기 240s` → `eks.quest 삭제` → off-verify 전부 0 · 임대 삭제. **240s 배수 경로 첫 실측 성공.**
+- [메모] 사용자 영향 13:21–13:33(≈12분): ① GitHub 로그인 불가 ② 🟡 기존 로그인 사용자 — JWT 키가 Fly·EKS 다르면(U-11, Fly 값은 write-only 라 미확인) 401/403 → FE `apiClient.assertOk` 가 토큰·로컬 진행 캐시를 지우고 reload = 로그아웃. 사용자가 로그인을 다시 시도한 정황과 맞는다. 서버 진행 데이터는 EC2 DB 그대로(같은 DB).
+- [메모] 사용자 브라우저는 **LAX 엣지**(`CF-Ray …-LAX`, fly `-lax`), 맥은 HKG/NRT — 한국 회선이 해외 엣지로 가는 경우. U-7 "한국 엣지" 확인은 실제로는 LAX·HKG 두 곳.
+- [메모] 부수: `/api/actuator/health` Fly 403 vs EKS 404 — 사용자 경로 아님, 미조사.
+- [결정] 다음 트래픽 창은 「10 직전」 선결(OAuth·JWT 통일·B7-19·B7-27 …) 이후. 그전엔 `traffic=fly` 만.
+
+- [해결] **정정 (같은 날 14시경)**: 사용자가 본 404 의 원인은 EKS 가 **아니었다.** prod FE 번들 실측 — `authorize?client_id=undefined`. V-3(10-26) 이후 FE 를 빌드하는 `fe-cd.yml` deploy-workers job 이 `VITE_GITHUB_CLIENT_ID` 를 받지 않는다(Vercel 은 자기 env 로 넣어 줬다) → **10-26 부터 Fly 든 EKS 든 신규 로그인 불가**. GitHub 은 로그인된 브라우저에 모르는 client id 면 404 페이지. core-api 로그에 사용자 시도가 0건이었던 것도 이것으로 설명된다(그 로그 2줄은 내 프로브). EKS OAuth 자리표시(토큰 교환 500)는 **별개의 두 번째 결함**으로 유효. 수정: `fe-cd.yml` 빌드 env + 번들 단언 스텝. 로컬 재현 — env 없음 `client_id=undefined` 1파일 → env 있음 0파일·client id 1파일.

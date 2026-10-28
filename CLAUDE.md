@@ -11,6 +11,7 @@
 | FE 코드 작성/수정 | `fe/CLAUDE.md` (자동 로드) |
 | 커밋 / PR / 브랜치 | `.claude/docs/git-strategy.md` |
 | 배포 / 환경변수 | `.claude/docs/deployment.md` |
+| 🔴 **시크릿 위치·교체·폐기** | `.claude/docs/secrets-map.md` ← 키 유출·만료·서비스 폐기 시 **사본 전부**를 여기서 찾는다 |
 | 멀티 에이전트 운영 | `.claude/docs/agent-workflow.md` |
 | 스킬 작성/수정 | `.claude/docs/skill-guide.md` |
 | 🔴 **블로그 글 작성·발행** | **이 레포가 아니다** → 형제 디렉토리 `study-log` ← 아래 「블로그」 절 **먼저** |
