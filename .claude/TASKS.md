@@ -89,6 +89,20 @@ ECR도 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 간격 반복,
       로그인·DB·RPG XP 연동. **지금은 보류이고, 판단은 사용자 몫이다.**
 
+### TASK-22: EKS 창 로그인 키 2개를 SSM 에 (📌D-016 B7-16, 2026-10-28 — **다음 트래픽 창 전 필수**)
+
+> 🔴 **값을 채팅·레포·PR 에 붙이지 마세요.** Claude 는 SSM 쓰기가 막혀 있어(분류기 — 시크릿 저장소 쓰기) 사용자 작업입니다.
+> 둘 다 **서울 리전(ap-northeast-2)**. 확인은 Claude 가 이름·길이·해시로 합니다.
+
+1. **client id (공개 값)** — AWS 콘솔 → Systems Manager → Parameter Store → *Create parameter*
+   - Name `/devquest/prod/app/GITHUB_CLIENT_ID` · Tier Standard · **Type String** · Value `Iv23li4rMCxm07zyBBmN`
+   - ⚠️ `fe-cd.yml` 의 `VITE_GITHUB_CLIENT_ID` 와 **같아야** 한다 — 다르면 on 이 창을 열지 않는다(`win_login_keys_verdict`)
+2. **EKS 전용 client secret** — GitHub → Settings → Developer settings → **GitHub Apps** → (client id `Iv23li4r…` 앱) → *Generate a new client secret*
+   - 🔴 **기존 secret 을 지우지 마세요** — Fly 가 쓰고 있습니다. 새로 만든 뒤 **기존 것이 목록에 그대로 남는지** 확인. 기존 것이 사라진다는 안내가 나오면 **멈추고** 알려 주세요.
+   - 새 secret 은 이 화면에서 **한 번만** 보입니다 → 바로 Parameter Store *Create parameter*:
+     Name `/devquest/prod/app/GITHUB_CLIENT_SECRET` · Tier Standard · **Type SecureString** · KMS key source *My current account* · KMS Key ID **`alias/aws/ssm`**(기본값) · Value 붙여넣기
+3. 끝나면 *"TASK-22 했어"* — Claude 가 `get-parameters-by-path` 로 이름·타입 확인, 다음 창(traffic=fly)에서 로그 `error=` 로 secret 유효성 확인
+
 ### TASK-17: EKS 창용 **관측** 키를 SSM 에 (📌D-016 — **첫 창(10번) 직전까지**, 급하지 않음)
 
 > ✅ **필수 2개는 끝났다 (2026-10-22)** — `ANTHROPIC_API_KEY`(EKS 전용 새 키) · `JUDGE0_API_KEY`(RapidAPI 앱 키).

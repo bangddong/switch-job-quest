@@ -128,6 +128,18 @@ v(){ ( . "$HERE/common.sh"; win_app_verdict "$1" ); }
 [ "$(v 'Synced Healthy Succeeded OrphanedResourceWarning')" = ok ] && ok "경고 condition 은 막지 않는다" || bad "$(v 'Synced Healthy Succeeded OrphanedResourceWarning')"
 [ "$(v 'OutOfSync Healthy Running SyncError')" = fail ] && ok "SyncError → fail" || bad "$(v 'OutOfSync Healthy Running SyncError')"
 
+echo "── 로그인 키 판정(on.sh — B7-16, C-4 1차: 파드·스모크 통과인데 로그인만 죽었다)"
+lk(){ ( . "$HERE/common.sh"; win_login_keys_verdict "$@" ); }
+[ "$(lk 'SENTRY_DSN,GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET' Iv1 Iv1)" = ok ] && ok "두 키 + client id 일치 → ok" || bad "$(lk 'SENTRY_DSN,GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET' Iv1 Iv1)"
+lk 'SENTRY_DSN,GRAFANA_LOKI_URL' '' Iv1 >/dev/null; [ $? = 1 ] && ok "🔑 다른 키만 있음(예전 판정 '개수 > 0' 은 통과) → 실패" || bad "공허한 통과"
+lk 'GITHUB_CLIENT_ID' Iv1 Iv1 >/dev/null; [ $? = 1 ] && ok "secret 없음 → 실패" || bad "secret 누락 통과"
+lk 'GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET' Iv1 Iv2 >/dev/null; [ $? = 1 ] && ok "client id 가 FE 와 다름 → 실패" || bad "불일치 통과"
+lk 'GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET' '' '' >/dev/null; [ $? = 1 ] && ok "FE 값을 못 읽음(빈 값끼리 같음) → 실패" || bad "빈 값 일치를 통과"
+lk 'XGITHUB_CLIENT_ID,GITHUB_CLIENT_SECRETX' Iv1 Iv1 >/dev/null; [ $? = 1 ] && ok "부분 일치 이름은 키로 안 친다" || bad "부분 일치 통과"
+FE_CID=$( . "$HERE/common.sh"; win_fe_client_id "$HERE/../../../../.github/workflows/fe-cd.yml" )
+[ "$FE_CID" = Iv23li4rMCxm07zyBBmN ] && ok "win_fe_client_id(on.sh·워크플로 공용)가 실제 fe-cd.yml 에서 client id 를 뽑는다" || bad "추출='$FE_CID'"
+grep -q 'win_fe_client_id "$ROOT/.github/workflows/fe-cd.yml"' "$HERE/on.sh" && ok "on.sh 가 같은 함수를 레포 루트 기준으로 부른다" || bad "on.sh 가 추출을 따로 한다"
+
 echo "── off-pre (destroy 전 — LB 0 이 합격)"
 reset 1; MOCK_CLUSTER=yes run off-pre.sh >/dev/null; rc=$?
 a=$(grep -n 'delete application' "$CALLS" | cut -d: -f1 | head -1); i=$(grep -n 'delete ingress' "$CALLS" | cut -d: -f1 | head -1)

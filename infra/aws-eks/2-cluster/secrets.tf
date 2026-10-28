@@ -160,7 +160,8 @@ resource "aws_secretsmanager_secret_version" "db_connection_external" {
 #      learning·prod 2-cluster를 동시에 못 세운다. 상세와 남은 일은
 #      `0-bootstrap/jwt-secret.tf`의 「경계를 무엇이 강제하는가」 절.
 #
-# GitHub OAuth 2개는 **자리표시 값**이다. Stage 2의 목표는 "앱이 완전히 부팅되는가"
+# GitHub OAuth 2개는 **learning(in-cluster) 모드에서만 자리표시 값**이다 — external(prod 창)에선 여기 없고 SSM→ESO 로 온다(B7-16, 아래).
+# 원래 서술: Stage 2의 목표는 "앱이 완전히 부팅되는가"
 # (=/health 200)이지 로그인 e2e가 아니다. 이 값들은 빈 생성만 통과시키면 된다.
 # 실제 로그인 검증이 필요해지면 학습 전용 OAuth App을 새로 발급해 주입한다.
 
@@ -181,12 +182,22 @@ resource "aws_secretsmanager_secret" "app" {
 
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
-  secret_string = jsonencode({
+  # 📌D-016 B7-16 (2026-10-28) — **external(prod 창) 모드에선 GITHUB_* 를 여기 넣지 않는다.**
+  #   prod OAuth 는 SSM `/devquest/prod/app/GITHUB_CLIENT_{ID,SECRET}` → ESO `core-api-runtime` 으로 온다
+  #   (값이 tfstate 를 거치지 않는다). 자리표시를 남겨 두고 runtime 이 envFrom 순서로 덮게 하지 않는 이유:
+  #   ① SSM 키가 빠지면 자리표시가 **조용히 이겨** 파드는 뜨고 로그인만 죽는다(C-4 1차와 같은 형태) — 빼 두면
+  #      `${GITHUB_CLIENT_ID}`(기본값 없음)가 기동을 실패시켜 창이 **닫힌 채로** 실패한다
+  #   ② runtime 허용 목록은 "다른 Secret 을 envFrom 으로 덮지 못하게" 가 존재 이유다(externalsecret-runtime.yaml F-3).
+  #   축이 `environment` 가 아니라 `external_enabled` 인 이유: core-api-runtime 은 apps-external 경로에만 있다.
+  #   삼항은 `tomap` 으로 양쪽 타입을 맞춘다(위 ① `inconsistent types`).
+  secret_string = jsonencode(merge({
     # 🔴 반드시 **자기 환경 키만** 인덱싱한다. 맵 전체를 넘기거나 다른 환경 키를
     #    읽으면 위에서 세운 경계가 무의미해진다.
-    JWT_SECRET           = data.terraform_remote_state.bootstrap.outputs.jwt_secrets[var.environment]
-    GITHUB_CLIENT_ID     = var.github_client_id_placeholder
-    GITHUB_CLIENT_SECRET = var.github_client_secret_placeholder
+    JWT_SECRET = data.terraform_remote_state.bootstrap.outputs.jwt_secrets[var.environment]
+    }, local.external_enabled == 1 ? tomap({}) : tomap({
+      GITHUB_CLIENT_ID     = var.github_client_id_placeholder
+      GITHUB_CLIENT_SECRET = var.github_client_secret_placeholder
+    }), {
 
     # ── 관측(Grafana) 3종은 **의도적으로 넣지 않는다** ──
     #
@@ -211,5 +222,14 @@ resource "aws_secretsmanager_secret_version" "app" {
     #    구버전 이미지는 GRAFANA_API_KEY에 기본값이 없어(`@Value("${GRAFANA_API_KEY}")`)
     #    **부팅 자체가 실패**한다 — `PlaceholderResolutionException`.
     #    다음 세션 전에 `ECR Push` 워크플로를 한 번 돌릴 것. (TASKS.md 등재)
-  })
+  }))
+
+  # 📌D-016 B7-16 — prod OAuth 를 읽는 IAM(irsa-eso.tf)은 `db_mode=external` 축에 걸려 있다. learning 환경이
+  #   external 로 서면 **learning JWT + prod OAuth** 조합이 되어 learning↔prod 경계(jwt-secret.tf)가 깨진다 → 막는다.
+  lifecycle {
+    precondition {
+      condition     = var.db_mode != "external" || var.environment == "prod"
+      error_message = "db_mode=external(prod DB·prod 앱 키·prod OAuth)은 environment=prod 에서만 허용한다(B7-16)."
+    }
+  }
 }

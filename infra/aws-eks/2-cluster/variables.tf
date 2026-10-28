@@ -261,7 +261,8 @@ variable "db_master_username" {
 
 variable "github_client_id_placeholder" {
   description = <<-EOT
-    학습 클러스터용 GitHub OAuth client id **자리표시 값**.
+    학습 클러스터용 GitHub OAuth client id **자리표시 값**. db_mode=external(prod 창)에선 쓰이지 않는다 —
+    prod OAuth 는 SSM → ESO(core-api-runtime)로 온다(B7-16, secrets.tf).
     🔴 prod의 실제 값을 넣지 말 것 — 학습장에 실서비스 신원 발급 권한을 주는 것이 된다.
     Stage 2의 목표는 앱이 완전히 부팅되는지(/health 200)이지 로그인 e2e가 아니다.
   EOT

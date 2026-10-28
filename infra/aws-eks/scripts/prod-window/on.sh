@@ -6,7 +6,7 @@
 # 하는 일 (튜토리얼 5e-1~5e-4 + Stage 4 의 CI 판):
 #   ① 관문: metrics-server APIService Available + `/openapi/v2` protobuf 200(5e-2 — `.12` 503 이면 ArgoCD 가 클러스터를 못 읽는다)
 #   ② LBC(helm, Stage 4 인자 그대로) → ③ ArgoCD(helm, values 파일) → ④ Application(prod: apps-external·리비전 고정·이미지 태그)
-#   ⑤ 판정: Application Synced+Healthy+Succeeded **동시**(win_app_verdict) · ExternalSecret 전부 Ready · `core-api-runtime` 키 수 > 0(8-A QA F-2 — optional envFrom 은
+#   ⑤ 판정: Application Synced+Healthy+Succeeded **동시**(win_app_verdict) · ExternalSecret 전부 Ready · `core-api-runtime` 키 수 > 0 + 로그인 키 값(B7-16 — 부재는 워크플로 사전 점검)(8-A QA F-2 — optional envFrom 은
 #      Secret 이 비어도 파드를 띄운다) · Ingress 주소
 #   ⑥ 스모크: ALB IP 로 `--resolve <학습 도메인>`(DNS 를 안 바꾼다 — 트래픽 0) · daily-question 200+question · core-api 보호 경로 403
 #
@@ -49,6 +49,8 @@ diag() {
       notReady: [.status.resources[]? | select(.status != "Synced" or ((.health.status // "Healthy") != "Healthy"))
                  | {kind, name, status, health: .health.status, msg: ((.health.message // "") | .[0:200])}]}' >&2 || true
   kubectl get pods -A --request-timeout=20s >&2 || true
+  # 기동 실패 원인(예: `${GITHUB_CLIENT_ID}` 미해결 PlaceholderResolutionException)은 파드 로그에만 남는다 — off 가 지우기 전에(QA F-2)
+  kubectl logs deploy/core-api -n default --tail=40 --request-timeout=20s 2>&1 | cut -c1-400 >&2 || true
   kubectl get events -A --sort-by=.lastTimestamp --request-timeout=20s 2>/dev/null | tail -25 >&2 || true
   kubectl top nodes --request-timeout=20s >&2 || true
 }
@@ -149,6 +151,16 @@ KEYS=$(kubectl get secret core-api-runtime -n default -o json | jq -r '.data // 
 [ -n "$KEYS" ] || { wlog "🔴 core-api-runtime 이 비었다 — SSM /devquest/prod/app/ 에 키가 없거나 이름이 허용 목록과 다르다(TASK-17)"; exit 1; }
 wlog "앱 외부 키: $KEYS"
 wsummary "- 앱 외부 키(이름): $KEYS"
+# 로그인 키(B7-16) — 없거나 FE 와 client id 가 다르면 창을 열지 않는다(C-4 1차: 파드·스모크는 통과, 로그인만 죽었다)
+#   ⚠️ 키 **부재**는 여기까지 오지 않는다 — external 모드에선 core-api-app 에 GITHUB_* 가 없어 기동이 먼저 실패하고 ⑤ 가
+#      15분 뒤 멈춘다(QA F-2). 그래서 부재는 워크플로 「로그인 키 사전 점검」(apply **전**, 과금 0)이 잡고, 여기는 값(FE 와 같은가 ·
+#      끝 개행)을 본다. `$(…)` 는 끝 개행을 지우므로 바이트 수로 따로 본다(QA F-5).
+CID=$(kubectl get secret core-api-runtime -n default -o jsonpath='{.data.GITHUB_CLIENT_ID}' 2>/dev/null | base64 -d 2>/dev/null || true)
+CID_BYTES=$(kubectl get secret core-api-runtime -n default -o jsonpath='{.data.GITHUB_CLIENT_ID}' 2>/dev/null | base64 -d 2>/dev/null | wc -c | tr -d ' ' || true)
+[ "${CID_BYTES:-0}" = "${#CID}" ] || { wlog "🔴 로그인 키: GITHUB_CLIENT_ID 끝에 개행이 있다(${CID_BYTES}B ≠ ${#CID}자) — SSM 값을 다시 넣는다"; exit 1; }
+FE_CID=$(win_fe_client_id "$ROOT/.github/workflows/fe-cd.yml")
+LV=$(win_login_keys_verdict "$KEYS" "$CID" "$FE_CID") || { wlog "🔴 로그인 키: $LV"; exit 1; }
+wlog "✅ 로그인 키: GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET 있음"
 kubectl rollout status deploy/core-api -n default --timeout=300s
 # 3노드 메모리(ArgoCD + LBC + 앱) — 첫 실측 대상(계획서 8-B). 실패해도 판정에 쓰지 않는다
 TOP=$(kubectl top nodes --no-headers --request-timeout=20s 2>/dev/null | awk '{printf "%s %s(%s) · ", $1, $4, $5}' || true)

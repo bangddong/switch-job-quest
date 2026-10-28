@@ -64,3 +64,9 @@ c8954f53fdc9206098d3c79fa0d9397505bd3358:docs/eks-migration-log.md:generic-api-k
 #   ⚠️ squash merge 후 main 에는 3443a46 이 없으므로 이 줄은 **사문**이 된다.
 #   ※ 유발 문자열은 인용하지 않는다 — 인용 자체가 재검출된다(64a0bd8 전례).
 3443a46080161ad8e2ef7ee2a572c36c3f0ac61f:docs/eks-migration-log.md:generic-api-key:5814
+
+# infra/aws-eks/scripts/prod-window/tests/window-test.sh (generic-api-key) — 2026-10-28, B7-16 PR
+#   → 로그인 키 판정 테스트의 **환경변수 이름 목록**(쉼표 결합) 이 걸린 것. 값이 아니다(이름만).
+#   → 현재 트리에서는 유발 형태를 제거했다(d16e194 — 다른 키 이름으로 교체). 로컬 `gitleaks detect --source infra --no-git` 로
+#     이 파일 0건 확인. 아래 지문은 **수정 전 커밋 54aa095 의 blob** 하나만 억제한다(히스토리 재작성 대신 지문 등록 — 위 선례).
+54aa095533446d4d311286f296a35daa92710a0c:infra/aws-eks/scripts/prod-window/tests/window-test.sh:generic-api-key:134

@@ -92,7 +92,7 @@ patches:
         value: { name: MAIL_ENABLED, value: "false" }
       # ⑦ 앱 외부 키(externalsecret-runtime.yaml). optional — Secret 이 **없을 때만** 파드를 살린다.
       #    ⚠️ ExternalSecret 동기화가 **실패**하면 wave 1 이 Degraded 라 core-api 자체가 안 만들어진다(QA F-2) —
-      #    "실패해도 뜬다" 가 아니다. 판정은 8-B on 잡(ExternalSecret Ready · 키 개수 > 0).
+      #    "실패해도 뜬다" 가 아니다. 판정은 8-B on 잡(ExternalSecret Ready · 키 개수 > 0 · 로그인 키 값 — B7-16) + 워크플로 사전 점검(로그인 키 부재).
       - op: add
         path: /spec/template/spec/containers/0/envFrom/-
         value: { secretRef: { name: core-api-runtime, optional: true } }

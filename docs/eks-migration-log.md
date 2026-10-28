@@ -6033,3 +6033,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [결정] 다음 트래픽 창은 「10 직전」 선결(OAuth·JWT 통일·B7-19·B7-27 …) 이후. 그전엔 `traffic=fly` 만.
 
 - [해결] **정정 (같은 날 14시경)**: 사용자가 본 404 의 원인은 EKS 가 **아니었다.** prod FE 번들 실측 — `authorize?client_id=undefined`. V-3(10-26) 이후 FE 를 빌드하는 `fe-cd.yml` deploy-workers job 이 `VITE_GITHUB_CLIENT_ID` 를 받지 않는다(Vercel 은 자기 env 로 넣어 줬다) → **10-26 부터 Fly 든 EKS 든 신규 로그인 불가**. GitHub 은 로그인된 브라우저에 모르는 client id 면 404 페이지. core-api 로그에 사용자 시도가 0건이었던 것도 이것으로 설명된다(그 로그 2줄은 내 프로브). EKS OAuth 자리표시(토큰 교환 500)는 **별개의 두 번째 결함**으로 유효. 수정: `fe-cd.yml` 빌드 env + 번들 단언 스텝. 로컬 재현 — env 없음 `client_id=undefined` 1파일 → env 있음 0파일·client id 1파일.
+
+## 2026-10-28 — 📌D-016 B7-16 EKS 창 로그인(OAuth) 배선
+
+- [결정] 사용자 *"추천대로 1번부터"* — 학습 클러스터 prod OAuth 금지 규칙을 **prod 창(external) 한정 해제**. 근거·기각안은 계획서 「B7-16 구현」 행.
+- [메모] Blindspot 12건 중 계획을 바꾼 것: ① 자리표시를 runtime 이 envFrom 순서로 **덮는** 안 기각 — SSM 이 비면 자리표시가 조용히 이겨 C-4 1차와 같은 형태로 죽는다 → external 모드에서 core-api-app 의 GITHUB_* **제거**(기본값 없는 `${GITHUB_CLIENT_ID}` 가 기동을 실패시킨다) ② IAM 이 `db_mode` 축이라 learning+external 이면 learning JWT + prod OAuth → `precondition` ③ on 의 판정 "키 개수 > 0" 이 공허(아무 키 하나면 통과) → `win_login_keys_verdict`.
+- [막힘] SSM `/devquest/prod/app/GITHUB_CLIENT_ID`(공개 값) put-parameter → 분류기 거부 `[Secret-Store Writes]`. 우회하지 않음 → TASK-22 로 사용자 콘솔 작업.
+- [메모] tofu 식 실측(스크래치): external `{"JWT_SECRET":…}` / in-cluster `{GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, JWT_SECRET}` — `tomap` 으로 `inconsistent types` 회피. 2-cluster `tofu validate` Success. 목 회귀 78/0, 변이(secret 검사 제거) → `🔴 secret 누락 통과` 1건 검출.
+- [결정] JWT 통일은 **다음 PR** — 실행 수단(FLY_API_TOKEN 권한 미확인)·PR 역할의 0-bootstrap state 읽기 위험 재판정이 먼저(계획서 「JWT 통일」 행).
