@@ -31,7 +31,7 @@
 
 | 시크릿 | 정본 | 사본 (전부) | 소비자 | 교체 시 주의 |
 |---|---|---|---|---|
-| **Anthropic API 키** | Anthropic 콘솔 | Fly `ANTHROPIC_API_KEY` · SSM `/devquest/prod/app/ANTHROPIC_API_KEY` · GitHub secret `ANTHROPIC_API_KEY` | prod 앱 · EKS 창(ESO) · `claude-batch-fix.yml` | **사본 3곳**. Fly 는 재배포 |
+| **Anthropic API 키 — 사본이 아니라 키 3개** | Anthropic 콘솔 | ① Fly `ANTHROPIC_API_KEY` = prod 키 ② SSM `/devquest/prod/app/ANTHROPIC_API_KEY` = **EKS 전용 별도 키**(TASK-17, 10-22 — 폐기를 쉽게 하려고 분리) ③ GitHub secret `ANTHROPIC_API_KEY` = 계보 🟡 미확인 | ① prod 앱 ② EKS 창(ESO) ③ `claude-batch-fix.yml` | 🔴 **서로 덮어쓰지 마라** — 유출된 그 키만 콘솔에서 폐기·재발급해 그 자리에만 넣는다. 셋을 같은 값으로 맞추면 분리가 무너진다 |
 | **Judge0 (RapidAPI) 키** | RapidAPI 콘솔 | Fly `JUDGE0_API_KEY` · SSM `/devquest/prod/app/JUDGE0_API_KEY` · 로컬 `settings.local.json` | prod 앱 · EKS 창 | 사본 3곳 |
 | **Resend API 키** | Resend 콘솔 | Fly `RESEND_API_KEY` · 로컬 `settings.local.json` | prod 앱(메일) | EKS 엔 없음(창 중 메일 꺼짐, B8-19) |
 | **JWT 서명 키 (Fly)** | **없음** — Fly write-only | Fly `JWT_SECRET` | prod 앱 | 🔴 교체 = **전 사용자 로그아웃**(만료 30일). EKS 와 **다른 값**(U-11) |
@@ -41,7 +41,7 @@
 | **EC2 Postgres 앱 비밀번호** | SSM `/devquest/prod/db/password` (EC2 user-data 가 생성) | Fly `DB_*` · 로컬 `settings.local.json` `PGPASSWORD` · EKS 창(ESO 가 SSM 직접) | prod 앱 · EKS 창 · 백업 | 교체 = EC2 에서 `ALTER ROLE` → SSM → Fly 순. **원격 쓰기는 사용자 명시 지시 필요** |
 | **WireGuard 설정 (Fly↔EC2)** | `fly wireguard create` 산출물(개인키) | SSM `/devquest/prod/db/wireguard-conf` | EC2 DB 부팅 | 제거 = `fly wireguard remove personal devquest-prod-db` |
 | **Neon 대기 DB URL** | Neon 콘솔 | SSM `/devquest/prod/db/neon-standby-url` | 매일 04:30 복원 | `neon-prod-coords` 는 String(비밀 아님). neondb_owner 비밀번호는 **리셋 안 하기로 결정** |
-| **Grafana 3종 · Sentry DSN** | Grafana Cloud · Sentry 콘솔 | Fly `GRAFANA_*` · `SENTRY_DSN` | prod 앱 | EKS 엔 **의도적으로 없음**(관측 오발 사고) |
+| **Grafana 3종 · Sentry DSN** | Grafana Cloud · Sentry 콘솔 | Fly `GRAFANA_*` · `SENTRY_DSN` | prod 앱 | EKS 엔 **현재 없음** — TASK-17 로 10번 직전 SSM `/devquest/prod/app/` 에 추가 예정, ESO 허용 목록(`externalsecret-runtime.yaml`)은 이미 열려 있다. 추가하면 이 행을 고친다. (학습 시절 *자리표시* 를 넣었다가 관측이 오발한 사고 때문에 자리표시는 금지) |
 | **Cloudflare 토큰 — FE 배포** | **없음**(발급 순간만) | GitHub secret `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) | `fe-cd.yml` deploy-workers | 권한: Workers·KV Edit. 만료 프리셋 버튼으로(날짜 선택 = 하루짜리 함정) |
 | **Cloudflare 토큰 — 8-C 창** | **없음** | SSM `/devquest/ops/cloudflare-token` | eks-window(DNS·KV) | 🔴 **만료 2027-01-24**. 만료 뒤 traffic=eks 창 off 는 임대 만료까지 보류 |
 | **GitHub PAT — EventBridge** | **없음** | Secrets Manager `events!connection/devquest-eks-window-github/*` | 18:00 off · 매시 watchdog | 🔴 **만료 2027-01-15**. connection **이름 바꾸지 마라**(PAT 가 placeholder 로 돌아감) |
@@ -81,6 +81,6 @@ aws ssm get-parameter ... --output text | shasum -a 256 | cut -c1-12
 
 ## 5. 알려진 구조 문제 (나중에 할 것)
 
-- **사본 다중화**: Anthropic 3곳·Judge0 3곳 — 교체 누락 위험. 정본 하나(SSM)에서 Fly 로 밀어 넣는 스크립트가 해법 후보.
+- **사본 다중화**: Judge0 3곳(Fly·SSM·로컬 — 같은 값) — 교체 누락 위험. (Anthropic 은 사본이 아니라 키가 셋 — §2) 정본 하나(SSM)에서 Fly 로 밀어 넣는 스크립트가 해법 후보.
 - **정본 없음**: Fly 의 JWT·OAuth secret 은 아무도 다시 못 읽는다 → EKS 와 일치시킬 수 없다(U-11·B7-16). 통일 시 **AWS 쪽을 정본**으로 두고 Fly 로 import.
 - `.claude/docs/deployment.md` 는 Vercel 시절 표 — 이 문서가 정본이다.

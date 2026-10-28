@@ -45,6 +45,8 @@ jobs:
     defaults:
       run:
         working-directory: fe
+    env:
+      VITE_GITHUB_CLIENT_ID: Iv23li4rMCxm07zyBBmN   # 아래 Build 주석 참조 — 값은 여기 한 곳
 
     steps:
       - uses: actions/checkout@v7
@@ -75,8 +77,6 @@ jobs:
       #    값의 정본·교체 절차: `.claude/docs/secrets-map.md`
       - name: Build
         run: npm run build
-        env:
-          VITE_GITHUB_CLIENT_ID: Iv23li4rMCxm07zyBBmN
 
       # 빌드 산출물 단언 — env 가 빠지면 빌드는 성공하고 로그인만 조용히 죽는다(10-26~10-28 실제로 그랬다).
       - name: Assert OAuth client id in bundle
@@ -84,7 +84,8 @@ jobs:
           if grep -rq 'client_id=undefined' dist; then
             echo "::error::번들에 client_id=undefined — VITE_GITHUB_CLIENT_ID 가 빌드에 안 들어갔다"; exit 1
           fi
-          grep -rq 'Iv23li4rMCxm07zyBBmN' dist || { echo "::error::번들에 GitHub client id 가 없다"; exit 1; }
+          [ -n "$VITE_GITHUB_CLIENT_ID" ] || { echo "::error::VITE_GITHUB_CLIENT_ID 가 비었다"; exit 1; }   # 빈 값이면 아래 grep -F "" 가 무조건 통과한다
+          grep -rqF "$VITE_GITHUB_CLIENT_ID" dist || { echo "::error::번들에 GitHub client id 가 없다"; exit 1; }
 
       # wranglerVersion 을 생략하면 npm ci 로 설치된 fe 의 wrangler(package.json 에 고정)를 그대로 쓴다.
       - name: Deploy to Cloudflare Workers

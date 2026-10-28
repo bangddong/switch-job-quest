@@ -18,6 +18,12 @@
 - #239 대응: `MaxRAMPercentage 75→50`, Metaspace 160m, Xss512k — **재발함** (튜닝으로 불충분)
 - `spring.threads.virtual.enabled=true`라서 `server.tomcat.threads.max`는 죽은 설정
 
+## 완료 PR 이력 — 최근 표에서 밀려난 것 (2026-10-28~)
+
+| PR/커밋 | 내용 | 날짜 |
+|---------|------|------|
+| **#503** | **prod FE 를 Vercel → Cloudflare Worker 로 전환**(Vercel 제거 V-3). #501 Worker(정적 자산 + `/api` 중계, 위조 IP 헤더 제거) → workers.dev 스모크 → zone route `quest.dhbang.co.kr/*`. 🔴 복귀 = 대시보드 route 삭제 → routes 제거 PR(그 사이 `fe/**` 머지 금지). 토큰 함정: 만료 **날짜 직접 지정 시 `not_before` 도 같은 날**(하루짜리 토큰) — 프리셋 사용 | 10-26 |
+
 ## 완료 PR 이력 (2026-05-26 ~ 2026-07-13, 2026-07-15 이동)
 
 | PR/커밋 | 내용 | 날짜 |
