@@ -1,6 +1,8 @@
 name: EKS Window
 
-# 📌D-016 순서표 8-B — prod 평일 창의 EKS 를 켜고 끈다. **트래픽 전환은 없다**(8-C 몫): 켜서 ALB 를 직접 찔러 보고 끈다.
+# 📌D-016 순서표 8-B — prod 평일 창의 EKS 를 켜고 끈다. 8-C C-2 — 입력 traffic 으로 트래픽 전환(Worker KV 스위치, 방식 ⓑ).
+#   traffic=fly(기본): eks.quest → ALB 만 만들고 사용자 트래픽은 Fly · traffic=eks: prod `/api` 를 임대 만료까지 EKS 로.
+#   off 는 언제나 **트래픽을 먼저 Fly 로** 돌리고(배수 240s) 나서 ALB·클러스터를 지운다(switch-off.sh).
 #   Q-3(2026-10-16): 켜기 = **수동만**(이 화면의 Run workflow 또는 `gh workflow run eks-window.yml -f action=on`)
 #                    끄기 = 18:00 KST 자동 + 수동 off 언제든
 #   + 매시 watchdog = CI 클러스터의 dead man's switch(B4-1). 로컬 리퍼는 맥이 깨어 있을 때만 돌고 CI·원격 클러스터를 못 본다.
@@ -21,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "on = 켜기(트래픽은 Fly 그대로) · off = 끄기 · watchdog = 임대 없거나 만료일 때만 끄기(EventBridge 매시)"
+        description: "on = 켜기(트래픽은 traffic 입력대로) · off = 끄기(트래픽 Fly 복귀 먼저) · watchdog = 임대 없거나 만료일 때만 끄기(EventBridge 매시)"
         type: choice
         # 🔴 따옴표 필수 — 맨 on/off 는 GitHub 의 입력 검증기가 YAML 1.1 불리언(true/false)으로 읽는다(2026-10-22 실측:
         #    `-f action=on` → HTTP 422 "not in the list of allowed values", `-f action=true` 는 통과하고 두 잡 다 skipped).
@@ -35,6 +37,14 @@ on:
         description: "임대 시간(1~10, on 에서만). 지나면 매시 watchdog 이 끈다. 18:00 KST off 는 이와 무관하게 돈다"
         type: string
         default: "6"
+      # 📌D-016 8-C C-2 — on 에서만 쓴다. fly = eks.quest 레코드만 만들고 사용자 트래픽은 Fly 그대로(C-3 트래픽 0 왕복).
+      #   eks = Worker KV 스위치를 켜 prod `/api` 를 EKS 로(until = 임대 만료). 🔴 첫 eks 창(C-4)은 사용자 승인.
+      #   🔴 기본값은 "fly" — EventBridge 는 off·watchdog 만 부르고 이 키를 안 넣는다. 실수의 방향을 "안 옮김" 으로.
+      traffic:
+        description: "on 에서만 — fly = 트래픽 Fly 유지(EKS 는 eks.quest 로만) · eks = prod /api 를 EKS 로(임대 만료까지)"
+        type: choice
+        options: ["fly", "eks"]
+        default: "fly"
   schedule:
     # 🔴 18:00 off(`0 9 * * *`)는 **지웠다** — EventBridge 가 정시에 부른다. GitHub 판은 늦게 오면 해롭다:
     #    5시간 늦은 schedule off 는 force 라 **18:00 이후 사람이 정당하게 켠 창을 끈다**(Blindspot U4). watchdog 은 임대를
@@ -166,7 +176,7 @@ jobs:
           tofu apply -auto-approve -input=false -no-color -lock-timeout=10m 2>&1 \
             | sed -u "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"
 
-      - name: 설치 · sync · 스모크 (트래픽 전환 없음)
+      - name: 설치 · sync · 스모크 (ALB 직접 — 트래픽 전환은 다음 단계)
         shell: bash
         run: |
           set -euo pipefail
@@ -174,10 +184,22 @@ jobs:
             | sed -u "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"
           if [ -f "$GITHUB_STEP_SUMMARY" ]; then sed -i "s/${AWS_ACCOUNT_ID}/<account>/g" "$GITHUB_STEP_SUMMARY"; fi
 
+      # 📌D-016 8-C C-2 — eks.quest → ALB(DNS only) · traffic=eks 면 Worker KV 스위치. 실패 = off 잡이 KV 를 먼저 fly 로 되돌린다.
+      #   토큰·계정·존 ID 는 스크립트가 SSM·API 로 얻고 ::add-mask:: 한다(cf.sh) — 그래서 sed 파이프 **앞**에서 stdout 이 러너에 닿아야 한다.
+      - name: eks.quest DNS · 트래픽 스위치 (traffic=${{ inputs.traffic }})
+        shell: bash
+        env:
+          TRAFFIC: ${{ inputs.traffic }}
+        run: |
+          set -euo pipefail
+          bash infra/aws-eks/scripts/prod-window/switch-on.sh "$TRAFFIC" 2>&1 \
+            | sed -u "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"
+
   off:
     name: EKS Window / off
     needs: "on"
-    # schedule·off·watchdog dispatch — 그리고 **on 이 임대를 쓴 뒤 실패**하면 같은 실행에서 끈다(8-B 는 트래픽 0 이라 즉시 끄는 게 안전).
+    # schedule·off·watchdog dispatch — 그리고 **on 이 임대를 쓴 뒤 실패**하면 같은 실행에서 끈다. traffic=eks 에서 스위치 확인이 실패해도
+    #   같다 — off 의 첫 단계(switch-off)가 KV 를 fly 로 되돌리고 배수한 뒤 끈다.
     if: >-
       always() && (
         github.event_name == 'schedule' ||
@@ -227,6 +249,16 @@ jobs:
           echo "모드 $MODE → ${OUT:-없음} (rc $rc)"
           echo "act=$([ "$OUT" = act ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           exit $rc
+
+      # 📌D-016 8-C C-2 — **맨 먼저** 트래픽을 Fly 로(KV) → 직전이 eks 면 배수 240s → eks.quest 삭제. 그 뒤에야 ALB 를 지운다.
+      #   🔴 임대 만료 표시보다 **앞** — Cloudflare 실패 시 폴백이 원래 임대(만료 시각·traffic=eks 표식)를 읽어야 한다.
+      #   rc≠0 = destroy 보류(traffic=eks 창이고 임대 유효 — Worker 가 아직 EKS 로 보낼 수 있다). 상한 = 임대 만료 + 1h.
+      - name: 트래픽 Fly 복귀 · eks.quest 삭제
+        if: steps.decide.outputs.act == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash infra/aws-eks/scripts/prod-window/switch-off.sh 2>&1 | sed -u "s/${AWS_ACCOUNT_ID:-__unset__}/<account>/g"
 
       # off 착수 = 임대 즉시 만료 — 이 실행이 중간에 죽어도 다음 watchdog 이 바로 다시 끈다(common.sh win_lease_expire)
       - name: 임대 만료 표시

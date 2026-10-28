@@ -3,15 +3,33 @@
 > 결정·순서·남은 위험은 계획서 `docs/superpowers/plans/2026-10-16-prod-eks-weekday-window.md` 「8번」이 소유한다.
 > 이 문서는 **어떻게 쓰나**만 적는다.
 
-## 지금 할 수 있는 것 (8-B — 트래픽 전환 없음)
+## 지금 할 수 있는 것 (8-B + 8-C C-2)
 
-켜면 EKS 가 prod DB(EC2)·prod 키로 뜨고 ALB 까지 생기지만 **DNS 는 그대로 Fly 를 가리킨다.** 사용자 영향은 0 이고, 드는 것은 EKS 비용뿐이다.
+켜면 EKS 가 prod DB(EC2)·prod 키로 뜨고 ALB 와 `eks.quest.dhbang.co.kr`(DNS only) 이 생긴다. **사용자 트래픽은 입력 `traffic` 이 정한다.**
 
 | 하고 싶은 것 | 방법 (원격에서 된다 — 로컬 셸 불필요) |
 |---|---|
-| 켜기 | GitHub → Actions → **EKS Window** → Run workflow → `action=on`, `hours=6` · 또는 `gh workflow run eks-window.yml -f action=on -f hours=6` |
-| 끄기 | 같은 화면에서 `action=off` · 또는 기다리면 **18:00 KST** 에 자동 |
-| 지금 켜져 있나 | `aws eks list-clusters --region ap-northeast-2` · 임대: `aws ssm get-parameter --name /devquest/ops/eks-window/lease --region ap-northeast-2 --query Parameter.Value --output text` |
+| 켜기 — 트래픽 Fly 유지 | Actions → **EKS Window** → `action=on`, `hours=6`, `traffic=fly`(기본) · `gh workflow run eks-window.yml -f action=on -f hours=6` |
+| 🔴 켜기 — prod `/api` 를 EKS 로 | 같은 화면에서 `traffic=eks` · `… -f traffic=eks`. 임대 만료 시각까지 EKS, 지나면 Worker 가 스스로 Fly |
+| 끄기 | `action=off` · 또는 **18:00 KST** 자동. 언제나 **트래픽 Fly 복귀 → 배수 240s → ALB·클러스터 삭제** 순 |
+| 지금 어디로 가나 | `curl -sI https://quest.dhbang.co.kr/api/v1/daily-question \| grep -i x-devquest-backend` → `fly` / `eks` |
+| 지금 켜져 있나 | `aws eks list-clusters --region ap-northeast-2` · 임대: `aws ssm get-parameter --name /devquest/ops/eks-window/lease --region ap-northeast-2 --query Parameter.Value --output text` (끝에 ` traffic=eks` 면 트래픽 창) |
+
+### 트래픽 스위치 (방식 ⓑ — 계획서 8-C)
+
+- 갈림길은 **Worker** 다. Worker 가 요청마다 Cloudflare KV `devquest-backend-switch` 의 `api-target` 을 읽는다.
+  `{"target":"eks","until":<ISO>}` 이고 until 이 미래면 EKS(`eks.quest`), 그 밖은 전부 Fly.
+- 그 값을 쓰는 것은 **이 워크플로뿐**이다(`switch-on.sh`·`switch-off.sh`, 토큰 SSM `/devquest/ops/cloudflare-token`).
+- `until` = 임대 만료 — **off 가 실패해도 그 시각에 트래픽은 Fly 로 돌아온다.** 클러스터는 다음 watchdog 이 끈다.
+- 수동 긴급 복귀(대시보드): Cloudflare → Workers KV → `devquest-backend-switch` → `api-target` 삭제 또는 `{"target":"fly"}`. 전파 ≤ 60s.
+
+| 실패 | 동작 |
+|---|---|
+| on — eks.quest·스위치 확인 실패 | 같은 실행의 off 가 KV 를 fly 로 되돌리고 끈다 |
+| off — Cloudflare 불통 + 임대 유효 + traffic=eks 창 | **destroy 보류**(빨강). 임대 만료 뒤 Worker 는 Fly, watchdog 이 끈다 — 상한 = 임대 + 1h |
+| off — Cloudflare 불통 + 그 밖(traffic=fly 창·임대 만료·없음) | 경고 후 진행. `eks.quest` 가 죽은 ALB 를 가리키며 남을 수 있다(무해 — 다음 on 이 덮어씀) |
+
+⚠️ Cloudflare 토큰 만료 **2027-01-24**. ⚠️ 러너의 확인은 러너가 닿는 엣지 기준이다(한국 엣지는 수십 초 늦을 수 있다).
 
 ## 무엇이 끄나 — 세 겹
 
@@ -72,10 +90,13 @@ aws ssm put-parameter --region ap-northeast-2 --name /devquest/ops/eks-window/le
 | `common.sh` | 클러스터 존재 · 임대 읽기/쓰기/만료/삭제 · LB 수 |
 | `budget-gate.sh` | 예산 게이트 (`aws freetier` — 무료) |
 | `pick-image-tag.sh` | 이미지 태그 = 마지막 성공 be-cd 커밋(8-A) |
-| `on.sh` | apply 뒤 — 관문 · LBC · ArgoCD · Application · 판정 · 스모크 |
+| `on.sh` | apply 뒤 — 관문 · LBC · ArgoCD · Application · 판정 · 스모크(ALB 직접) |
+| `cf.sh` | Cloudflare API — 토큰·계정·존·KV 조회(add-mask) · KV 읽기/쓰기 · `eks.quest` upsert/삭제 · DoH |
+| `switch-on.sh` | on 마지막 — `eks.quest` → ALB · 실제 이름 200 · traffic=eks 면 임대 표식 → KV eks → 공개 URL 헤더 확인 |
+| `switch-off.sh` | off 맨 앞 — KV fly → (직전 eks 면) 배수 240s → `eks.quest` 삭제 · Cloudflare 불통 폴백 |
 | `decide-off.sh` | 끌지 판정(force/watchdog 표) |
 | `off-pre.sh` | destroy 전 — LB 기록(LCU) · Application → Ingress → LB 0 |
 | `off-verify.sh` | destroy 후 — AWS 로 꺼짐 판정 · LBC SG 정리 · 임대 삭제 |
-| `tests/window-test.sh` | 목 회귀(39건, $0). `tests/pick-image-tag-test.sh`(9건) |
+| `tests/window-test.sh` | 목 회귀(71건, $0 — 목 aws·kubectl·curl). `tests/pick-image-tag-test.sh`(9건) |
 
 🔴 이 폴더의 스크립트는 `tofu apply`/`destroy` 를 부르지 않는다 — 워크플로 단계에만 둔다(Infra CI guard 가 워크플로만 읽는다).
