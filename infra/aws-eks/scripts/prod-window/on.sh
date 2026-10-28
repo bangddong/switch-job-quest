@@ -190,4 +190,4 @@ jq -e '(.data.question // "") | length > 0' /tmp/eks-window-smoke.json >/dev/nul
 #   403 인 이유: SecurityConfig 에 authenticationEntryPoint 가 없어 기본(Http403ForbiddenEntryPoint)이다.
 #   Fly prod 실측(2026-10-22): `curl https://api.quest.dhbang.co.kr/api/v1/progress` → 403. 같은 이미지라 같아야 한다.
 smoke /api/v1/progress 403
-wlog "✅ on 완료 — 트래픽은 여전히 Fly 다(8-B 는 DNS 를 바꾸지 않는다)"
+wlog "✅ on 완료(ALB 직접 스모크) — 트래픽 전환은 다음 단계 switch-on.sh(traffic 입력)"
