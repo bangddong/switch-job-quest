@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { fetchTechInterviewQuestion, evaluateTechInterview } from '@/lib/apiClient'
+import { RateLimitError } from '@/lib/rateLimit'
 import type { TechInterviewResult } from '@/types/api.types'
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 
@@ -23,8 +24,8 @@ export function TechInterviewPage() {
       const data = await fetchTechInterviewQuestion(techStack)
       setQuestions(data.questions)
       setAnswers(data.questions.map(() => ''))
-    } catch {
-      setError('질문을 불러오는 데 실패했습니다. 다시 시도해주세요.')
+    } catch (e) {
+      setError(e instanceof RateLimitError ? e.message : '질문을 불러오는 데 실패했습니다. 다시 시도해주세요.')
     } finally {
       setLoading(false)
     }
@@ -44,8 +45,8 @@ export function TechInterviewPage() {
     try {
       const data = await evaluateTechInterview(techStack, questions, answers)
       setResult(data)
-    } catch {
-      setError('평가 요청에 실패했습니다. 다시 시도해주세요.')
+    } catch (e) {
+      setError(e instanceof RateLimitError ? e.message : '평가 요청에 실패했습니다. 다시 시도해주세요.')
     } finally {
       setSubmitting(false)
     }

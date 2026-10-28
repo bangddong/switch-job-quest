@@ -121,11 +121,7 @@ const styles: Record<string, CSSProperties> = {
   },
 }
 
-interface LoginPageProps {
-  onTryDemo?: () => void
-}
-
-export function LoginPage({ onTryDemo }: LoginPageProps) {
+export function LoginPage() {
   const { loginWithGithub } = useAuth()
 
   return (
@@ -165,30 +161,28 @@ export function LoginPage({ onTryDemo }: LoginPageProps) {
 
         <p style={styles.subCopy}>AI가 당신의 실력을 평가합니다</p>
 
-        {onTryDemo && (
-          <div style={{ width: '100%', marginTop: 16 }}>
-            <button
-              onClick={onTryDemo}
-              style={{
-                width: '100%',
-                padding: '14px 0',
-                background: 'transparent',
-                border: '1px solid rgba(78,205,196,0.3)',
-                borderRadius: 10,
-                color: '#4ECDC4',
-                fontSize: 14,
-                fontFamily: "'Courier New', monospace",
-                cursor: 'pointer',
-                letterSpacing: 0.5,
-              }}
-            >
-              로그인 없이 기술면접 체험하기 →
-            </button>
-            <p style={{ marginTop: 10, fontSize: 12, color: '#475569', textAlign: 'center', fontFamily: "'Courier New', monospace" }}>
-              XP 적립 없음 · 진행 상황 저장 안 됨
-            </p>
-          </div>
-        )}
+        <div style={{ width: '100%', marginTop: 16 }}>
+          <button
+            onClick={() => { window.location.href = '/daily-question' }}
+            style={{
+              width: '100%',
+              padding: '14px 0',
+              background: 'transparent',
+              border: '1px solid rgba(78,205,196,0.3)',
+              borderRadius: 10,
+              color: '#4ECDC4',
+              fontSize: 14,
+              fontFamily: "'Courier New', monospace",
+              cursor: 'pointer',
+              letterSpacing: 0.5,
+            }}
+          >
+            로그인 없이 오늘의 질문 풀어보기 →
+          </button>
+          <p style={{ marginTop: 10, fontSize: 12, color: '#475569', textAlign: 'center', fontFamily: "'Courier New', monospace" }}>
+            XP 적립 없음 · 진행 상황 저장 안 됨
+          </p>
+        </div>
       </div>
     </div>
   )

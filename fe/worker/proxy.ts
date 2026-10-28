@@ -14,7 +14,8 @@ const API_PREFIX = '/api/'
 const BACKEND_HEADER = 'X-DevQuest-Backend'
 
 // 클라이언트가 위조할 수 있는 IP 헤더 — 업스트림에 중계하지 않는다.
-// BE(AbstractRateLimitInterceptor)는 Fly-Client-IP 를 먼저 믿고, 나머지는 현재 미사용이지만 방어적으로 제거한다.
+// BE 의 익명 한도 IP 판정이 Fly-Client-IP 를 1순위로 읽는다(다음 PR 에서 Worker↔원본 신뢰 헤더로 교체 예정, 📌D-016 B7-19).
+// 나머지 헤더는 현재 미사용이지만 방어적으로 제거한다.
 // X-Forwarded-For 는 아래에서 CF-Connecting-IP 값으로 다시 쓴다.
 const STRIPPED_CLIENT_IP_HEADERS = [
   'Fly-Client-IP',
