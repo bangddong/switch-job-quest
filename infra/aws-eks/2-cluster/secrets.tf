@@ -160,7 +160,8 @@ resource "aws_secretsmanager_secret_version" "db_connection_external" {
 #      learning·prod 2-cluster를 동시에 못 세운다. 상세와 남은 일은
 #      `0-bootstrap/jwt-secret.tf`의 「경계를 무엇이 강제하는가」 절.
 #
-# GitHub OAuth 2개는 **자리표시 값**이다. Stage 2의 목표는 "앱이 완전히 부팅되는가"
+# GitHub OAuth 2개는 **learning(in-cluster) 모드에서만 자리표시 값**이다 — external(prod 창)에선 여기 없고 SSM→ESO 로 온다(B7-16, 아래).
+# 원래 서술: Stage 2의 목표는 "앱이 완전히 부팅되는가"
 # (=/health 200)이지 로그인 e2e가 아니다. 이 값들은 빈 생성만 통과시키면 된다.
 # 실제 로그인 검증이 필요해지면 학습 전용 OAuth App을 새로 발급해 주입한다.
 

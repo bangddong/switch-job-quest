@@ -136,8 +136,9 @@ lk 'GITHUB_CLIENT_ID' Iv1 Iv1 >/dev/null; [ $? = 1 ] && ok "secret 없음 → �
 lk 'GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET' Iv1 Iv2 >/dev/null; [ $? = 1 ] && ok "client id 가 FE 와 다름 → 실패" || bad "불일치 통과"
 lk 'GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET' '' '' >/dev/null; [ $? = 1 ] && ok "FE 값을 못 읽음(빈 값끼리 같음) → 실패" || bad "빈 값 일치를 통과"
 lk 'XGITHUB_CLIENT_ID,GITHUB_CLIENT_SECRETX' Iv1 Iv1 >/dev/null; [ $? = 1 ] && ok "부분 일치 이름은 키로 안 친다" || bad "부분 일치 통과"
-FE_CID=$(sed -nE 's/^[[:space:]]*VITE_GITHUB_CLIENT_ID:[[:space:]]*([A-Za-z0-9._-]+).*/\1/p' "$HERE/../../../../.github/workflows/fe-cd.yml" | head -1)
-[ "$FE_CID" = Iv23li4rMCxm07zyBBmN ] && ok "on.sh 의 sed 가 실제 fe-cd.yml 에서 client id 를 뽑는다" || bad "추출='$FE_CID'"
+FE_CID=$( . "$HERE/common.sh"; win_fe_client_id "$HERE/../../../../.github/workflows/fe-cd.yml" )
+[ "$FE_CID" = Iv23li4rMCxm07zyBBmN ] && ok "win_fe_client_id(on.sh·워크플로 공용)가 실제 fe-cd.yml 에서 client id 를 뽑는다" || bad "추출='$FE_CID'"
+grep -q 'win_fe_client_id "$ROOT/.github/workflows/fe-cd.yml"' "$HERE/on.sh" && ok "on.sh 가 같은 함수를 레포 루트 기준으로 부른다" || bad "on.sh 가 추출을 따로 한다"
 
 echo "── off-pre (destroy 전 — LB 0 이 합격)"
 reset 1; MOCK_CLUSTER=yes run off-pre.sh >/dev/null; rc=$?

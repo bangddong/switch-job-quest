@@ -1018,7 +1018,7 @@ sed "s|RDS_MASTER_SECRET_PLACEHOLDER|$ARN|" k8s/eso/externalsecret-db.yaml | kub
 <!-- verify: infra/aws-eks/0-bootstrap/jwt-secret.tf ~ ^resource "random_password" "jwt_secret" -->
 <!-- verify: infra/aws-eks/0-bootstrap/jwt-secret.tf ~ ^  for_each = var.jwt_environments -->
 <!-- verify: infra/aws-eks/2-cluster/secrets.tf ~ ^  name        = "\$\{var.cluster_name\}/\$\{var.environment\}/app" -->
-<!-- verify: infra/aws-eks/2-cluster/secrets.tf ~ ^    JWT_SECRET           = data.terraform_remote_state -->
+<!-- verify: infra/aws-eks/2-cluster/secrets.tf ~ ^    JWT_SECRET += +data.terraform_remote_state -->
 <!-- verify: k8s/eso/externalsecret-app.yaml ~ ^        key: APP_SECRET_NAME_PLACEHOLDER -->
 
 > 🔴 **`db_mode=in-cluster`(Stage 3a~)라면 위 db 블록 대신 이걸 쓴다.** 두 파일은 **같은 이름의
