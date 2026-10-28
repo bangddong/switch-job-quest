@@ -6013,3 +6013,21 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] **C-3 완료 기준 전부 통과**(계획서 C-2 행): 로컬에서 KV 직접 조회 `{"target":"fly"}`(= **KV 쓰기 첫 실측 성공**) · `eks.quest` 레코드 0건 · `api.quest` CNAME 유지 · 클러스터 0 · LB 0 · 임대 없음 · prod 헤더 `fly` · off 로그에 `KV 쓰기 실패` 0회.
 - [메모] 로그 마스킹: on·off 로그에서 32자 이상 hex 문자열은 전부 40자 커밋 SHA(on 11건, off 0건 — 비SHA 0) → Cloudflare 계정·존 ID 노출 없음. 토큰 문자열·`Authorization` 0건.
 - [메모] 미검증으로 남은 것(C-4 몫): 실제 트래픽 전환(KV eks), 240s 배수 대기 경로, 한국 엣지 전파 시간.
+
+## 2026-10-28 — 📌D-016 8-C C-4 첫 트래픽 창 (1차, 12분 만에 중단)
+
+- [비용] on run 40630206388 (13:04 dispatch → 13:21 완료, `hours=2 traffic=eks`) · off run 40632912972 (13:32 → 13:44). 클러스터 ≈40분 ≈ $0.12(추정).
+- [메모] on 로그: `KV → eks (until 2026-10-28T06:04:37Z = 임대 만료)` → `✅ 트래픽 → EKS (… x-devquest-backend: eks)`. 맥(HKG 엣지)에서도 `eks` 200 확인. 노드 메모리 65%·80%·**89%**.
+- [막힘] 13:3x 사용자 보고: **"github 로그인시 404 뜬다"**. 재현(잘못된 code 로 `POST /api/v1/auth/github`):
+  ```
+  quest(→eks)  500 {"code":"DEFAULT","message":"알 수 없는 오류가 발생했습니다"}
+  eks.quest    500 (동일)
+  api.quest    400 {"code":"INVALID_REQUEST"}   ← Fly
+  ```
+  core-api 로그: `Unexpected error: 404 Not Found: "{"error":"Not Found"}"` (ApiControllerAdvice) — GitHub `login/oauth/access_token` 이 **client_id 를 모를 때 404** 를 돌려준다.
+- [해결] 원인 🔴: `2-cluster/secrets.tf` 가 `GITHUB_CLIENT_ID/SECRET` 에 `var.github_client_*_placeholder` 를 넣는다(Secret `core-api-app`, 값 길이 41 — 실제 client id 형식 아님). 설계대로다(학습 클러스터에 prod OAuth 금지). **계획서 「10 직전」 선결 항목 OAuth(B7-16)·JWT 통일(U-11/B7-15) 을 이행하지 않은 채 첫 창을 열었다** — C-4 를 추천하면서 그 목록을 다시 열어보지 않았다(내 실수).
+- [해결] 13:32:38 off dispatch → 13:33:25 prod 헤더 `fly`(HKG). 로그 `KV 직전 값: {"target":"eks",…}` → `배수 대기 240s` → `eks.quest 삭제` → off-verify 전부 0 · 임대 삭제. **240s 배수 경로 첫 실측 성공.**
+- [메모] 사용자 영향 13:21–13:33(≈12분): ① GitHub 로그인 불가 ② 🟡 기존 로그인 사용자 — JWT 키가 Fly·EKS 다르면(U-11, Fly 값은 write-only 라 미확인) 401/403 → FE `apiClient.assertOk` 가 토큰·로컬 진행 캐시를 지우고 reload = 로그아웃. 사용자가 로그인을 다시 시도한 정황과 맞는다. 서버 진행 데이터는 EC2 DB 그대로(같은 DB).
+- [메모] 사용자 브라우저는 **LAX 엣지**(`CF-Ray …-LAX`, fly `-lax`), 맥은 HKG/NRT — 한국 회선이 해외 엣지로 가는 경우. U-7 "한국 엣지" 확인은 실제로는 LAX·HKG 두 곳.
+- [메모] 부수: `/api/actuator/health` Fly 403 vs EKS 404 — 사용자 경로 아님, 미조사.
+- [결정] 다음 트래픽 창은 「10 직전」 선결(OAuth·JWT 통일·B7-19·B7-27 …) 이후. 그전엔 `traffic=fly` 만.
