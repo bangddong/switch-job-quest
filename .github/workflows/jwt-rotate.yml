@@ -67,6 +67,9 @@ jobs:
             echo "::error::rotate 는 confirm=LOGOUT-ALL 이 필요하다(전원 1회 로그아웃)"; exit 1
           fi
 
+      # 서드파티·가변 ref 라 AWS(Admin) 자격증명이 env 에 들어오기 **전에** 설치한다(QA F-2)
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_MAIN }}
@@ -79,8 +82,6 @@ jobs:
           ACCT="$(aws sts get-caller-identity --query Account --output text)"
           echo "::add-mask::$ACCT"
           [[ "$ACCT" =~ ^[0-9]{12}$ ]] || { echo "::error::계정 ID 조회 실패 — 마스킹 없이 진행할 수 없다"; exit 1; }
-
-      - uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: rotate 전제 — 클러스터 꺼짐 · be-cd 없음
         if: inputs.action == 'rotate'
@@ -113,6 +114,9 @@ jobs:
           echo "::add-mask::$KEY"
           F=$(mktemp); trap 'rm -f "$F"' EXIT
           printf '%s' "$KEY" > "$F"
+          # ⓪ digest 기록을 먼저 `pending` 으로 — 아래 어디서 죽든 다음 check 가 "끝나지 않은 rotate" 를 에러로 본다.
+          #    안 그러면 SSM(새)·Fly(옛) 인데 digest 가 옛 기록과 같아 check 가 거짓 초록을 낸다(QA F-1). 성공 시 마지막 스텝이 덮는다.
+          aws ssm put-parameter --name "$DIGEST_PARAM" --type String --overwrite --value "pending-run-$GITHUB_RUN_ID" >/dev/null
           # ① SSM 먼저 — Fly 단계가 실패해도 "정본은 새 키, Fly 는 옛 키" 로 남을 뿐이다(재실행하면 둘 다 새로 맞춘다)
           aws ssm put-parameter --name "$JWT_PARAM" --type SecureString --key-id alias/aws/ssm --overwrite \
             --value "file://$F" --description "prod JWT signing key (Fly + EKS window) - written by jwt-rotate.yml" >/dev/null
@@ -144,9 +148,14 @@ jobs:
             echo "✅ Fly JWT_SECRET digest 기록 → $DIGEST_PARAM"
             exit 0
           fi
-          S=$(aws ssm get-parameter --name "$DIGEST_PARAM" --query Parameter.Value --output text 2>/dev/null || echo none)
+          # ParameterNotFound 만 "기록 없음" — AccessDenied·스로틀은 에러(QA F-4, win_lease_state 와 같은 구분)
+          if ! S=$(aws ssm get-parameter --name "$DIGEST_PARAM" --query Parameter.Value --output text 2>&1); then
+            case "$S" in *ParameterNotFound*) S=none ;; *) echo "::error::digest 기록 조회 오류: ${S:0:200}"; exit 1 ;; esac
+          fi
           if [ "$S" = none ]; then
             echo "::warning::기록된 digest 없음 — rotate 전이다(Fly 키는 SSM 과 다르다)"
+          elif [[ "$S" == pending-* ]]; then
+            echo "::error::끝나지 않은 rotate($S) — SSM 과 Fly 가 어긋났을 수 있다. rotate 를 다시 돌려 둘을 새로 맞춘다"; exit 1
           elif [ "$S" = "$D" ]; then
             echo "✅ Fly JWT_SECRET digest = 마지막 rotate 기록 (손으로 바꾼 흔적 없음)"
           else
