@@ -3,6 +3,7 @@ package com.devquest.daily
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.persistence.autoconfigure.EntityScan
 import org.springframework.boot.runApplication
+import org.springframework.scheduling.annotation.EnableScheduling
 
 /**
  * Phase 2 Stage B-2b — `core:daily-core`(콘텐츠 생성 로직) · `clients:client-ai-http`(AI 전송) ·
@@ -23,12 +24,17 @@ import org.springframework.boot.runApplication
  * 레포지토리 빈(`DailyQuestionContentPort`·`TechQuestionBankPort` 구현체)은 등록되는데 엔티티가
  * 0개로 로드되어 `Not a managed type: DailyQuestionContentEntity`로 기동 실패한다.
  *
+ * `@EnableScheduling`: 익명 daily explain/evaluate 의 레이트 리밋 버킷(개인·전역)을 자정(Asia/Seoul)에
+ * 비우는 `RateLimitResetScheduler` 용 — core-api `DevQuestApplication` 과 같은 패턴(D-007 복제). 이게
+ * 없으면 `@Scheduled` 가 에러 없이 무시돼 전역 상한이 영영 리셋되지 않는다.
+ *
  * `@EnableJpaRepositories`는 별도로 선언하지 않는다 — db-core의
  * `com.devquest.storage.db.core.config.CoreJpaConfig`가 이미
  * `@EnableJpaRepositories(basePackages = ["com.devquest.storage.db.core"])`를 갖고 있고,
  * 이 클래스는 컴포넌트 스캔(`scanBasePackages`)으로 빈으로 잡힌다 — 중복 선언 시 설정 충돌 위험.
  */
 @SpringBootApplication(scanBasePackages = ["com.devquest"])
+@EnableScheduling
 @EntityScan("com.devquest.storage.db.core")
 class DailyApiApplication
 

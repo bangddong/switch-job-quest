@@ -6,14 +6,18 @@ import org.junit.jupiter.api.Test
 class RateLimitResetSchedulerTest {
 
     @Test
-    fun `자정 리셋 시 tech-interview, daily-explain, daily-evaluate 버킷을 모두 초기화한다`() {
+    fun `자정 리셋 시 tech-interview, daily-explain, daily-evaluate 개인 버킷과 전역 상한을 모두 초기화한다`() {
         val rateLimitBucketStore = RateLimitBucketStore(capacity = 2, refillDays = 1)
         val dailyExplainRateLimitBucketStore = DailyExplainRateLimitBucketStore(capacity = 5, refillDays = 1)
         val dailyEvaluateRateLimitBucketStore = DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1)
+        val dailyExplainGlobalStore = DailyExplainGlobalRateLimitStore(capacity = 2, refillDays = 1)
+        val dailyEvaluateGlobalStore = DailyEvaluateGlobalRateLimitStore(capacity = 3, refillDays = 1)
         val scheduler = RateLimitResetScheduler(
             rateLimitBucketStore,
             dailyExplainRateLimitBucketStore,
             dailyEvaluateRateLimitBucketStore,
+            dailyExplainGlobalStore,
+            dailyEvaluateGlobalStore,
         )
         val ip = "1.2.3.4"
 
@@ -24,12 +28,18 @@ class RateLimitResetSchedulerTest {
         assertThat(rateLimitBucketStore.getOrCreate(ip).tryConsume(1)).isFalse()
         assertThat(dailyExplainRateLimitBucketStore.getOrCreate(ip).tryConsume(1)).isFalse()
         assertThat(dailyEvaluateRateLimitBucketStore.getOrCreate(ip).tryConsume(1)).isFalse()
+        repeat(2) { dailyExplainGlobalStore.bucket().tryConsume(1) }
+        repeat(3) { dailyEvaluateGlobalStore.bucket().tryConsume(1) }
+        assertThat(dailyExplainGlobalStore.bucket().tryConsume(1)).isFalse()
+        assertThat(dailyEvaluateGlobalStore.bucket().tryConsume(1)).isFalse()
 
         scheduler.resetDailyLimits()
 
         assertThat(rateLimitBucketStore.getOrCreate(ip).tryConsume(1)).isTrue()
         assertThat(dailyExplainRateLimitBucketStore.getOrCreate(ip).tryConsume(1)).isTrue()
         assertThat(dailyEvaluateRateLimitBucketStore.getOrCreate(ip).tryConsume(1)).isTrue()
+        assertThat(dailyExplainGlobalStore.bucket().availableTokens).isEqualTo(2)
+        assertThat(dailyEvaluateGlobalStore.bucket().availableTokens).isEqualTo(3)
     }
 
     private fun exhaust(store: AbstractRateLimitBucketStore, ip: String, times: Int) {

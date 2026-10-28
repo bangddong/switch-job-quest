@@ -12,10 +12,11 @@ import tools.jackson.databind.ObjectMapper
 @Component
 class DailyEvaluateRateLimitInterceptor(
     private val dailyEvaluateRateLimitBucketStore: DailyEvaluateRateLimitBucketStore,
+    globalStore: DailyEvaluateGlobalRateLimitStore,
     objectMapper: ObjectMapper,
-) : AbstractRateLimitInterceptor(objectMapper) {
+) : AbstractRateLimitInterceptor(objectMapper, globalStore) {
 
-    override fun resolveBucket(ip: String): Bucket = dailyEvaluateRateLimitBucketStore.getOrCreate(ip)
+    override fun resolveBucket(key: String): Bucket = dailyEvaluateRateLimitBucketStore.getOrCreate(key)
 }
 
 @Component
@@ -23,3 +24,13 @@ class DailyEvaluateRateLimitBucketStore(
     @Value("\${devquest.rate-limit.daily-evaluate.capacity:1}") capacity: Long,
     @Value("\${devquest.rate-limit.daily-evaluate.refill-days:1}") refillDays: Long,
 ) : AbstractRateLimitBucketStore(capacity, refillDays)
+
+/**
+ * 익명 evaluate 경로의 **전체 일일 상한**. IP 개인 버킷을 통과한 요청만 여기서 차감된다
+ * (`AbstractRateLimitInterceptor` 의 개인 → 전역 순서).
+ */
+@Component
+class DailyEvaluateGlobalRateLimitStore(
+    @Value("\${devquest.rate-limit.daily-evaluate.global-capacity:50}") capacity: Long,
+    @Value("\${devquest.rate-limit.daily-evaluate.refill-days:1}") refillDays: Long,
+) : AbstractGlobalRateLimitStore(capacity, refillDays)

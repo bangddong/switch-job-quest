@@ -61,17 +61,6 @@ class TechInterviewServiceTest {
     }
 
     @Test
-    fun `evaluate - userId가 null이면 questProgressRecorder를 호출하지 않는다`() {
-        val result = TechInterviewResult(questions = listOf("Q1"), overallScore = 80, passed = true)
-        whenever(techInterviewPort.evaluate(any(), any(), any())).thenReturn(result)
-
-        val returned = service.evaluate(null, "Java", listOf("Q1"), listOf("A1"))
-
-        assertThat(returned.passed).isTrue()
-        verify(questProgressRecorder, never()).record(any(), any(), any(), any(), any(), any(), any())
-    }
-
-    @Test
     fun `evaluate - AI 평가가 실패하면 questProgressRecorder를 호출하지 않고 예외가 그대로 전파된다 (트랜잭션 재배치 회귀 가드)`() {
         whenever(techInterviewPort.evaluate(any(), any(), any())).thenThrow(RuntimeException("AI 호출 실패"))
 

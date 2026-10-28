@@ -3,9 +3,14 @@ package com.devquest.core.api.support
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContextHolder
 import tools.jackson.databind.ObjectMapper
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -15,6 +20,19 @@ import java.io.StringWriter
  * 같은 IP라도 한쪽 버킷이 소진돼도 다른 쪽은 영향을 받지 않아야 한다.
  */
 class RateLimitBucketIsolationTest {
+
+    // tech-interview 는 인증된 사용자 ID 로 버킷을 가른다 — 같은 "사용자"가 daily 의 IP 버킷과 독립인지 본다.
+    @BeforeEach
+    fun login() {
+        SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken(
+            "github-1", null, listOf(SimpleGrantedAuthority("ROLE_USER"))
+        )
+    }
+
+    @AfterEach
+    fun logout() {
+        SecurityContextHolder.clearContext()
+    }
 
     private fun mockRequest(ip: String): HttpServletRequest {
         val request = mock<HttpServletRequest>()
@@ -39,6 +57,7 @@ class RateLimitBucketIsolationTest {
         )
         val dailyEvaluateInterceptor = DailyEvaluateRateLimitInterceptor(
             DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
+            DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1),
             ObjectMapper(),
         )
         val ip = "1.2.3.4"
@@ -62,6 +81,7 @@ class RateLimitBucketIsolationTest {
         )
         val dailyEvaluateInterceptor = DailyEvaluateRateLimitInterceptor(
             DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
+            DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1),
             ObjectMapper(),
         )
         val ip = "1.2.3.4"

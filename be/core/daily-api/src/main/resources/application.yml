@@ -71,9 +71,12 @@ devquest:
       read-timeout-ms: ${AI_API_READ_TIMEOUT_MS:150000}
   rate-limit:
     # core-api/application.yml의 devquest.rate-limit.daily-explain / daily-evaluate와 동일 값.
+    # global-capacity: 익명 경로 전체 일일 상한 — IP 개인 버킷(capacity) 통과분만 차감한다.
     daily-explain:
       capacity: 5
+      global-capacity: 100
       refill-days: 1
     daily-evaluate:
       capacity: 1
+      global-capacity: 50
       refill-days: 1
