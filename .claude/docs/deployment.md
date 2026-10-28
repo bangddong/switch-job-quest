@@ -1,5 +1,8 @@
 # 배포 구성
 
+> ⚠️ **아래 표는 Vercel 시절(2026-10-26 이전) 기준이다.** FE 는 Cloudflare Workers, DB 는 EC2 Postgres 로 바뀌었다.
+> 🔴 **시크릿·환경변수의 정본 목록은 `.claude/docs/secrets-map.md`** — 여기 표로 교체 대상을 찾지 마라.
+
 ## 인프라
 
 | 대상 | 플랫폼 | 도메인 |

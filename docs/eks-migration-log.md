@@ -6031,3 +6031,5 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] 사용자 브라우저는 **LAX 엣지**(`CF-Ray …-LAX`, fly `-lax`), 맥은 HKG/NRT — 한국 회선이 해외 엣지로 가는 경우. U-7 "한국 엣지" 확인은 실제로는 LAX·HKG 두 곳.
 - [메모] 부수: `/api/actuator/health` Fly 403 vs EKS 404 — 사용자 경로 아님, 미조사.
 - [결정] 다음 트래픽 창은 「10 직전」 선결(OAuth·JWT 통일·B7-19·B7-27 …) 이후. 그전엔 `traffic=fly` 만.
+
+- [해결] **정정 (같은 날 14시경)**: 사용자가 본 404 의 원인은 EKS 가 **아니었다.** prod FE 번들 실측 — `authorize?client_id=undefined`. V-3(10-26) 이후 FE 를 빌드하는 `fe-cd.yml` deploy-workers job 이 `VITE_GITHUB_CLIENT_ID` 를 받지 않는다(Vercel 은 자기 env 로 넣어 줬다) → **10-26 부터 Fly 든 EKS 든 신규 로그인 불가**. GitHub 은 로그인된 브라우저에 모르는 client id 면 404 페이지. core-api 로그에 사용자 시도가 0건이었던 것도 이것으로 설명된다(그 로그 2줄은 내 프로브). EKS OAuth 자리표시(토큰 교환 500)는 **별개의 두 번째 결함**으로 유효. 수정: `fe-cd.yml` 빌드 env + 번들 단언 스텝. 로컬 재현 — env 없음 `client_id=undefined` 1파일 → env 있음 0파일·client id 1파일.
