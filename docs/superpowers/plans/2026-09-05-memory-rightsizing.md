@@ -103,6 +103,10 @@ IP당 **하루 5회**에서 429 로 막힌다. `evaluate` 는 **1회**.
   value: '{"devquest.rate-limit.daily-explain.capacity":100000,"devquest.rate-limit.daily-evaluate.capacity":100000}'
 ```
 
+> ⚠️ **2026-10-28 이후 전체 일일 상한이 생겼다**(📌D-016 B7-19 — `daily-explain.global-capacity` 100 · `daily-evaluate.global-capacity` 50).
+> 개인 한도만 올리면 **101번째 explain 부터 429** 다. 부하 세션엔 둘 다 올린다:
+> `{"devquest.rate-limit.daily-explain.capacity":100000,"devquest.rate-limit.daily-explain.global-capacity":100000,"devquest.rate-limit.daily-evaluate.capacity":100000,"devquest.rate-limit.daily-evaluate.global-capacity":100000}`
+
 🔑 **`SPRING_APPLICATION_JSON` 을 쓰는 이유 = relaxed binding 추측을 피하려고.**
 `DEVQUEST_RATELIMIT_DAILYEXPLAIN_CAPACITY` 같은 환경변수 형태는 대시 처리 규칙을 **틀리면
 조용히 무시된다** — 옛 용량이 그대로 살아 있는데 아무 에러도 안 난다. 이 레포가 반복해서 데인

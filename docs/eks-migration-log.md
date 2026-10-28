@@ -6048,3 +6048,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] 일반 관행 설명 후 결정: 서명 키는 tfstate 가 아니라 secret 저장소 · 같은 서비스 다중 배포는 같은 키 공유가 정상(둘 다 발급) · 무중단 교체는 이중 키 검증이 표준이나 사용자 ≈ 1명이라 과함.
 - [메모] Blindspot 9건 중 계획을 바꾼 것: ① external 에서 core-api-app 이 `{}` 면 ESO 가 Secret 을 안 만들 수 있어(🟡) envFrom(optional 아님) 이 깨짐 → 비밀 아닌 표식 키 1개 ② count=0 으로 빼면 B7-16 precondition·IRSA ARN·outputs·on.sh 형태 검사가 함께 사라짐 → 리소스 유지 ③ 창 중 rotate = Fly·EKS 키 분기 → 클러스터 켜짐이면 거부 ⑥ be-cd concurrency 공유 = 대기 배포 조용히 취소 → 공유 대신 실행·대기 0 확인 ⑧ 테스트 이름 목록 쉼표 결합 = gitleaks 재발 → printf 로 조립. PR 역할의 SSM 복호화 불가 🔴 확인(`iam-github-oidc.tf` DenyContentReads·DenyKmsDecrypt) — 정본 이동의 이득이 실재.
 - [메모] tofu 식 실측: external `{"APP_SECRET_SOURCE":"ssm-core-api-runtime"}` / in-cluster 3키(JWT 포함). `tofu validate` Success · design-integrity 통과 · 목 회귀 80/0 · 64자 키 생성 파이프 로컬 확인(len=64).
+
+## 2026-10-28 — 📌D-016 JWT 키 교체 실행 · B7-19 레이트 리밋 재설계 1단계
+
+- [해결] JWT 통일 실행(#513 머지 직후, 사용자 *"키 교체 바로 시작하자"*): `jwt-rotate.yml` check → `##[warning]SSM … 없음`·`기록된 digest 없음`(예상 — FLY_API_TOKEN 으로 `secrets list --json` 읽기·파싱 첫 실측 성공) → rotate: `✅ SSM … 저장·되읽기 일치(sha256 앞 8: 7adb1da3)` · Fly import · `✅ Fly 200 (+10s)` → check: `✅ Fly JWT_SECRET digest = 마지막 rotate 기록`. 로그 64자 영숫자 0건. SSM SecureString `alias/aws/ssm` len=64. 로그인 키 사전 점검 `ok`(3키).
+- [결정] B7-19: 사용자 *"일반적으로 사용자별 제한은 어떻게?"* → 관행 설명(로그인 + 사용자 ID 한도 + 전체 상한, IP 는 약한 방어) → *"데일리 기술면접만 로그인 없이, 그 외 로그인"*. 상세는 계획서 「B7-19 재설계」 행.
+- [막힘] Blindspot 🔴: `api.quest` 도 Worker 를 안 거치고 직접 부를 수 있다 — IP 판정을 XFF 첫 값으로 바꾸면 Fly 에서도 위조. → 1단계는 IP 판정 불변, 2단계에서 Worker↔원본 신뢰 헤더.
+- [메모] BE 커밋 e15e331 에 attribution trailer 2줄이 들어감(서브에이전트가 시스템 알림을 지시보다 먼저 따름). force push 는 훅이 막음 → 우회 안 함, **squash merge 로 메시지 정리**.

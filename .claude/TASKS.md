@@ -89,19 +89,6 @@ ECR도 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 간격 반복,
       로그인·DB·RPG XP 연동. **지금은 보류이고, 판단은 사용자 몫이다.**
 
-### TASK-23: JWT 키 교체 실행 (📌D-016 JWT 통일 — **다음 트래픽 창 전 필수**, 시점은 사용자)
-
-> 🔴 **rotate = 로그인한 사용자 전원 1회 로그아웃 + Fly 재시작(≈30초 다운).** 진행 데이터는 서버에 있어 재로그인하면 복원.
-> 실행 전까지 EKS 창은 사전 점검(`JWT_SECRET` 없음)에서 **과금 전에** 멈춘다 — 그래서 traffic=fly 창도 못 연다.
-> Claude 가 승인받고 dispatch 를 시도할 수 있다(분류기가 막으면 아래를 사용자가 Actions 화면에서).
-
-1. **check 먼저**(읽기만): Actions → **JWT Rotate** → Run workflow → branch `main` · action `check`
-   - 기대: `Fly JWT_SECRET digest` 를 읽음 + "기록된 digest 없음(rotate 전)" 경고 — flyctl JSON 파싱·토큰 권한(읽기) 첫 실측(QA F-5)
-2. **rotate**: 같은 화면 · action `rotate` · confirm `LOGOUT-ALL`
-   - 전제: EKS 클러스터 꺼짐 · be-cd 실행/대기 0 (워크플로가 확인하고 아니면 거부)
-   - 기대: `SSM … 되읽기 일치` → Fly import → `digest 기록` → `Fly 200`
-3. 끝나면 사이트에서 다시 로그인 · *"TASK-23 했어"* — Claude 가 check 로 digest 일치 확인
-
 ### TASK-17: EKS 창용 **관측** 키를 SSM 에 (📌D-016 — **첫 창(10번) 직전까지**, 급하지 않음)
 
 > ✅ **필수 2개는 끝났다 (2026-10-22)** — `ANTHROPIC_API_KEY`(EKS 전용 새 키) · `JUDGE0_API_KEY`(RapidAPI 앱 키).
@@ -119,6 +106,10 @@ AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS �
 ~~JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).~~ → OAuth = TASK-22 ✅ · JWT = TASK-23(아래 위).
 
 ## 완료된 항목
+
+### TASK-23: JWT 키 교체 실행 → **완료 (2026-10-28)**
+
+> `jwt-rotate.yml` check(읽기 권한·JSON 파싱 첫 실측) → rotate(SSM 되읽기 해시 일치 · Fly import · Fly 200 +10s) → check(digest 일치). 로그 64자 영숫자 0건.
 
 ### TASK-22: EKS 창 로그인 키 2개를 SSM 에 → **완료 (2026-10-28)**
 
