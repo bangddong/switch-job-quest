@@ -155,6 +155,7 @@ jobs:
 
       # 📌D-016 B7-16 — 로그인 키 사전 점검(과금 **전**). external 모드에선 core-api-app 에 GITHUB_* 가 없어서, SSM 에 없으면
       #   core-api 기동이 실패하고 on.sh ⑤ 가 15분 뒤에야 멈춘다(QA F-2). 이름 확인 + client id(String, 공개 값) = FE 번들 값.
+      #   JWT_SECRET(JWT 통일 10-28) — Fly 와 같은 값이어야 창 전환에 로그아웃이 없다. 값 일치는 jwt-rotate.yml 이 둘을 함께 써서 보장한다.
       #   secret 값은 읽지 않는다(--with-decryption 없음 · 이름만).
       - name: 로그인 키 사전 점검
         shell: bash
@@ -162,12 +163,12 @@ jobs:
           set -euo pipefail
           . infra/aws-eks/scripts/prod-window/common.sh
           P=/devquest/prod/app
-          KEYS=$(aws ssm get-parameters --region "$WIN_REGION" --names "$P/GITHUB_CLIENT_ID" "$P/GITHUB_CLIENT_SECRET" \
+          KEYS=$(aws ssm get-parameters --region "$WIN_REGION" --names "$P/GITHUB_CLIENT_ID" "$P/GITHUB_CLIENT_SECRET" "$P/JWT_SECRET" \
                    --query 'Parameters[].Name' --output text | tr '\t' '\n' | sed "s#^$P/##" | paste -sd, -)
           CID=$(aws ssm get-parameter --region "$WIN_REGION" --name "$P/GITHUB_CLIENT_ID" --query Parameter.Value --output text 2>/dev/null || true)
           LV=$(win_login_keys_verdict "$KEYS" "$CID" "$(win_fe_client_id .github/workflows/fe-cd.yml)") \
             || { echo "::error::로그인 키: $LV (TASK-22)"; exit 1; }
-          echo "- 🔑 로그인 키: SSM 에 GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET 있음" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 🔑 로그인 키: SSM 에 GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET · JWT_SECRET 있음" >> "$GITHUB_STEP_SUMMARY"
 
       # 🔴 apply **전에** 쓴다 — apply 도중 실패해도 off 잡·watchdog 이 "이 실행이 켜려던 클러스터" 를 정리할 근거가 된다.
       - name: 임대 쓰기

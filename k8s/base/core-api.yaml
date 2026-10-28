@@ -70,7 +70,8 @@ spec:
           # 손으로 `kubectl create secret` 하지 않는다 — k8s/eso/ 참고.
           # 시크릿을 둘로 나눈 이유는 소유자가 다르기 때문:
           #   core-api-db  = AWS 소유 (RDS가 만들고 로테이션하는 크리덴셜 + 접속 좌표)
-          #   core-api-app = 우리 소유 (tofu가 생성한 JWT 키 + GitHub OAuth 자리표시)
+          #   core-api-app = 우리 소유 (tofu가 생성한 JWT 키 + GitHub OAuth 자리표시) — 학습(in-cluster) 경로.
+          #     prod 창(apps-external)에선 표식 키 하나뿐이고 JWT·OAuth 는 core-api-runtime(SSM)이 준다(B7-16·JWT 통일 10-28)
           #
           # ⚠️ envFrom은 나중 항목이 앞 항목의 같은 키를 덮어쓴다. 지금은 키가 겹치지 않지만
           #    (DB_* vs JWT_SECRET/GITHUB_*), 새 키를 추가할 때 충돌 여부를 확인할 것.

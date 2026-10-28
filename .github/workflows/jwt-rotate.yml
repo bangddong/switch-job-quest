@@ -1,0 +1,165 @@
+name: JWT Rotate
+
+# 📌D-016 JWT 통일 (2026-10-28) — prod JWT 서명 키의 **정본 = SSM `/devquest/prod/app/JWT_SECRET`**.
+#   Fly(`JWT_SECRET` secret)와 EKS 창(ESO core-api-runtime)이 **같은 값**을 써야 창 전환에 로그아웃이 없다(U-11).
+#   Fly secret 은 write-only 라 옛 키를 읽을 수 없다 → 맞추는 방법은 **새 키를 만들어 둘 다에 쓰는 것뿐**이다.
+#
+#   action=check  — 읽기만. SSM 파라미터 존재(이름만) · Fly JWT_SECRET digest 와 마지막 rotate 기록 대조(손 교체 drift 감지)
+#   action=rotate — 🔴 새 키 64자 → SSM(SecureString) → Fly `secrets import`(머신 재시작 ≈30초 다운) → digest 기록
+#                    = **로그인한 사용자 전원 1회 로그아웃**(옛 토큰 무효). 진행 데이터는 서버에 있어 재로그인 시 복원.
+#
+#   🔑 값은 러너 밖으로 나가지 않는다 — 생성 즉시 ::add-mask::, SSM 은 file:// 로(프로세스 인자 X), Fly 는 stdin 으로.
+#   🔴 main 에서만 — `AWS_ROLE_ARN_MAIN` 의 신뢰 정책이 `ref:refs/heads/main` 만 받는다. job 에 `environment:` 를 넣지
+#      마라(sub 클레임이 바뀌어 assume 실패, B3-10).
+#   🔴 EKS 클러스터가 켜져 있으면 rotate 를 거부한다 — ESO 는 1h 마다 갱신하고 envFrom 파드는 재시작되지 않아
+#      창이 끝날 때까지 Fly(새 키)·EKS(옛 키)가 갈린다(Blindspot JWT #3).
+#   🔴 be-cd 가 실행·대기 중이면 거부한다 — 같은 Fly 앱에 배포와 secret 변경이 겹치지 않게. concurrency 를 be-cd 와
+#      공유하지 않는 이유: 대기 중인 be-cd 를 조용히 취소할 수 있다(B8-15 와 같은 구조, Blindspot JWT #6).
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "check = 읽기만 · rotate = 새 키 → SSM + Fly (🔴 전원 1회 로그아웃 · Fly 재시작)"
+        type: choice
+        options: ["check", "rotate"]
+        default: "check"
+      confirm:
+        description: "rotate 일 때만 — 정확히 LOGOUT-ALL"
+        type: string
+        default: ""
+
+permissions:
+  id-token: write # main 전용 역할 assume
+  contents: read
+  actions: read   # be-cd 실행 중 여부
+
+concurrency:
+  group: jwt-rotate
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  FLY_APP: devquest-api
+  JWT_PARAM: /devquest/prod/app/JWT_SECRET
+  DIGEST_PARAM: /devquest/ops/fly-jwt-digest # 비밀 아님 — Fly 가 보여 주는 digest(마지막 rotate 시점)
+
+jobs:
+  jwt:
+    name: JWT / ${{ inputs.action }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 입력·시크릿 확인
+        shell: bash
+        env:
+          MAIN_ROLE: ${{ secrets.AWS_ROLE_ARN_MAIN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          ACTION: ${{ inputs.action }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          [ -n "$MAIN_ROLE" ] || { echo "::error::secrets.AWS_ROLE_ARN_MAIN 이 비어 있다"; exit 1; }
+          [ -n "$FLY_API_TOKEN" ] || { echo "::error::secrets.FLY_API_TOKEN 이 비어 있다"; exit 1; }
+          if [ "$ACTION" = rotate ] && [ "$CONFIRM" != LOGOUT-ALL ]; then
+            echo "::error::rotate 는 confirm=LOGOUT-ALL 이 필요하다(전원 1회 로그아웃)"; exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_MAIN }}
+          aws-region: ap-northeast-2
+
+      # 퍼블릭 레포의 Actions 로그는 퍼블릭이다 — 계정 ID 마스킹(eks-window.yml 과 같은 fail-closed)
+      - name: 계정 ID 마스킹
+        shell: bash
+        run: |
+          ACCT="$(aws sts get-caller-identity --query Account --output text)"
+          echo "::add-mask::$ACCT"
+          [[ "$ACCT" =~ ^[0-9]{12}$ ]] || { echo "::error::계정 ID 조회 실패 — 마스킹 없이 진행할 수 없다"; exit 1; }
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: rotate 전제 — 클러스터 꺼짐 · be-cd 없음
+        if: inputs.action == 'rotate'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          . infra/aws-eks/scripts/prod-window/common.sh
+          C=$(win_cluster_exists) || { echo "::error::클러스터 조회 실패 — 판단 불가라 멈춘다"; exit 1; }
+          [ "$C" = no ] || { echo "::error::EKS 클러스터가 켜져 있다 — 창이 끝난 뒤(off 후) 돌린다(Fly·EKS 키가 갈린다)"; exit 1; }
+          N=0
+          for s in in_progress queued waiting pending requested; do
+            n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow be-cd.yml --status "$s" --json databaseId --jq length)
+            N=$((N + n))
+          done
+          [ "$N" = 0 ] || { echo "::error::be-cd 가 $N 건 실행·대기 중 — 끝난 뒤 다시"; exit 1; }
+
+      - name: rotate — 새 키 → SSM → Fly (🔴 전원 1회 로그아웃)
+        if: inputs.action == 'rotate'
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          # 64자 영숫자 = 64 바이트 → jjwt 가 HS512 를 고른다(JwtProvider `secret.toByteArray()` — 원시 바이트, 끝 개행 금지)
+          KEY=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64 || true)
+          [ "${#KEY}" -eq 64 ] || { echo "::error::키 생성 실패(길이 ${#KEY})"; exit 1; }
+          echo "::add-mask::$KEY"
+          F=$(mktemp); trap 'rm -f "$F"' EXIT
+          printf '%s' "$KEY" > "$F"
+          # ① SSM 먼저 — Fly 단계가 실패해도 "정본은 새 키, Fly 는 옛 키" 로 남을 뿐이다(재실행하면 둘 다 새로 맞춘다)
+          aws ssm put-parameter --name "$JWT_PARAM" --type SecureString --key-id alias/aws/ssm --overwrite \
+            --value "file://$F" --description "prod JWT signing key (Fly + EKS window) - written by jwt-rotate.yml" >/dev/null
+          H1=$(sha256sum < "$F" | cut -c1-64)
+          H2=$(aws ssm get-parameter --name "$JWT_PARAM" --with-decryption --query Parameter.Value --output text | tr -d '\n' | sha256sum | cut -c1-64)
+          [ "$H1" = "$H2" ] || { echo "::error::SSM 되읽기 해시 불일치"; exit 1; }
+          echo "✅ SSM $JWT_PARAM 저장·되읽기 일치(sha256 앞 8: ${H1:0:8})"
+          # ② Fly — stdin 으로(인자 X). import 는 머신을 재시작한다(release_command 는 안 돈다 🟡)
+          printf 'JWT_SECRET=%s\n' "$KEY" | flyctl secrets import -a "$FLY_APP"
+          echo "- 🔑 JWT 키 교체: SSM 저장(해시 일치) → Fly import 완료 — **로그인 사용자 전원 1회 로그아웃**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: digest 기록 · 대조
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          # 이름만 — 값은 읽지 않는다
+          if aws ssm describe-parameters --parameter-filters "Key=Name,Values=$JWT_PARAM" --query 'Parameters[0].Name' --output text | grep -qx "$JWT_PARAM"; then
+            echo "✅ SSM $JWT_PARAM 있음"
+          else
+            echo "::warning::SSM $JWT_PARAM 없음 — 아직 rotate 를 한 번도 안 돌렸다(EKS 창은 사전 점검에서 멈춘다)"
+          fi
+          D=$(flyctl secrets list -a "$FLY_APP" --json | jq -r '.[] | select((.Name // .name) == "JWT_SECRET") | (.Digest // .digest)')
+          [ -n "$D" ] && [ "$D" != null ] || { echo "::error::Fly 에 JWT_SECRET 이 없거나 digest 를 못 읽었다"; exit 1; }
+          if [ "$ACTION" = rotate ]; then
+            aws ssm put-parameter --name "$DIGEST_PARAM" --type String --overwrite --value "$D" >/dev/null
+            echo "✅ Fly JWT_SECRET digest 기록 → $DIGEST_PARAM"
+            exit 0
+          fi
+          S=$(aws ssm get-parameter --name "$DIGEST_PARAM" --query Parameter.Value --output text 2>/dev/null || echo none)
+          if [ "$S" = none ]; then
+            echo "::warning::기록된 digest 없음 — rotate 전이다(Fly 키는 SSM 과 다르다)"
+          elif [ "$S" = "$D" ]; then
+            echo "✅ Fly JWT_SECRET digest = 마지막 rotate 기록 (손으로 바꾼 흔적 없음)"
+          else
+            echo "::error::Fly JWT_SECRET digest 가 마지막 rotate 기록과 다르다 — 누가 fly secrets 로 직접 바꿨다(SSM 과 어긋남)"; exit 1
+          fi
+
+      - name: Fly 기동 확인
+        if: inputs.action == 'rotate'
+        shell: bash
+        run: |
+          for i in $(seq 1 30); do
+            c=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://api.quest.dhbang.co.kr/api/v1/daily-question || echo 000)
+            [ "$c" = 200 ] && { echo "✅ Fly 200 (+$((i * 10))s)"; exit 0; }
+            sleep 10
+          done
+          echo "::error::Fly 가 5분 안에 200 으로 돌아오지 않았다 — fly status 확인"; exit 1

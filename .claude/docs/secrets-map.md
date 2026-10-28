@@ -12,7 +12,7 @@
 | 보관소 | 읽기 | 쓰기 | 들어 있는 것 |
 |---|---|---|---|
 | **Fly secrets** (`devquest-api`) | ❌ **write-only** (이름·digest 만) | `fly secrets set/import` → **앱 재시작 = prod 재배포** | 앱 런타임 전부 (§2) |
-| **SSM `/devquest/prod/app/*`** | `aws ssm get-parameter --with-decryption` | `put-parameter --overwrite` (KMS `alias/aws/ssm` 유지) — ⚠️ Claude 는 쓰기가 막혀 있다(분류기, 10-28) → 사용자가 콘솔로 | EKS 가 ESO 로 읽는 앱 외부 키 + 로그인 키(허용 목록 `externalsecret-runtime.yaml`) |
+| **SSM `/devquest/prod/app/*`** | `aws ssm get-parameter --with-decryption` | `put-parameter --overwrite` (KMS `alias/aws/ssm` 유지) — ⚠️ Claude 는 쓰기가 막혀 있다(분류기, 10-28) → 사용자가 콘솔로 | EKS 가 ESO 로 읽는 앱 외부 키 + 로그인 키(OAuth·**JWT**, 허용 목록 `externalsecret-runtime.yaml`) — PR plan 역할은 Deny(복호화 불가) |
 | **SSM `/devquest/prod/db/*`** | 위와 같음 | 위와 같음 | EC2 DB 비밀번호·WireGuard·Neon 대기 — ⚠️ **EC2 역할이 읽는 곳** (prod 쓰기 자격증명 추가 금지) |
 | **SSM `/devquest/ops/*`** | 위와 같음 | 위와 같음 | 운영 토큰(Cloudflare 8-C), 창 임대(비밀 아님) |
 | **Secrets Manager** `events!connection/devquest-eks-window-github/*` | (EventBridge 관리) | `aws events update-connection` | EventBridge → GitHub dispatch PAT |
@@ -34,8 +34,8 @@
 | **Anthropic API 키 — 사본이 아니라 키 3개** | Anthropic 콘솔 | ① Fly `ANTHROPIC_API_KEY` = prod 키 ② SSM `/devquest/prod/app/ANTHROPIC_API_KEY` = **EKS 전용 별도 키**(TASK-17, 10-22 — 폐기를 쉽게 하려고 분리) ③ GitHub secret `ANTHROPIC_API_KEY` = 계보 🟡 미확인 | ① prod 앱 ② EKS 창(ESO) ③ `claude-batch-fix.yml` | 🔴 **서로 덮어쓰지 마라** — 유출된 그 키만 콘솔에서 폐기·재발급해 그 자리에만 넣는다. 셋을 같은 값으로 맞추면 분리가 무너진다 |
 | **Judge0 (RapidAPI) 키** | RapidAPI 콘솔 | Fly `JUDGE0_API_KEY` · SSM `/devquest/prod/app/JUDGE0_API_KEY` · 로컬 `settings.local.json` | prod 앱 · EKS 창 | 사본 3곳 |
 | **Resend API 키** | Resend 콘솔 | Fly `RESEND_API_KEY` · 로컬 `settings.local.json` | prod 앱(메일) | EKS 엔 없음(창 중 메일 꺼짐, B8-19) |
-| **JWT 서명 키 (Fly)** | **없음** — Fly write-only | Fly `JWT_SECRET` | prod 앱 | 🔴 교체 = **전 사용자 로그아웃**(만료 30일). EKS 와 **다른 값**(U-11) |
-| **JWT 서명 키 (EKS)** | 0-bootstrap `random_password.jwt_secret[env]` (tfstate) | Secrets Manager `devquest-eks/<env>/app` (창 동안) | EKS 창 | 통일(U-11) = 이 값을 Fly 로 **출력 없이** import(B7-17) |
+| **JWT 서명 키 (prod — Fly·EKS 공용)** | **SSM `/devquest/prod/app/JWT_SECRET`** (SecureString — 10-28 JWT 통일부터 정본) | ① Fly `JWT_SECRET` ② EKS 창(ESO `core-api-runtime`) — **같은 값** | prod 앱(Fly) · EKS 창 | 🔴 **교체 = `jwt-rotate.yml` action=rotate 만** (새 키 → SSM → Fly 를 한 번에, 값은 러너 밖으로 안 나감) = **전원 1회 로그아웃**. `fly secrets set JWT_SECRET` 을 손으로 하지 마라 — SSM 과 갈린다(action=check 가 digest 로 잡는다, 기록 `/devquest/ops/fly-jwt-digest`). 클러스터가 켜져 있으면 rotate 거부 |
+| **JWT 서명 키 (learning)** | 0-bootstrap `random_password.jwt_secret["learning"]` (tfstate) | Secrets Manager `devquest-eks/learning/app` (학습 세션 동안) | 학습 클러스터 | prod 와 무관. ⚠️ `jwt_secrets["prod"]` 도 state 에 남아 있지만 **prod 는 더 이상 안 쓴다**(10-28~, 죽은 값 — `jwt_environments` 에서 빼면 prevent_destroy 로 apply 실패라 둔다) |
 | **GitHub OAuth client id** | GitHub → Developer settings → GitHub Apps (공개 값) | `fe-cd.yml` 빌드 env · Fly `GITHUB_CLIENT_ID` · SSM `/devquest/prod/app/GITHUB_CLIENT_ID`(String, EKS 창) · `application-local.yml`(로컬) · Vercel env | FE 로그인 URL · prod 앱 토큰 교환 | 비밀 아님. **FE 번들과 Fly 가 같아야** 로그인 된다 |
 | **GitHub OAuth client secret — 키 2개** | **없음** — GitHub 은 발급 순간만 보여 줌 | ① Fly `GITHUB_CLIENT_SECRET` ② SSM `/devquest/prod/app/GITHUB_CLIENT_SECRET`(SecureString) = **EKS 전용 별도 secret**(B7-16, TASK-22) | ① prod 앱 ② EKS 창(ESO `core-api-runtime`) | 🔴 서로 덮어쓰지 마라 — 유출된 쪽만 GitHub 에서 폐기·재발급. learning 모드는 자리표시(`2-cluster/secrets.tf`). on 이 SSM client id = `fe-cd.yml` 값을 강제 |
 | **EC2 Postgres 앱 비밀번호** | SSM `/devquest/prod/db/password` (EC2 user-data 가 생성) | Fly `DB_*` · 로컬 `settings.local.json` `PGPASSWORD` · EKS 창(ESO 가 SSM 직접) | prod 앱 · EKS 창 · 백업 | 교체 = EC2 에서 `ALTER ROLE` → SSM → Fly 순. **원격 쓰기는 사용자 명시 지시 필요** |
@@ -82,5 +82,5 @@ aws ssm get-parameter ... --output text | shasum -a 256 | cut -c1-12
 ## 5. 알려진 구조 문제 (나중에 할 것)
 
 - **사본 다중화**: Judge0 3곳(Fly·SSM·로컬 — 같은 값) — 교체 누락 위험. (Anthropic 은 사본이 아니라 키가 셋 — §2) 정본 하나(SSM)에서 Fly 로 밀어 넣는 스크립트가 해법 후보.
-- **정본 없음**: Fly 의 JWT·OAuth secret 은 아무도 다시 못 읽는다 → EKS 와 일치시킬 수 없다(U-11·B7-16). 통일 시 **AWS 쪽을 정본**으로 두고 Fly 로 import.
+- ~~정본 없음: Fly 의 JWT 는 아무도 다시 못 읽는다~~ → **10-28 해소**: JWT 정본 = SSM, `jwt-rotate.yml` 이 SSM·Fly 를 함께 쓴다. OAuth secret 은 Fly·EKS 가 **별도 키**(정본 없음이 의도 — 각자 폐기 독립).
 - `.claude/docs/deployment.md` 는 Vercel 시절 표 — 이 문서가 정본이다.

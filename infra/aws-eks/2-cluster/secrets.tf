@@ -190,13 +190,23 @@ resource "aws_secretsmanager_secret_version" "app" {
   #   ② runtime 허용 목록은 "다른 Secret 을 envFrom 으로 덮지 못하게" 가 존재 이유다(externalsecret-runtime.yaml F-3).
   #   축이 `environment` 가 아니라 `external_enabled` 인 이유: core-api-runtime 은 apps-external 경로에만 있다.
   #   삼항은 `tomap` 으로 양쪽 타입을 맞춘다(위 ① `inconsistent types`).
-  secret_string = jsonencode(merge({
+  # 📌D-016 JWT 통일 (2026-10-28) — external 모드에선 **JWT_SECRET 도** 여기 넣지 않는다. prod JWT 의 정본은
+  #   SSM `/devquest/prod/app/JWT_SECRET`(Fly 와 같은 값, `jwt-rotate.yml` 이 둘을 함께 쓴다) → core-api-runtime.
+  #   0-bootstrap `jwt_secrets["prod"]` 는 **더 이상 prod 가 쓰지 않는다**(state 평문을 PR plan 역할이 읽을 수 있어서 —
+  #   SSM SecureString 은 그 역할이 Deny·kms:Decrypt Deny 로 못 읽는다, iam-github-oidc.tf DenyContentReads). 리소스는
+  #   남긴다(jwt_environments 에서 prod 를 빼면 prevent_destroy 로 apply 실패).
+  #   ⚠️ external 에서 이 Secret 을 **빈 JSON 으로 두지 않는다** — 데이터 0개면 ESO 가 K8s Secret 을 안 만들 수 있고
+  #      core-api 의 envFrom `core-api-app`(optional 아님)이 CreateContainerConfigError 가 된다(Blindspot JWT #1, 🟡).
+  #      비밀이 아닌 표식 하나를 둔다. 리소스를 count=0 으로 빼지 않는 이유: 아래 precondition·irsa-eso.tf ARN·
+  #      outputs `app_secret_name`·on.sh 형태 검사가 모두 이 리소스에 걸려 있다(#2).
+  secret_string = jsonencode(merge(local.external_enabled == 1 ? tomap({
+    APP_SECRET_SOURCE = "ssm-core-api-runtime" # 비밀 아님 — JWT·OAuth 는 core-api-runtime 이 준다
+    }) : tomap({
     # 🔴 반드시 **자기 환경 키만** 인덱싱한다. 맵 전체를 넘기거나 다른 환경 키를
     #    읽으면 위에서 세운 경계가 무의미해진다.
-    JWT_SECRET = data.terraform_remote_state.bootstrap.outputs.jwt_secrets[var.environment]
-    }, local.external_enabled == 1 ? tomap({}) : tomap({
-      GITHUB_CLIENT_ID     = var.github_client_id_placeholder
-      GITHUB_CLIENT_SECRET = var.github_client_secret_placeholder
+    JWT_SECRET           = data.terraform_remote_state.bootstrap.outputs.jwt_secrets[var.environment]
+    GITHUB_CLIENT_ID     = var.github_client_id_placeholder
+    GITHUB_CLIENT_SECRET = var.github_client_secret_placeholder
     }), {
 
     # ── 관측(Grafana) 3종은 **의도적으로 넣지 않는다** ──

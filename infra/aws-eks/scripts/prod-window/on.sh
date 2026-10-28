@@ -160,7 +160,7 @@ CID_BYTES=$(kubectl get secret core-api-runtime -n default -o jsonpath='{.data.G
 [ "${CID_BYTES:-0}" = "${#CID}" ] || { wlog "🔴 로그인 키: GITHUB_CLIENT_ID 끝에 개행이 있다(${CID_BYTES}B ≠ ${#CID}자) — SSM 값을 다시 넣는다"; exit 1; }
 FE_CID=$(win_fe_client_id "$ROOT/.github/workflows/fe-cd.yml")
 LV=$(win_login_keys_verdict "$KEYS" "$CID" "$FE_CID") || { wlog "🔴 로그인 키: $LV"; exit 1; }
-wlog "✅ 로그인 키: GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET 있음"
+wlog "✅ 로그인 키: GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET · JWT_SECRET 있음"
 kubectl rollout status deploy/core-api -n default --timeout=300s
 # 3노드 메모리(ArgoCD + LBC + 앱) — 첫 실측 대상(계획서 8-B). 실패해도 판정에 쓰지 않는다
 TOP=$(kubectl top nodes --no-headers --request-timeout=20s 2>/dev/null | awk '{printf "%s %s(%s) · ", $1, $4, $5}' || true)
