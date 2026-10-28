@@ -118,7 +118,7 @@ win_app_verdict() {
   if [ "$sync" = Synced ] && [ "$health" = Healthy ] && [ "$phase" = Succeeded ]; then echo ok; else echo wait; fi
 }
 
-# 로그인 키 판정 (📌D-016 B7-16, 2026-10-28) — $1 = core-api-runtime 키 이름(쉼표) · $2 = 그 Secret 의 GITHUB_CLIENT_ID 값 ·
+# 로그인 키 판정 (📌D-016 B7-16 + JWT 통일, 2026-10-28) — $1 = core-api-runtime 키 이름(쉼표) · $2 = 그 Secret 의 GITHUB_CLIENT_ID 값 ·
 #   $3 = FE 번들에 박히는 client id(`fe-cd.yml` 의 VITE_GITHUB_CLIENT_ID). stdout ok | "<사유>" (rc 1).
 #   🔑 C-4 1차(10-28)는 **파드가 뜨고 스모크(200/403)도 통과했는데 로그인만 죽었다** — 키 개수 > 0 만 보던 판정이 공허했다.
 #   FE 가 GitHub 에 보내는 client id 와 EKS 가 토큰 교환에 쓰는 client id 가 다르면 code 교환이 실패하므로 값까지 맞춘다
@@ -130,7 +130,7 @@ win_fe_client_id() {
 
 win_login_keys_verdict() {
   local keys=",$1," cid="$2" fe="$3" k
-  for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET; do
+  for k in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET JWT_SECRET; do   # JWT_SECRET — JWT 통일(10-28): Fly 와 같은 키, 없으면 기동 실패
     case "$keys" in *",$k,"*) ;; *) echo "로그인 키 $k 없음 — SSM /devquest/prod/app/$k"; return 1 ;; esac
   done
   [ -n "$fe" ] || { echo "fe-cd.yml 에서 VITE_GITHUB_CLIENT_ID 를 못 읽었다"; return 1; }

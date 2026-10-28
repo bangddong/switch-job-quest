@@ -22,6 +22,7 @@
 
 | PR/커밋 | 내용 | 날짜 |
 |---------|------|------|
+| **#505** | **8-C C-0 Cloudflare 읽기 실측 + C-2 차단 발견.** Free · SSL `full`(존 전체 strict 금지 — 블로그) · api.quest DNS only. 🔴 엣지 인증서 SAN = `dhbang.co.kr`·`*.dhbang.co.kr` 뿐 → 두 단계 `api.quest` 에 프록시를 켜면 TLS 실패 → 방식 재결정(ⓑ). `api.request` = Fly 직결 죽은 레코드 | 10-26 |
 | **#503** | **prod FE 를 Vercel → Cloudflare Worker 로 전환**(Vercel 제거 V-3). #501 Worker(정적 자산 + `/api` 중계, 위조 IP 헤더 제거) → workers.dev 스모크 → zone route `quest.dhbang.co.kr/*`. 🔴 복귀 = 대시보드 route 삭제 → routes 제거 PR(그 사이 `fe/**` 머지 금지). 토큰 함정: 만료 **날짜 직접 지정 시 `not_before` 도 같은 날**(하루짜리 토큰) — 프리셋 사용 | 10-26 |
 
 ## 완료 PR 이력 (2026-05-26 ~ 2026-07-13, 2026-07-15 이동)

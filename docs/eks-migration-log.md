@@ -6041,3 +6041,10 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [막힘] SSM `/devquest/prod/app/GITHUB_CLIENT_ID`(공개 값) put-parameter → 분류기 거부 `[Secret-Store Writes]`. 우회하지 않음 → TASK-22 로 사용자 콘솔 작업.
 - [메모] tofu 식 실측(스크래치): external `{"JWT_SECRET":…}` / in-cluster `{GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, JWT_SECRET}` — `tomap` 으로 `inconsistent types` 회피. 2-cluster `tofu validate` Success. 목 회귀 78/0, 변이(secret 검사 제거) → `🔴 secret 누락 통과` 1건 검출.
 - [결정] JWT 통일은 **다음 PR** — 실행 수단(FLY_API_TOKEN 권한 미확인)·PR 역할의 0-bootstrap state 읽기 위험 재판정이 먼저(계획서 「JWT 통일」 행).
+
+## 2026-10-28 — 📌D-016 JWT 통일 설계 (SSM 단일 정본 + jwt-rotate.yml)
+
+- [결정] 사용자: *"SSM에 등록하고 fly나 eks 둘 다 하나만 쓰겠다는거지?"* → *"그 방향으로 가자"*. 정본 = SSM `/devquest/prod/app/JWT_SECRET`, 교체 = 새 키(Fly 옛 키는 write-only 라 버림) = 1회 전원 로그아웃 감수. 이중 키 검증 기각(옛 키를 못 읽어 EKS 에 반쪽 + BE 비용).
+- [메모] 일반 관행 설명 후 결정: 서명 키는 tfstate 가 아니라 secret 저장소 · 같은 서비스 다중 배포는 같은 키 공유가 정상(둘 다 발급) · 무중단 교체는 이중 키 검증이 표준이나 사용자 ≈ 1명이라 과함.
+- [메모] Blindspot 9건 중 계획을 바꾼 것: ① external 에서 core-api-app 이 `{}` 면 ESO 가 Secret 을 안 만들 수 있어(🟡) envFrom(optional 아님) 이 깨짐 → 비밀 아닌 표식 키 1개 ② count=0 으로 빼면 B7-16 precondition·IRSA ARN·outputs·on.sh 형태 검사가 함께 사라짐 → 리소스 유지 ③ 창 중 rotate = Fly·EKS 키 분기 → 클러스터 켜짐이면 거부 ⑥ be-cd concurrency 공유 = 대기 배포 조용히 취소 → 공유 대신 실행·대기 0 확인 ⑧ 테스트 이름 목록 쉼표 결합 = gitleaks 재발 → printf 로 조립. PR 역할의 SSM 복호화 불가 🔴 확인(`iam-github-oidc.tf` DenyContentReads·DenyKmsDecrypt) — 정본 이동의 이득이 실재.
+- [메모] tofu 식 실측: external `{"APP_SECRET_SOURCE":"ssm-core-api-runtime"}` / in-cluster 3키(JWT 포함). `tofu validate` Success · design-integrity 통과 · 목 회귀 80/0 · 64자 키 생성 파이프 로컬 확인(len=64).
