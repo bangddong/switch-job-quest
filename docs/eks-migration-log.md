@@ -5991,3 +5991,25 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] Blindspot 부수 발견: 계획서의 *"prod-smoke-daily 는 api.quest 직접이라 늘 Fly"* 는 **틀렸다** — `quest.dhbang.co.kr`(Worker) 경유. 05:23 KST 를 덮는 eks 창이면 EKS 를 스모크한다(기본 창 12~18 엔 해당 없음). 계획서 정정.
 - [메모] 목 회귀 `window-test.sh` ✅ 67 · 🔴 0(목 curl·sleep 추가). shellcheck 경고 0(info 1, 로컬 실행).
 - [해결] QA LOW 3건 수정: F-1 재 on 의 임대 조회 오류 = 표식 유지 · 표식 있으면 만료를 앞당기지 않음 / F-2 DNS 조회를 클라이언트에서도 이름 정확 일치(ACM 검증 CNAME 보호) / F-3 KV 쓰기 실패를 Summary 에 남김. 목 회귀 ✅ 71 · 🔴 0. 실 Cloudflare 읽기 전용 재확인(`api.quest` 1건 CNAME 유지 · `eks.quest` 0건).
+
+## 2026-10-28 — 📌D-016 8-C C-3 트래픽 0 왕복 (첫 Cloudflare 쓰기)
+
+- [비용] 10:48 KST on dispatch(`hours=1 traffic=fly`, #510 머지 커밋 `7b63939`) → 11:07 on 성공 → 11:08 off dispatch → 11:15 off 성공. 클러스터 가동 ≈ 27분 × 3노드 $0.1865/h ≈ **$0.08** + ALB ≈ 11분(LCU 0). 산정치 — 표에는 다음 세션 `budgets describe-budgets` 조회값으로.
+- [해결] on 의 새 단계(`switch-on.sh`, Linux 러너 첫 실행):
+  ```
+  [eks-window] DNS eks.quest.dhbang.co.kr → k8s-default-devquest-3675af8c03-….ap-northeast-2.elb.amazonaws.com (DNS only · TTL 60)
+  [eks-window] ✅ eks.quest.dhbang.co.kr 실제 이름으로 200
+  [eks-window] traffic=fly — 사용자 트래픽은 Fly 그대로
+  ```
+  🔴 실측: **DNS Edit 권한 첫 사용 성공**(C-0 이후 🟡) · Linux 러너의 `-H @<(…)` 토큰 전달 동작 · DoH 확인 통과.
+- [메모] 창 중 맥에서: `https://eks.quest…/api/v1/daily-question` **200** · `dig @1.1.1.1 CNAME` = 새 ALB · `quest.dhbang.co.kr` 헤더 `x-devquest-backend: fly` · 임대 값에 `traffic=eks` 표식 **없음**(의도).
+- [해결] off 의 새 단계(`switch-off.sh`):
+  ```
+  [eks-window] force → act
+  [eks-window] KV 직전 값: 없음
+  [eks-window] ✅ eks.quest.dhbang.co.kr 삭제(또는 없음)
+  ```
+  직전 값이 없어서 240s 배수 대기는 건너뛰었다(의도). 그 뒤 기존 경로(LB 기록 LCU=0 → LB 0 → destroy → off-verify 전부 0 · 임대 삭제).
+- [메모] **C-3 완료 기준 전부 통과**(계획서 C-2 행): 로컬에서 KV 직접 조회 `{"target":"fly"}`(= **KV 쓰기 첫 실측 성공**) · `eks.quest` 레코드 0건 · `api.quest` CNAME 유지 · 클러스터 0 · LB 0 · 임대 없음 · prod 헤더 `fly` · off 로그에 `KV 쓰기 실패` 0회.
+- [메모] 로그 마스킹: on·off 로그에서 32자 이상 hex 문자열은 전부 40자 커밋 SHA(on 11건, off 0건 — 비SHA 0) → Cloudflare 계정·존 ID 노출 없음. 토큰 문자열·`Authorization` 0건.
+- [메모] 미검증으로 남은 것(C-4 몫): 실제 트래픽 전환(KV eks), 240s 배수 대기 경로, 한국 엣지 전파 시간.
