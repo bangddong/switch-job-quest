@@ -97,6 +97,6 @@ aws ssm put-parameter --region ap-northeast-2 --name /devquest/ops/eks-window/le
 | `decide-off.sh` | 끌지 판정(force/watchdog 표) |
 | `off-pre.sh` | destroy 전 — LB 기록(LCU) · Application → Ingress → LB 0 |
 | `off-verify.sh` | destroy 후 — AWS 로 꺼짐 판정 · LBC SG 정리 · 임대 삭제 |
-| `tests/window-test.sh` | 목 회귀(67건, $0 — 목 aws·kubectl·curl). `tests/pick-image-tag-test.sh`(9건) |
+| `tests/window-test.sh` | 목 회귀(71건, $0 — 목 aws·kubectl·curl). `tests/pick-image-tag-test.sh`(9건) |
 
 🔴 이 폴더의 스크립트는 `tofu apply`/`destroy` 를 부르지 않는다 — 워크플로 단계에만 둔다(Infra CI guard 가 워크플로만 읽는다).

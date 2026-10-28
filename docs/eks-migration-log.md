@@ -5989,4 +5989,5 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [막힘] 목 회귀 첫 실행 3건 빨강 중 **1건이 실제 버그**: `cf_call` 이 HTTP 코드를 전역 변수에 남겼는데 호출자가 `r=$(cf_call …)` 서브셸로 불러 값이 사라졌다 → KV 404(키 없음)를 "읽기 실패" 로 오판, 매 off 마다 불필요한 240s 대기. 코드를 파일로 넘기도록 수정. (나머지 1건은 테스트 기대값 계산 실수 — epoch 2000003600 = `04:33:20Z`.)
 - [메모] 실 Cloudflare **읽기 전용** 확인(쓰기 0): `cf_init` → 계정·존 32자 ID 해석, KV NS `be53c1e0…` 제목 조회 성공 · `cf_kv_get` → `none`(HTTP 404) · `eks.quest` 레코드 `[]` · DoH `api.quest` → `devquest-api.fly.dev` 일치.
 - [메모] Blindspot 부수 발견: 계획서의 *"prod-smoke-daily 는 api.quest 직접이라 늘 Fly"* 는 **틀렸다** — `quest.dhbang.co.kr`(Worker) 경유. 05:23 KST 를 덮는 eks 창이면 EKS 를 스모크한다(기본 창 12~18 엔 해당 없음). 계획서 정정.
-- [메모] 목 회귀 `window-test.sh` ✅ 67 · 🔴 0(목 curl·sleep 추가). shellcheck 경고 0(info 1).
+- [메모] 목 회귀 `window-test.sh` ✅ 67 · 🔴 0(목 curl·sleep 추가). shellcheck 경고 0(info 1, 로컬 실행).
+- [해결] QA LOW 3건 수정: F-1 재 on 의 임대 조회 오류 = 표식 유지 · 표식 있으면 만료를 앞당기지 않음 / F-2 DNS 조회를 클라이언트에서도 이름 정확 일치(ACM 검증 CNAME 보호) / F-3 KV 쓰기 실패를 Summary 에 남김. 목 회귀 ✅ 71 · 🔴 0. 실 Cloudflare 읽기 전용 재확인(`api.quest` 1건 CNAME 유지 · `eks.quest` 0건).

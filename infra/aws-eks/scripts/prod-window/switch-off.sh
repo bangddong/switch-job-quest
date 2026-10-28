@@ -60,11 +60,14 @@ if PREV=$(cf_kv_get); then
 else
   wlog "KV 읽기 실패 — eks 일 수 있다고 본다"
 fi
-if ! cf_kv_put '{"target":"fly"}'; then
+if cf_kv_put '{"target":"fly"}'; then
+  wsummary "- 🚦 트래픽: **Fly** (KV api-target = fly)"
+else
   [ "$MAYBE_EKS" = 0 ] || fallback "KV fly 쓰기 실패"
   wlog "⚠️ KV 쓰기 실패지만 직전 값이 eks 가 아니었다 — 트래픽은 이미 Fly. 진행"
+  # 초록으로 끝나도 쓰기 경로가 죽어 있다는 사실은 남긴다(QA F-3) — C-3 완료 기준이 이 줄을 본다
+  wsummary "- ⚠️ 트래픽: Fly(직전 값 $([ "$PREV" = none ] && echo 없음 || echo 'eks 아님')) — **KV 쓰기 실패**. 다음 traffic=eks 전에 토큰·권한 확인"
 fi
-wsummary "- 🚦 트래픽: **Fly** (KV api-target = fly)"
 
 # ── ② 배수 대기 ──────────────────────────────────────────────────────────
 if [ "$MAYBE_EKS" = 1 ]; then

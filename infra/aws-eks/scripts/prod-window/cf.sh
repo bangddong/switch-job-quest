@@ -97,7 +97,9 @@ cf_dns_list() {
   local r
   r=$(cf_call GET "/zones/$CF_ZONE/dns_records?name=$1&per_page=100") \
     || { wlog "DNS 조회 실패($(cf_code)): $(printf '%s' "$r" | cf_err)"; return 1; }
-  printf '%s' "$r" | jq -c '[.result[]? | {id, type, content}]'
+  # 이름을 **클라이언트에서도** 정확 일치로 거른다(QA F-2) — 삭제 경로가 API 의 `name=` 의미에만 기대지 않게.
+  #   어긋나면 `_…eks.quest` ACM 검증 CNAME 이 지워져 인증서 갱신이 실패한다(acm.tf TASK-10).
+  printf '%s' "$r" | jq -c --arg n "$1" '[.result[]? | select((.name | ascii_downcase) == ($n | ascii_downcase)) | {id, type, content}]'
 }
 
 # CNAME upsert — $1 이름 · $2 대상. 같은 이름에 CNAME 아닌 레코드가 있으면 손대지 않고 rc 1.

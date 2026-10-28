@@ -75,7 +75,7 @@ case "$url" in
         printf '%s' "$body" > "$STATE/kv"; echo "$body" >> "$STATE/kv_puts"; resp 200 '{"success":true}' ;;
       "GET "*/dns_records\?name=*) resp 200 "{\"success\":true,\"result\":$(cat "$STATE/dns" 2>/dev/null || echo '[]')}" ;;
       "POST "*/dns_records|"PUT "*/dns_records/*)
-        c=$(printf '%s' "$body" | jq -r .content); echo "[{\"id\":\"r1\",\"type\":\"CNAME\",\"content\":\"$c\"}]" > "$STATE/dns"
+        c=$(printf '%s' "$body" | jq -r .content); n=$(printf '%s' "$body" | jq -r .name); echo "[{\"id\":\"r1\",\"type\":\"CNAME\",\"name\":\"$n\",\"content\":\"$c\"}]" > "$STATE/dns"
         echo "$method" >> "$STATE/dns_writes"; resp 200 '{"success":true}' ;;
       "DELETE "*/dns_records/*)
         [ "${MOCK_DNS_DEL:-ok}" = fail ] && resp 500 '{"success":false,"errors":[{"code":1,"message":"x"}]}'
@@ -165,9 +165,9 @@ grep -q 'GET https://api.cloudflare.com/client/v4/zones/zone00000000000000000000
   && ok "레코드 조회는 이름 정확 일치(ACM 검증 _xxx.eks.quest 를 안 건드림)" || bad "$(grep dns_records "$CALLS" | head -1)"
 reset; echo '{"target":"eks","until":"2033-01-01T00:00:00Z"}' > "$M/kv"; MOCK_LEASE="$VALID" son fly >/dev/null; rc=$?
 [ $rc = 0 ] && [ "$(jq -r .target "$M/kv")" = fly ] && ok "traffic=fly 재실행 + KV eks → fly 로 되돌림(U-5)" || bad "rc=$rc kv=$(cat "$M/kv")"
-reset; echo '[{"id":"r1","type":"CNAME","content":"old.elb.amazonaws.com"}]' > "$M/dns"; MOCK_LEASE="$VALID" son fly >/dev/null
+reset; echo '[{"id":"r1","type":"CNAME","name":"eks.quest.dhbang.co.kr","content":"old.elb.amazonaws.com"}]' > "$M/dns"; MOCK_LEASE="$VALID" son fly >/dev/null
 [ "$(cat "$M/dns_writes")" = PUT ] && ok "기존 레코드는 PUT(갱신) — 중복 생성 안 함" || bad "$(cat "$M/dns_writes")"
-reset; echo '[{"id":"a1","type":"A","content":"1.2.3.4"}]' > "$M/dns"; MOCK_LEASE="$VALID" son fly >/dev/null; rc=$?
+reset; echo '[{"id":"a1","type":"A","name":"eks.quest.dhbang.co.kr","content":"1.2.3.4"}]' > "$M/dns"; MOCK_LEASE="$VALID" son fly >/dev/null; rc=$?
 [ $rc = 1 ] && [ ! -f "$M/dns_writes" ] && ok "🔴 같은 이름에 A 레코드 → 손대지 않고 rc 1" || bad "rc=$rc"
 reset; MOCK_LEASE="$VALID" son eks >/dev/null; rc=$?
 [ $rc = 0 ] && [ "$(cat "$M/kv")" = '{"target":"eks","until":"2033-05-18T04:33:20Z"}' ] \
@@ -192,7 +192,7 @@ grep -qx '::add-mask::cf-test-token' "$M/out" && grep -qx '::add-mask::acct00000
 
 echo "── switch-off (8-C C-2 — 트래픽 먼저 · 배수 · 레코드)"
 soff(){ WIN_DRAIN_WAIT=240 run switch-off.sh; }
-reset; echo '{"target":"eks","until":"2033-01-01T00:00:00Z"}' > "$M/kv"; echo '[{"id":"r1","type":"CNAME","content":"x"}]' > "$M/dns"
+reset; echo '{"target":"eks","until":"2033-01-01T00:00:00Z"}' > "$M/kv"; echo '[{"id":"r1","type":"CNAME","name":"eks.quest.dhbang.co.kr","content":"x"}]' > "$M/dns"
 MOCK_LEASE="$VALID" soff >/dev/null; rc=$?
 k=$(grep -n 'PUT .*values/api-target' "$CALLS" | cut -d: -f1 | head -1); w=$(grep -n '^sleep 240' "$CALLS" | cut -d: -f1 | head -1); d=$(grep -n 'DELETE .*dns_records' "$CALLS" | cut -d: -f1 | head -1)
 [ $rc = 0 ] && [ "$(cat "$M/kv")" = '{"target":"fly"}' ] && [ -n "$k" ] && [ -n "$w" ] && [ -n "$d" ] && [ "$k" -lt "$w" ] && [ "$w" -lt "$d" ] \
@@ -215,7 +215,7 @@ reset; echo '{"target":"eks","until":"2033-01-01T00:00:00Z"}' > "$M/kv"; echo "$
 [ $rc = 1 ] && ok "🔴 KV eks 인데 fly 쓰기 실패 + 임대 유효 → rc 1" || bad "rc=$rc"
 reset; MOCK_LEASE="$VALID" MOCK_KV_PUT=fail soff >/dev/null; rc=$?
 [ $rc = 0 ] && ok "KV 없음 + 쓰기 실패 → 트래픽은 이미 Fly, 진행" || bad "rc=$rc"
-reset; echo '[{"id":"r1","type":"CNAME","content":"x"}]' > "$M/dns"; MOCK_LEASE="$VALID" MOCK_DNS_DEL=fail soff >/dev/null; rc=$?
+reset; echo '[{"id":"r1","type":"CNAME","name":"eks.quest.dhbang.co.kr","content":"x"}]' > "$M/dns"; MOCK_LEASE="$VALID" MOCK_DNS_DEL=fail soff >/dev/null; rc=$?
 [ $rc = 0 ] && ok "레코드 삭제 실패 → 경고만(rc 0)" || bad "rc=$rc"
 
 echo "── 임대 표식 이어 가기"
@@ -223,6 +223,17 @@ reset; echo "$VALID traffic=eks" > "$M/lease_cur"; ( PATH="$M:$PATH"; . "$HERE/c
 grep -q ' traffic=eks$' "$M/lease_cur" && ok "창 중 재 on — 새 임대가 traffic=eks 표식을 잇는다" || bad "$(cat "$M/lease_cur")"
 reset; MOCK_LEASE="$VALID"; ( PATH="$M:$PATH"; MOCK_LEASE="$VALID"; export MOCK_LEASE; . "$HERE/common.sh"; win_lease_put 3 ) 2>/dev/null
 ! grep -q 'traffic=eks' "$M/lease_cur" && ok "표식 없는 임대 → 새 임대도 표식 없음" || bad "$(cat "$M/lease_cur")"
+
+echo "── QA F-1~3 (C-2)"
+reset; echo '[{"id":"v1","type":"CNAME","name":"_abc.eks.quest.dhbang.co.kr","content":"_x.acm-validations.aws"}]' > "$M/dns"; MOCK_LEASE="$VALID" soff >/dev/null
+! grep -q 'DELETE .*dns_records/v1' "$CALLS" && ok "F-2 API 가 이름 다른 레코드(ACM 검증)를 돌려줘도 지우지 않는다" || bad "🔴 ACM 검증 CNAME 삭제"
+reset; echo "expires=2000036000 run=1 started=1999990000 traffic=eks" > "$M/lease_cur"; ( PATH="$M:$PATH"; . "$HERE/common.sh"; win_lease_put 1 ) 2>/dev/null
+grep -q '^expires=2000036000 .* traffic=eks$' "$M/lease_cur" && ok "F-1b 표식 있는 임대에 더 짧은 재 on → 만료를 앞당기지 않음" || bad "$(cat "$M/lease_cur")"
+reset; ( PATH="$M:$PATH"; MOCK_LEASE=err; export MOCK_LEASE; . "$HERE/common.sh"; win_lease_put 3 ) 2>/dev/null
+grep -q ' traffic=eks$' "$M/lease_put" && ok "F-1a 임대 조회 오류 → 표식 보수적으로 유지" || bad "$(cat "$M/lease_put" 2>/dev/null)"
+reset; GITHUB_STEP_SUMMARY="$M/sum" MOCK_LEASE="$VALID" MOCK_KV_PUT=fail soff >/dev/null
+grep -q 'KV 쓰기 실패' "$M/sum" && ! grep -q 'KV api-target = fly' "$M/sum" && ok "F-3 KV 쓰기 실패는 Summary 에 남는다(초록이어도)" || bad "$(cat "$M/sum")"
+rm -f "$M/sum"
 
 echo
 echo "합계: ✅ $P · 🔴 $F"

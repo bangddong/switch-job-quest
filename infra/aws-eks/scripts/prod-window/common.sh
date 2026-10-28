@@ -45,11 +45,23 @@ win_lease_state() {
 
 # 임대 쓰기 — $1 = 시간(정수). 실패는 rc≠0 (on 은 여기서 멈춘다 — 임대 없이 켜면 watchdog 이 곧 끈다).
 win_lease_put() {
-  local hours="$1" now exp mark=""
+  local hours="$1" now exp mark="" cur old
   case "$hours" in ''|*[!0-9]*) wlog "시간이 정수가 아니다: $hours"; return 1 ;; esac
   now=$(date +%s); exp=$((now + hours * 3600))
   # 창 중 재실행 — 이미 트래픽이 EKS 면 표식을 이어 간다(지우면 switch-off 폴백이 "eks 아님" 으로 오판한다, 8-C C-2)
-  win_lease_has_eks && mark=" traffic=eks"
+  #   ① 조회 **오류**는 표식 있음으로 본다(QA F-1a) — 표식이 남는 쪽의 비용은 Cloudflare 불통 때 destroy 보류(상한 임대+1h)뿐이다
+  #   ② 표식이 있으면 expires 를 **줄이지 않는다**(F-1b) — KV until 은 이전 임대 만료라, 더 짧은 hours 로 재 on 하면
+  #      불변식 "until ≤ 임대 만료" 가 깨진다(switch-on 이 KV 를 다시 쓰기 전에 죽는 경우)
+  if cur=$(aws ssm get-parameter --region "$WIN_REGION" --name "$WIN_LEASE_PARAM" \
+             --query 'Parameter.Value' --output text 2>&1); then
+    case " $cur " in *" traffic=eks "*)
+      mark=" traffic=eks"
+      old=$(printf '%s' "$cur" | sed -nE 's/.*expires=([0-9]+).*/\1/p')
+      if [ -n "$old" ] && [ "$old" -gt "$exp" ]; then wlog "표식 있는 임대 — 만료를 앞당기지 않는다"; exp="$old"; fi ;;
+    esac
+  else
+    case "$cur" in *ParameterNotFound*) ;; *) wlog "임대 조회 오류 — 트래픽 표식을 보수적으로 남긴다"; mark=" traffic=eks" ;; esac
+  fi
   aws ssm put-parameter --region "$WIN_REGION" --name "$WIN_LEASE_PARAM" --type String --overwrite \
     --value "expires=$exp run=${GITHUB_RUN_ID:-local} started=$now$mark" >/dev/null || return 1
   wlog "임대: $(TZ=Asia/Seoul date -r "$exp" '+%m-%d %H:%M KST' 2>/dev/null || TZ=Asia/Seoul date -d "@$exp" '+%m-%d %H:%M KST') 까지"
