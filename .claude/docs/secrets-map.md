@@ -12,7 +12,7 @@
 | 보관소 | 읽기 | 쓰기 | 들어 있는 것 |
 |---|---|---|---|
 | **Fly secrets** (`devquest-api`) | ❌ **write-only** (이름·digest 만) | `fly secrets set/import` → **앱 재시작 = prod 재배포** | 앱 런타임 전부 (§2) |
-| **SSM `/devquest/prod/app/*`** | `aws ssm get-parameter --with-decryption` | `put-parameter --overwrite` (KMS `alias/aws/ssm` 유지) | EKS 가 ESO 로 읽는 앱 외부 키 |
+| **SSM `/devquest/prod/app/*`** | `aws ssm get-parameter --with-decryption` | `put-parameter --overwrite` (KMS `alias/aws/ssm` 유지) — ⚠️ Claude 는 쓰기가 막혀 있다(분류기, 10-28) → 사용자가 콘솔로 | EKS 가 ESO 로 읽는 앱 외부 키 + 로그인 키(허용 목록 `externalsecret-runtime.yaml`) |
 | **SSM `/devquest/prod/db/*`** | 위와 같음 | 위와 같음 | EC2 DB 비밀번호·WireGuard·Neon 대기 — ⚠️ **EC2 역할이 읽는 곳** (prod 쓰기 자격증명 추가 금지) |
 | **SSM `/devquest/ops/*`** | 위와 같음 | 위와 같음 | 운영 토큰(Cloudflare 8-C), 창 임대(비밀 아님) |
 | **Secrets Manager** `events!connection/devquest-eks-window-github/*` | (EventBridge 관리) | `aws events update-connection` | EventBridge → GitHub dispatch PAT |
@@ -36,8 +36,8 @@
 | **Resend API 키** | Resend 콘솔 | Fly `RESEND_API_KEY` · 로컬 `settings.local.json` | prod 앱(메일) | EKS 엔 없음(창 중 메일 꺼짐, B8-19) |
 | **JWT 서명 키 (Fly)** | **없음** — Fly write-only | Fly `JWT_SECRET` | prod 앱 | 🔴 교체 = **전 사용자 로그아웃**(만료 30일). EKS 와 **다른 값**(U-11) |
 | **JWT 서명 키 (EKS)** | 0-bootstrap `random_password.jwt_secret[env]` (tfstate) | Secrets Manager `devquest-eks/<env>/app` (창 동안) | EKS 창 | 통일(U-11) = 이 값을 Fly 로 **출력 없이** import(B7-17) |
-| **GitHub OAuth client id** | GitHub → Developer settings (공개 값) | `fe-cd.yml` 빌드 env · Fly `GITHUB_CLIENT_ID` · `application-local.yml` · Vercel env | FE 로그인 URL · prod 앱 토큰 교환 | 비밀 아님. **FE 번들과 Fly 가 같아야** 로그인 된다 |
-| **GitHub OAuth client secret** | **없음** — GitHub 은 발급 순간만 보여 줌 | Fly `GITHUB_CLIENT_SECRET` | prod 앱 | EKS 는 **자리표시**(`2-cluster/secrets.tf`) → 창 중 로그인 불가(C-4 1차). GitHub 앱은 secret 여러 개 가능(🟡 미확인) |
+| **GitHub OAuth client id** | GitHub → Developer settings → GitHub Apps (공개 값) | `fe-cd.yml` 빌드 env · Fly `GITHUB_CLIENT_ID` · SSM `/devquest/prod/app/GITHUB_CLIENT_ID`(String, EKS 창) · `application-local.yml`(로컬) · Vercel env | FE 로그인 URL · prod 앱 토큰 교환 | 비밀 아님. **FE 번들과 Fly 가 같아야** 로그인 된다 |
+| **GitHub OAuth client secret — 키 2개** | **없음** — GitHub 은 발급 순간만 보여 줌 | ① Fly `GITHUB_CLIENT_SECRET` ② SSM `/devquest/prod/app/GITHUB_CLIENT_SECRET`(SecureString) = **EKS 전용 별도 secret**(B7-16, TASK-22) | ① prod 앱 ② EKS 창(ESO `core-api-runtime`) | 🔴 서로 덮어쓰지 마라 — 유출된 쪽만 GitHub 에서 폐기·재발급. learning 모드는 자리표시(`2-cluster/secrets.tf`). on 이 SSM client id = `fe-cd.yml` 값을 강제 |
 | **EC2 Postgres 앱 비밀번호** | SSM `/devquest/prod/db/password` (EC2 user-data 가 생성) | Fly `DB_*` · 로컬 `settings.local.json` `PGPASSWORD` · EKS 창(ESO 가 SSM 직접) | prod 앱 · EKS 창 · 백업 | 교체 = EC2 에서 `ALTER ROLE` → SSM → Fly 순. **원격 쓰기는 사용자 명시 지시 필요** |
 | **WireGuard 설정 (Fly↔EC2)** | `fly wireguard create` 산출물(개인키) | SSM `/devquest/prod/db/wireguard-conf` | EC2 DB 부팅 | 제거 = `fly wireguard remove personal devquest-prod-db` |
 | **Neon 대기 DB URL** | Neon 콘솔 | SSM `/devquest/prod/db/neon-standby-url` | 매일 04:30 복원 | `neon-prod-coords` 는 String(비밀 아님). neondb_owner 비밀번호는 **리셋 안 하기로 결정** |

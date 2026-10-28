@@ -149,6 +149,11 @@ KEYS=$(kubectl get secret core-api-runtime -n default -o json | jq -r '.data // 
 [ -n "$KEYS" ] || { wlog "🔴 core-api-runtime 이 비었다 — SSM /devquest/prod/app/ 에 키가 없거나 이름이 허용 목록과 다르다(TASK-17)"; exit 1; }
 wlog "앱 외부 키: $KEYS"
 wsummary "- 앱 외부 키(이름): $KEYS"
+# 로그인 키(B7-16) — 없거나 FE 와 client id 가 다르면 창을 열지 않는다(C-4 1차: 파드·스모크는 통과, 로그인만 죽었다)
+CID=$(kubectl get secret core-api-runtime -n default -o jsonpath='{.data.GITHUB_CLIENT_ID}' 2>/dev/null | base64 -d 2>/dev/null || true)
+FE_CID=$(sed -nE 's/^[[:space:]]*VITE_GITHUB_CLIENT_ID:[[:space:]]*([A-Za-z0-9._-]+).*/\1/p' .github/workflows/fe-cd.yml | head -1)
+LV=$(win_login_keys_verdict "$KEYS" "$CID" "$FE_CID") || { wlog "🔴 로그인 키: $LV"; exit 1; }
+wlog "✅ 로그인 키: GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET 있음"
 kubectl rollout status deploy/core-api -n default --timeout=300s
 # 3노드 메모리(ArgoCD + LBC + 앱) — 첫 실측 대상(계획서 8-B). 실패해도 판정에 쓰지 않는다
 TOP=$(kubectl top nodes --no-headers --request-timeout=20s 2>/dev/null | awk '{printf "%s %s(%s) · ", $1, $4, $5}' || true)
