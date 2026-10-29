@@ -20,7 +20,12 @@ storage:
       jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
       username: ${DB_USERNAME}
       password: ${DB_PASSWORD}
-      maximum-pool-size: 10
+      # 10 → 3 (U-6). EKS 몫 커넥션 예산 25 안에 들이기 위해서다: core-api 10 + daily-api 3 × HPA 최대 4 = 22 ≤ 25.
+      # 이전 10 × 4 = 40 이면 core-api 10 과 합쳐 50 으로 예산(와 EC2 Postgres max_connections 50)을 혼자 넘는다.
+      # daily-api 는 오늘의 질문 읽기·소량 쓰기와 레이트 리밋 카운터만 쓴다. 카운터 쿼리는 문장마다 커넥션을 빌렸다
+      # 즉시 반납하므로(OSIV 로 요청 내내 쥐지 않는다) 파드당 3 이면 충분하다.
+      # core-api 풀·connection-timeout·pgjdbc socketTimeout 정리는 B7-21 몫이다.
+      maximum-pool-size: 3
       minimum-idle: 0
       connection-test-query: SELECT 1
 

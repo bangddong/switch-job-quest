@@ -22,7 +22,7 @@ class DailyGlobalRateLimitTest {
     private class Fixture(personalCapacity: Long, globalCapacity: Long) {
         val personalStore = DailyExplainRateLimitBucketStore(capacity = personalCapacity, refillDays = 1)
         val globalStore = DailyExplainGlobalRateLimitStore(capacity = globalCapacity, refillDays = 1)
-        val interceptor = DailyExplainRateLimitInterceptor(personalStore, globalStore, ObjectMapper(), ClientIpResolver(""))
+        val interceptor = DailyExplainRateLimitInterceptor(personalStore, globalStore, ObjectMapper(), memoryOnlyLimiter(), ClientIpResolver(""))
 
         fun call(ip: String): Pair<Boolean, HttpServletResponse> {
             val response = mockResponse()
@@ -93,7 +93,7 @@ class DailyGlobalRateLimitTest {
     fun `daily-evaluate 도 같은 순서로 동작한다`() {
         val personal = DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1)
         val global = DailyEvaluateGlobalRateLimitStore(capacity = 1, refillDays = 1)
-        val interceptor = DailyEvaluateRateLimitInterceptor(personal, global, ObjectMapper(), ClientIpResolver(""))
+        val interceptor = DailyEvaluateRateLimitInterceptor(personal, global, ObjectMapper(), memoryOnlyLimiter(), ClientIpResolver(""))
 
         assertThat(interceptor.preHandle(mockRequest("1.1.1.1"), mockResponse(), Any())).isTrue()
         assertThat(interceptor.preHandle(mockRequest("2.2.2.2"), mockResponse(), Any())).isFalse()
