@@ -334,4 +334,5 @@ Logtail (Better Stack): fly.io log drain 연동 완료.
 | **#467·#468** | **📌D-016 순서표 5 계획 + 5-0 실측.** Fly→DB = **Fly 6PN 에 EC2 를 WireGuard 피어로**(사용자 — 고정 IP $3.60 현금 기각), 비번 = SSM SecureString·EC2 생성(Secrets Manager 는 회전을 Fly write-only 시크릿 때문에 못 켜서 기각), TLS require. 실측: 인바운드 0개로 Fly→EC2 Postgres 접속, RTT 29.7ms. 🔴 **Java(musl)는 `._peer.internal` 을 못 푼다**(A 질의 NXDOMAIN) → `DB_HOST` = 피어 IPv6 리터럴. Neon = PG 17·싱가포르 | 10-19~20 |
 
 <!-- 2026-10-29 최근 완료에서 이동 -->
+| **#510 + C-3** | **8-C C-2 eks-window 배선 + 트래픽 0 왕복.** 입력 `traffic`(fly 기본·eks) — on 끝에 `eks.quest` → ALB(DNS only), eks 면 임대 표식 → KV `{eks, until=임대 만료}`. off 맨 앞: KV fly → (직전 eks 면) 배수 240s → 레코드 삭제. Cloudflare 불통은 eks 창+임대 유효일 때만 destroy 보류. C-3 실측: DNS 생성·삭제·KV 쓰기 첫 성공, 27분 ≈ $0.08. 다음 = C-4 첫 트래픽 창(🔴) | 10-28 |
 | **#507·#508** | **8-C C-1 Worker 백엔드 스위치 배포.** Worker 가 KV `devquest-backend-switch` 키 `api-target` `{target, until}` 를 읽어 `/api/*` 를 Fly/EKS 로 — eks 는 `until` 이 미래·12h 이내·`EKS_ORIGIN` https 일 때만, 그 외(값 없음·만료·KV 오류) = Fly. 응답 헤더 `X-DevQuest-Backend`(B8-14 ✅). 키 없음 → prod 동작 불변(`fly` 실측). 토큰 둘: FE 배포(GitHub secret)·8-C(SSM) 둘 다 KV Edit | 10-27 |

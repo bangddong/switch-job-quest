@@ -43,7 +43,7 @@
 | **WireGuard 설정 (Fly↔EC2)** | `fly wireguard create` 산출물(개인키) | SSM `/devquest/prod/db/wireguard-conf` | EC2 DB 부팅 | 제거 = `fly wireguard remove personal devquest-prod-db` |
 | **Neon 대기 DB URL** | Neon 콘솔 | SSM `/devquest/prod/db/neon-standby-url` | 매일 04:30 복원 | `neon-prod-coords` 는 String(비밀 아님). neondb_owner 비밀번호는 **리셋 안 하기로 결정** |
 | **Grafana 3종 · Sentry DSN** | Grafana Cloud · Sentry 콘솔 | Fly `GRAFANA_*` · `SENTRY_DSN` | prod 앱 | EKS 엔 **현재 없음** — TASK-17 로 10번 직전 SSM `/devquest/prod/app/` 에 추가 예정, ESO 허용 목록(`externalsecret-runtime.yaml`)은 이미 열려 있다. 추가하면 이 행을 고친다. (학습 시절 *자리표시* 를 넣었다가 관측이 오발한 사고 때문에 자리표시는 금지) |
-| **Cloudflare 토큰 — FE 배포** | **없음**(발급 순간만) | GitHub secret `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) | `fe-cd.yml` deploy-workers · `edge-auth-rotate.yml`(Worker secret 쓰기·목록) | 권한: Workers·KV Edit(🟡 Worker secret 쓰기는 Workers Scripts Edit 범위 — 첫 rotate 로 실측). 만료 프리셋 버튼으로(날짜 선택 = 하루짜리 함정) |
+| **Cloudflare 토큰 — FE 배포** | **없음**(발급 순간만) | GitHub secret `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) | `fe-cd.yml` deploy-workers · `edge-auth-rotate.yml`(Worker secret 쓰기·목록) | 권한: Workers·KV Edit(🔴 Worker secret 쓰기 **가능** — 첫 rotate 10-29 실측, run 40816914011). 만료 프리셋 버튼으로(날짜 선택 = 하루짜리 함정) |
 | **Cloudflare 토큰 — 8-C 창** | **없음** | SSM `/devquest/ops/cloudflare-token` | eks-window(DNS·KV) | 🔴 **만료 2027-01-24**. 만료 뒤 traffic=eks 창 off 는 임대 만료까지 보류 |
 | **GitHub PAT — EventBridge** | **없음** | Secrets Manager `events!connection/devquest-eks-window-github/*` | 18:00 off · 매시 watchdog | 🔴 **만료 2027-01-15**. connection **이름 바꾸지 마라**(PAT 가 placeholder 로 돌아감) |
 | **Fly 배포 토큰** | **없음** | GitHub secret `FLY_API_TOKEN` | `be-cd.yml` | app 범위 deploy 토큰(TASK-13). 값 출력 금지 |

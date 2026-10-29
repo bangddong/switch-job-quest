@@ -10,7 +10,6 @@ import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
 import com.devquest.core.domain.port.CodingRankPort
 import com.devquest.core.domain.port.CodingRoadmapProgressPort
-import com.devquest.core.domain.port.CodingSubmissionPort
 import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.Judge0Result
 import com.devquest.core.domain.port.UserCodingLevelPort
@@ -27,6 +26,8 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
+import org.springframework.core.annotation.AnnotatedElementUtils
+import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 
 @ExtendWith(MockitoExtension::class)
@@ -35,7 +36,7 @@ class CodingQuestServiceTest {
     @Mock lateinit var codingProblemGeneratorPort: CodingProblemGeneratorPort
     @Mock lateinit var codingProblemPort: CodingProblemPort
     @Mock lateinit var userCodingLevelPort: UserCodingLevelPort
-    @Mock lateinit var codingSubmissionPort: CodingSubmissionPort
+    @Mock lateinit var codingSubmissionRecorder: CodingSubmissionRecorder
     @Mock lateinit var judge0Port: Judge0Port
     @Mock lateinit var codingHintPort: CodingHintPort
     @Mock lateinit var codingRoadmapProgressPort: CodingRoadmapProgressPort
@@ -60,6 +61,36 @@ class CodingQuestServiceTest {
         solutionCode = "import java.util.Scanner; class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); int n = sc.nextInt(); System.out.println(n * n); } }",
         testCases = testCases
     )
+
+    // ===== 트랜잭션 경계 회귀 가드 (B7-27) =====
+    // 실제 커넥션 점유는 Spring AOP 프록시 없는 Mockito 단위 테스트로 증명할 수 없다(통합 테스트 영역).
+    // 차선책으로 메서드·클래스 어디에도 @Transactional 이 붙지 않았음을 구조적으로 가드한다.
+    private fun assertNotTransactional(methodName: String, vararg paramTypes: Class<*>) {
+        val method = CodingQuestService::class.java.getMethod(methodName, *paramTypes)
+        val reason = "$methodName()는 LLM·Judge0 외부 호출 동안 HikariCP 커넥션(pool=10)을 점유하지 않도록 " +
+            "메서드에도 클래스에도 @Transactional 이 붙으면 안 된다 (B7-27). DB 쓰기는 CodingSubmissionRecorder 가 담당한다"
+
+        assertThat(AnnotatedElementUtils.findMergedAnnotation(method, Transactional::class.java))
+            .`as`("[method-level] $reason")
+            .isNull()
+        assertThat(AnnotatedElementUtils.findMergedAnnotation(CodingQuestService::class.java, Transactional::class.java))
+            .`as`("[class-level] $reason")
+            .isNull()
+    }
+
+    @Test
+    fun `generateProblem 회귀가드 - 메서드·클래스 어디에도 @Transactional 이 붙어있지 않다 (B7-27)`() {
+        assertNotTransactional(
+            "generateProblem", String::class.java, String::class.java, String::class.java
+        )
+    }
+
+    @Test
+    fun `submitCode 회귀가드 - 메서드·클래스 어디에도 @Transactional 이 붙어있지 않다 (B7-27)`() {
+        assertNotTransactional(
+            "submitCode", String::class.java, Long::class.javaPrimitiveType!!, String::class.java, String::class.java
+        )
+    }
 
     // ===== generateProblem 테스트 =====
 
@@ -155,28 +186,25 @@ class CodingQuestServiceTest {
         whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
         whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
-        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(10L)
         whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
-        // solveCount 1 → 레벨업 조건 불충족
-        whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(1)
 
         val result = service.submitCode("user1", 1L, "JAVA", "class Main {}")
 
         assertThat(result.passed).isEqualTo(true)
-        verify(codingSubmissionPort).save(eq("user1"), eq(1L), eq("JAVA"), any(), eq(true), any(), any())
+        // DB 쓰기(제출 저장 + solveCount + 레벨업)는 recorder 한 번 호출로 위임된다 (B7-27)
+        verify(codingSubmissionRecorder).record(eq("user1"), eq(1L), eq("JAVA"), eq("class Main {}"), eq(true), eq("{}"), any())
     }
 
     @Test
     fun `submitCode - 하나라도 실패 시 passed=false 반환`() {
         whenever(codingProblemPort.findById(1L)).thenReturn(sampleProblem)
         whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "wrong", status = "Wrong Answer", passed = false))
-        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(11L)
         whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
 
         val result = service.submitCode("user1", 1L, "JAVA", "class Main {}")
 
         assertThat(result.passed).isEqualTo(false)
-        verify(codingSubmissionPort).save(eq("user1"), eq(1L), eq("JAVA"), any(), eq(false), any(), any())
+        verify(codingSubmissionRecorder).record(eq("user1"), eq(1L), eq("JAVA"), eq("class Main {}"), eq(false), eq("{}"), any())
     }
 
     // ===== getHint 테스트 =====
@@ -345,19 +373,14 @@ class CodingQuestServiceTest {
     }
 
     @Test
-    fun `submitCode - solve_count가 3의 배수가 되면 레벨 업`() {
-        whenever(codingProblemPort.findById(1L)).thenReturn(sampleProblem)
-        whenever(judge0Port.execute(any(), eq(62), eq("5"), eq("25"))).thenReturn(Judge0Result(stdout = "25", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("3"), eq("9"))).thenReturn(Judge0Result(stdout = "9", status = "Accepted", passed = true))
-        whenever(judge0Port.execute(any(), eq(62), eq("0"), eq("0"))).thenReturn(Judge0Result(stdout = "0", status = "Accepted", passed = true))
-        whenever(codingSubmissionPort.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(12L)
-        whenever(objectMapper.writeValueAsString(any())).thenReturn("{}")
-        // solveCount가 2이면 incrementSolveCount 후 3 → 레벨업
-        whenever(userCodingLevelPort.getSolveCount("user1")).thenReturn(2)
+    fun `submitCode - 문제가 없으면 Judge0·recorder 를 건드리지 않고 실패 결과를 반환`() {
+        whenever(codingProblemPort.findById(99L)).thenReturn(null)
 
-        service.submitCode("user1", 1L, "JAVA", "class Main {}")
+        val result = service.submitCode("user1", 99L, "JAVA", "class Main {}")
 
-        verify(userCodingLevelPort).incrementSolveCount("user1")
-        verify(userCodingLevelPort).incrementLevel("user1")
+        assertThat(result.passed).isFalse()
+        assertThat(result.message).isEqualTo("문제를 찾을 수 없습니다")
+        verifyNoInteractions(judge0Port)
+        verifyNoInteractions(codingSubmissionRecorder)
     }
 }
