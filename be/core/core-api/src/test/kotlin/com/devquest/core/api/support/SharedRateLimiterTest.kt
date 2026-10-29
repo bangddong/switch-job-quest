@@ -12,6 +12,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import java.time.Duration
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 공유 DB 카운터 → 메모리 버킷 대체(fail-soft) 정책.
@@ -124,6 +126,96 @@ class SharedRateLimiterTest {
         clock.advanceMillis(SharedRateLimiter.DB_RETRY_AFTER_MILLIS + 1)
         limiter.tryConsume("s", "k", 1_000) { memory }
         assertThat(port.consumeCalls).hasSize(2)
+    }
+
+    @Test
+    fun `서킷 만료 후에는 한 요청만 DB 를 시도하고 나머지는 그동안 메모리로 간다 - half-open (QA F-2)`() {
+        port.failing = true
+        val memory = bucket(1_000)
+        limiter.tryConsume("s", "k", 1_000) { memory } // 서킷 열림
+        assertThat(port.consumeCalls).hasSize(1)
+        clock.advanceMillis(SharedRateLimiter.DB_RETRY_AFTER_MILLIS + 1) // 만료
+
+        // 시도권을 얻은 요청이 DB 안에서 응답을 기다리는 동안(블랙홀) 다른 요청이 몰려온다
+        val hold = port.holdNextConsume()
+        val probeResult = AtomicReference<RateLimitTicket?>()
+        val probe = Thread { probeResult.set(limiter.tryConsume("s", "probe", 1_000) { memory }) }
+        probe.start()
+        assertThat(hold.entered.await(5, TimeUnit.SECONDS)).isTrue()
+        repeat(20) { assertThat(limiter.tryConsume("s", "k", 1_000) { memory }).isNotNull() }
+
+        assertThat(port.consumeCalls).describedAs("만료 직후 DB 호출은 시도권을 얻은 한 건뿐 (총 2건)").hasSize(2)
+        hold.release.countDown()
+        probe.join(5_000)
+    }
+
+    @Test
+    fun `half-open 시도가 성공하면 서킷이 닫히고 이후 요청은 모두 DB 로 간다 (QA F-2)`() {
+        port.failing = true
+        val memory = bucket(1_000)
+        limiter.tryConsume("s", "k", 5) { memory }
+        port.failing = false
+        clock.advanceMillis(SharedRateLimiter.DB_RETRY_AFTER_MILLIS + 1)
+
+        assertThat(limiter.tryConsume("s", "k", 5, ::noFallback)).isNotNull() // 시도권 요청이 성공 → 닫힘
+        repeat(3) { assertThat(limiter.tryConsume("s", "k", 5, ::noFallback)).isNotNull() }
+
+        assertThat(port.usedOf("s", "k")).isEqualTo(4)
+    }
+
+    @Test
+    fun `half-open 시도가 실패하면 다시 5초 동안 모든 요청이 DB 를 건너뛴다 (QA F-2)`() {
+        port.failing = true
+        val memory = bucket(1_000)
+        limiter.tryConsume("s", "k", 1_000) { memory }
+        clock.advanceMillis(SharedRateLimiter.DB_RETRY_AFTER_MILLIS + 1)
+        limiter.tryConsume("s", "k", 1_000) { memory } // 시도권 요청 — 실패
+        assertThat(port.consumeCalls).hasSize(2)
+
+        repeat(20) { limiter.tryConsume("s", "k", 1_000) { memory } }
+
+        assertThat(port.consumeCalls).hasSize(2)
+    }
+
+    @Test
+    fun `서킷이 열려 있으면 환불도 DB 를 건너뛴다 - 환불 때문에 DB 대기를 하지 않는다 (QA F-2)`() {
+        val ticket = limiter.tryConsume("s", "k", 5, ::noFallback)!!
+        port.failing = true
+        limiter.tryConsume("s", "other", 5) { bucket(5) } // 실패 → 서킷 열림
+        assertThat(port.refundCalls).isEmpty()
+
+        ticket.refund()
+
+        assertThat(port.refundCalls).describedAs("서킷이 열려 있는 동안 DB 환불 호출 없음").isEmpty()
+        assertThat(warns).hasSize(1)
+    }
+
+    @Test
+    fun `서킷이 닫히면 환불은 다시 DB 로 간다 (QA F-2)`() {
+        val ticket = limiter.tryConsume("s", "k", 5, ::noFallback)!!
+        port.failing = true
+        limiter.tryConsume("s", "other", 5) { bucket(5) }
+        port.failing = false
+        clock.advanceMillis(SharedRateLimiter.DB_RETRY_AFTER_MILLIS + 1)
+
+        ticket.refund()
+
+        assertThat(port.usedOf("s", "k")).isEqualTo(0)
+    }
+
+    @Test
+    fun `환불은 차감한 날짜의 행에 돌려준다 - 자정을 넘겨도 새 날 행을 건드리지 않는다 (QA F-4)`() {
+        val d1 = port.today
+        val ticket = limiter.tryConsume("s", "k", 1, ::noFallback)!!
+        val d2 = d1.plusDays(1)
+        port.today = d2 // 자정이 지났다
+        limiter.tryConsume("s", "k", 1, ::noFallback)!! // 새 날 행 used=1
+
+        ticket.refund()
+
+        assertThat(port.refundDates).containsExactly(d1)
+        assertThat(port.usedOf("s", "k", d1)).isEqualTo(0)
+        assertThat(port.usedOf("s", "k", d2)).isEqualTo(1)
     }
 
     @Test

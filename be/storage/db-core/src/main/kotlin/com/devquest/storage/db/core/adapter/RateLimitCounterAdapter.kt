@@ -7,10 +7,8 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.sql.Timestamp
 import java.time.Clock
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.ZoneId
 import javax.sql.DataSource
 
@@ -35,6 +33,13 @@ import javax.sql.DataSource
  * 상한 도달 후의 거부 요청이 INSERT 를 시도해 PK 위반 에러 로그를 쌓지 않도록 `NOT EXISTS` 로 거른다.
  *
  * 날짜는 앱이 KST 로 계산해 바인딩한다 — DB `CURRENT_DATE` 는 EC2 Postgres 의 TZ(미설정)에 의존한다.
+ * 차감한 날짜는 [tryConsume] 이 돌려주고, 환불은 그 날짜 행에 한다(자정을 낀 환불이 새 날짜 행을 건드리지 않는다).
+ * `updated_at` 은 INSERT·UPDATE 모두 DB `NOW()` 로 채운다 — V14 의 `DEFAULT NOW()` 와 같은 시계라서 한 컬럼에 시각 기준이 섞이지 않는다
+ * (앱이 KST 벽시계를 바인딩하면 DB 세션 TZ 와 어긋난다).
+ *
+ * ## 알려진 한계 (고치지 않는다)
+ * 쿼리 타임아웃(1초)이 **커밋 이후** 에 발생하면 DB 에는 차감이 남았는데 호출처는 실패로 보고 메모리 버킷으로도 한 번 더 차감한다
+ * (이중 차감). 더 엄격한 쪽으로 틀어지고 극히 드물어서 그대로 둔다.
  */
 @Component
 class RateLimitCounterAdapter(
@@ -47,39 +52,36 @@ class RateLimitCounterAdapter(
 
     private val jdbc = JdbcTemplate(dataSource).apply { queryTimeout = QUERY_TIMEOUT_SECONDS }
 
-    override fun tryConsume(scope: String, key: String, capacity: Int): Boolean {
-        if (capacity <= 0) return false
+    override fun tryConsume(scope: String, key: String, capacity: Int): LocalDate? {
+        if (capacity <= 0) return null
         val hashedKey = hash(key)
         val today = today()
-        val now = now()
 
-        if (increment(scope, hashedKey, today, capacity, now)) return true
+        if (increment(scope, hashedKey, today, capacity)) return today
         val inserted = try {
-            jdbc.update(INSERT_FIRST_USE, scope, hashedKey, today, now, scope, hashedKey, today)
+            jdbc.update(INSERT_FIRST_USE, scope, hashedKey, today, scope, hashedKey, today)
         } catch (e: DuplicateKeyException) {
             // 다른 인스턴스가 같은 순간 첫 행을 만들었다(PK 충돌). 아래에서 증가 경로로 다시 간다.
             0
         }
-        if (inserted == 1) return true
+        if (inserted == 1) return today
         // INSERT 가 0행(NOT EXISTS 가 방금 커밋된 타 요청의 행을 봄)이거나 PK 충돌이면 행이 이미 있다.
         // 상한 미만인데 거부하면 거짓 429 이므로 증가 경로를 한 번 더 탄다 — 행이 있으니 ① 이 정확히 판정한다.
         // 당일 행은 삭제되지 않으므로(정리는 2일 뒤) 한 번이면 충분하다.
-        return increment(scope, hashedKey, today, capacity, now)
+        return if (increment(scope, hashedKey, today, capacity)) today else null
     }
 
-    override fun refund(scope: String, key: String) {
-        jdbc.update(REFUND, now(), scope, hash(key), today())
+    override fun refund(scope: String, key: String, date: LocalDate) {
+        jdbc.update(REFUND, scope, hash(key), date)
     }
 
     override fun deleteExpired(): Int =
         jdbc.update(DELETE_EXPIRED, today().minusDays(RETENTION_DAYS))
 
-    private fun increment(scope: String, hashedKey: String, today: LocalDate, capacity: Int, now: Timestamp): Boolean =
-        jdbc.update(INCREMENT, now, scope, hashedKey, today, capacity) == 1
+    private fun increment(scope: String, hashedKey: String, today: LocalDate, capacity: Int): Boolean =
+        jdbc.update(INCREMENT, scope, hashedKey, today, capacity) == 1
 
     private fun today(): LocalDate = LocalDate.now(clock.withZone(KST))
-
-    private fun now(): Timestamp = Timestamp.valueOf(LocalDateTime.now(clock.withZone(KST)))
 
     companion object {
         private val KST: ZoneId = ZoneId.of("Asia/Seoul")
@@ -89,16 +91,16 @@ class RateLimitCounterAdapter(
         const val RETENTION_DAYS = 2L
 
         private const val INCREMENT =
-            "UPDATE rate_limit_counter SET used = used + 1, updated_at = ? " +
+            "UPDATE rate_limit_counter SET used = used + 1, updated_at = NOW() " +
                 "WHERE scope = ? AND limit_key = ? AND limit_date = ? AND used < ?"
 
         private const val INSERT_FIRST_USE =
             "INSERT INTO rate_limit_counter (scope, limit_key, limit_date, used, updated_at) " +
-                "SELECT ?, ?, ?, 1, ? WHERE NOT EXISTS " +
+                "SELECT ?, ?, ?, 1, NOW() WHERE NOT EXISTS " +
                 "(SELECT 1 FROM rate_limit_counter WHERE scope = ? AND limit_key = ? AND limit_date = ?)"
 
         private const val REFUND =
-            "UPDATE rate_limit_counter SET used = used - 1, updated_at = ? " +
+            "UPDATE rate_limit_counter SET used = used - 1, updated_at = NOW() " +
                 "WHERE scope = ? AND limit_key = ? AND limit_date = ? AND used > 0"
 
         private const val DELETE_EXPIRED = "DELETE FROM rate_limit_counter WHERE limit_date < ?"

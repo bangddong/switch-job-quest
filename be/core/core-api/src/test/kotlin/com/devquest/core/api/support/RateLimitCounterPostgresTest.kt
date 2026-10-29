@@ -16,7 +16,10 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.testcontainers.postgresql.PostgreSQLContainer
 import java.sql.DriverManager
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
@@ -61,6 +64,7 @@ class RateLimitCounterPostgresTest {
 
     // 2026-10-29 10:00 KST
     private val today = "2026-10-29T01:00:00Z"
+    private val todayDate = LocalDate.of(2026, 10, 29)
 
     private val dataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
     private val jdbc = JdbcTemplate(dataSource)
@@ -100,7 +104,7 @@ class RateLimitCounterPostgresTest {
     fun `용량 경계 - cap 건만 통과하고 그 뒤는 거부되며 거부는 사용량을 늘리지 않는다`() {
         val adapter = adapterAt()
 
-        val results = (1..5).map { adapter.tryConsume("s", "k", 3) }
+        val results = (1..5).map { adapter.tryConsume("s", "k", 3) != null }
 
         assertThat(results).containsExactly(true, true, true, false, false)
         assertThat(usedOf("s", "k")).isEqualTo(3)
@@ -108,33 +112,55 @@ class RateLimitCounterPostgresTest {
 
     @Test
     fun `날짜 분리 - KST 날짜가 바뀌면 같은 키가 새로 센다`() {
-        assertThat(adapterAt("2026-10-29T14:59:00Z").tryConsume("s", "k", 1)).isTrue() // 23:59 KST
-        assertThat(adapterAt("2026-10-29T14:59:30Z").tryConsume("s", "k", 1)).isFalse()
-        assertThat(adapterAt("2026-10-29T15:00:00Z").tryConsume("s", "k", 1)).isTrue() // 00:00 KST 다음 날
+        assertThat(adapterAt("2026-10-29T14:59:00Z").tryConsume("s", "k", 1)).isNotNull() // 23:59 KST
+        assertThat(adapterAt("2026-10-29T14:59:30Z").tryConsume("s", "k", 1)).isNull()
+        assertThat(adapterAt("2026-10-29T15:00:00Z").tryConsume("s", "k", 1)).isNotNull() // 00:00 KST 다음 날
     }
 
     @Test
     fun `scope 분리 - 같은 키도 scope 가 다르면 따로 센다`() {
         val adapter = adapterAt()
-        assertThat(adapter.tryConsume("daily-explain", "ip", 1)).isTrue()
+        assertThat(adapter.tryConsume("daily-explain", "ip", 1)).isNotNull()
 
-        assertThat(adapter.tryConsume("daily-explain", "ip", 1)).isFalse()
-        assertThat(adapter.tryConsume("daily-evaluate", "ip", 1)).isTrue()
+        assertThat(adapter.tryConsume("daily-explain", "ip", 1)).isNull()
+        assertThat(adapter.tryConsume("daily-evaluate", "ip", 1)).isNotNull()
     }
 
     @Test
     fun `환불 - 사용량이 줄고 0 아래로 내려가지 않는다`() {
         val adapter = adapterAt()
-        assertThat(adapter.tryConsume("s", "k", 1)).isTrue()
-        assertThat(adapter.tryConsume("s", "k", 1)).isFalse()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNotNull()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNull()
 
-        adapter.refund("s", "k")
-        adapter.refund("s", "k")
-        adapter.refund("s", "no-row")
+        adapter.refund("s", "k", todayDate)
+        adapter.refund("s", "k", todayDate)
+        adapter.refund("s", "no-row", todayDate)
 
         assertThat(usedOf("s", "k")).isEqualTo(0)
         assertThat(usedOf("s", "no-row")).isNull()
-        assertThat(adapter.tryConsume("s", "k", 1)).isTrue()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNotNull()
+    }
+
+    @Test
+    fun `updated_at 은 앱이 넣는 KST 시각이 아니라 DB NOW 라서 DEFAULT 로 들어간 행과 같은 시계다 (QA F-4)`() {
+        // 앱 시계는 2026-10-29 10:00 KST 로 고정 — 앱이 시각을 바인딩하면 실제 DB 시각과 크게 어긋난다.
+        val adapter = adapterAt()
+        jdbc.update(
+            "INSERT INTO rate_limit_counter (scope, limit_key, limit_date, used) VALUES ('default-row', 'x', CAST('2026-10-29' AS DATE), 1)",
+        )
+        fun updatedAt(scope: String): LocalDateTime =
+            requireNotNull(jdbc.queryForObject("SELECT updated_at FROM rate_limit_counter WHERE scope = ?", LocalDateTime::class.java, scope))
+        fun reset() = jdbc.update("UPDATE rate_limit_counter SET updated_at = TIMESTAMP '2000-01-01 00:00:00' WHERE scope = 's'")
+        val defaultStamp = updatedAt("default-row")
+
+        adapter.tryConsume("s", "k", 3) // INSERT 경로
+        assertThat(Duration.between(defaultStamp, updatedAt("s")).abs()).describedAs("INSERT").isLessThan(Duration.ofMinutes(1))
+        reset()
+        adapter.tryConsume("s", "k", 3) // UPDATE 경로
+        assertThat(Duration.between(defaultStamp, updatedAt("s")).abs()).describedAs("증가").isLessThan(Duration.ofMinutes(1))
+        reset()
+        adapter.refund("s", "k", todayDate)
+        assertThat(Duration.between(defaultStamp, updatedAt("s")).abs()).describedAs("환불").isLessThan(Duration.ofMinutes(1))
     }
 
     @Test
@@ -165,7 +191,7 @@ class RateLimitCounterPostgresTest {
             val futures = (1..64).map {
                 pool.submit {
                     start.await()
-                    if (adapter.tryConsume("s", "hot", cap)) success.incrementAndGet()
+                    if (adapter.tryConsume("s", "hot", cap) != null) success.incrementAndGet()
                 }
             }
             start.countDown()
@@ -192,7 +218,7 @@ class RateLimitCounterPostgresTest {
                 (1..perKey).map {
                     pool.submit {
                         barrier.await(30, TimeUnit.SECONDS)
-                        if (adapter.tryConsume("race", "key-$k", 1)) successByKey[k].incrementAndGet()
+                        if (adapter.tryConsume("race", "key-$k", 1) != null) successByKey[k].incrementAndGet()
                     }
                 }
             }
@@ -218,7 +244,7 @@ class RateLimitCounterPostgresTest {
                 (1..perKey).map {
                     pool.submit {
                         barrier.await(30, TimeUnit.SECONDS)
-                        if (adapter.tryConsume("race-cap", "key-$k", cap)) successByKey[k].incrementAndGet()
+                        if (adapter.tryConsume("race-cap", "key-$k", cap) != null) successByKey[k].incrementAndGet()
                     }
                 }
             }
@@ -235,7 +261,7 @@ class RateLimitCounterPostgresTest {
     @Test
     fun `쿼리 타임아웃 - 행 잠금에 막힌 쿼리는 약 1초 뒤 DataAccessException 으로 끝난다`() {
         val adapter = adapterAt()
-        assertThat(adapter.tryConsume("s", "locked", 5)).isTrue()
+        assertThat(adapter.tryConsume("s", "locked", 5)).isNotNull()
 
         DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { locker ->
             locker.autoCommit = false
@@ -254,8 +280,8 @@ class RateLimitCounterPostgresTest {
     fun `긴 키와 한글 키도 64자 해시로 저장된다`() {
         val adapter = adapterAt()
 
-        assertThat(adapter.tryConsume("s", "가".repeat(3_000), 1)).isTrue()
-        assertThat(adapter.tryConsume("s", "가".repeat(3_000), 1)).isFalse()
+        assertThat(adapter.tryConsume("s", "가".repeat(3_000), 1)).isNotNull()
+        assertThat(adapter.tryConsume("s", "가".repeat(3_000), 1)).isNull()
         assertThat(jdbc.queryForList("SELECT length(limit_key) FROM rate_limit_counter", Int::class.java)).containsExactly(64)
     }
 }

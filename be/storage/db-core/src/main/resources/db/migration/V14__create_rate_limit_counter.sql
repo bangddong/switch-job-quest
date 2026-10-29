@@ -11,7 +11,7 @@ CREATE TABLE rate_limit_counter (
     limit_key  VARCHAR(64) NOT NULL,           -- 클라이언트 IP·사용자 ID 의 SHA-256 hex (원문을 저장하지 않는다)
     limit_date DATE        NOT NULL,           -- 앱이 계산한 KST 날짜 (DB CURRENT_DATE 는 서버 TZ 에 의존해 쓰지 않는다)
     used       INT         NOT NULL,           -- 오늘 사용한 횟수
-    updated_at TIMESTAMP   NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP   NOT NULL DEFAULT NOW(),   -- 어댑터 쿼리도 INSERT·UPDATE 때 NOW() 로 채운다(앱이 시각을 바인딩하지 않는다)
     PRIMARY KEY (scope, limit_key, limit_date)
 );
 

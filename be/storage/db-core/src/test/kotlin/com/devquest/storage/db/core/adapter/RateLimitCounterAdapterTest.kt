@@ -13,7 +13,10 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.sql.Connection
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import javax.sql.DataSource
@@ -35,6 +38,7 @@ class RateLimitCounterAdapterTest {
 
     // 2026-10-29 10:00 KST
     private val today = "2026-10-29T01:00:00Z"
+    private val todayDate = LocalDate.of(2026, 10, 29)
 
     @BeforeEach
     fun createFreshTable() {
@@ -54,10 +58,10 @@ class RateLimitCounterAdapterTest {
     fun `상한 미만이면 차감되고 상한에 닿으면 거부되며 거부는 사용량을 늘리지 않는다`() {
         val adapter = adapterAt(today)
 
-        assertThat(adapter.tryConsume("s", "k", 2)).isTrue()
-        assertThat(adapter.tryConsume("s", "k", 2)).isTrue()
-        assertThat(adapter.tryConsume("s", "k", 2)).isFalse()
-        assertThat(adapter.tryConsume("s", "k", 2)).isFalse()
+        assertThat(adapter.tryConsume("s", "k", 2)).isNotNull()
+        assertThat(adapter.tryConsume("s", "k", 2)).isNotNull()
+        assertThat(adapter.tryConsume("s", "k", 2)).isNull()
+        assertThat(adapter.tryConsume("s", "k", 2)).isNull()
 
         assertThat(usedOf("s", "k")).isEqualTo(2)
     }
@@ -66,15 +70,15 @@ class RateLimitCounterAdapterTest {
     fun `용량 1 이면 첫 요청만 통과한다`() {
         val adapter = adapterAt(today)
 
-        assertThat(adapter.tryConsume("s", "k", 1)).isTrue()
-        assertThat(adapter.tryConsume("s", "k", 1)).isFalse()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNotNull()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNull()
     }
 
     @Test
     fun `용량 0 이하면 행을 만들지 않고 거부한다`() {
         val adapter = adapterAt(today)
 
-        assertThat(adapter.tryConsume("s", "k", 0)).isFalse()
+        assertThat(adapter.tryConsume("s", "k", 0)).isNull()
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM rate_limit_counter", Int::class.java)).isEqualTo(0)
     }
@@ -82,37 +86,37 @@ class RateLimitCounterAdapterTest {
     @Test
     fun `키가 다르면 서로의 한도에 영향을 주지 않는다`() {
         val adapter = adapterAt(today)
-        assertThat(adapter.tryConsume("s", "a", 1)).isTrue()
+        assertThat(adapter.tryConsume("s", "a", 1)).isNotNull()
 
-        assertThat(adapter.tryConsume("s", "a", 1)).isFalse()
-        assertThat(adapter.tryConsume("s", "b", 1)).isTrue()
+        assertThat(adapter.tryConsume("s", "a", 1)).isNull()
+        assertThat(adapter.tryConsume("s", "b", 1)).isNotNull()
     }
 
     @Test
     fun `scope 가 다르면 같은 키도 따로 센다`() {
         val adapter = adapterAt(today)
-        assertThat(adapter.tryConsume("explain", "k", 1)).isTrue()
+        assertThat(adapter.tryConsume("explain", "k", 1)).isNotNull()
 
-        assertThat(adapter.tryConsume("explain", "k", 1)).isFalse()
-        assertThat(adapter.tryConsume("evaluate", "k", 1)).isTrue()
+        assertThat(adapter.tryConsume("explain", "k", 1)).isNull()
+        assertThat(adapter.tryConsume("evaluate", "k", 1)).isNotNull()
     }
 
     @Test
     fun `날짜가 바뀌면 새 행에서 다시 센다 - 자정 리셋 없이`() {
-        assertThat(adapterAt(today).tryConsume("s", "k", 1)).isTrue()
-        assertThat(adapterAt(today).tryConsume("s", "k", 1)).isFalse()
+        assertThat(adapterAt(today).tryConsume("s", "k", 1)).isNotNull()
+        assertThat(adapterAt(today).tryConsume("s", "k", 1)).isNull()
 
         val tomorrow = "2026-10-30T01:00:00Z"
-        assertThat(adapterAt(tomorrow).tryConsume("s", "k", 1)).isTrue()
+        assertThat(adapterAt(tomorrow).tryConsume("s", "k", 1)).isNotNull()
         assertThat(jdbc.queryForObject("SELECT count(*) FROM rate_limit_counter", Int::class.java)).isEqualTo(2)
     }
 
     @Test
     fun `날짜 경계는 UTC 가 아니라 KST 자정이다`() {
         // 2026-10-29 14:59 UTC = 2026-10-29 23:59 KST, 15:00 UTC = 2026-10-30 00:00 KST
-        assertThat(adapterAt("2026-10-29T14:59:00Z").tryConsume("s", "k", 1)).isTrue()
-        assertThat(adapterAt("2026-10-29T14:59:30Z").tryConsume("s", "k", 1)).isFalse()
-        assertThat(adapterAt("2026-10-29T15:00:00Z").tryConsume("s", "k", 1)).isTrue()
+        assertThat(adapterAt("2026-10-29T14:59:00Z").tryConsume("s", "k", 1)).isNotNull()
+        assertThat(adapterAt("2026-10-29T14:59:30Z").tryConsume("s", "k", 1)).isNull()
+        assertThat(adapterAt("2026-10-29T15:00:00Z").tryConsume("s", "k", 1)).isNotNull()
 
         val dates = jdbc.queryForList("SELECT CAST(limit_date AS VARCHAR(10)) FROM rate_limit_counter ORDER BY limit_date", String::class.java)
         assertThat(dates).containsExactly("2026-10-29", "2026-10-30")
@@ -121,24 +125,72 @@ class RateLimitCounterAdapterTest {
     @Test
     fun `환불하면 사용량이 1 줄어 다시 차감할 수 있다`() {
         val adapter = adapterAt(today)
-        assertThat(adapter.tryConsume("s", "k", 1)).isTrue()
-        assertThat(adapter.tryConsume("s", "k", 1)).isFalse()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNotNull()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNull()
 
-        adapter.refund("s", "k")
+        adapter.refund("s", "k", todayDate)
 
         assertThat(usedOf("s", "k")).isEqualTo(0)
-        assertThat(adapter.tryConsume("s", "k", 1)).isTrue()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNotNull()
+    }
+
+    private fun usedOn(scope: String, key: String, date: LocalDate): Int? =
+        jdbc.queryForList(
+            "SELECT used FROM rate_limit_counter WHERE scope = ? AND limit_key = ? AND limit_date = ?",
+            Int::class.java,
+            scope,
+            RateLimitCounterAdapter.hash(key),
+            java.sql.Date.valueOf(date),
+        ).firstOrNull()
+
+    @Test
+    fun `차감에 성공하면 차감한 KST 날짜를 돌려주고 거부하면 null 이다`() {
+        assertThat(adapterAt("2026-10-29T14:59:00Z").tryConsume("s", "k", 1)).isEqualTo(LocalDate.of(2026, 10, 29)) // 23:59 KST
+        assertThat(adapterAt("2026-10-29T14:59:30Z").tryConsume("s", "k", 1)).isNull()
+        assertThat(adapterAt("2026-10-29T15:00:00Z").tryConsume("s", "k", 1)).isEqualTo(LocalDate.of(2026, 10, 30)) // 00:00 KST 다음 날
+    }
+
+    @Test
+    fun `자정을 낀 환불은 차감한 날짜의 행에 돌려주고 새 날짜 행은 건드리지 않는다 (QA F-4)`() {
+        val d1 = requireNotNull(adapterAt("2026-10-29T14:59:00Z").tryConsume("s", "k", 1)) // 23:59 KST 차감
+        val after = adapterAt("2026-10-29T15:01:00Z") // 00:01 KST — 새 날
+        val d2 = requireNotNull(after.tryConsume("s", "k", 1)) // 새 날 행 used=1
+
+        after.refund("s", "k", d1) // 차감 시점의 날짜로 환불
+
+        assertThat(usedOn("s", "k", d1)).isEqualTo(0)
+        assertThat(usedOn("s", "k", d2)).describedAs("새 날 행은 그대로").isEqualTo(1)
+    }
+
+    @Test
+    fun `updated_at 은 INSERT·증가·환불 모두 DB 시각(NOW) 기준이라 DDL 기본값과 같은 시계다 (QA F-4)`() {
+        // 앱 시계는 2026-10-29 10:00 KST 로 고정 — 앱이 시각을 바인딩하면 실제 DB 시각과 크게 어긋난다.
+        val adapter = adapterAt(today)
+        fun updatedAtGap(): Duration {
+            val updated = jdbc.queryForObject("SELECT updated_at FROM rate_limit_counter", LocalDateTime::class.java)
+            val dbNow = jdbc.queryForObject("SELECT CAST(NOW() AS TIMESTAMP)", LocalDateTime::class.java)
+            return Duration.between(updated, dbNow).abs()
+        }
+
+        adapter.tryConsume("s", "k", 3) // INSERT 경로
+        assertThat(updatedAtGap()).describedAs("INSERT").isLessThan(Duration.ofMinutes(1))
+        jdbc.update("UPDATE rate_limit_counter SET updated_at = TIMESTAMP '2000-01-01 00:00:00'")
+        adapter.tryConsume("s", "k", 3) // UPDATE 경로
+        assertThat(updatedAtGap()).describedAs("증가").isLessThan(Duration.ofMinutes(1))
+        jdbc.update("UPDATE rate_limit_counter SET updated_at = TIMESTAMP '2000-01-01 00:00:00'")
+        adapter.refund("s", "k", todayDate)
+        assertThat(updatedAtGap()).describedAs("환불").isLessThan(Duration.ofMinutes(1))
     }
 
     @Test
     fun `환불은 0 아래로 내려가지 않고 행이 없어도 에러가 아니다`() {
         val adapter = adapterAt(today)
 
-        adapter.refund("s", "never-used")
+        adapter.refund("s", "never-used", todayDate)
         assertThat(usedOf("s", "never-used")).isNull()
 
         adapter.tryConsume("s", "k", 3)
-        repeat(3) { adapter.refund("s", "k") }
+        repeat(3) { adapter.refund("s", "k", todayDate) }
         assertThat(usedOf("s", "k")).isEqualTo(0)
     }
 
@@ -160,8 +212,8 @@ class RateLimitCounterAdapterTest {
     fun `긴 키도 64자 해시로 고정된다`() {
         val adapter = adapterAt(today)
 
-        assertThat(adapter.tryConsume("s", "x".repeat(5_000), 1)).isTrue()
-        assertThat(adapter.tryConsume("s", "x".repeat(5_000), 1)).isFalse()
+        assertThat(adapter.tryConsume("s", "x".repeat(5_000), 1)).isNotNull()
+        assertThat(adapter.tryConsume("s", "x".repeat(5_000), 1)).isNull()
     }
 
     @Test
@@ -191,10 +243,10 @@ class RateLimitCounterAdapterTest {
         val adapter = adapterAt(today)
         val other = adapterAt(today)
 
-        assertThat(adapter.tryConsume("s", "k", 3)).isTrue()
-        assertThat(other.tryConsume("s", "k", 3)).isTrue()
-        assertThat(adapter.tryConsume("s", "k", 3)).isTrue()
-        assertThat(other.tryConsume("s", "k", 3)).isFalse()
+        assertThat(adapter.tryConsume("s", "k", 3)).isNotNull()
+        assertThat(other.tryConsume("s", "k", 3)).isNotNull()
+        assertThat(adapter.tryConsume("s", "k", 3)).isNotNull()
+        assertThat(other.tryConsume("s", "k", 3)).isNull()
     }
 
     /**
@@ -238,7 +290,7 @@ class RateLimitCounterAdapterTest {
             Clock.fixed(Instant.parse(today), ZoneOffset.UTC),
         )
 
-        assertThat(adapter.tryConsume("s", "k", 5)).isTrue()
+        assertThat(adapter.tryConsume("s", "k", 5)).isNotNull()
 
         assertThat(usedOf("s", "k")).isEqualTo(2)
     }
@@ -250,7 +302,7 @@ class RateLimitCounterAdapterTest {
             Clock.fixed(Instant.parse(today), ZoneOffset.UTC),
         )
 
-        assertThat(adapter.tryConsume("s", "k", 1)).isFalse()
+        assertThat(adapter.tryConsume("s", "k", 1)).isNull()
 
         assertThat(usedOf("s", "k")).isEqualTo(1)
     }
@@ -278,7 +330,7 @@ class RateLimitCounterAdapterTest {
             val adapter = RateLimitCounterAdapter(it, Clock.fixed(Instant.parse(today), ZoneOffset.UTC))
 
             repeat(5) { i -> adapter.tryConsume("s", "k$i", 1) }
-            adapter.refund("s", "k0")
+            adapter.refund("s", "k0", todayDate)
             adapter.deleteExpired()
 
             assertThat(it.hikariPoolMXBean.activeConnections).isEqualTo(0)
