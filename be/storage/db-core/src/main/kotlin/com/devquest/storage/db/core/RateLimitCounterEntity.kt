@@ -20,7 +20,9 @@ import java.time.LocalDateTime
  *
  * 타입은 V14 와 정확히 맞춘다: date↔LocalDate, int↔Int, timestamp↔LocalDateTime.
  * ⚠️ 두 앱(core-api·daily-api)이 모두 `@EntityScan` 으로 이 엔티티를 validate 한다 — V14 가 적용되기 전에
- * daily-api 가 먼저 뜨면 기동에 실패한다(마이그레이션은 core-api 가 실행한다).
+ * daily-api 가 먼저 뜨면 기동에 실패한다. prod DB 의 마이그레이션 실행자는 **Fly `release_command = "migrate"`
+ * (core-api jar) 하나뿐**이다 — EKS(external DB 모드)는 기동 시 migrate 를 끄고, daily-api 는 켜지 않는다.
+ * 그래서 V14 는 prod 배포(Fly release)가 먼저 끝나야 적용되고, 그 전에 EKS 쪽 앱이 먼저 뜨면 validate 에서 실패한다.
  */
 @Entity
 @Table(name = "rate_limit_counter")
