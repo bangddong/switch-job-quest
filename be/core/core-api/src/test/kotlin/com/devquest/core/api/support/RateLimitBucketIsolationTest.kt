@@ -59,6 +59,7 @@ class RateLimitBucketIsolationTest {
             DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
             DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1),
             ObjectMapper(),
+            ClientIpResolver(""),
         )
         val ip = "1.2.3.4"
 
@@ -83,6 +84,7 @@ class RateLimitBucketIsolationTest {
             DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
             DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1),
             ObjectMapper(),
+            ClientIpResolver(""),
         )
         val ip = "1.2.3.4"
 

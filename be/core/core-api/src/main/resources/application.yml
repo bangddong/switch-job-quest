@@ -53,6 +53,11 @@ logging:
     com.devquest: DEBUG
 
 devquest:
+  # B7-19 2단계 — Cloudflare Worker 와 원본이 공유하는 비밀. Worker 가 X-DevQuest-Edge-Auth 로 보내고,
+  # 일치할 때만 X-DevQuest-Client-IP 를 익명 레이트 리밋의 클라이언트 IP 로 쓴다(ClientIpResolver).
+  # 빈 기본값 = 신뢰 헤더 미사용(기존 Fly-Client-IP/XFF/remoteAddr 판정). 실제 값은 시크릿 저장소에서만 주입한다.
+  edge:
+    auth-secret: ${EDGE_AUTH_SECRET:}
   ai:
     # Phase 1 Task 1.2 조사: AiCallExecutor(client-ai/support)가 소비. core-api 자신은 이 키를
     # 직접 참조하지 않지만, inprocess 모드에서는 client-ai 빈이 core-api 컨텍스트 안에서 뜨므로

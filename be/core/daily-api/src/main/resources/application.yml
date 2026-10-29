@@ -54,6 +54,11 @@ storage:
       maximum-pool-size: 5
 
 devquest:
+  # B7-19 2단계 — Cloudflare Worker 와 원본이 공유하는 비밀. Worker 가 X-DevQuest-Edge-Auth 로 보내고,
+  # 일치할 때만 X-DevQuest-Client-IP 를 익명 레이트 리밋의 클라이언트 IP 로 쓴다(ClientIpResolver).
+  # 빈 기본값 = 신뢰 헤더 미사용(기존 Fly-Client-IP/XFF/remoteAddr 판정). 실제 값은 시크릿 저장소에서만 주입한다.
+  edge:
+    auth-secret: ${EDGE_AUTH_SECRET:}
   # DailyQuestionContentService(daily-core)의 `@Value("${devquest.daily-question.tech-stack}")`가
   # 기본값 없이 요구하는 키(함정 ⑥). core-api의 application.yml:93-94와 값이 반드시 동일해야
   # 한다 — 값이 갈라지면 두 앱이 만드는 "AI 폴백 질문"의 기술 스택 범위가 조용히 달라진다.

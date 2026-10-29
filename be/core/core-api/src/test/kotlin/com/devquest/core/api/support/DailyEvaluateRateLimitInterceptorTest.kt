@@ -19,7 +19,7 @@ class DailyEvaluateRateLimitInterceptorTest {
     @BeforeEach
     fun setUp() {
         store = DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1)
-        interceptor = DailyEvaluateRateLimitInterceptor(store, DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1), ObjectMapper())
+        interceptor = DailyEvaluateRateLimitInterceptor(store, DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1), ObjectMapper(), ClientIpResolver(""))
     }
 
     private fun mockRequest(ip: String, flyClientIp: String? = null): HttpServletRequest {

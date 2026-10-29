@@ -14,7 +14,8 @@ class DailyEvaluateRateLimitInterceptor(
     private val dailyEvaluateRateLimitBucketStore: DailyEvaluateRateLimitBucketStore,
     globalStore: DailyEvaluateGlobalRateLimitStore,
     objectMapper: ObjectMapper,
-) : AbstractRateLimitInterceptor(objectMapper, globalStore) {
+    clientIpResolver: ClientIpResolver,
+) : AbstractRateLimitInterceptor(objectMapper, clientIpResolver, globalStore) {
 
     override fun resolveBucket(key: String): Bucket = dailyEvaluateRateLimitBucketStore.getOrCreate(key)
 }
