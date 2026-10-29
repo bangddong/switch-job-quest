@@ -1,0 +1,189 @@
+name: Edge Auth Rotate
+
+# 📌D-016 B7-19 2단계 (2026-10-29) — Worker↔원본 공유 비밀 `EDGE_AUTH_SECRET`.
+#   Worker 가 원본(Fly·EKS)으로 보낼 때 `X-DevQuest-Edge-Auth: <비밀>` + `X-DevQuest-Client-IP: <CF-Connecting-IP>` 를 붙이고,
+#   BE 는 비밀이 맞을 때만 그 IP 로 익명 레이트 리밋을 센다. 원본(api.quest·eks.quest)은 직접 호출이 가능해 일반 헤더는 못 믿는다.
+#
+#   사본 3곳 — 정본 SSM `/devquest/prod/app/EDGE_AUTH_SECRET`
+#     ① Worker secret `EDGE_AUTH_SECRET`(Cloudflare, devquest-fe) ② Fly secret(devquest-api) ③ EKS 창: ESO `daily-api-edge`
+#
+#   🔑 **fail-soft 설계** — 어느 사본이든 없거나 서로 다르면 BE 는 기존 IP 판정(Fly-Client-IP → XFF → remoteAddr)으로 돌아간다.
+#      그래서 세 곳을 원자적으로 못 바꿔도(교체 중 수십 초) 서비스는 멈추지 않는다. 대가: 그 사이 익명 사용자가 엣지 주소 버킷을
+#      공유할 수 있다(#514 이전 상태). 비용은 전체 일일 상한(#514)이 막는다.
+#   🔴 이 값은 JWT 와 달리 **로그아웃을 일으키지 않는다** — 그러나 Fly `secrets import` 는 머신을 재시작한다(≈30초 다운).
+#
+#   action=check  — 이름만 본다(값 X): SSM 파라미터 · Fly secret 목록 · Worker secret 목록.
+#                    ⚠️ 세 값이 **같은지**는 못 본다(Worker secret 은 읽을 수 없고 digest 도 없다). 어긋나면 위 fail-soft 로 드러나지 않는다.
+#                    의심되면 rotate 를 다시 돌려 셋을 새로 맞춘다.
+#   action=rotate — 새 값 64자 → Worker → SSM(되읽기 해시) → Fly(재시작) 순. confirm `FLY-RESTART`.
+#
+#   🔑 값은 러너 밖으로 나가지 않는다 — 생성 즉시 ::add-mask::, SSM 은 file://, Worker·Fly 는 stdin.
+#   🔴 main 에서만(`AWS_ROLE_ARN_MAIN` 신뢰 정책). job 에 `environment:` 를 넣지 마라(B3-10).
+#   🔴 EKS 클러스터가 켜져 있으면 rotate 거부 — ESO 1h 갱신·envFrom 파드 미재시작으로 창 끝까지 EKS 만 옛 값(jwt-rotate 와 같은 가드).
+#   🔴 be-cd 실행·대기 중이면 거부 — 같은 Fly 앱에 배포와 secret 변경이 겹치지 않게(jwt-rotate 와 같은 이유).
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "check = 이름만 확인 · rotate = 새 값 → Worker + SSM + Fly (🔴 Fly 재시작 ≈30초)"
+        type: choice
+        options: ["check", "rotate"]
+        default: "check"
+      confirm:
+        description: "rotate 일 때만 — 정확히 FLY-RESTART"
+        type: string
+        default: ""
+
+permissions:
+  id-token: write # main 전용 역할 assume
+  contents: read
+  actions: read   # be-cd 실행 중 여부
+
+concurrency:
+  group: edge-auth-rotate
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  FLY_APP: devquest-api
+  SECRET_NAME: EDGE_AUTH_SECRET
+  EDGE_PARAM: /devquest/prod/app/EDGE_AUTH_SECRET
+
+jobs:
+  edge:
+    name: Edge auth / ${{ inputs.action }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 입력·시크릿 확인
+        shell: bash
+        env:
+          MAIN_ROLE: ${{ secrets.AWS_ROLE_ARN_MAIN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACTION: ${{ inputs.action }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          [ -n "$MAIN_ROLE" ] || { echo "::error::secrets.AWS_ROLE_ARN_MAIN 이 비어 있다"; exit 1; }
+          [ -n "$FLY_API_TOKEN" ] || { echo "::error::secrets.FLY_API_TOKEN 이 비어 있다"; exit 1; }
+          [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ] || { echo "::error::Cloudflare 배포 토큰·계정 secret 이 비어 있다"; exit 1; }
+          if [ "$ACTION" = rotate ] && [ "$CONFIRM" != FLY-RESTART ]; then
+            echo "::error::rotate 는 confirm=FLY-RESTART 가 필요하다(Fly 머신 재시작)"; exit 1
+          fi
+
+      # 서드파티·가변 ref 라 AWS(Admin) 자격증명이 env 에 들어오기 **전에** 설치한다(jwt-rotate QA F-2)
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # wrangler 는 fe 의 package.json 에 고정된 버전을 쓴다(fe-cd 와 같다). Node >= 22.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: fe/package-lock.json
+      - run: npm ci
+        working-directory: fe
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_MAIN }}
+          aws-region: ap-northeast-2
+
+      # 퍼블릭 레포의 Actions 로그는 퍼블릭이다 — 계정 ID 마스킹(fail-closed)
+      - name: 계정 ID 마스킹
+        shell: bash
+        run: |
+          ACCT="$(aws sts get-caller-identity --query Account --output text)"
+          echo "::add-mask::$ACCT"
+          [[ "$ACCT" =~ ^[0-9]{12}$ ]] || { echo "::error::계정 ID 조회 실패 — 마스킹 없이 진행할 수 없다"; exit 1; }
+
+      - name: rotate 전제 — 클러스터 꺼짐 · be-cd 없음
+        if: inputs.action == 'rotate'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          . infra/aws-eks/scripts/prod-window/common.sh
+          C=$(win_cluster_exists) || { echo "::error::클러스터 조회 실패 — 판단 불가라 멈춘다"; exit 1; }
+          [ "$C" = no ] || { echo "::error::EKS 클러스터가 켜져 있다 — 창이 끝난 뒤(off 후) 돌린다"; exit 1; }
+          N=0
+          for s in in_progress queued waiting pending requested; do
+            n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow be-cd.yml --status "$s" --json databaseId --jq length)
+            N=$((N + n))
+          done
+          [ "$N" = 0 ] || { echo "::error::be-cd 가 $N 건 실행·대기 중 — 끝난 뒤 다시"; exit 1; }
+
+      - name: rotate — 새 값 → Worker → SSM → Fly (🔴 Fly 재시작)
+        if: inputs.action == 'rotate'
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          KEY=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64 || true)
+          [ "${#KEY}" -eq 64 ] || { echo "::error::값 생성 실패(길이 ${#KEY})"; exit 1; }
+          echo "::add-mask::$KEY"
+          F=$(mktemp); trap 'rm -f "$F"' EXIT
+          printf '%s' "$KEY" > "$F"
+          # ① Worker 먼저 — 비밀이 BE 에만 있고 Worker 에 없는 구간보다, Worker 에만 있는 구간이 짧고 둘 다 fail-soft 다.
+          #    secret put 은 새 Worker 버전을 즉시 배포한다(코드·라우트는 그대로).
+          (cd fe && npx wrangler secret put "$SECRET_NAME" < "$F" >/dev/null)
+          echo "✅ Worker secret $SECRET_NAME 저장"
+          # ② SSM 정본 — 되읽기 해시로 확인(EKS 창은 다음 on 에서 ESO 가 읽는다)
+          aws ssm put-parameter --name "$EDGE_PARAM" --type SecureString --key-id alias/aws/ssm --overwrite \
+            --value "file://$F" --description "Worker-origin shared secret (B7-19) - written by edge-auth-rotate.yml" >/dev/null
+          H1=$(sha256sum < "$F" | cut -c1-64)
+          H2=$(aws ssm get-parameter --name "$EDGE_PARAM" --with-decryption --query Parameter.Value --output text | tr -d '\n' | sha256sum | cut -c1-64)
+          [ "$H1" = "$H2" ] || { echo "::error::SSM 되읽기 해시 불일치"; exit 1; }
+          echo "✅ SSM $EDGE_PARAM 저장·되읽기 일치(sha256 앞 8: ${H1:0:8})"
+          # ③ Fly — stdin 으로(인자 X). import 는 머신을 재시작한다
+          printf '%s=%s\n' "$SECRET_NAME" "$KEY" | flyctl secrets import -a "$FLY_APP"
+          echo "- 🔑 Edge 비밀 교체: Worker → SSM(해시 일치) → Fly import 완료(재시작)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 이름 확인 (값 X)
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -uo pipefail
+          FAIL=0
+          if aws ssm describe-parameters --parameter-filters "Key=Name,Values=$EDGE_PARAM" --query 'Parameters[0].Name' --output text | grep -qx "$EDGE_PARAM"; then
+            echo "✅ SSM $EDGE_PARAM 있음"
+          else
+            echo "::warning::SSM $EDGE_PARAM 없음 — 아직 rotate 를 안 돌렸다(EKS 창 daily-api 는 기존 IP 판정)"; FAIL=1
+          fi
+          if flyctl secrets list -a "$FLY_APP" --json | jq -e --arg n "$SECRET_NAME" '.[] | select((.Name // .name) == $n)' >/dev/null; then
+            echo "✅ Fly $SECRET_NAME 있음"
+          else
+            echo "::warning::Fly $SECRET_NAME 없음 — Fly 는 기존 IP 판정"; FAIL=1
+          fi
+          if (cd fe && npx wrangler secret list --format json 2>/dev/null) | jq -e --arg n "$SECRET_NAME" '.[] | select(.name == $n)' >/dev/null; then
+            echo "✅ Worker $SECRET_NAME 있음"
+          else
+            echo "::warning::Worker $SECRET_NAME 없음(또는 목록 조회 실패) — 헤더를 안 보내 BE 는 기존 IP 판정"; FAIL=1
+          fi
+          if [ "$ACTION" = rotate ] && [ "$FAIL" = 1 ]; then
+            echo "::error::rotate 직후인데 사본이 빠졌다 — 위 경고 확인"; exit 1
+          fi
+
+      - name: Fly 기동 확인
+        if: inputs.action == 'rotate'
+        shell: bash
+        run: |
+          for i in $(seq 1 30); do
+            c=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://api.quest.dhbang.co.kr/api/v1/daily-question || echo 000)
+            [ "$c" = 200 ] && { echo "✅ Fly 200 (+$((i * 10))s)"; exit 0; }
+            sleep 10
+          done
+          echo "::error::Fly 가 5분 안에 200 으로 돌아오지 않았다 — fly status 확인"; exit 1

@@ -6071,3 +6071,9 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [해결] **JWT 통일 실측 확정 🔴**: 창 중 EKS 에서 발급받은 토큰으로, Fly 복귀 후 새로고침 → **로그인 유지**(사용자 확인). EKS 서명 토큰을 Fly 가 검증 = 같은 키(SSM 정본 → ESO / jwt-rotate → Fly). U-11 해소. 따라서 창 시작 때 풀린 로그인은 10-28 rotate 의 예정된 1회 로그아웃으로 본다(🟡 — 직접 증거는 없지만 반대 방향이 같은 키로 확인됐다).
 - [비용] off 완료: 배수 240s → eks.quest 삭제 → ALB LCU 0.00023 → destroy → off-verify 클러스터·EC2·LB·EBS·LBC SG 전부 0 · 임대 삭제. 클러스터 ≈ 01:10Z~01:5xZ ≈ 45분 ≈ $0.13(추정). 트래픽 EKS 구간 ≈ 10:26~10:39 KST(13분).
 - [메모] C-4 남은 미검증: KV 전파 시간을 엣지별로 재진 적 없음(이번엔 off dispatch → prod `fly` ≈70s, 맥 1곳). 정기 창 전까지 필수는 아님.
+
+## 2026-10-29 — 📌D-016 B7-19 2단계 (Worker↔원본 신뢰 IP 헤더)
+
+- [결정] 사용자 *"응 진행해줘"* — Worker 가 공유 비밀 + CF-Connecting-IP 를 원본에 실어 보내고 BE 는 비밀이 맞을 때만 그 IP 로 익명 한도를 센다. 비밀 배포는 jwt-rotate 방식(새 워크플로 `edge-auth-rotate.yml`). 상세·미룬 것은 계획서 「B7-19 2단계 구현」 행.
+- [메모] Blindspot 17건 중 계획을 바꾼 것: ① EKS 의 오늘의 질문은 **daily-api** 가 받고(ingress) daily-api 는 `core-api-runtime` 을 안 받는다 → ESO 허용목록에 추가하는 원안으로는 EKS 에 비밀이 안 들어간다 → 전용 ExternalSecret `daily-api-edge` ② 불일치를 고정 `untrusted` 버킷으로 보내는 안 기각 — evaluate 용량 1 이라 사본 교체 중 수십 초 어긋나면 **익명 전원이 하루 막힌다** → fail-soft(기존 판정) ③ Fly 앱은 `devquest-api` 하나뿐 — Fly 비밀은 한 곳.
+- [메모] 근거 🟡(코드): Worker 는 클라이언트의 `Fly-Client-IP` 를 지우지만 Fly 프록시가 TCP 상대(= Worker 이그레스, Cloudflare 주소)로 다시 채운다 → 지금 Fly 의 익명 IP 키는 엣지 주소. 실측은 머지 후 rotate 전후 비교로.

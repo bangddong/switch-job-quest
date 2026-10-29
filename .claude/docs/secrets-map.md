@@ -20,7 +20,7 @@
 | **0-bootstrap tfstate** (S3) | `tofu output` | tofu | 환경별 JWT 키·postgres 마스터(학습) — ⚠️ state 에 **평문**(B3-5) |
 | **GitHub Actions secrets** | ❌ write-only | `gh secret set` | CI 자격증명 (§3) |
 | **GitHub Actions 워크플로 평문** | 레포 | PR | 비밀 아닌 빌드 값 (`fe-cd.yml` 의 `VITE_GITHUB_CLIENT_ID`) |
-| **Cloudflare Worker** (`fe/wrangler.jsonc`) | 레포 | PR | **비밀 없음** — `vars`(오리진 2개)·KV id 는 공개 값 |
+| **Cloudflare Worker** (`fe/wrangler.jsonc` + Worker secret) | 레포(vars) · Cloudflare(secret) | PR(vars) · `edge-auth-rotate.yml`(secret) | `vars`(오리진 2개)·KV id 는 공개 값. **secret 1개 `EDGE_AUTH_SECRET`**(B7-19 2단계, 10-29) — 읽을 수 없다(이름만 `wrangler secret list`) |
 | **Vercel env** (FE 프로젝트) | ❌ 복호화 금지(규칙) | — | 옛 FE 빌드 값 — **V-4 에서 프로젝트째 삭제** |
 | **로컬 맥** | — | — | `.claude/settings.local.json`(PGPASSWORD·Resend·Judge0 평문, gitignore) · `fe/.env.local` · 키체인 `vercel-token` · `~/.fly` 인증 |
 
@@ -35,6 +35,7 @@
 | **Judge0 (RapidAPI) 키** | RapidAPI 콘솔 | Fly `JUDGE0_API_KEY` · SSM `/devquest/prod/app/JUDGE0_API_KEY` · 로컬 `settings.local.json` | prod 앱 · EKS 창 | 사본 3곳 |
 | **Resend API 키** | Resend 콘솔 | Fly `RESEND_API_KEY` · 로컬 `settings.local.json` | prod 앱(메일) | EKS 엔 없음(창 중 메일 꺼짐, B8-19) |
 | **JWT 서명 키 (prod — Fly·EKS 공용)** | **SSM `/devquest/prod/app/JWT_SECRET`** (SecureString — 10-28 JWT 통일부터 정본) | ① Fly `JWT_SECRET` ② EKS 창(ESO `core-api-runtime`) — **같은 값** | prod 앱(Fly) · EKS 창 | 🔴 **교체 = `jwt-rotate.yml` action=rotate 만** (새 키 → SSM → Fly 를 한 번에, 값은 러너 밖으로 안 나감) = **전원 1회 로그아웃**. `fly secrets set JWT_SECRET` 을 손으로 하지 마라 — SSM 과 갈린다(action=check 가 digest 로 잡는다, 기록 `/devquest/ops/fly-jwt-digest`). 클러스터가 켜져 있으면 rotate 거부 |
+| **Edge 공유 비밀 (Worker↔원본)** | **SSM `/devquest/prod/app/EDGE_AUTH_SECRET`** (SecureString — B7-19 2단계, 10-29) | ① Worker secret `EDGE_AUTH_SECRET`(devquest-fe) ② Fly `EDGE_AUTH_SECRET`(devquest-api) ③ EKS 창 ESO `daily-api-edge`(daily-api 전용 — core-api-runtime 아님) | Worker 가 `X-DevQuest-Edge-Auth` 로 보냄 → BE 가 맞을 때만 `X-DevQuest-Client-IP` 를 익명 레이트 리밋 키로 | 교체 = **`edge-auth-rotate.yml` action=rotate 만**(confirm `FLY-RESTART`, Worker → SSM → Fly, Fly 재시작 ≈30초, 로그아웃 없음). 🔑 **fail-soft** — 없거나 어긋나면 BE 는 기존 IP 판정(그래서 사본 불일치가 장애로 안 드러난다 — check 는 이름만 본다). 유출 시 피해 = 익명 한도의 IP 위조(비용은 전체 상한이 막음). 클러스터 켜져 있으면 rotate 거부 |
 | **JWT 서명 키 (learning)** | 0-bootstrap `random_password.jwt_secret["learning"]` (tfstate) | Secrets Manager `devquest-eks/learning/app` (학습 세션 동안) | 학습 클러스터 | prod 와 무관. ⚠️ `jwt_secrets["prod"]` 도 state 에 남아 있지만 **prod 는 더 이상 안 쓴다**(10-28~, 죽은 값 — `jwt_environments` 에서 빼면 prevent_destroy 로 apply 실패라 둔다) |
 | **GitHub OAuth client id** | GitHub → Developer settings → GitHub Apps (공개 값) | `fe-cd.yml` 빌드 env · Fly `GITHUB_CLIENT_ID` · SSM `/devquest/prod/app/GITHUB_CLIENT_ID`(String, EKS 창) · `application-local.yml`(로컬) · Vercel env | FE 로그인 URL · prod 앱 토큰 교환 | 비밀 아님. **FE 번들과 Fly 가 같아야** 로그인 된다 |
 | **GitHub OAuth client secret — 키 2개** | **없음** — GitHub 은 발급 순간만 보여 줌 | ① Fly `GITHUB_CLIENT_SECRET` ② SSM `/devquest/prod/app/GITHUB_CLIENT_SECRET`(SecureString) = **EKS 전용 별도 secret**(B7-16, TASK-22) | ① prod 앱 ② EKS 창(ESO `core-api-runtime`) | 🔴 서로 덮어쓰지 마라 — 유출된 쪽만 GitHub 에서 폐기·재발급. learning 모드는 자리표시(`2-cluster/secrets.tf`). on 이 SSM client id = `fe-cd.yml` 값을 강제 |
@@ -42,7 +43,7 @@
 | **WireGuard 설정 (Fly↔EC2)** | `fly wireguard create` 산출물(개인키) | SSM `/devquest/prod/db/wireguard-conf` | EC2 DB 부팅 | 제거 = `fly wireguard remove personal devquest-prod-db` |
 | **Neon 대기 DB URL** | Neon 콘솔 | SSM `/devquest/prod/db/neon-standby-url` | 매일 04:30 복원 | `neon-prod-coords` 는 String(비밀 아님). neondb_owner 비밀번호는 **리셋 안 하기로 결정** |
 | **Grafana 3종 · Sentry DSN** | Grafana Cloud · Sentry 콘솔 | Fly `GRAFANA_*` · `SENTRY_DSN` | prod 앱 | EKS 엔 **현재 없음** — TASK-17 로 10번 직전 SSM `/devquest/prod/app/` 에 추가 예정, ESO 허용 목록(`externalsecret-runtime.yaml`)은 이미 열려 있다. 추가하면 이 행을 고친다. (학습 시절 *자리표시* 를 넣었다가 관측이 오발한 사고 때문에 자리표시는 금지) |
-| **Cloudflare 토큰 — FE 배포** | **없음**(발급 순간만) | GitHub secret `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) | `fe-cd.yml` deploy-workers | 권한: Workers·KV Edit. 만료 프리셋 버튼으로(날짜 선택 = 하루짜리 함정) |
+| **Cloudflare 토큰 — FE 배포** | **없음**(발급 순간만) | GitHub secret `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) | `fe-cd.yml` deploy-workers · `edge-auth-rotate.yml`(Worker secret 쓰기·목록) | 권한: Workers·KV Edit(🟡 Worker secret 쓰기는 Workers Scripts Edit 범위 — 첫 rotate 로 실측). 만료 프리셋 버튼으로(날짜 선택 = 하루짜리 함정) |
 | **Cloudflare 토큰 — 8-C 창** | **없음** | SSM `/devquest/ops/cloudflare-token` | eks-window(DNS·KV) | 🔴 **만료 2027-01-24**. 만료 뒤 traffic=eks 창 off 는 임대 만료까지 보류 |
 | **GitHub PAT — EventBridge** | **없음** | Secrets Manager `events!connection/devquest-eks-window-github/*` | 18:00 off · 매시 watchdog | 🔴 **만료 2027-01-15**. connection **이름 바꾸지 마라**(PAT 가 placeholder 로 돌아감) |
 | **Fly 배포 토큰** | **없음** | GitHub secret `FLY_API_TOKEN` | `be-cd.yml` | app 범위 deploy 토큰(TASK-13). 값 출력 금지 |

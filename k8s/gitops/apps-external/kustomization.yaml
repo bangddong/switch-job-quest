@@ -24,6 +24,7 @@ resources:
   - ../apps
   - secretstore-parameterstore.yaml
   - externalsecret-runtime.yaml   # 📌D-016 8-A — 앱 외부 키(TASK-17)
+  - externalsecret-daily-edge.yaml # 📌D-016 B7-19 2단계 — Worker↔원본 공유 비밀, daily-api 전용
   - ingress.yaml                  # 📌D-016 8-B — prod 창 ALB(인증서는 Application 패치, off 는 Application 먼저)
 
 patches:
@@ -96,3 +97,11 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/envFrom/-
         value: { secretRef: { name: core-api-runtime, optional: true } }
+  # ⑧ 📌D-016 B7-19 2단계 — daily-api 가 Worker 의 신뢰 IP 헤더를 검증할 공유 비밀(externalsecret-daily-edge.yaml).
+  #    optional + 빈 Secret 허용 — 없으면 BE 가 기존 IP 판정으로 돌아간다(fail-soft). core-api 는 EKS 에서 오늘의 질문을
+  #    받지 않으므로(ingress) 넣지 않는다.
+  - target: { kind: Deployment, name: daily-api }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value: { secretRef: { name: daily-api-edge, optional: true } }
