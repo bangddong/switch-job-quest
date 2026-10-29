@@ -8,21 +8,34 @@ export interface Env {
   EKS_ORIGIN: string
   /** 백엔드 스위치 KV. 바인딩이 없는 배포에서는 늘 Fly 로 간다. */
   SWITCH?: KVNamespace
+  /**
+   * Worker↔원본 공유 비밀(secret 바인딩). wrangler.jsonc 의 vars 에 넣지 않는다 — 같은 이름이 있으면 secret 과 충돌한다.
+   * 코드가 secret 보다 먼저 배포되므로 없거나 비어 있어도 정상 동작해야 한다(신뢰 헤더만 생략).
+   */
+  EDGE_AUTH_SECRET?: string
 }
 
 const API_PREFIX = '/api/'
 const BACKEND_HEADER = 'X-DevQuest-Backend'
+// Worker 가 원본에 "이 IP 는 내가 넣었다" 를 증명하는 신뢰 헤더 쌍. BE 와 이름이 같아야 한다.
+const EDGE_AUTH_HEADER = 'X-DevQuest-Edge-Auth'
+const TRUSTED_CLIENT_IP_HEADER = 'X-DevQuest-Client-IP'
 
 // 클라이언트가 위조할 수 있는 IP 헤더 — 업스트림에 중계하지 않는다.
-// BE 의 익명 한도 IP 판정이 Fly-Client-IP 를 1순위로 읽는다(다음 PR 에서 Worker↔원본 신뢰 헤더로 교체 예정, 📌D-016 B7-19).
+// Worker 를 거치면 Fly 가 Fly-Client-IP 를 Worker 이그레스 주소로 채워 사용자들이 레이트 리밋 버킷을 공유한다(📌D-016 B7-19).
+// 그래서 BE 는 Worker↔원본 신뢰 헤더(X-DevQuest-Edge-Auth + X-DevQuest-Client-IP)가 검증되면 그 IP 를 쓰고,
+// 없으면 기존 판정(Fly-Client-IP 등)으로 fail-soft 한다. 원본은 직접 호출이 가능하므로 일반 IP 헤더는 신뢰하지 않는다.
 // 나머지 헤더는 현재 미사용이지만 방어적으로 제거한다.
 // X-Forwarded-For 는 아래에서 CF-Connecting-IP 값으로 다시 쓴다.
+// 신뢰 헤더 쌍도 클라이언트 값은 항상 지우고(위조 방지) 아래에서 조건이 맞을 때만 다시 채운다.
 const STRIPPED_CLIENT_IP_HEADERS = [
   'Fly-Client-IP',
   'X-Real-IP',
   'Forwarded',
   'True-Client-IP',
   'X-Client-IP',
+  EDGE_AUTH_HEADER,
+  TRUSTED_CLIENT_IP_HEADER,
 ] as const
 
 export function isApiPath(pathname: string): boolean {
@@ -32,8 +45,13 @@ export function isApiPath(pathname: string): boolean {
 /**
  * 클라이언트 요청을 업스트림(Fly) 요청으로 바꾼다.
  * 클라이언트가 위조할 수 있는 IP/프록시 헤더는 신뢰하지 않고 Cloudflare 가 채운 값으로 다시 쓴다.
+ * edgeAuthSecret 이 비어 있지 않고 CF-Connecting-IP 가 있을 때만 신뢰 헤더 쌍을 싣는다(둘 중 하나라도 없으면 둘 다 생략).
  */
-export function buildUpstreamRequest(request: Request, apiOrigin: string): Request {
+export function buildUpstreamRequest(
+  request: Request,
+  apiOrigin: string,
+  edgeAuthSecret?: string,
+): Request {
   const url = new URL(request.url)
   const upstreamUrl = `${apiOrigin.replace(/\/+$/, '')}${url.pathname}${url.search}`
 
@@ -53,6 +71,10 @@ export function buildUpstreamRequest(request: Request, apiOrigin: string): Reque
     headers.set('X-Forwarded-For', clientIp)
   } else {
     headers.delete('X-Forwarded-For')
+  }
+  if (edgeAuthSecret && clientIp) {
+    headers.set(EDGE_AUTH_HEADER, edgeAuthSecret)
+    headers.set(TRUSTED_CLIENT_IP_HEADER, clientIp)
   }
   headers.set('X-Forwarded-Proto', 'https')
   headers.set('X-Forwarded-Host', url.host)
@@ -91,7 +113,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
   // 자동 장애 전환 없음 — EKS 실패를 Fly 로 재시도하면 POST(AI 평가)가 이중 처리될 수 있다.
   try {
-    return withBackendHeader(await fetch(buildUpstreamRequest(request, origin)), backend)
+    return withBackendHeader(await fetch(buildUpstreamRequest(request, origin, env.EDGE_AUTH_SECRET)), backend)
   } catch (error) {
     console.error('upstream fetch failed', error instanceof Error ? error.message : String(error))
     return withBackendHeader(

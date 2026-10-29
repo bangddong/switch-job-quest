@@ -13,7 +13,8 @@ class DailyExplainRateLimitInterceptor(
     private val dailyExplainRateLimitBucketStore: DailyExplainRateLimitBucketStore,
     globalStore: DailyExplainGlobalRateLimitStore,
     objectMapper: ObjectMapper,
-) : AbstractRateLimitInterceptor(objectMapper, globalStore) {
+    clientIpResolver: ClientIpResolver,
+) : AbstractRateLimitInterceptor(objectMapper, clientIpResolver, globalStore) {
 
     override fun resolveBucket(key: String): Bucket = dailyExplainRateLimitBucketStore.getOrCreate(key)
 }

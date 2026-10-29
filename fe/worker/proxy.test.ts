@@ -190,6 +190,99 @@ describe('handleRequest — /api 중계', () => {
   })
 })
 
+describe('handleRequest — 신뢰 클라이언트 IP 헤더 (B7-19)', () => {
+  const TEST_SECRET = 'test-edge-secret'
+  const AUTH = 'X-DevQuest-Edge-Auth'
+  const CLIENT_IP = 'X-DevQuest-Client-IP'
+  const apiRequest = (headers: Record<string, string> = {}) =>
+    new Request('https://quest.dhbang.co.kr/api/v1/x', { headers })
+  const withSecret = (secret: string | undefined, base: Env = makeEnv()): Env => ({
+    ...base,
+    EDGE_AUTH_SECRET: secret,
+  })
+
+  it('비밀과 CF-Connecting-IP 가 있으면 Fly 원본에 두 헤더를 싣는다', async () => {
+    const upstream = stubUpstream()
+    await handleRequest(apiRequest({ 'CF-Connecting-IP': '203.0.113.9' }), withSecret(TEST_SECRET))
+
+    const sent = sentRequest(upstream)
+    expect(sent.url).toBe('https://api.quest.dhbang.co.kr/api/v1/x')
+    expect(sent.headers.get(AUTH)).toBe(TEST_SECRET)
+    expect(sent.headers.get(CLIENT_IP)).toBe('203.0.113.9')
+  })
+
+  it('EKS 원본(KV 스위치 eks)에도 같은 두 헤더를 싣는다', async () => {
+    const upstream = stubUpstream()
+    const { env } = envWithSwitch(activeLease())
+    await handleRequest(apiRequest({ 'CF-Connecting-IP': '203.0.113.9' }), withSecret(TEST_SECRET, env))
+
+    const sent = sentRequest(upstream)
+    expect(sent.url).toBe('https://eks.quest.dhbang.co.kr/api/v1/x')
+    expect(sent.headers.get(AUTH)).toBe(TEST_SECRET)
+    expect(sent.headers.get(CLIENT_IP)).toBe('203.0.113.9')
+  })
+
+  it.each([
+    ['undefined', undefined],
+    ['빈 문자열', ''],
+  ])('비밀이 %s 이면 두 헤더를 보내지 않는다', async (_name, secret) => {
+    const upstream = stubUpstream()
+    await handleRequest(apiRequest({ 'CF-Connecting-IP': '203.0.113.9' }), withSecret(secret))
+
+    const sent = sentRequest(upstream)
+    expect(sent.headers.get(AUTH)).toBeNull()
+    expect(sent.headers.get(CLIENT_IP)).toBeNull()
+  })
+
+  it('CF-Connecting-IP 가 없으면 비밀이 있어도 두 헤더를 보내지 않는다', async () => {
+    const upstream = stubUpstream()
+    await handleRequest(apiRequest(), withSecret(TEST_SECRET))
+
+    const sent = sentRequest(upstream)
+    expect(sent.headers.get(AUTH)).toBeNull()
+    expect(sent.headers.get(CLIENT_IP)).toBeNull()
+  })
+
+  it('클라이언트가 위조한 두 헤더는 비밀이 있으면 Worker 값으로 덮어쓴다', async () => {
+    const upstream = stubUpstream()
+    await handleRequest(
+      apiRequest({ [AUTH]: 'forged-secret', [CLIENT_IP]: '6.6.6.6', 'CF-Connecting-IP': '203.0.113.9' }),
+      withSecret(TEST_SECRET),
+    )
+
+    const sent = sentRequest(upstream)
+    expect(sent.headers.get(AUTH)).toBe(TEST_SECRET)
+    expect(sent.headers.get(CLIENT_IP)).toBe('203.0.113.9')
+  })
+
+  it.each([
+    ['비밀 없음', undefined, '203.0.113.9'],
+    ['빈 비밀', '', '203.0.113.9'],
+    ['CF-Connecting-IP 없음', TEST_SECRET, undefined],
+  ])('위조된 두 헤더는 %s 일 때 제거되어 업스트림에 가지 않는다', async (_name, secret, cfIp) => {
+    const upstream = stubUpstream()
+    const headers: Record<string, string> = { [AUTH]: 'forged-secret', [CLIENT_IP]: '6.6.6.6' }
+    if (cfIp) headers['CF-Connecting-IP'] = cfIp
+    await handleRequest(apiRequest(headers), withSecret(secret))
+
+    const sent = sentRequest(upstream)
+    expect(sent.headers.get(AUTH)).toBeNull()
+    expect(sent.headers.get(CLIENT_IP)).toBeNull()
+  })
+
+  it('기존 XFF 재작성은 신뢰 헤더와 함께 그대로 동작한다', async () => {
+    const upstream = stubUpstream()
+    await handleRequest(
+      apiRequest({ 'X-Forwarded-For': '6.6.6.6', 'Fly-Client-IP': '7.7.7.7', 'CF-Connecting-IP': '203.0.113.9' }),
+      withSecret(TEST_SECRET),
+    )
+
+    const sent = sentRequest(upstream)
+    expect(sent.headers.get('x-forwarded-for')).toBe('203.0.113.9')
+    expect(sent.headers.get('fly-client-ip')).toBeNull()
+  })
+})
+
 describe('handleRequest — 정적 자산', () => {
   it('/api/ 가 아닌 경로는 ASSETS 로 넘기고 업스트림 fetch 를 하지 않는다', async () => {
     const upstream = stubUpstream()
