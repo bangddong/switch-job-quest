@@ -46,7 +46,9 @@ concurrency:
 
 env:
   AWS_REGION: ap-northeast-2
-  NO_AWS: env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN
+  # wrangler(서드파티 npm 런타임)에 넘기지 않을 것 — AWS 정적 키 3종 + OIDC 토큰 재발급 수단 + Fly 토큰(QA F-2·F-7).
+  #   남는 AWS_REGION·AWS_DEFAULT_REGION 은 자격증명이 아니다. CLOUDFLARE_* 는 wrangler 가 써야 하므로 남긴다.
+  NO_AWS: env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u FLY_API_TOKEN
   FLY_APP: devquest-api
   SECRET_NAME: EDGE_AUTH_SECRET
   EDGE_PARAM: /devquest/prod/app/EDGE_AUTH_SECRET
@@ -172,14 +174,16 @@ jobs:
             echo "::warning::Fly $SECRET_NAME 없음 — Fly 는 기존 IP 판정"; FAIL=1
           fi
           # 출력 형태(`[{"name":…}]`)는 첫 실행이 첫 실측(QA F-1) — 실패하면 원인 앞부분을 보여 준다(값은 안 나온다: 이름 목록뿐)
-          if W=$(cd fe && $NO_AWS npx wrangler secret list --format json 2>&1); then
+          # stdout 만 파싱하고 stderr 는 따로 받는다 — 경고 한 줄이 jq 입력에 섞이면 '없음' 오탐이 난다(QA F-8)
+          WE=$(mktemp)
+          if W=$(cd fe && $NO_AWS npx wrangler secret list --format json 2>"$WE"); then
             if printf '%s' "$W" | jq -e --arg n "$SECRET_NAME" '.[] | select(.name == $n)' >/dev/null 2>&1; then
               echo "✅ Worker $SECRET_NAME 있음"
             else
               echo "::warning::Worker $SECRET_NAME 없음(또는 출력 형태가 예상과 다름: ${W:0:200}) — 헤더를 안 보내 BE 는 기존 IP 판정"; FAIL=1
             fi
           else
-            echo "::warning::Worker secret 목록 조회 실패: ${W:0:300}"; FAIL=1
+            E=$(cat "$WE"); echo "::warning::Worker secret 목록 조회 실패: ${E:0:300}"; FAIL=1
           fi
           if [ "$ACTION" = rotate ] && [ "$FAIL" = 1 ]; then
             echo "::error::rotate 직후인데 사본이 빠졌다 — 위 경고 확인"; exit 1
