@@ -17,7 +17,7 @@ import javax.sql.DataSource
  * 컴포넌트 스캔 대상이 되고, prod 프로파일로 뜨는 순간 자동으로 [flyway]가 생성되어
  * `migrate()`가 돈다 — "db-core를 의존한다"가 실행 조건이 되어버린다.
  *
- * 문제는 마이그레이션 파일이 `core-api`(V1~V6, V8, V9)와 `db-core`(V7, V10~V13) 두 모듈에
+ * 문제는 마이그레이션 파일이 `core-api`(V1~V6, V8, V9)와 `db-core`(V7, V10~V14) 두 모듈에
  * 나뉘어 있다는 점이다. `db-core`만 의존하는 앱(예: daily-api)의 클래스패스에는 `core-api` 쪽 파일이
  * 없다. 그런 앱이 `repair()`를 돌리면 "실행 시점 클래스패스의 파일 집합"과 DB의 `flyway_schema_history`를
  * 대조해 core-api 버전들이 `DELETED`로 마킹되고, 다음 core-api 기동이 그 버전을 V1부터 재실행 →

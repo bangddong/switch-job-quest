@@ -14,7 +14,7 @@ object MigrationExecutor {
     const val EXIT_FAILED = 1
 
     /**
-     * core-api jar 가 전체 마이그레이션 집합(core-api V1~V6·V8·V9 + db-core V7·V10~V13)을 가진 유일한 이미지다.
+     * core-api jar 가 전체 마이그레이션 집합(core-api V1~V6·V8·V9 + db-core V7·V10~V14)을 가진 유일한 이미지다.
      * validate 모드만 pending 을 허용한다(이력 일관성만 보려는 사전 점검이라서). migrate 모드는 Flyway 기본
      * validateOnMigrate=true 로 migrate 직전에 같은 검증을 하며, 거기서는 pending 이 정상이다.
      */

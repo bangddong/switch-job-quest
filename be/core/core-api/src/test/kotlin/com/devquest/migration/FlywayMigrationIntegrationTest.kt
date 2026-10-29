@@ -22,7 +22,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
  * `scanBasePackages=["com.devquest"]` 빈 누수로 43개 테스트가 깨진 전력이 있어(Phase 0),
  * 이 테스트는 Flyway + DataSource만 필요하므로 컨텍스트 로딩 자체가 불필요한 위험이다.
  *
- * 마이그레이션 리소스는 core-api(V1~V6, V8, V9)와 db-core(V7, V10~V13) 두 모듈에 나뉘어 있고
+ * 마이그레이션 리소스는 core-api(V1~V6, V8, V9)와 db-core(V7, V10~V14) 두 모듈에 나뉘어 있고
  * core-api가 db-core를 의존하므로, 이 테스트 소스셋(core-api `test`)의 클래스패스에서
  * 실제 배포와 동일하게 둘 다 합쳐진 상태로 로드된다.
  *
@@ -77,7 +77,7 @@ class FlywayMigrationIntegrationTest {
         }
 
         // 마이그레이션 파일이 사라지거나(예: 리소스 누락) 추가되면 이 목록과 어긋나 테스트가 실패한다.
-        private val expectedVersions = (1..13).map { it.toString() }
+        private val expectedVersions = (1..14).map { it.toString() }
     }
 
     private fun newFlyway(): Flyway =
@@ -112,7 +112,7 @@ class FlywayMigrationIntegrationTest {
         assertThat(appliedVersions)
             .describedAs("적용된 마이그레이션 버전 목록")
             .containsExactlyInAnyOrderElementsOf(expectedVersions)
-        assertThat(flyway.info().current().version.toString()).isEqualTo("13")
+        assertThat(flyway.info().current().version.toString()).isEqualTo("14")
 
         // validate()는 실패 시 예외를 던진다 — 던지지 않으면 통과.
         flyway.validate()
