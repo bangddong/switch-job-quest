@@ -10,7 +10,7 @@ import { InterviewCoach } from '@/features/interview-coach'
 import { GrowthDashboard } from '@/features/growth'
 import { SettingsPage } from '@/features/settings'
 import { ResumeProfilePage } from '@/features/resume'
-import { TechInterviewPage, TechInterviewDemoPage, DailyQuestionPage } from '@/features/tech-interview'
+import { TechInterviewPage, DailyQuestionPage } from '@/features/tech-interview'
 import { CodingQuestPage, CodingRoadmapPage } from '@/features/coding-quest'
 import { useAuth } from '@/hooks/useAuth'
 import { LoginPage } from '@/features/auth/components/LoginPage'
@@ -60,7 +60,6 @@ type View =
   | { kind: 'settings' }
   | { kind: 'resume' }
   | { kind: 'tech-interview' }
-  | { kind: 'tech-interview-demo' }
   | { kind: 'coding-roadmap' }
   | { kind: 'coding-quest'; category: string }
 
@@ -172,12 +171,6 @@ export function App() {
       .catch(() => { /* 조회 실패 시 빈 배열 유지 */ })
   }, [isLoggedIn])
 
-  useEffect(() => {
-    if (isLoggedIn && view.kind === 'tech-interview-demo') {
-      setView({ kind: 'tech-interview' })
-    }
-  }, [isLoggedIn, view.kind])
-
   const getActProgress = useCallback(
     (act: Act) => {
       const done = act.quests.filter((q) => completed[q.id]).length
@@ -204,26 +197,7 @@ export function App() {
 
   // Unauthenticated
   if (!isLoggedIn) {
-    if (view.kind === 'tech-interview-demo') {
-      return (
-        <div style={{ background: '#060610', minHeight: '100vh' }}>
-          <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 20px 40px' }}>
-            <button
-              onClick={() => setView({ kind: 'map' })}
-              style={{
-                background: 'none', border: 'none', color: '#475569',
-                cursor: 'pointer', fontSize: 13, padding: '16px 0 0',
-                fontFamily: "'Courier New', monospace",
-              }}
-            >
-              ← 로그인 페이지로
-            </button>
-            <TechInterviewDemoPage onLogin={() => setView({ kind: 'map' })} />
-          </div>
-        </div>
-      )
-    }
-    return <LoginPage onTryDemo={() => setView({ kind: 'tech-interview-demo' })} />
+    return <LoginPage />
   }
 
   const handleCharacterComplete = (c: Character) => {

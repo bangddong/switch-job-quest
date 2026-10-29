@@ -97,9 +97,13 @@ devquest:
     tech-interview:
       capacity: 2
       refill-days: 1
+    # tech-interview: 로그인 필수 — 한도 키는 인증된 사용자 ID (사용자당 일 capacity 회).
+    # daily-*: 익명 공개 — IP 개인 버킷(capacity) 통과분만 전체 일일 상한(global-capacity)을 차감한다.
     daily-explain:
       capacity: 5
+      global-capacity: 100
       refill-days: 1
     daily-evaluate:
       capacity: 1
+      global-capacity: 50
       refill-days: 1

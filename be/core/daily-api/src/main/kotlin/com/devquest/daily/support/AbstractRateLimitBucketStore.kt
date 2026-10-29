@@ -16,7 +16,7 @@ abstract class AbstractRateLimitBucketStore(
 
     private val buckets = ConcurrentHashMap<String, Bucket>()
 
-    fun getOrCreate(ip: String): Bucket = buckets.computeIfAbsent(ip) { newBucket() }
+    fun getOrCreate(key: String): Bucket = buckets.computeIfAbsent(key) { newBucket() }
 
     fun clear() = buckets.clear()
 

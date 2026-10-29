@@ -71,6 +71,8 @@ data:
       # 상향이 **먹었는지** 확인한다. 5회까지는 상향과 무관하게 성공하므로 6번째가 유일한 판별점.
       i=1; while [ $i -le 6 ]; do echo "explain #$i -> $(post_explain)"; i=$((i+1)); done
       echo "→ #6 이 200 이면 상향 적용됨. 429 면 미적용 — 부하를 걸지 말고 원인부터 볼 것."
+      # ⚠️ 2026-10-28~ 전체 일일 상한(global-capacity, explain 100)도 있다 — 개인 한도만 올리면 #6 은 200 이어도
+      #    부하 중 101번째부터 429. 상향 JSON 에 global-capacity 도 넣는다(memory-rightsizing 계획서 §채택).
       exit 0
     fi
 

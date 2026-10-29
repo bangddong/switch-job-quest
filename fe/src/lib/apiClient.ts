@@ -1,6 +1,7 @@
 import type { ApiResponse, ProgressResult, ActClearReportResult, QuestHistoryItem, JourneyReportResult, UserEmailResult, TechInterviewResult, CodingProblem, CodingSubmissionResult, CodingLevelResult, CategoryProgress, CodingRankResult, Resume } from '@/types/api.types'
 import { getToken, clearToken } from '@/hooks/useAuth'
 import { STORAGE_KEYS } from '@/lib/storageKeys'
+import { isRateLimited, toRateLimitError } from '@/lib/rateLimit'
 
 const API_BASE = '/api/v1'
 let reloadScheduled = false
@@ -103,6 +104,7 @@ export async function saveUserEmail(email: string): Promise<UserEmailResult> {
 
 export async function fetchTechInterviewQuestion(techStack: string): Promise<TechInterviewResult> {
   const res = await fetch(`${API_BASE}/tech-interview/question?techStack=${encodeURIComponent(techStack)}`, { headers: authHeaders() })
+  if (isRateLimited(res.status)) throw await toRateLimitError(res)
   assertOk(res)
   const json: ApiResponse<TechInterviewResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('질문 조회 실패')
@@ -115,6 +117,7 @@ export async function evaluateTechInterview(techStack: string, questions: string
     headers: authHeaders(),
     body: JSON.stringify({ techStack, questions, answers }),
   })
+  if (isRateLimited(res.status)) throw await toRateLimitError(res)
   assertOk(res)
   const json: ApiResponse<TechInterviewResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('평가 실패')

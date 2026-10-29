@@ -1,7 +1,9 @@
 package com.devquest.core.api.config
 
+import com.devquest.core.api.support.DailyEvaluateGlobalRateLimitStore
 import com.devquest.core.api.support.DailyEvaluateRateLimitBucketStore
 import com.devquest.core.api.support.DailyEvaluateRateLimitInterceptor
+import com.devquest.core.api.support.DailyExplainGlobalRateLimitStore
 import com.devquest.core.api.support.DailyExplainRateLimitBucketStore
 import com.devquest.core.api.support.DailyExplainRateLimitInterceptor
 import com.devquest.core.api.support.RateLimitBucketStore
@@ -25,10 +27,12 @@ class WebMvcConfigTest {
     )
     private val dailyExplainRateLimitInterceptor = DailyExplainRateLimitInterceptor(
         DailyExplainRateLimitBucketStore(capacity = 5, refillDays = 1),
+        DailyExplainGlobalRateLimitStore(capacity = 100, refillDays = 1),
         ObjectMapper(),
     )
     private val dailyEvaluateRateLimitInterceptor = DailyEvaluateRateLimitInterceptor(
         DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
+        DailyEvaluateGlobalRateLimitStore(capacity = 50, refillDays = 1),
         ObjectMapper(),
     )
 

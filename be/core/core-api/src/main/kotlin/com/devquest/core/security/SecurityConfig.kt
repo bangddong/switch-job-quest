@@ -36,7 +36,6 @@ class SecurityConfig(
                     "/actuator/health",
                     "/actuator/health/readiness",
                 ).permitAll()
-                it.requestMatchers("/api/v1/tech-interview/**").permitAll()
                 it.requestMatchers("/api/v1/daily-question/**").permitAll()
                 // Fly 6PN(fdaa::/16) 절은 소비처 0건 + prod 403 실측으로 확인 후 삭제(2026-09-15).
                 it.requestMatchers("/actuator/**").access(

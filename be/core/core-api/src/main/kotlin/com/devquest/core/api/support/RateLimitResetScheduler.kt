@@ -9,6 +9,8 @@ class RateLimitResetScheduler(
     private val rateLimitBucketStore: RateLimitBucketStore,
     private val dailyExplainRateLimitBucketStore: DailyExplainRateLimitBucketStore,
     private val dailyEvaluateRateLimitBucketStore: DailyEvaluateRateLimitBucketStore,
+    private val dailyExplainGlobalRateLimitStore: DailyExplainGlobalRateLimitStore,
+    private val dailyEvaluateGlobalRateLimitStore: DailyEvaluateGlobalRateLimitStore,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -18,6 +20,8 @@ class RateLimitResetScheduler(
         rateLimitBucketStore.clear()
         dailyExplainRateLimitBucketStore.clear()
         dailyEvaluateRateLimitBucketStore.clear()
+        dailyExplainGlobalRateLimitStore.clear()
+        dailyEvaluateGlobalRateLimitStore.clear()
         log.info("Rate limit buckets cleared (daily reset)")
     }
 }

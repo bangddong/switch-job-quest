@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { ApiResponse, DailyQuestionExplainResult, TechInterviewResult } from '@/types/api.types'
+import { isRateLimited, toRateLimitError } from '@/lib/rateLimit'
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 
 async function fetchDailyQuestion(): Promise<string> {
@@ -23,10 +24,7 @@ async function submitDailyEvaluation(question: string, answer: string): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, answer }),
   })
-  if (res.status === 429) {
-    const json = await res.json().catch(() => ({}))
-    throw new Error((json as { error?: { message?: string } })?.error?.message ?? '오늘 체험 횟수를 초과했습니다. 내일 다시 시도해주세요.')
-  }
+  if (isRateLimited(res.status)) throw await toRateLimitError(res)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<TechInterviewResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('평가 실패')
@@ -45,10 +43,7 @@ async function submitExplain(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, answer, feedback, userQuestion, modelAnswer }),
   })
-  if (res.status === 429) {
-    const json = await res.json().catch(() => ({}))
-    throw new Error((json as { error?: { message?: string } })?.error?.message ?? '오늘 체험 횟수를 초과했습니다. 내일 다시 시도해주세요.')
-  }
+  if (isRateLimited(res.status)) throw await toRateLimitError(res)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json: ApiResponse<DailyQuestionExplainResult> = await res.json()
   if (json.result !== 'SUCCESS' || json.data == null) throw new Error('설명 요청 실패')
