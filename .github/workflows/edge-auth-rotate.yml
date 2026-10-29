@@ -46,6 +46,7 @@ concurrency:
 
 env:
   AWS_REGION: ap-northeast-2
+  NO_AWS: env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN
   FLY_APP: devquest-api
   SECRET_NAME: EDGE_AUTH_SECRET
   EDGE_PARAM: /devquest/prod/app/EDGE_AUTH_SECRET
@@ -80,6 +81,7 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
       # wrangler 는 fe 의 package.json 에 고정된 버전을 쓴다(fe-cd 와 같다). Node >= 22.
+      #   설치는 AWS 자격증명 전, **실행**은 뒤 스텝이라 실행 시 `$NO_AWS` 로 AWS 환경변수를 지운다(QA F-2).
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -135,7 +137,8 @@ jobs:
           printf '%s' "$KEY" > "$F"
           # ① Worker 먼저 — 비밀이 BE 에만 있고 Worker 에 없는 구간보다, Worker 에만 있는 구간이 짧고 둘 다 fail-soft 다.
           #    secret put 은 새 Worker 버전을 즉시 배포한다(코드·라우트는 그대로).
-          (cd fe && npx wrangler secret put "$SECRET_NAME" < "$F" >/dev/null)
+          #    `env -u AWS_*` — wrangler(서드파티 npm 런타임)에 main 역할 자격증명을 넘기지 않는다(QA F-2).
+          (cd fe && $NO_AWS npx wrangler secret put "$SECRET_NAME" < "$F" >/dev/null)
           echo "✅ Worker secret $SECRET_NAME 저장"
           # ② SSM 정본 — 되읽기 해시로 확인(EKS 창은 다음 on 에서 ESO 가 읽는다)
           aws ssm put-parameter --name "$EDGE_PARAM" --type SecureString --key-id alias/aws/ssm --overwrite \
@@ -168,17 +171,23 @@ jobs:
           else
             echo "::warning::Fly $SECRET_NAME 없음 — Fly 는 기존 IP 판정"; FAIL=1
           fi
-          if (cd fe && npx wrangler secret list --format json 2>/dev/null) | jq -e --arg n "$SECRET_NAME" '.[] | select(.name == $n)' >/dev/null; then
-            echo "✅ Worker $SECRET_NAME 있음"
+          # 출력 형태(`[{"name":…}]`)는 첫 실행이 첫 실측(QA F-1) — 실패하면 원인 앞부분을 보여 준다(값은 안 나온다: 이름 목록뿐)
+          if W=$(cd fe && $NO_AWS npx wrangler secret list --format json 2>&1); then
+            if printf '%s' "$W" | jq -e --arg n "$SECRET_NAME" '.[] | select(.name == $n)' >/dev/null 2>&1; then
+              echo "✅ Worker $SECRET_NAME 있음"
+            else
+              echo "::warning::Worker $SECRET_NAME 없음(또는 출력 형태가 예상과 다름: ${W:0:200}) — 헤더를 안 보내 BE 는 기존 IP 판정"; FAIL=1
+            fi
           else
-            echo "::warning::Worker $SECRET_NAME 없음(또는 목록 조회 실패) — 헤더를 안 보내 BE 는 기존 IP 판정"; FAIL=1
+            echo "::warning::Worker secret 목록 조회 실패: ${W:0:300}"; FAIL=1
           fi
           if [ "$ACTION" = rotate ] && [ "$FAIL" = 1 ]; then
             echo "::error::rotate 직후인데 사본이 빠졌다 — 위 경고 확인"; exit 1
           fi
 
+      # always() — 위 이름 확인이 실패해도(쓰기는 이미 끝난 뒤) Fly 가 돌아왔는지는 반드시 본다(QA F-1)
       - name: Fly 기동 확인
-        if: inputs.action == 'rotate'
+        if: always() && inputs.action == 'rotate'
         shell: bash
         run: |
           for i in $(seq 1 30); do
