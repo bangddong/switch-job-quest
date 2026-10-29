@@ -6055,3 +6055,19 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [결정] B7-19: 사용자 *"일반적으로 사용자별 제한은 어떻게?"* → 관행 설명(로그인 + 사용자 ID 한도 + 전체 상한, IP 는 약한 방어) → *"데일리 기술면접만 로그인 없이, 그 외 로그인"*. 상세는 계획서 「B7-19 재설계」 행.
 - [막힘] Blindspot 🔴: `api.quest` 도 Worker 를 안 거치고 직접 부를 수 있다 — IP 판정을 XFF 첫 값으로 바꾸면 Fly 에서도 위조. → 1단계는 IP 판정 불변, 2단계에서 Worker↔원본 신뢰 헤더.
 - [메모] BE 커밋 e15e331 에 attribution trailer 2줄이 들어감(서브에이전트가 시스템 알림을 지시보다 먼저 따름). force push 는 훅이 막음 → 우회 안 함, **squash merge 로 메시지 정리**.
+
+## 2026-10-29 — 📌D-016 8-C C-4 2차 (EKS 실제 로그인 확인)
+
+- [결정] 남은 「10 직전」 순서 확정(사용자 *"순서대로 진행하자"*): ① C-4 2차 → ② B7-19 2단계(신뢰 IP 헤더) → ③ B7-27 → ④ U-6(공유 레이트 리밋 저장소) → ⑤ 9번 창 중 Fly 정책(B8-19·B8-20) → ⑥ B8-18 관측 → 10 첫 정기 창. C-4 2차를 먼저 두는 이유: #511~#513 로그인 수정이 실제로 검증된 적이 없고, ② 가 Worker 를 바꾸기 전에 기준선을 확정해야 실패 원인을 가를 수 있다.
+- [메모] #514(B7-19 1단계) squash 머지 54e4ed8 → be-cd·fe-cd·ecr-push 성공. prod 실측: 비로그인 `/api/v1/tech-interview/question` **403** · daily-question 200 · 로그인 화면 새 버튼 문구 번들에 존재.
+- [막힘] 1차 dispatch(사용자 *"순서대로 진행하자"*) → Claude Code auto mode 분류기 `[Production Deploy]` 거부. 레포 설정(`settings.local.json` ask = tofu apply·destroy 만)이 아니라 분류기 판정 — 계획 승인과 prod 트래픽 전환 승인을 구분한다. 사용자 *"C-4 2차 돌려줘"* 후 통과.
+- [비용] on run 40798755494 (10:10 KST dispatch, `hours=1 traffic=eks`).
+- [메모] on 성공(≈16분): budget-gate 통과(남은 크레딧 $188.25, 이번 창 1h ≈ $0.35) · `✅ 로그인 키: GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET · JWT_SECRET 있음` · ALB 스모크 daily 200 / progress 403 · `KV → eks (until 2026-10-29T02:10:38Z = 임대 만료)` · prod 헤더 `x-devquest-backend: eks`.
+- [해결] OAuth 교환 프로브(잘못된 code 로 `POST /api/v1/auth/github`): quest(→eks)·eks.quest·api.quest(Fly) **셋 다 400 INVALID_REQUEST**. 1차는 EKS 만 500(GitHub 이 client_id 를 몰라 404) → #512 의 SSM→ESO 배선으로 GitHub 이 EKS client 를 인식한다. secret 유효성은 상태코드로 못 가르므로 실제 브라우저 로그인으로 확인.
+- [메모] ⚠️ 위 OAuth 프로브 판정 정정: core-api 로그 10:27:53 `Request parse failed: JSON parse error: … AuthController$GithubAuthRequest` ×2 — 프로브 본문이 요청 DTO 에 안 맞아 **GitHub 에 닿기 전에 400** 이었다. 상태코드 일치는 client id 증거가 아니다(검사가 주장보다 헐거웠다). 증거는 아래 실제 로그인.
+- [해결] 사용자 브라우저(창 중, KV=eks): 접속 시 로그인 풀려 있음 → **GitHub 재로그인 성공**(EKS 전용 OAuth secret 실동작 🔴). 풀린 원인은 미분리 — 10-28 16:04 KST JWT rotate(예정된 전원 1회 로그아웃) 이후 첫 방문일 수 있다. core-api 로그 ERROR/WARN 10건 = 기동 경고 + 위 프로브 2건, 인증·서명 예외 0.
+- [메모] 사용자 지적: **FE 에 로그아웃 UI 가 없다** — `useAuth().logout` 정의만 있고 사용처 0(grep). 창 검증 절차의 "로그아웃 후 재로그인" 은 원래 불가능했다.
+- [비용] off run 40801625327 (10:39 KST dispatch) → prod 헤더 `fly` 10:39:41(dispatch 후 ≈70s). 이어서 배수 240s → eks.quest 삭제 → destroy.
+- [해결] **JWT 통일 실측 확정 🔴**: 창 중 EKS 에서 발급받은 토큰으로, Fly 복귀 후 새로고침 → **로그인 유지**(사용자 확인). EKS 서명 토큰을 Fly 가 검증 = 같은 키(SSM 정본 → ESO / jwt-rotate → Fly). U-11 해소. 따라서 창 시작 때 풀린 로그인은 10-28 rotate 의 예정된 1회 로그아웃으로 본다(🟡 — 직접 증거는 없지만 반대 방향이 같은 키로 확인됐다).
+- [비용] off 완료: 배수 240s → eks.quest 삭제 → ALB LCU 0.00023 → destroy → off-verify 클러스터·EC2·LB·EBS·LBC SG 전부 0 · 임대 삭제. 클러스터 ≈ 01:10Z~01:5xZ ≈ 45분 ≈ $0.13(추정). 트래픽 EKS 구간 ≈ 10:26~10:39 KST(13분).
+- [메모] C-4 남은 미검증: KV 전파 시간을 엣지별로 재진 적 없음(이번엔 off dispatch → prod `fly` ≈70s, 맥 1곳). 정기 창 전까지 필수는 아님.
