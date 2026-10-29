@@ -1,6 +1,6 @@
 package com.devquest.core.api.support
 
-import io.github.bucket4j.Bucket
+import com.devquest.core.domain.model.RateLimitScopes
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.authentication.AnonymousAuthenticationToken
@@ -17,9 +17,10 @@ import tools.jackson.databind.ObjectMapper
  */
 @Component
 class TechInterviewRateLimitInterceptor(
-    private val rateLimitBucketStore: RateLimitBucketStore,
+    protected override val personalStore: RateLimitBucketStore,
     objectMapper: ObjectMapper,
-) : AbstractRateLimitInterceptor(objectMapper) {
+    limiter: SharedRateLimiter,
+) : AbstractRateLimitInterceptor(objectMapper, limiter) {
 
     override fun resolveKey(request: HttpServletRequest): String? {
         val authentication = SecurityContextHolder.getContext().authentication ?: return null
@@ -30,8 +31,6 @@ class TechInterviewRateLimitInterceptor(
         return userId.takeUnless { it.isBlank() || it == ANONYMOUS_PRINCIPAL }
     }
 
-    override fun resolveBucket(key: String): Bucket = rateLimitBucketStore.getOrCreate(key)
-
     private companion object {
         const val ANONYMOUS_PRINCIPAL = "anonymousUser"
     }
@@ -41,4 +40,4 @@ class TechInterviewRateLimitInterceptor(
 class RateLimitBucketStore(
     @Value("\${devquest.rate-limit.tech-interview.capacity:2}") capacity: Long,
     @Value("\${devquest.rate-limit.tech-interview.refill-days:1}") refillDays: Long,
-) : AbstractRateLimitBucketStore(capacity, refillDays)
+) : AbstractRateLimitBucketStore(RateLimitScopes.TECH_INTERVIEW, capacity, refillDays)

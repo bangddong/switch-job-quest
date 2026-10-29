@@ -1,5 +1,6 @@
 package com.devquest.core.api.support
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import jakarta.servlet.http.HttpServletRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -84,5 +85,41 @@ class ClientIpResolverTest {
             .isEqualTo("2.2.2.2")
         assertThat(resolver.resolve(request(remoteAddr = "4.4.4.4")))
             .isEqualTo("4.4.4.4")
+    }
+
+    // --- L-78: 판정 경로 지표 -------------------------------------------------------------
+
+    private fun SimpleMeterRegistry.count(path: String): Double =
+        counter(ClientIpResolver.METRIC_NAME, "path", path).count()
+
+    @Test
+    fun `신뢰 헤더로 판정하면 path=trusted 카운터만 오른다`() {
+        val registry = SimpleMeterRegistry()
+        val resolver = ClientIpResolver(secret, registry)
+
+        resolver.resolve(request(edgeAuth = secret, edgeClientIp = "203.0.113.7"))
+        resolver.resolve(request(edgeAuth = secret, edgeClientIp = "203.0.113.8"))
+
+        assertThat(registry.count("trusted")).isEqualTo(2.0)
+        assertThat(registry.count("legacy")).isEqualTo(0.0)
+    }
+
+    @Test
+    fun `비밀 불일치·헤더 없음·비밀 미설정은 모두 path=legacy 로 센다`() {
+        val registry = SimpleMeterRegistry()
+        val configured = ClientIpResolver(secret, registry)
+        val unconfigured = ClientIpResolver("", registry)
+
+        configured.resolve(request(edgeAuth = "wrong", edgeClientIp = "203.0.113.7", flyClientIp = "172.68.0.1"))
+        configured.resolve(request(flyClientIp = "172.68.0.1"))
+        unconfigured.resolve(request(edgeAuth = secret, edgeClientIp = "203.0.113.7"))
+
+        assertThat(registry.count("legacy")).isEqualTo(3.0)
+        assertThat(registry.count("trusted")).isEqualTo(0.0)
+    }
+
+    @Test
+    fun `지표 레지스트리 없이 만들어도 판정은 그대로 동작한다`() {
+        assertThat(ClientIpResolver("").resolve(request(flyClientIp = "172.68.0.1"))).isEqualTo("172.68.0.1")
     }
 }

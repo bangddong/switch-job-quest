@@ -28,6 +28,7 @@ class TrustedClientIpRateLimitTest {
             DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
             DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1),
             ObjectMapper(),
+            memoryOnlyLimiter(),
             ClientIpResolver(secret),
         )
     }

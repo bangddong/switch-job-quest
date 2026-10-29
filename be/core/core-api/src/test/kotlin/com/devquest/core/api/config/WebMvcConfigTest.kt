@@ -9,6 +9,7 @@ import com.devquest.core.api.support.DailyExplainRateLimitBucketStore
 import com.devquest.core.api.support.DailyExplainRateLimitInterceptor
 import com.devquest.core.api.support.RateLimitBucketStore
 import com.devquest.core.api.support.TechInterviewRateLimitInterceptor
+import com.devquest.core.api.support.memoryOnlyLimiter
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry
@@ -25,17 +26,20 @@ class WebMvcConfigTest {
     private val techInterviewRateLimitInterceptor = TechInterviewRateLimitInterceptor(
         RateLimitBucketStore(capacity = 2, refillDays = 1),
         ObjectMapper(),
+        memoryOnlyLimiter(),
     )
     private val dailyExplainRateLimitInterceptor = DailyExplainRateLimitInterceptor(
         DailyExplainRateLimitBucketStore(capacity = 5, refillDays = 1),
         DailyExplainGlobalRateLimitStore(capacity = 100, refillDays = 1),
         ObjectMapper(),
+        memoryOnlyLimiter(),
         ClientIpResolver(""),
     )
     private val dailyEvaluateRateLimitInterceptor = DailyEvaluateRateLimitInterceptor(
         DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
         DailyEvaluateGlobalRateLimitStore(capacity = 50, refillDays = 1),
         ObjectMapper(),
+        memoryOnlyLimiter(),
         ClientIpResolver(""),
     )
 

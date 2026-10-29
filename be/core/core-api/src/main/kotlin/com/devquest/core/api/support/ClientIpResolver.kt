@@ -1,5 +1,7 @@
 package com.devquest.core.api.support
 
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.InitializingBean
@@ -22,17 +24,25 @@ import java.security.MessageDigest
  * 에 넣는 순서는 원자적이지 않고(교체 중 수 초~수십 초 불일치) Vercel 복귀 경로는 헤더 자체가 없다.
  * 고정 버킷으로 보내면 evaluate 용량 1 때문에 전원이 하루 동안 막힌다. 비용 상한은 전체 일일 상한이 지킨다.
  *
+ * 판정 경로는 Micrometer 카운터 `devquest.ratelimit.client_ip{path=trusted|legacy}` 로 센다(L-78). 비밀이 Worker·Fly 에
+ * 제대로 배포됐는데도 `legacy` 만 늘면 신뢰 경로가 죽은 것이다 — fail-soft 라 장애로는 드러나지 않기 때문이다.
+ * [MeterRegistry] 는 선택 주입이다(`ClientIpResolver("")` 직접 생성이 계속 가능). daily-api 는 지표 송출 경로가 없어 넣지 않는다.
+ *
  * 원본(api/eks 호스트)은 Worker 를 안 거치고 직접 호출될 수 있어 클라이언트가 보내는 헤더는 신뢰하지 않는다 —
  * 비밀이 맞을 때만 신뢰 헤더를 읽는다. 비밀·헤더 값과 불일치 요청은 로그에 남기지 않는다(직접 호출 공격 시 로그 범람).
  */
 @Component
 class ClientIpResolver(
     @Value("\${devquest.edge.auth-secret:}") authSecret: String,
+    meterRegistry: MeterRegistry? = null,
 ) : InitializingBean {
 
     private val log = LoggerFactory.getLogger(javaClass)
     private val secretBytes: ByteArray? = authSecret.trim().takeIf { it.isNotEmpty() }
         ?.toByteArray(StandardCharsets.UTF_8)
+
+    private val trustedCounter: Counter? = meterRegistry?.counter(METRIC_NAME, "path", "trusted")
+    private val legacyCounter: Counter? = meterRegistry?.counter(METRIC_NAME, "path", "legacy")
 
     override fun afterPropertiesSet() {
         // 기동 시 한 번만. 요청마다 남기면 로그가 범람한다.
@@ -41,7 +51,14 @@ class ClientIpResolver(
         }
     }
 
-    fun resolve(request: HttpServletRequest): String = trustedEdgeClientIp(request) ?: legacyClientIp(request)
+    fun resolve(request: HttpServletRequest): String {
+        trustedEdgeClientIp(request)?.let {
+            trustedCounter?.increment()
+            return it
+        }
+        legacyCounter?.increment()
+        return legacyClientIp(request)
+    }
 
     private fun trustedEdgeClientIp(request: HttpServletRequest): String? {
         val expected = secretBytes ?: return null
@@ -56,6 +73,7 @@ class ClientIpResolver(
             ?: request.remoteAddr
 
     companion object {
+        const val METRIC_NAME = "devquest.ratelimit.client_ip"
         const val EDGE_AUTH_HEADER = "X-DevQuest-Edge-Auth"
         const val EDGE_CLIENT_IP_HEADER = "X-DevQuest-Client-IP"
     }
