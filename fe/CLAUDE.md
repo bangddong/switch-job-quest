@@ -38,12 +38,12 @@
   - **안전 기본값 = Fly**: 바인딩 없음 · 키 없음 · KV 예외 · JSON 오류/객체 아님 · `target !== 'eks'` · `until` 없음/파싱 불가/만료 · `until > 지금+12h` · `EKS_ORIGIN` 이 비었거나 `https:` URL 이 아님. 임대 만료 시각에 스스로 Fly 로 돌아오는 dead man's switch.
   - **값 계약**: `until` 은 타임존 지정자(`Z` 또는 `±HH:MM`)가 붙은 ISO 8601 날짜-시각만 받는다(예: `2026-10-27T12:00:00Z`). 타임존 없는 값·비-ISO 문자열은 Fly.
   - 응답에 `X-DevQuest-Backend: fly|eks` 헤더(502 포함). **자동 장애 전환 없음** — EKS 실패는 그대로 502 (POST 이중 처리 방지).
+  - `wrangler.jsonc` 의 `kv_namespaces` 가 KV 네임스페이스 `devquest-backend-switch` 를 `SWITCH` 로 바인딩한다(키가 없으면 Fly). 바인딩이 빠지면 항상 Fly. KV 는 `fe/**` 재배포와 독립이라 창 중 머지가 스위치를 되돌리지 않는다.
 - **신뢰 클라이언트 IP 헤더 (B7-19 2단계, `worker/proxy.ts`)**: Worker secret `EDGE_AUTH_SECRET` 이 있고 `CF-Connecting-IP` 가 있으면
   원본(Fly·EKS 둘 다)에 `X-DevQuest-Edge-Auth: <비밀>` + `X-DevQuest-Client-IP: <IP>` 를 붙인다. 하나라도 없으면 **둘 다 안 보낸다**.
   클라이언트가 보낸 같은 이름 헤더는 항상 제거한다. BE 는 비밀이 맞을 때만 그 IP 로 익명 한도를 세고, 아니면 기존 판정(fail-soft).
   - 🔴 `EDGE_AUTH_SECRET` 을 `wrangler.jsonc` 의 `vars` 에 **넣지 마라** — secret 과 같은 이름이면 충돌한다. `Env` 에선 선택 필드(코드가 secret 보다 먼저 배포된다).
   - 코드 배포는 fe-cd, **secret 값은 `.github/workflows/edge-auth-rotate.yml` 만 쓴다**(SSM 정본 → Worker·Fly·EKS 사본). 위치·교체: `.claude/docs/secrets-map.md`.
-  - `wrangler.jsonc` 의 `kv_namespaces` 가 KV 네임스페이스 `devquest-backend-switch` 를 `SWITCH` 로 바인딩한다(키가 없으면 Fly). 바인딩이 빠지면 항상 Fly. KV 는 `fe/**` 재배포와 독립이라 창 중 머지가 스위치를 되돌리지 않는다.
 - ⚠️ **로컬 `wrangler deploy` 금지** — 실배포다. 코드 배포는 `fe-cd.yml`의 `deploy-workers` job만 한다(secret 은 `edge-auth-rotate.yml`).
 
 ## API 패턴
