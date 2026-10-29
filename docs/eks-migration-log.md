@@ -6077,3 +6077,14 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [결정] 사용자 *"응 진행해줘"* — Worker 가 공유 비밀 + CF-Connecting-IP 를 원본에 실어 보내고 BE 는 비밀이 맞을 때만 그 IP 로 익명 한도를 센다. 비밀 배포는 jwt-rotate 방식(새 워크플로 `edge-auth-rotate.yml`). 상세·미룬 것은 계획서 「B7-19 2단계 구현」 행.
 - [메모] Blindspot 17건 중 계획을 바꾼 것: ① EKS 의 오늘의 질문은 **daily-api** 가 받고(ingress) daily-api 는 `core-api-runtime` 을 안 받는다 → ESO 허용목록에 추가하는 원안으로는 EKS 에 비밀이 안 들어간다 → 전용 ExternalSecret `daily-api-edge` ② 불일치를 고정 `untrusted` 버킷으로 보내는 안 기각 — evaluate 용량 1 이라 사본 교체 중 수십 초 어긋나면 **익명 전원이 하루 막힌다** → fail-soft(기존 판정) ③ Fly 앱은 `devquest-api` 하나뿐 — Fly 비밀은 한 곳.
 - [메모] 근거 🟡(코드): Worker 는 클라이언트의 `Fly-Client-IP` 를 지우지만 Fly 프록시가 TCP 상대(= Worker 이그레스, Cloudflare 주소)로 다시 채운다 → 지금 Fly 의 익명 IP 키는 엣지 주소. 실측은 머지 후 rotate 전후 비교로.
+- [해결] #515 머지(dc439dc) → 사용자 *"Edge rotate"* → `gh workflow run edge-auth-rotate.yml --ref main -f action=rotate -f confirm=FLY-RESTART` → run 40816914011 success(≈80초, 전 단계 success). 로그 실측:
+  ```
+  ✅ Worker secret EDGE_AUTH_SECRET 저장
+  ✅ SSM /devquest/prod/app/EDGE_AUTH_SECRET 저장·되읽기 일치(sha256 앞 8: …)
+  > Machine … [app] has state: started        04:18:15Z
+  > Waiting for … [app] to become healthy: 1/1 04:18:43Z
+  ✅ SSM … 있음 / ✅ Fly EDGE_AUTH_SECRET 있음 / ✅ Worker EDGE_AUTH_SECRET 있음
+  ✅ Fly 200 (+10s)
+  ```
+  - [메모] **CF FE 배포 토큰으로 Worker secret 쓰기 가능** — 시크릿 지도의 🟡 를 🔴 로. Fly 재시작 ≈30초(머신 1대). 이름 확인이 rotate 런 안에서 돌았으므로 별도 `check` 생략. 사후 prod 오늘의 질문 200, backend fly. 비용 $0.
+  - [메모] ⚪ 미확인 2건: ① BE 가 실제로 신뢰 경로를 타는지 — 판정 경로 지표가 없다(원장 L-78, U-6 에서) ② Fly 기동 WARN 소멸 — 로컬 flyctl 토큰 없음(`Error: no access token available`).
