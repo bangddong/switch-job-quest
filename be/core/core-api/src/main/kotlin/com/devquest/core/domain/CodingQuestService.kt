@@ -11,22 +11,30 @@ import com.devquest.core.domain.port.CodingProblemGeneratorPort
 import com.devquest.core.domain.port.CodingProblemPort
 import com.devquest.core.domain.port.CodingRankPort
 import com.devquest.core.domain.port.CodingRoadmapProgressPort
-import com.devquest.core.domain.port.CodingSubmissionPort
 import com.devquest.core.domain.port.Judge0Port
 import com.devquest.core.domain.port.UserCodingLevelPort
 import java.time.LocalDate
 import java.time.ZoneId
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 
+/**
+ * ⚠️ **트랜잭션 경계 (B7-27)**: [generateProblem]·[submitCode] 는 의도적으로 `@Transactional` 을 붙이지
+ * 않는다. LLM 문제 생성(+ 테스트케이스마다 Judge0 검증, 최대 2회 재시도)과 제출 시 Judge0 순차 실행은
+ * 수십 초가 걸릴 수 있는데, 메서드 전체를 감싸면 그동안 HikariCP 커넥션(prod pool=10)을 쥔다.
+ * AiCheckService 와 같은 논리다.
+ *
+ * - [generateProblem]: DB 부수효과는 `codingProblemPort.save` 한 번뿐이라 바깥 트랜잭션이 원자성을 더한 적 없다.
+ * - [submitCode]: Judge0 실행은 트랜잭션 밖에서 하고, DB 쓰기 묶음(제출 저장 + solveCount + 레벨업)은
+ *   별도 빈 [CodingSubmissionRecorder.record] 의 `@Transactional` 한 번으로 원자성을 유지한다.
+ */
 @Service
 class CodingQuestService(
     private val codingProblemGeneratorPort: CodingProblemGeneratorPort,
     private val codingProblemPort: CodingProblemPort,
     private val userCodingLevelPort: UserCodingLevelPort,
-    private val codingSubmissionPort: CodingSubmissionPort,
+    private val codingSubmissionRecorder: CodingSubmissionRecorder,
     private val judge0Port: Judge0Port,
     private val codingHintPort: CodingHintPort,
     private val codingRoadmapProgressPort: CodingRoadmapProgressPort,
@@ -39,7 +47,6 @@ class CodingQuestService(
         private const val JAVA_LANGUAGE_ID = 62
         private const val KOTLIN_LANGUAGE_ID = 78
         private const val MAX_RETRY = 2
-        private const val LEVEL_UP_INTERVAL = 3
         private const val ROADMAP_UNLOCK_THRESHOLD = 3
 
         private val TIER_THRESHOLDS = listOf(
@@ -85,7 +92,6 @@ class CodingQuestService(
         )
     }
 
-    @Transactional
     fun generateProblem(userId: String, language: String, category: String): CodingProblem {
         require(language in listOf("JAVA", "KOTLIN")) { "지원하지 않는 언어입니다: $language" }
         val level = userCodingLevelPort.getLevel(userId)
@@ -157,7 +163,6 @@ class CodingQuestService(
         throw AiEvaluationException("코딩 문제 생성에 실패했습니다. 잠시 후 다시 시도해주세요.")
     }
 
-    @Transactional
     fun submitCode(userId: String, problemId: Long, language: String, userCode: String): CodingSubmissionResult {
         val problem = codingProblemPort.findById(problemId)
             ?: return CodingSubmissionResult(problemId = problemId, passed = false, message = "문제를 찾을 수 없습니다")
@@ -176,16 +181,7 @@ class CodingQuestService(
         val judgeResultJson = objectMapper.writeValueAsString(
             mapOf("passed" to passed, "stdout" to lastStdout, "stderr" to lastStderr)
         )
-        codingSubmissionPort.save(userId, problemId, language, userCode, passed, judgeResultJson, problem.category)
-
-        if (passed) {
-            val currentSolveCount = userCodingLevelPort.getSolveCount(userId)
-            userCodingLevelPort.incrementSolveCount(userId)
-            if ((currentSolveCount + 1) % LEVEL_UP_INTERVAL == 0) {
-                userCodingLevelPort.incrementLevel(userId)
-                log.info("레벨 업: userId=$userId, solveCount=${currentSolveCount + 1}")
-            }
-        }
+        codingSubmissionRecorder.record(userId, problemId, language, userCode, passed, judgeResultJson, problem.category)
 
         log.info("코드 제출: userId=$userId, problemId=$problemId, passed=$passed")
         return CodingSubmissionResult(
