@@ -27,7 +27,7 @@ import javax.sql.DataSource
  * ```
  * 1) UPDATE … SET used = used + 1 WHERE (scope,key,date) AND used < :cap     → 1행이면 차감 성공
  * 2) 0행이면 INSERT … SELECT … WHERE NOT EXISTS (같은 PK)                      → 1행이면 첫 사용(used=1) 성공
- * 3) INSERT 도 0행이면 행이 있고 이미 상한 → 거부. (동시 INSERT 경합으로 PK 충돌이 나면 1)을 한 번 더)
+ * 3) INSERT 가 0행이거나 PK 충돌이면 행이 이미 있다(타 요청이 방금 만들었거나 이미 상한) → 1)을 정확히 한 번 더 → 1행이면 성공, 0행이면 거부
  * ```
  * 한 문장짜리 `INSERT … ON CONFLICT DO UPDATE … WHERE … RETURNING` 대신 이 형태를 쓰는 이유: H2 가 `ON CONFLICT DO UPDATE` 를
  * 지원하지 않아 테스트 컨텍스트(H2)가 실제 SQL 을 타지 못한다. 상한은 `UPDATE … WHERE used < :cap` 의 행 잠금이 지키므로
@@ -57,10 +57,14 @@ class RateLimitCounterAdapter(
         val inserted = try {
             jdbc.update(INSERT_FIRST_USE, scope, hashedKey, today, now, scope, hashedKey, today)
         } catch (e: DuplicateKeyException) {
-            // 다른 인스턴스가 같은 순간 첫 행을 만들었다 — 이제 행이 있으니 증가 경로로 다시 간다.
-            return increment(scope, hashedKey, today, capacity, now)
+            // 다른 인스턴스가 같은 순간 첫 행을 만들었다(PK 충돌). 아래에서 증가 경로로 다시 간다.
+            0
         }
-        return inserted == 1
+        if (inserted == 1) return true
+        // INSERT 가 0행(NOT EXISTS 가 방금 커밋된 타 요청의 행을 봄)이거나 PK 충돌이면 행이 이미 있다.
+        // 상한 미만인데 거부하면 거짓 429 이므로 증가 경로를 한 번 더 탄다 — 행이 있으니 ① 이 정확히 판정한다.
+        // 당일 행은 삭제되지 않으므로(정리는 2일 뒤) 한 번이면 충분하다.
+        return increment(scope, hashedKey, today, capacity, now)
     }
 
     override fun refund(scope: String, key: String) {

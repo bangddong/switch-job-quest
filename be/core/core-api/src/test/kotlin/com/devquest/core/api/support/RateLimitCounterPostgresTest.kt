@@ -205,6 +205,34 @@ class RateLimitCounterPostgresTest {
     }
 
     @Test
+    fun `동시성 - 첫 사용 경합에서 cap 이 2 이상이어도 키마다 정확히 cap 건이 성공한다 (QA F-1 거짓 429 회귀)`() {
+        val keys = 100
+        val perKey = 8
+        val cap = 5
+        val adapter = adapterAt()
+        val pool = Executors.newFixedThreadPool(perKey)
+        val successByKey = Array(keys) { AtomicInteger() }
+        try {
+            val futures = (0 until keys).flatMap { k ->
+                val barrier = CyclicBarrier(perKey)
+                (1..perKey).map {
+                    pool.submit {
+                        barrier.await(30, TimeUnit.SECONDS)
+                        if (adapter.tryConsume("race-cap", "key-$k", cap)) successByKey[k].incrementAndGet()
+                    }
+                }
+            }
+            futures.forEach { it.get(60, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+
+        // 8 요청 중 cap(5) 건만 성공해야 한다 — 첫 INSERT 경합에서 거짓 거부가 나면 5 미만이 된다
+        assertThat(successByKey.map { it.get() }).describedAs("키마다 정확히 cap 건").allMatch { it == cap }
+        assertThat((0 until keys).map { usedOf("race-cap", "key-$it") }).allMatch { it == cap }
+    }
+
+    @Test
     fun `쿼리 타임아웃 - 행 잠금에 막힌 쿼리는 약 1초 뒤 DataAccessException 으로 끝난다`() {
         val adapter = adapterAt()
         assertThat(adapter.tryConsume("s", "locked", 5)).isTrue()

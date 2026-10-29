@@ -9,10 +9,14 @@ import org.springframework.core.io.ClassPathResource
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Proxy
+import java.sql.Connection
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import javax.sql.DataSource
 
 /**
  * [RateLimitCounterAdapter] 의 SQL 을 H2 에서 검증한다. 어댑터 SQL 은 Postgres·H2 공통 문법이라
@@ -191,6 +195,64 @@ class RateLimitCounterAdapterTest {
         assertThat(other.tryConsume("s", "k", 3)).isTrue()
         assertThat(adapter.tryConsume("s", "k", 3)).isTrue()
         assertThat(other.tryConsume("s", "k", 3)).isFalse()
+    }
+
+    /**
+     * 첫 INSERT 문장을 준비하는 순간(= UPDATE 가 0행이었던 직후) [beforeFirstInsert] 를 끼워 넣는 DataSource.
+     * 타 요청이 그 사이에 행을 만들고 커밋한 경합을 스레드 타이밍 없이 결정적으로 재현한다.
+     */
+    private fun dataSourceInterceptingFirstInsert(beforeFirstInsert: () -> Unit): DataSource {
+        var fired = false
+        fun wrap(connection: Connection): Connection = Proxy.newProxyInstance(
+            Connection::class.java.classLoader, arrayOf(Connection::class.java),
+        ) { _, method, args ->
+            val sql = args?.firstOrNull() as? String
+            if (!fired && method.name == "prepareStatement" && sql != null && sql.startsWith("INSERT INTO rate_limit_counter")) {
+                fired = true
+                beforeFirstInsert()
+            }
+            try {
+                method.invoke(connection, *(args ?: emptyArray()))
+            } catch (e: InvocationTargetException) {
+                throw e.targetException
+            }
+        } as Connection
+        return object : DataSource by dataSource {
+            override fun getConnection(): Connection = wrap(dataSource.connection)
+            override fun getConnection(username: String, password: String): Connection = wrap(dataSource.getConnection(username, password))
+        }
+    }
+
+    private fun insertRowFromOtherRequest(key: String, used: Int) {
+        jdbc.update(
+            "INSERT INTO rate_limit_counter (scope, limit_key, limit_date, used, updated_at) VALUES ('s', ?, CAST('2026-10-29' AS DATE), ?, CURRENT_TIMESTAMP)",
+            RateLimitCounterAdapter.hash(key), used,
+        )
+    }
+
+    @Test
+    fun `첫 사용 경합 - UPDATE 0행 직후 타 요청이 행을 만들어 INSERT 가 0행이어도 상한 미만이면 허용한다 (QA F-1)`() {
+        // 재현: A ①UPDATE 0행 → B 가 INSERT 커밋(used=1) → A ②INSERT…NOT EXISTS 0행. cap=5 이므로 A 는 허용되어야 한다.
+        val adapter = RateLimitCounterAdapter(
+            dataSourceInterceptingFirstInsert { insertRowFromOtherRequest("k", 1) },
+            Clock.fixed(Instant.parse(today), ZoneOffset.UTC),
+        )
+
+        assertThat(adapter.tryConsume("s", "k", 5)).isTrue()
+
+        assertThat(usedOf("s", "k")).isEqualTo(2)
+    }
+
+    @Test
+    fun `첫 사용 경합 - 타 요청이 먼저 상한을 채웠으면 거부하고 사용량을 늘리지 않는다 (QA F-1)`() {
+        val adapter = RateLimitCounterAdapter(
+            dataSourceInterceptingFirstInsert { insertRowFromOtherRequest("k", 1) },
+            Clock.fixed(Instant.parse(today), ZoneOffset.UTC),
+        )
+
+        assertThat(adapter.tryConsume("s", "k", 1)).isFalse()
+
+        assertThat(usedOf("s", "k")).isEqualTo(1)
     }
 
     @Test
