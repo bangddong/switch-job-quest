@@ -142,3 +142,22 @@ win_login_keys_verdict() {
 win_lb_count() {
   aws elbv2 describe-load-balancers --region "$WIN_REGION" --query 'length(LoadBalancers)' --output text
 }
+
+# 실행·대기 중인 워크플로 run 수 — 📌D-016 9번(B8-20). $1 = owner/repo · $2 = 워크플로 파일 · $3 = jq 필터(배열 → 수).
+#   stdout 정수. 조회 오류는 rc 2 — "0건" 으로 떨어뜨리지 않는다(B8-16 과 같은 이유: 모르면 막는다).
+#   상태 5종은 jwt-rotate·edge-auth-rotate 의 be-cd 가드와 같다.
+win_active_runs() {
+  local s n total=0
+  for s in in_progress queued waiting pending requested; do
+    n=$(gh run list -R "$1" --workflow "$2" --status "$s" --limit 50 --json displayTitle --jq "$3" 2>/dev/null) \
+      || { wlog "$2 실행 조회 오류(status=$s)"; return 2; }
+    [[ "$n" =~ ^[0-9]+$ ]] || { wlog "$2 실행 조회 결과가 정수가 아니다: ${n:0:80}"; return 2; }
+    total=$((total + n))
+  done
+  echo "$total"
+}
+
+# eks-window 의 on 실행만 고르는 jq — run-name 이 `EKS Window / <action>` 이다(eks-window.yml `run-name`).
+#   watchdog(매시 :17·:47, 클러스터 없으면 1분 안에 끝남)까지 세면 be-cd 가 시간당 몇 % 확률로 이유 없이 막힌다.
+#   off·watchdog 이 **클러스터가 있을 때** 도는 동안은 아래 클러스터 판정이 막는다.
+WIN_ON_RUN_JQ='[.[] | select(.displayTitle | endswith("/ on"))] | length'

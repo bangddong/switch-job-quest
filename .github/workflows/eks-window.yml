@@ -19,6 +19,10 @@ name: EKS Window
 # ⚠️ GitHub cron 은 UTC·지연·누락이 있고 레포 활동이 60일 없으면 schedule 이 꺼진다(N-13). 그래서 보조다.
 #    ⚠️ EventBridge 경로도 **GitHub Actions 장애에는 함께 걸린다**(dispatch 는 받아도 run 이 안 돌 수 있다) —
 #    B4-21 은 cron 지연·60일 비활성만 해소했다. dispatch 실패(401·422 등)는 CloudWatch 알람이 메일로 알린다.
+# 📌D-016 9번(B8-20) — be-cd 의 창 게이트(deploy-gate.sh)가 **on 실행만** 골라 본다(`… / on` 으로 끝나는 제목).
+#   watchdog(매시)까지 세면 be-cd 가 이유 없이 막힌다. 🔴 이 형식을 바꾸면 common.sh WIN_ON_RUN_JQ 도 함께 고친다.
+run-name: "EKS Window / ${{ github.event_name == 'schedule' && 'watchdog(cron)' || inputs.action }}"
+
 on:
   workflow_dispatch:
     inputs:
@@ -132,8 +136,23 @@ jobs:
           M=$(TZ=Asia/Seoul date +%-M)
           # QA F-3 — on 이 끝나기까지 ~20분: 17:35 이후면 대기 중이던 18:00 off 가 켜자마자 닫는다
           if [ "$H" -eq 17 ] && [ "$M" -ge 35 ]; then echo "::warning::17:35 이후 on — 켜지는 즈음 18:00 off(EventBridge)가 바로 끈다. 18:00 이후에 다시 켜는 편이 낫다"; fi
-          # QA F-3 — 09:00 을 가로지르면 EKS core-api 의 09:00 스케줄러(오늘 질문 생성)가 Fly 와 함께 돈다(메일은 EKS 에서 꺼짐 — 9번)
-          [ "$H" -ge 9 ] || echo "::warning::09:00 KST 이전 on — 09:00 스케줄러가 Fly·EKS 양쪽에서 돈다(같은 커밋이라 동치로 판단, 9번에서 정리)"
+          # 9번(10-30) 판정 — 09:00 을 가로질러도 **안전**: 창 중에도 Fly 1대가 돌며 메일은 Fly 만 보낸다(EKS MAIL_ENABLED=false).
+          #   EKS core-api 도 09:00 에 오늘 질문을 만들지만 UNIQUE(question_date, mail_type) + 충돌 시 기존 행 재조회라 중복이 없다.
+          #   남는 비용: 뱅크가 소진된 날이면 AI 생성이 양쪽에서 한 번씩(한쪽 결과는 버려진다) — 그래서 경고만 남긴다.
+          [ "$H" -ge 9 ] || echo "::warning::09:00 KST 이전 on — 09:00 오늘 질문 생성이 Fly·EKS 양쪽에서 돈다(중복 행 없음 · 뱅크 소진일이면 AI 비용 2회)"
+
+      # 📌D-016 9번 · B8-20 — be-cd 가 돌거나 대기 중이면 켜지 않는다(과금 **전**). 그 배포의 release_command 가 apply 중에
+      #   공유 DB 를 마이그레이션하면, 아래에서 고를 이미지(= 직전 성공 be-cd)가 스키마보다 뒤처진다.
+      #   반대 방향(창 중 be-cd)은 be-cd 의 창 게이트가 거부한다 — 둘이 **서로를** 본다.
+      - name: 배포 게이트 (be-cd 실행·대기 중이면 거부)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          MSG=$(bash infra/aws-eks/scripts/prod-window/deploy-gate.sh window-on 2>&1); rc=$?
+          echo "$MSG"
+          [ $rc = 0 ] || { echo "::error::$MSG"; exit 1; }
 
       - name: 예산 게이트 (Q-3 · B8-22)
         shell: bash
