@@ -12,7 +12,7 @@
 | ⑥ 방식 | **A — push 유지, OTel 리소스 속성으로 플랫폼·인스턴스 분리** | B(클러스터 안 Alloy/OTel Collector 스크레이프) 기각: 새 차트·IRSA·노드 메모리, `SecurityConfig` 의 `/actuator/**` 127.0.0.1 제한을 풀어야 해 ⑤ actuator 판정과 정면 충돌, Fly 는 어차피 A 가 필요. → B 는 **학습 트랙 L-5** 로 따로 실습 |
 | daily-api Grafana 키 | **전용 ExternalSecret 신설**(GRAFANA 키만) | `daily-api-edge` 확장은 이름-내용 불일치, `core-api-runtime` 공유는 Anthropic 등 불필요 키 노출(최소권한 위반) |
 | 창 로그 | **core-api · daily-api 둘 다 Loki** | EKS prod 창엔 Fluent Bit 가 없어 destroy 시 로그 소실. L-4(트레이스↔로그 연결)의 전제 |
-| ai-api AI 비용 지표 | **⑥ 에 포함** | 같은 메커니즘(`support:monitoring` 의존)이고, 빠지면 창 중 오늘의 질문 AI 비용이 대시보드에서 사라진다. 🟡 조사 보고에서 추천을 명시하지 않았던 항목 — 범위가 커지면 원장으로 내린다 |
+| ai-api AI 비용 지표 | **⑥ 에 포함** | 같은 메커니즘(`support:monitoring` 의존)이고, 빠지면 창 중 오늘의 질문 AI 비용이 대시보드에서 사라진다. ✅ 사용자 확정 10-30(*"ai-api도 ⑥에 포함하는 걸로 가자"*) |
 | TASK-17 시점 | **⑥ 1단계 머지·Fly 배포 후** | 먼저 넣으면 EKS core-api 가 즉시 같은 리소스로 push → 충돌이 실제로 발생(아래 현황) |
 
 ## 현황 (조사 근거)
