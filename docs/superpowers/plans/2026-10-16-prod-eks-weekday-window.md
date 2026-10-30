@@ -513,7 +513,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | B8-15 | 🔴 | concurrency pending 교체가 off 를 조용히 취소 | ✅ 8-B 코드 — 취소돼도 되게(임대 + 매시 watchdog, 상한 = 임대 + 1h) |
 | B8-16 | 🟡 | 리퍼 로직 그대로 재사용 금지(kubeconfig 실패=없음, Ingress 실패에도 destroy), LBC SG 누적 | ✅ 8-B 코드 — AWS LB 0 판정이 최종, 남으면 destroy 안 함 · LBC SG 정리·판정 |
 | B8-17 | 🟡 | ALB 매일 삭제로 LCU 실측 소실 | ✅ 8-B 코드 — off 가 LB 이름·생성 시각·ConsumedLCUs 합을 Summary 에 |
-| B8-18 | 🟡 | 창 관측 공백(GRAFANA 키 없음, service.name 충돌) | TASK-17(키) + 10 직전(리소스 속성) |
+| B8-18 | 🟡 | 창 관측 공백(GRAFANA 키 없음, service.name 충돌) | TASK-17(키) + 10 직전(리소스 속성) → 설계 확정 10-30(A안·Grafana 유지): `2026-10-30-observability.md` |
 | B8-19 | 🟡 | U-5 전제가 거꾸로(EKS 는 메일 꺼짐) | 9번 |
 | B8-20 | 🟡 | 창 중 be 머지가 EKS 아래 스키마를 바꿈 | 9번(be-cd 창 중 정책) |
 | B8-21 | 🟡 | 로컬 apply 가 창 중 prod 클러스터를 기본값으로 덮음 | ✅ 기본값 문제는 8-A `prod.auto.tfvars.json` 이 닫았다. 로컬 도구의 임대 읽기는 「8-B 에서 미룬 것」 |
