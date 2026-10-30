@@ -75,6 +75,9 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
     implementation("com.bucket4j:bucket4j-core:8.10.1")
+    // ClientIpResolver 의 판정 경로 카운터(devquest.ratelimit.client_ip, L-78). support:monitoring 이 actuator 를
+    // implementation 으로만 갖고 있어 core-api 컴파일 클래스패스에는 새지 않는다 — 직접 선언한다. 버전은 Boot BOM.
+    implementation("io.micrometer:micrometer-core")
 
     // 마이그레이션 모드(`java -jar app.jar migrate|validate|repair`, com.devquest.migration)가 Flyway API 를
     // 직접 쓴다. db-core 가 flyway-core 를 implementation 으로만 갖고 있어 compileClasspath 로 새지 않으므로

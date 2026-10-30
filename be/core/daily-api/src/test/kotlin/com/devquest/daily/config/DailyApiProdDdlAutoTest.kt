@@ -39,4 +39,13 @@ class DailyApiProdDdlAutoTest {
 
         assertThat(dialect).isEqualTo("org.hibernate.dialect.PostgreSQLDialect")
     }
+
+    @Test
+    fun `prod 풀 크기는 3 이다 - core 10 + daily 3 x HPA 4 = 22 가 EKS 커넥션 예산 25 안에 든다`() {
+        val sources = YamlPropertySourceLoader().load("application-prod", ClassPathResource("application-prod.yml"))
+
+        val poolSize = sources.firstNotNullOfOrNull { it.getProperty("storage.datasource.core.maximum-pool-size") }
+
+        assertThat(poolSize.toString()).isEqualTo("3")
+    }
 }

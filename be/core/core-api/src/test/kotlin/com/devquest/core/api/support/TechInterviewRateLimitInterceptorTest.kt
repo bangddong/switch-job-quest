@@ -30,7 +30,7 @@ class TechInterviewRateLimitInterceptorTest {
     @BeforeEach
     fun setUp() {
         store = RateLimitBucketStore(capacity = 2, refillDays = 1)
-        interceptor = TechInterviewRateLimitInterceptor(store, ObjectMapper())
+        interceptor = TechInterviewRateLimitInterceptor(store, ObjectMapper(), memoryOnlyLimiter())
         SecurityContextHolder.clearContext()
     }
 

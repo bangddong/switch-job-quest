@@ -12,7 +12,10 @@
 #   ① 부하 스크립트(k8s/loadtest/k6.yaml)의 요청 3개 중 2개가 여기로 온다.
 #   ② 🔴 core-api 는 복제하면 안 된다 — `@Scheduled` 잡 2개(DailyMailScheduler ·
 #      RateLimitResetScheduler)가 분산 락 없이 돌아서, 파드 수만큼 **중복 실행**된다.
-#      daily-api 에는 `@Scheduled` 가 없다.
+#      daily-api 에도 `RateLimitResetScheduler`(자정)가 있지만 파드 수만큼 돌아도 안전하다 —
+#      메모리 대체 버킷 clear(파드 로컬) + 공유 DB 의 오래된 행 **멱등 DELETE** 뿐이다(U-6, 10-29).
+#      🔴 daily-api 풀은 3(application-prod.yml) — maxReplicas 4 × 3 + core-api 10 = 22 ≤ EKS 예산 25.
+#         maxReplicas 를 올리면 이 계산을 다시 해라(20-devquest-tuning.conf max_connections 50).
 #
 # 계산식 (15초마다):
 #   필요 파드 수 = 올림( 현재 파드 수 × 현재 사용률 ÷ 목표 사용률 )

@@ -6,12 +6,18 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 키(IP 또는 인증된 사용자 ID)당 일일 토큰 버킷을 관리하는 공통 베이스.
- * capacity·refillDays만 다른 여러 레이트 리밋 정책이 이 클래스를 상속해
- * 서로 독립된 버킷 저장소를 갖는다.
+ * 키(IP 또는 인증된 사용자 ID)당 일일 한도의 **메모리 대체 버킷**을 관리하는 공통 베이스.
+ *
+ * 한도의 본 저장소는 공유 DB 카운터([SharedRateLimiter])다. 이 버킷은 DB 를 쓸 수 없을 때만 쓰인다(fail-soft).
+ * [scope]·[capacity] 는 DB 카운터의 종류·상한이기도 하다 — 같은 정책이 두 저장소에서 같은 값으로 돈다.
+ * capacity·refillDays만 다른 여러 레이트 리밋 정책이 이 클래스를 상속해 서로 독립된 한도를 갖는다.
+ *
+ * ⚠️ [refillDays] 는 **이 메모리 대체 버킷 전용**이다. DB 카운터는 (scope, key, KST 날짜) 행이라 **KST 하루 고정**이고
+ * 이 값을 읽지 않는다 — `devquest.rate-limit.*.refill-days` 를 바꿔도 정상(DB) 경로의 한도 주기는 달라지지 않는다.
  */
 abstract class AbstractRateLimitBucketStore(
-    private val capacity: Long,
+    val scope: String,
+    val capacity: Long,
     private val refillDays: Long,
 ) {
 

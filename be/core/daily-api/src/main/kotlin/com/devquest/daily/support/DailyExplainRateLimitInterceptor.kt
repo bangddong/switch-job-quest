@@ -1,6 +1,6 @@
 package com.devquest.daily.support
 
-import io.github.bucket4j.Bucket
+import com.devquest.core.domain.model.RateLimitScopes
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import tools.jackson.databind.ObjectMapper
@@ -10,20 +10,18 @@ import tools.jackson.databind.ObjectMapper
  */
 @Component
 class DailyExplainRateLimitInterceptor(
-    private val dailyExplainRateLimitBucketStore: DailyExplainRateLimitBucketStore,
+    protected override val personalStore: DailyExplainRateLimitBucketStore,
     globalStore: DailyExplainGlobalRateLimitStore,
     objectMapper: ObjectMapper,
+    limiter: SharedRateLimiter,
     clientIpResolver: ClientIpResolver,
-) : AbstractRateLimitInterceptor(objectMapper, clientIpResolver, globalStore) {
-
-    override fun resolveBucket(key: String): Bucket = dailyExplainRateLimitBucketStore.getOrCreate(key)
-}
+) : AbstractRateLimitInterceptor(objectMapper, limiter, clientIpResolver, globalStore)
 
 @Component
 class DailyExplainRateLimitBucketStore(
     @Value("\${devquest.rate-limit.daily-explain.capacity:5}") capacity: Long,
     @Value("\${devquest.rate-limit.daily-explain.refill-days:1}") refillDays: Long,
-) : AbstractRateLimitBucketStore(capacity, refillDays)
+) : AbstractRateLimitBucketStore(RateLimitScopes.DAILY_EXPLAIN, capacity, refillDays)
 
 /**
  * 익명 explain 경로의 **전체 일일 상한**. IP 개인 버킷을 통과한 요청만 여기서 차감된다
@@ -33,4 +31,4 @@ class DailyExplainRateLimitBucketStore(
 class DailyExplainGlobalRateLimitStore(
     @Value("\${devquest.rate-limit.daily-explain.global-capacity:100}") capacity: Long,
     @Value("\${devquest.rate-limit.daily-explain.refill-days:1}") refillDays: Long,
-) : AbstractGlobalRateLimitStore(capacity, refillDays)
+) : AbstractGlobalRateLimitStore(RateLimitScopes.DAILY_EXPLAIN_GLOBAL, capacity, refillDays)

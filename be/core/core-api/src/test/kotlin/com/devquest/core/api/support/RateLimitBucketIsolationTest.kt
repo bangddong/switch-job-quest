@@ -54,11 +54,13 @@ class RateLimitBucketIsolationTest {
         val techInterviewInterceptor = TechInterviewRateLimitInterceptor(
             RateLimitBucketStore(capacity = 2, refillDays = 1),
             ObjectMapper(),
+            memoryOnlyLimiter(),
         )
         val dailyEvaluateInterceptor = DailyEvaluateRateLimitInterceptor(
             DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
             DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1),
             ObjectMapper(),
+            memoryOnlyLimiter(),
             ClientIpResolver(""),
         )
         val ip = "1.2.3.4"
@@ -79,11 +81,13 @@ class RateLimitBucketIsolationTest {
         val techInterviewInterceptor = TechInterviewRateLimitInterceptor(
             RateLimitBucketStore(capacity = 2, refillDays = 1),
             ObjectMapper(),
+            memoryOnlyLimiter(),
         )
         val dailyEvaluateInterceptor = DailyEvaluateRateLimitInterceptor(
             DailyEvaluateRateLimitBucketStore(capacity = 1, refillDays = 1),
             DailyEvaluateGlobalRateLimitStore(capacity = 1000, refillDays = 1),
             ObjectMapper(),
+            memoryOnlyLimiter(),
             ClientIpResolver(""),
         )
         val ip = "1.2.3.4"

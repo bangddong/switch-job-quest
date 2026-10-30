@@ -70,7 +70,7 @@ class MigrationLauncherIntegrationTest {
     fun `빈 DB 에 migrate 모드는 전 버전을 적용하고 exit 0`() {
         assertThat(MigrationLauncher.run(args("migrate"))).isEqualTo(0)
 
-        assertThat(historyRows()).isEqualTo(13)
+        assertThat(historyRows()).isEqualTo(14)
     }
 
     @Test
