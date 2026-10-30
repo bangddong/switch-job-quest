@@ -6088,3 +6088,13 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
   ```
   - [메모] **CF FE 배포 토큰으로 Worker secret 쓰기 가능** — 시크릿 지도의 🟡 를 🔴 로. Fly 재시작 ≈30초(머신 1대). 이름 확인이 rotate 런 안에서 돌았으므로 별도 `check` 생략. 사후 prod 오늘의 질문 200, backend fly. 비용 $0.
   - [메모] ⚪ 미확인 2건: ① BE 가 실제로 신뢰 경로를 타는지 — 판정 경로 지표가 없다(원장 L-78, U-6 에서) ② Fly 기동 WARN 소멸 — 로컬 flyctl 토큰 없음(`Error: no access token available`).
+
+## 2026-10-30 — 📌D-016 9번 창 중 Fly 정책 (B8-19 · B8-20 · B7-19-2 ⓐ)
+
+- [메모] U-6(#517) 머지·배포 — 창 꺼짐 확인 후(`server: Fly`, 클러스터 마커 없음) squash `9f22ab7`. be-cd run 40991766713 성공, `release_command d8d99307c10478 completed successfully`(로그에 Flyway 출력은 없음 — V14 는 prod `ddl-auto: validate` 기동 통과로 간접 확인 🟡). 사후 `/api/v1/daily-question` 200 0.67s. 비용 $0.
+- [결정] **창 중 Fly 1대 유지**(코드 변경 없음). Blindspot 🔴: eks-window·prod-window 스크립트에 flyctl 호출 0 — 창 중 Fly 는 `fly.toml` 그대로, `min_machines_running=1` 이라 suspend 대상 아님. U-5 의 "창 중 Fly 0대 필수"(10-16)는 **반대**였다 — EKS 는 `MAIL_ENABLED=false` 라 0대면 09:00 메일이 어디서도 안 간다(B8-19). 기각: 0대(메일 누락 + eks-window 에 Fly 쓰기 단계·토큰 신설).
+- [메모] 09:00 오늘 질문은 Fly·EKS core-api 가 **둘 다** 만든다(`DailyMailScheduler` ① 은 MAIL_ENABLED 무관) — `V13` `UNIQUE(question_date, mail_type)` + `saveWithUniqueRecovery` 재조회라 중복 행 없음. 남는 것 = 뱅크 소진일 AI 생성 2회(계획서 9번 ⓐ).
+- [결정] **be-cd ↔ eks-window on 상호 거부**(B8-20) — `prod-window/deploy-gate.sh`. be-cd: 테스트 뒤·배포 직전, *on 실행·대기* 또는 *클러스터 존재* 면 **실패**. 왜 실패인가: pick-image-tag 가 `be-cd runs?status=success` 의 최신 head_sha 를 Fly 커밋으로 믿는다 — skip·exit 0 이면 배포 안 된 sha 가 다음 창 이미지가 된다. 자격증명 = 읽기 전용 OIDC 역할(ReadOnlyAccess, SSM 값 Deny) — main admin 역할 안 씀. on 식별 = `run-name: EKS Window / on`(watchdog 까지 세면 매시 :17·:47 에 be-cd 가 이유 없이 막힌다). 기각: ⓐ 대기형 게이트(잡 상한 6h < 임대 최대 10h, 대기 중 jwt/edge rotate 도 계속 거부) ⓑ concurrency 그룹 공유(대기 run 조용히 취소 — B8-15) ⓒ 수동 규칙만(기계 강제 없음) ⓓ `gh workflow disable`(push 이벤트 자체가 사라짐, off 실패 시 영구 비활성).
+- [결정] 거부된 배포 = 창 뒤 `workflow_dispatch`(main 만). 옛 run "Re-run" 은 be/ 트리가 main 과 다르면 실패 — 역행 배포 방지(Blindspot D).
+- [메모] 회귀 `window-test.sh` 80 → 94(게이트 14 — 차단·오탐(watchdog)·조회 오류 rc 2). **실패 주입 4종 전부 검출**: on 필터 제거 1 · 클러스터 판정 제거 1 · 조회 오류→0 2 · window-on 판정 제거 2. actionlint(docker `rhysd/actionlint`) 두 워크플로 무결.
+- [결정] `server.forward-headers-strategy: native` 두 앱 명시(B7-19-2 ⓐ). Boot 4.0.3 기본 internal-proxies 가 10/8·172.16/12·fc00::/7·127/8 포함. EKS 동작 불변(이미 K8s 감지 NATIVE), Fly 만 isSecure·HSTS·remoteAddr 변화. 기각: `framework`(ForwardedHeaderFilter 는 신뢰 판정 없이 XFF 맨 왼쪽 → api.quest 직결 `X-Forwarded-For: 127.0.0.1` 로 actuator IP 절 통과) · `none`(EKS 동작 변경).
