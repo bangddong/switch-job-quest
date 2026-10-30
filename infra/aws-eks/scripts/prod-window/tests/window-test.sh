@@ -285,6 +285,14 @@ greset; runs be-cd.yml in_progress '[{"displayTitle":"a"},{"displayTitle":"b"}]'
 greset; out=$(MOCK_GH=err gate window-on); rc=$?; [ $rc = 2 ] && ok "window-on: 조회 오류 → rc 2(켜지 않는다)" || bad "rc=$rc $out"
 greset; out=$(gate bogus); rc=$?; [ $rc = 2 ] && ok "모드 오타 → rc 2" || bad "rc=$rc $out"
 greset; out=$(GITHUB_REPOSITORY= run deploy-gate.sh be-cd); rc=$?; [ $rc -ne 0 ] && ok "GITHUB_REPOSITORY 없음 → 실패" || bad "rc=$rc"
+# QA F-3 — run-name 형식과 WIN_ON_RUN_JQ 의 결합. 어긋나면 on 감지가 0 이 돼 fail-open 이다.
+RN=$(sed -nE 's/^run-name:[[:space:]]*"(.*)"[[:space:]]*$/\1/p' "$HERE/../../../../.github/workflows/eks-window.yml")
+t=$(printf '%s' "$RN" | sed -E "s/\\$\{\{.*\}\}/on/")
+n=$(printf '[{"displayTitle":"%s"}]' "$t" | ( . "$HERE/common.sh"; jq "$WIN_ON_RUN_JQ" ))
+[ -n "$RN" ] && [ "$n" = 1 ] && ok "F-3 eks-window.yml run-name('$RN')의 on 제목('$t')을 WIN_ON_RUN_JQ 가 고른다" || bad "🔴 run-name '$RN' → '$t' 을 못 고름(n=$n)"
+t=$(printf '%s' "$RN" | sed -E "s/\\$\{\{.*\}\}/watchdog(cron)/")
+n=$(printf '[{"displayTitle":"%s"}]' "$t" | ( . "$HERE/common.sh"; jq "$WIN_ON_RUN_JQ" ))
+[ "$n" = 0 ] && ok "F-3 watchdog 제목('$t')은 고르지 않는다" || bad "watchdog 을 on 으로 셈(n=$n)"
 
 echo
 echo "합계: ✅ $P · 🔴 $F"

@@ -6,6 +6,8 @@ name: BE CD
 #   🔴 거부는 **실패**로 끝난다(skip 아님) — pick-image-tag 가 "마지막 성공 be-cd" 를 Fly 커밋으로 믿기 때문이다.
 #   거부된 변경은 창이 끝난 뒤 **Actions → BE CD → Run workflow(main)** 로 배포한다. 반대 방향(be-cd 중 창 켜기)은
 #   eks-window on 이 거부한다.
+#   🚑 창 중 긴급 핫픽스(QA F-5): eks-window `off`(트래픽 Fly 복귀 → destroy) → 이 워크플로 Run workflow(main). 손 `fly deploy` 는 금지
+#      (pick-image-tag 전제가 깨진다). ⚠️ 게이트는 AWS OIDC 에 의존한다(fail-closed) — AWS·시크릿 장애면 창 밖 배포도 막힌다.
 on:
   push:
     branches: [main]
@@ -14,8 +16,10 @@ on:
   # 창 중 거부된 배포를 창이 끝난 뒤 다시 돌리는 길. main 에서만 의미가 있다(아래 job `if`).
   workflow_dispatch:
 
+# ⚠️ 그룹 이름은 `be-cd` 그대로 — main 이 아닌 ref 의 수동 실행은 아래 job `if` 로 skip 되는데, 같은 그룹이면 대기 중인 push run 을
+#    밀어낼 수 있다(QA F-6). 그래서 main 만 이 그룹을 쓰고 나머지는 ref 별 그룹으로 보낸다.
 concurrency:
-  group: be-cd
+  group: ${{ github.ref == 'refs/heads/main' && 'be-cd' || format('be-cd-{0}', github.ref) }}
   cancel-in-progress: false
 
 # 🔑 이 블록을 넣으면 나열하지 않은 권한은 none 이 된다 — 지금 잡이 쓰는 것은 checkout(contents)뿐이었다.
@@ -91,7 +95,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
-          MSG=$(bash infra/aws-eks/scripts/prod-window/deploy-gate.sh be-cd 2>&1); rc=$?
+          # stderr 를 합치므로 describe-cluster 오류문(ARN)이 섞일 수 있다 — Step Summary 는 ::add-mask:: 가 안 걸린다(QA F-1)
+          MSG=$(bash infra/aws-eks/scripts/prod-window/deploy-gate.sh be-cd 2>&1 | sed -E 's/[0-9]{12}/<account>/g'); rc=$?  # pipefail — 게이트 rc 가 남는다
           echo "$MSG"
           if [ $rc != 0 ]; then
             echo "::error::$MSG — 창이 끝난 뒤 Actions → BE CD → Run workflow(main) 로 배포한다"
