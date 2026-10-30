@@ -23,6 +23,12 @@ server:
   # ⚠️ be/Dockerfile:35의 `EXPOSE 8080`은 서비스별로 조정되지 않는다 — Dockerfile은 이번
   # 범위에서 수정하지 않는다(Stage C에서 매니페스트/Dockerfile 작업 시 함께 처리).
   port: 8082
+  # B7-19-2 ⓐ / D-016 계획 9번 — 전략을 명시 고정한다. 미설정이면 Spring Boot 가 Kubernetes 일 때만 암묵 NATIVE,
+  # Fly 는 NONE 이라 같은 코드가 플랫폼별로 isSecure·remoteAddr 를 다르게 봤다. native = Tomcat RemoteIpValve:
+  # 신뢰 프록시(내부 대역·루프백)가 보낸 X-Forwarded-For/Proto 만 해석한다.
+  # `framework` 는 기각 — ForwardedHeaderFilter 는 신뢰 프록시 판정 없이 XFF 맨 왼쪽을 remoteAddr 로 써서
+  # 클라이언트가 보낸 `X-Forwarded-For: 127.0.0.1` 로 loopback 판정을 위조할 수 있다(core-api SecurityConfig 의 actuator 절과 동일 설정 유지).
+  forward-headers-strategy: native
 
 # C-1 — core-api application.yml:39-49와 동일 계약. `/health`(liveness)는 상수만 반환하므로
 # readiness에는 절대 쓰지 않는다 — DB가 죽어도 readiness가 UP으로 보이면 Service가 죽은 파드로

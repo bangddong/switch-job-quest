@@ -35,6 +35,12 @@ spring:
 
 server:
   port: 8080
+  # B7-19-2 ⓐ / D-016 계획 9번 — 전략을 명시 고정한다. 미설정이면 Spring Boot 가 Kubernetes 일 때만 암묵 NATIVE,
+  # Fly 는 NONE 이라 같은 코드가 플랫폼별로 isSecure·remoteAddr 를 다르게 봤다. native = Tomcat RemoteIpValve:
+  # 신뢰 프록시(내부 대역·루프백)가 보낸 X-Forwarded-For/Proto 만 해석한다.
+  # `framework` 는 기각 — ForwardedHeaderFilter 는 신뢰 프록시 판정 없이 XFF 맨 왼쪽을 remoteAddr 로 써서,
+  # `X-Forwarded-For: 127.0.0.1` 한 줄로 SecurityConfig 의 loopback 전용 /actuator/** 절을 통과할 수 있다.
+  forward-headers-strategy: native
 
 # readiness 그룹을 명시적으로 정의한다. `/health`(liveness)는 상수만 반환 — DB가 죽어도 재시작 폭풍을
 # 일으키지 않기 위한 의도된 설계다. 하지만 그 상수 응답이 readinessProbe에도 쓰이면 DB가 죽어도
