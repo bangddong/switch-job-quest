@@ -86,7 +86,7 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: { name: CORS_ALLOWED_ORIGINS, value: "https://quest.dhbang.co.kr" }
-      # ⑥ 메일은 **Fly 만** 보낸다 — 창 중에도 Fly 가 살아 있고(9번), 두 곳이 보내면 중복 발송이다(B8-19·U-5).
+      # ⑥ 메일은 **Fly 만** 보낸다 — 창 중에도 Fly 1대가 살아 있고(9번 확정 10-30 — 0대 기각), 두 곳이 보내면 중복 발송이다(B8-19·U-5).
       #    기본값도 false 지만 명시한다(TASK-17 로 RESEND 키가 들어와도 EKS 는 보내지 않게).
       - op: add
         path: /spec/template/spec/containers/0/env/-

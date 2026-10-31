@@ -1,17 +1,37 @@
 name: BE CD
 
+# 📌D-016 9번 · B8-20 (2026-10-30) — **EKS 창이 켜진 동안에는 Fly 에 배포하지 않는다.**
+#   창 중 배포 = Fly `release_command` 가 새 마이그레이션을 공유 DB 에 적용 → EKS 의 옛 이미지 아래 스키마가 바뀐다
+#   (HPA 로 새로 뜨는 daily-api 파드는 기동 시 validate 한다). 판정·이유: infra/aws-eks/scripts/prod-window/deploy-gate.sh
+#   🔴 거부는 **실패**로 끝난다(skip 아님) — pick-image-tag 가 "마지막 성공 be-cd" 를 Fly 커밋으로 믿기 때문이다.
+#   거부된 변경은 창이 끝난 뒤 **Actions → BE CD → Run workflow(main)** 로 배포한다. 반대 방향(be-cd 중 창 켜기)은
+#   eks-window on 이 거부한다.
+#   🚑 창 중 긴급 핫픽스(QA F-5): eks-window `off`(트래픽 Fly 복귀 → destroy) → 이 워크플로 Run workflow(main). 손 `fly deploy` 는 금지
+#      (pick-image-tag 전제가 깨진다). ⚠️ 게이트는 AWS OIDC 에 의존한다(fail-closed) — AWS·시크릿 장애면 창 밖 배포도 막힌다.
 on:
   push:
     branches: [main]
     paths:
       - 'be/**'
+  # 창 중 거부된 배포를 창이 끝난 뒤 다시 돌리는 길. main 에서만 의미가 있다(아래 job `if`).
+  workflow_dispatch:
 
+# ⚠️ 그룹 이름은 `be-cd` 그대로 — main 이 아닌 ref 의 수동 실행은 아래 job `if` 로 skip 되는데, 같은 그룹이면 대기 중인 push run 을
+#    밀어낼 수 있다(QA F-6). 그래서 main 만 이 그룹을 쓰고 나머지는 ref 별 그룹으로 보낸다.
 concurrency:
-  group: be-cd
+  group: ${{ github.ref == 'refs/heads/main' && 'be-cd' || format('be-cd-{0}', github.ref) }}
   cancel-in-progress: false
+
+# 🔑 이 블록을 넣으면 나열하지 않은 권한은 none 이 된다 — 지금 잡이 쓰는 것은 checkout(contents)뿐이었다.
+permissions:
+  id-token: write # 창 게이트 — 읽기 전용 OIDC 역할(AWS_ROLE_ARN)로 클러스터 존재만 본다
+  contents: read
+  actions: read   # 창 게이트 — eks-window 실행 중 여부
 
 jobs:
   deploy:
+    # workflow_dispatch 는 브랜치를 고를 수 있다 — main 이 아닌 커밋이 Fly 에 가지 않게.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,6 +58,51 @@ jobs:
 
       - name: Test
         run: ./gradlew test --no-daemon
+
+      # 🔴 역행 배포 방지 — 이 run 의 be/ 가 지금 main 의 be/ 와 다르면 더 새 be 변경이 main 에 있다는 뜻이다.
+      #    창 중 거부된 옛 run 을 창 뒤 "Re-run" 하면 Fly 가 옛 커밋으로 되돌아가고, pick-image-tag 는 여전히 새 커밋을
+      #    고른다("EKS 이미지 = Fly 커밋" 이 깨진다). be/ 트리로 비교하므로 fe·docs 커밋이 뒤에 쌓인 것은 막지 않는다.
+      - name: 최신 be/ 인지 확인
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin main
+          HERE=$(git rev-parse "HEAD:be"); MAIN=$(git rev-parse "FETCH_HEAD:be")
+          [ "$HERE" = "$MAIN" ] || { echo "::error::이 run 의 be/ 가 main 최신과 다르다 — 옛 커밋 재실행이다. Actions → BE CD → Run workflow(main) 로 최신을 배포한다"; exit 1; }
+
+      # 테스트 **뒤**에 자격증명을 만든다 — gradle 테스트가 AWS 자격증명을 들고 돌지 않게.
+      # 읽기 전용 역할(PR plan 용과 같은 역할 — ReadOnlyAccess, SSM 값 읽기 Deny). main 전용 admin 역할은 쓰지 않는다.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      # 🔴 계정 ID 마스킹 — 퍼블릭 레포의 Actions 로그는 퍼블릭이다. describe-cluster 오류문이 ARN 을 담을 수 있다(eks-window.yml 과 같은 fail-closed).
+      - name: 계정 ID 마스킹
+        working-directory: .
+        shell: bash
+        run: |
+          ACCT="$(aws sts get-caller-identity --query Account --output text)"
+          echo "::add-mask::$ACCT"
+          [[ "$ACCT" =~ ^[0-9]{12}$ ]] || { echo "::error::계정 ID 조회 실패 — 마스킹 없이 진행할 수 없다"; exit 1; }
+
+      # 📌D-016 9번 · B8-20 — **배포 직전**에 판정한다(테스트 ~수 분 동안 창이 켜질 수 있다).
+      - name: 창 게이트 (EKS 창 중 배포 금지)
+        working-directory: .
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          # stderr 를 합치므로 describe-cluster 오류문(ARN)이 섞일 수 있다 — Step Summary 는 ::add-mask:: 가 안 걸린다(QA F-1)
+          MSG=$(bash infra/aws-eks/scripts/prod-window/deploy-gate.sh be-cd 2>&1 | sed -E 's/[0-9]{12}/<account>/g'); rc=$?  # pipefail — 게이트 rc 가 남는다
+          echo "$MSG"
+          if [ $rc != 0 ]; then
+            echo "::error::$MSG — 창이 끝난 뒤 Actions → BE CD → Run workflow(main) 로 배포한다"
+            echo "- ⛔ 창 게이트: $MSG — 창 종료 후 수동 실행" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 

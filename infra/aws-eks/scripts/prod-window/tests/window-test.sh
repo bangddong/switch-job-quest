@@ -251,6 +251,49 @@ reset; GITHUB_STEP_SUMMARY="$M/sum" MOCK_LEASE="$VALID" MOCK_KV_PUT=fail soff >/
 grep -q 'KV 쓰기 실패' "$M/sum" && ! grep -q 'KV api-target = fly' "$M/sum" && ok "F-3 KV 쓰기 실패는 Summary 에 남는다(초록이어도)" || bad "$(cat "$M/sum")"
 rm -f "$M/sum"
 
+echo "── deploy-gate (9번 · B8-20 — 창 중 be 배포 ↔ be-cd 중 창 켜기, 서로 거부)"
+# 목 gh — `gh run list -R r --workflow W --status S ... --json displayTitle --jq Q` 만. 상태별 run 은 $STATE/runs_<W>_<S> (JSON 배열, 없으면 []).
+cat > "$M/gh" <<'G'
+#!/bin/bash
+echo "gh $*" >> "$CALLS"
+case "${MOCK_GH:-ok}" in err) echo "HTTP 502" >&2; exit 1 ;; junk) echo "oops"; exit 0 ;; esac
+wf="" st="" q=""
+while [ $# -gt 0 ]; do case "$1" in --workflow) wf="$2"; shift ;; --status) st="$2"; shift ;; --jq) q="$2"; shift ;; esac; shift; done
+f="$STATE/runs_${wf}_${st}"; [ -f "$f" ] || { echo "[]" | jq "$q"; exit 0; }
+jq "$q" "$f"
+G
+chmod +x "$M/gh"
+greset(){ reset; rm -f "$M"/runs_*; }
+gate(){ GITHUB_REPOSITORY=o/r run deploy-gate.sh "$@"; }
+runs(){ printf '%s' "$3" > "$M/runs_$1_$2"; }
+greset; out=$(MOCK_CLUSTER=no gate be-cd); rc=$?; [ $rc = 0 ] && ok "be-cd: on 실행 없음 + 클러스터 없음 → 진행" || bad "rc=$rc $out"
+greset; runs eks-window.yml in_progress '[{"displayTitle":"EKS Window / on"}]'; out=$(MOCK_CLUSTER=no gate be-cd); rc=$?
+[ $rc = 1 ] && ok "🔴 be-cd: on 실행 중(apply 전 — 클러스터 아직 없음) → 거부" || bad "rc=$rc $out"
+greset; runs eks-window.yml pending '[{"displayTitle":"EKS Window / on"}]'; out=$(MOCK_CLUSTER=no gate be-cd); rc=$?
+[ $rc = 1 ] && ok "be-cd: on 대기(concurrency pending) → 거부" || bad "rc=$rc $out"
+greset; runs eks-window.yml in_progress '[{"displayTitle":"EKS Window / watchdog"},{"displayTitle":"EKS Window / watchdog(cron)"}]'; out=$(MOCK_CLUSTER=no gate be-cd); rc=$?
+[ $rc = 0 ] && ok "오탐 방지: watchdog 만 도는 중 + 클러스터 없음 → 진행(매시 :17·:47 에 be-cd 가 막히지 않는다)" || bad "rc=$rc $out"
+greset; out=$(MOCK_CLUSTER=yes gate be-cd); rc=$?; [ $rc = 1 ] && ok "🔴 be-cd: 클러스터 있음(창 중) → 거부" || bad "rc=$rc $out"
+greset; out=$(MOCK_CLUSTER=err gate be-cd); rc=$?; [ $rc = 2 ] && ok "be-cd: 클러스터 조회 오류 → rc 2('없음' 으로 안 떨어짐)" || bad "rc=$rc $out"
+greset; out=$(MOCK_GH=err MOCK_CLUSTER=no gate be-cd); rc=$?; [ $rc = 2 ] && ok "be-cd: run 조회 오류 → rc 2" || bad "rc=$rc $out"
+greset; out=$(MOCK_GH=junk MOCK_CLUSTER=no gate be-cd); rc=$?; [ $rc = 2 ] && ok "be-cd: run 조회 결과가 정수가 아님 → rc 2" || bad "rc=$rc $out"
+greset; out=$(gate window-on); rc=$?; [ $rc = 0 ] && ! grep -q '^aws ' "$CALLS" && ok "window-on: be-cd 없음 → 진행(aws 안 부름)" || bad "rc=$rc $out"
+greset; runs be-cd.yml queued '[{"displayTitle":"feat(be): x"}]'; out=$(gate window-on); rc=$?
+[ $rc = 1 ] && ok "🔴 window-on: be-cd 대기 중 → 거부(on 직전 머지의 마이그레이션이 apply 중에 돈다)" || bad "rc=$rc $out"
+greset; runs be-cd.yml in_progress '[{"displayTitle":"a"},{"displayTitle":"b"}]'; out=$(gate window-on); rc=$?
+[ $rc = 1 ] && grep -q '2건' <<<"$out" && ok "window-on: be-cd 실행 중 2건 → 거부(건수 표시)" || bad "rc=$rc $out"
+greset; out=$(MOCK_GH=err gate window-on); rc=$?; [ $rc = 2 ] && ok "window-on: 조회 오류 → rc 2(켜지 않는다)" || bad "rc=$rc $out"
+greset; out=$(gate bogus); rc=$?; [ $rc = 2 ] && ok "모드 오타 → rc 2" || bad "rc=$rc $out"
+greset; out=$(GITHUB_REPOSITORY= run deploy-gate.sh be-cd); rc=$?; [ $rc -ne 0 ] && ok "GITHUB_REPOSITORY 없음 → 실패" || bad "rc=$rc"
+# QA F-3 — run-name 형식과 WIN_ON_RUN_JQ 의 결합. 어긋나면 on 감지가 0 이 돼 fail-open 이다.
+RN=$(sed -nE 's/^run-name:[[:space:]]*"(.*)"[[:space:]]*$/\1/p' "$HERE/../../../../.github/workflows/eks-window.yml")
+t=$(printf '%s' "$RN" | sed -E "s/\\$\{\{.*\}\}/on/")
+n=$(printf '[{"displayTitle":"%s"}]' "$t" | ( . "$HERE/common.sh"; jq "$WIN_ON_RUN_JQ" ))
+[ -n "$RN" ] && [ "$n" = 1 ] && ok "F-3 eks-window.yml run-name('$RN')의 on 제목('$t')을 WIN_ON_RUN_JQ 가 고른다" || bad "🔴 run-name '$RN' → '$t' 을 못 고름(n=$n)"
+t=$(printf '%s' "$RN" | sed -E "s/\\$\{\{.*\}\}/watchdog(cron)/")
+n=$(printf '[{"displayTitle":"%s"}]' "$t" | ( . "$HERE/common.sh"; jq "$WIN_ON_RUN_JQ" ))
+[ "$n" = 0 ] && ok "F-3 watchdog 제목('$t')은 고르지 않는다" || bad "watchdog 을 on 으로 셈(n=$n)"
+
 echo
 echo "합계: ✅ $P · 🔴 $F"
 [ "$F" = 0 ]
