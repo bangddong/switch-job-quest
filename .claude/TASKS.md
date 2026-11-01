@@ -103,6 +103,10 @@ AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS �
 | `SENTRY_DSN` | sentry.io → 프로젝트 설정 (있으면) |
 
 🔴 **이름은 대소문자·숫자까지 정확히** — 허용 목록과 다르면 **에러 없이 빠진다**. 넣었으면 "넣었다"고만(Claude 가 이름만 확인).
+
+> ⏱ **시점 (⑥ B8-18, 2026-11-01)**: ⑥ PR(지표·로그 `platform` 분리) **머지·Fly 배포 뒤**에 넣는다 — 먼저 넣으면 EKS core-api 가
+> Fly 와 구분 없는 리소스로 같은 스택에 push 해 지표가 섞인다. 같은 3개 파라미터를 **daily-api 도 읽는다**(ESO `daily-api-observability`) —
+> 추가로 넣을 것은 없다.
 ~~JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).~~ → OAuth = TASK-22 ✅ · JWT = TASK-23(아래 위).
 
 ## 완료된 항목

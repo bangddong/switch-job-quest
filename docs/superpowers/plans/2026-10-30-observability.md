@@ -12,7 +12,10 @@
 | ⑥ 방식 | **A — push 유지, OTel 리소스 속성으로 플랫폼·인스턴스 분리** | B(클러스터 안 Alloy/OTel Collector 스크레이프) 기각: 새 차트·IRSA·노드 메모리, `SecurityConfig` 의 `/actuator/**` 127.0.0.1 제한을 풀어야 해 ⑤ actuator 판정과 정면 충돌, Fly 는 어차피 A 가 필요. → B 는 **학습 트랙 L-5** 로 따로 실습 |
 | daily-api Grafana 키 | **전용 ExternalSecret 신설**(GRAFANA 키만) | `daily-api-edge` 확장은 이름-내용 불일치, `core-api-runtime` 공유는 Anthropic 등 불필요 키 노출(최소권한 위반) |
 | 창 로그 | **core-api · daily-api 둘 다 Loki** | EKS prod 창엔 Fluent Bit 가 없어 destroy 시 로그 소실. L-4(트레이스↔로그 연결)의 전제 |
-| ai-api AI 비용 지표 | **⑥ 에 포함** | 같은 메커니즘(`support:monitoring` 의존)이고, 빠지면 창 중 오늘의 질문 AI 비용이 대시보드에서 사라진다. ✅ 사용자 확정 10-30(*"ai-api도 ⑥에 포함하는 걸로 가자"*) |
+| ai-api AI 비용 지표 | ~~⑥ 에 포함~~ → 🔄 **⑥ 에서 제외 (11-01 사용자 재결정)** | 10-30 근거 *"빠지면 창 중 오늘의 질문 AI 비용이 사라진다"* 는 **틀렸다** — EKS ai-api 는 스텁 모드(`k8s/base/ai-api.yaml` `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=true`, Anthropic 키 없음, 스텁 평가자는 지표 기록 안 함)라 AI 비용 지표가 **애초에 생기지 않는다**. 남는 건 JVM·HTTP 지표뿐인데 limit 448Mi = JVM 하한이라 레지스트리 추가가 OOM 위험. 스텁 해제 판정(B8-25) 때 다시 본다 |
+| daily-api service.name | **`devquest-daily-api`** (11-01) | 기본값 `devquest-api` 를 쓰면 EKS 에서 core-api 와 같은 job → HTTP 지표가 job 단위로 합산된다 |
+| 플랫폼 구분 | ~~리소스 속성 `devquest.platform`~~ → **Micrometer 공통 태그 `platform`** (11-01) | Grafana Cloud OTLP 는 `service.name`·`service.instance.id` 외 리소스 속성을 라벨로 안 올리고 `target_info` 로 보낸다(🟡 문서 미대조) → `sum by (platform)` 불가. 공통 태그는 모든 시계열에 라벨, Loki 라벨 이름과도 같다. 값 2개라 카디널리티 부담 없음. instance 는 리소스 속성 `service.instance.id` 그대로 |
+| `/actuator/prometheus` 노출 | **core-api 만 유지** (11-01) | 9번이 넘긴 노출 정리. 운영 레시피(`fly ssh … wget localhost:8080/actuator/prometheus` — `jvm-observability-notes.md`)가 쓴다. daily-api 는 노출 안 함 + prometheus 레지스트리 끔(메모리). actuator IP 절(`SecurityConfig`)은 그대로 — 소비처 0 이지만 금지 규칙 |
 | TASK-17 시점 | **⑥ 1단계 머지·Fly 배포 후** | 먼저 넣으면 EKS core-api 가 즉시 같은 리소스로 push → 충돌이 실제로 발생(아래 현황) |
 
 ## 현황 (조사 근거)
@@ -31,7 +34,7 @@
 
 🟡 **추론 — 구현 때 테스트로 확인**: ① Micrometer 는 `otlp.resourceAttributes` 가 non-null 이면 `OTEL_RESOURCE_ATTRIBUTES` 환경변수를 무시한다(소스 미대조) → 매니페스트만으로 못 고친다. ② Grafana Cloud OTLP 변환은 `service.name→job`, `service.instance.id→instance`(문서 미대조).
 
-## ⑥ 구현 단계 (⑤ 머지 후 `origin/main` 에서 분기)
+## ⑥ 구현 단계 (⑤ 머지 후 `origin/main` 에서 분기) — 🚧 구현 2026-11-01 (1·2·3·4·6·7, 5 제외)
 
 | 단계 | 내용 | 파일 |
 |---|---|---|
@@ -39,9 +42,27 @@
 | 2 | Loki 라벨 `platform` 추가 | `logback-spring.xml`·`LogbackLokiConfigTest.kt` |
 | 3 | 플랫폼 env | `be/fly.toml [env]`, `k8s/gitops/apps-external/kustomization.yaml` |
 | 4 | daily-api 송출 + Loki + 판정 경로 카운터(D-007 복제), 오토컨피그 OTLP 이중 차단 복제(429 이력) | `daily-api/build.gradle.kts`·`application-prod.yml`·Application·`ClientIpResolver.kt` |
-| 5 | ai-api 송출(`service.name=devquest-ai-api`) | `ai-api/build.gradle.kts`·yml |
+| ~~5~~ | ~~ai-api 송출~~ — **제외(11-01)**, 위 결정 테이블 | — |
 | 6 | 키 배선: daily-api·ai-api 전용 ExternalSecret(optional envFrom) | `k8s/gitops/apps-external/` |
 | 7 | 문서: 상위 계획서 B8-18·⑥, 원장 L-78 종결, `secrets-map.md`(Grafana 사본에 daily-api·ai-api), TASK-17 | |
+
+### 구현 중 확정한 것 (2026-11-01, Blindspot 18건 반영)
+
+- 🔴 **import 우선순위 함정** — `spring.config.import` 로 가져온 `monitoring.yml` 값이 앱 `application.yml` 을 **이긴다**. 앱마다 달라야 하는 값(service-name·exposure·공통 태그)을 리터럴로 두면 daily-api 가 조용히 `devquest-api`·`health,prometheus` 가 된다. → monitoring.yml 은 `${devquest.observability.service-name:devquest-api}` 간접 참조, 앱이 프로퍼티 정의. exposure 는 앱별로 이동. daily-api 컨텍스트 테스트로 고정(리터럴로 되돌리면 3건 실패 — 실패 주입 확인).
+- `resourceAttributes()` 직접 override(Map) — 문자열 파싱 경로는 빈 값 `key=` 통과·키 중복 시 `Collectors.toMap` 기동 실패(micrometer-registry-otlp 1.16.3 javap). `service.instance.id` = `FLY_MACHINE_ID` → `HOSTNAME` → `unknown`(빈 문자열도 다음 후보 — Spring `${A:${B:x}}` 는 빈 값에서 안 넘어가서 Kotlin 에서 해석).
+- 오토컨피그 OTLP 차단(`management.otlp.metrics.export.enabled: false`)을 core-api prod → `monitoring.yml` 공통으로. ⚠️ Boot 4.0.3 오토컨피그는 `OpenTelemetryProperties` 부재로 **지금은 발동 조건 자체가 안 맞는다**(잠재 가드) — 설정값을 테스트로 고정.
+- Loki 라벨 `app`·`platform` 은 springProperty 기본값(`devquest-api`·`unknown`). core-api `app=devquest-api` 유지(대시보드 `{app="devquest-api"}`).
+- daily-api `grafana.otlp.instance-id` 는 core-api 와 **같은 리터럴**(환경변수화 금지 규칙 — 주입 누락 시 조용한 송출 중단). 새 프로퍼티는 `devquest.observability.*` 로 이름 분리.
+- 키 배선: ESO `daily-api-observability`(GRAFANA 3종, `find` — 없으면 빈 Secret, optional envFrom). `DEVQUEST_PLATFORM` = Fly `fly.toml [env]` `fly`, EKS apps-external 패치 `eks`(core-api·daily-api).
+
+### 🔜 이번에 안 하는 Blindspot 발견 (2026-11-01)
+
+- ⓐ 🔴 **B8-25 — 창 중 오늘의 질문 채점·설명이 ai-api 스텁으로 간다.** 상위 계획서 B8-25 행. ⑥ 범위(관측)가 아니고 스텁 해제 = 창 중 실제 AI 비용·ai-api 에 Anthropic 키 배선이라 별도 판정.
+- ⓑ **시계열 연속성은 절반** — job 은 같지만 `instance` 라벨이 새로 붙어 기존 시계열은 끊긴다. 대시보드 `max_over_time - min_over_time` 우회식은 새 시계열의 첫 증가분을 놓친다 → L-2(PromQL 정리)에서.
+- ⓒ **메모리** — daily-api 에 OTLP 레지스트리·Loki appender 추가(prometheus 레지스트리는 끔). limit 640Mi 실측(memory-rightsizing F-2)은 레지스트리 없던 시점 — 첫 창에서 working set 재측정. HPA 최대 4대 × 시리즈 수는 Grafana 무료 티어 활성 시리즈와 대조.
+- ⓓ daily-api prod stdout 이 Logstash JSON 으로 바뀐다(`support:logging`). `kubectl logs` grep 스크립트는 core-api 것뿐(`on.sh`) — 영향 없음 확인.
+- ⓔ daily-api 미매핑 경로가 404 가 아니라 500(`DailyApiControllerAdvice` 포괄 핸들러) — 관측 무관, 기존 동작.
+- ⓕ `jvm-observability-notes.md`·`memory-rightsizing.md` 의 *"daily/ai 에는 prometheus 가 없다"* 서술은 여전히 참(노출 안 함) — 고칠 것 없음.
 
 - 비용: **AWS 과금 0**(새 리소스 없음). 검증은 10번 첫 창에 편승. Grafana 무료 티어 활성 시리즈만 관찰 — 파드명 instance 라 창마다 새 시계열, daily-api HPA 최대 4.
 - ⑤ 와 겹치는 파일: `apps-external/kustomization.yaml`(🔴 같은 패치 블록) · core-api·daily-api `application-prod.yml`(🟡 forward-headers 인접) · 상위 계획서 표.

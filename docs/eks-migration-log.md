@@ -6098,3 +6098,16 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [결정] 거부된 배포 = 창 뒤 `workflow_dispatch`(main 만). 옛 run "Re-run" 은 be/ 트리가 main 과 다르면 실패 — 역행 배포 방지(Blindspot D).
 - [메모] 회귀 `window-test.sh` 80 → 94(게이트 14 — 차단·오탐(watchdog)·조회 오류 rc 2). **실패 주입 4종 전부 검출**: on 필터 제거 1 · 클러스터 판정 제거 1 · 조회 오류→0 2 · window-on 판정 제거 2. actionlint(docker `rhysd/actionlint`) 두 워크플로 무결.
 - [결정] `server.forward-headers-strategy: native` 두 앱 명시(B7-19-2 ⓐ). Boot 4.0.3 기본 internal-proxies 가 10/8·172.16/12·fc00::/7·127/8 포함. EKS 동작 불변(이미 K8s 감지 NATIVE), Fly 만 isSecure·HSTS·remoteAddr 변화. 기각: `framework`(ForwardedHeaderFilter 는 신뢰 판정 없이 XFF 맨 왼쪽 → api.quest 직결 `X-Forwarded-For: 127.0.0.1` 로 actuator IP 절 통과) · `none`(EKS 동작 변경).
+- [해결] #520 머지(squash `86d78ae`, 10-31 창 꺼짐 확인 후) — be-cd run 41155236258 success. 창 게이트 출력 `창 꺼짐 — 배포 진행`, 로그 12자리 숫자 0건(마스킹), 읽기 전용 OIDC assume 첫 실사용 성공. QA F-2 실측(Fly `server: Fly/366e4bf88`): XFF `127.0.0.1` · `10.0.0.1` · `127.0.0.1, 127.0.0.1` · `::1` → `/actuator/prometheus` 전부 **403**, 헤더 없음도 403 · `strict-transport-security: max-age=31536000 ; includeSubDomains` 존재 · `/actuator/health` 200 → **롤백 불필요**. 비용 $0.
+
+## 2026-11-01 — 📌D-016 ⑥ B8-18 관측 (Fly·EKS 지표/로그 분리)
+
+- [메모] Blindspot 18건(읽기 전용). 설계를 바꾼 4건 → 사용자 결정(전부 추천안): ① **ai-api ⑥ 제외** — 10-30 포함 근거(*"창 중 AI 비용이 사라진다"*)가 틀렸다. EKS ai-api 는 스텁(`DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=true`)이라 AI 비용 지표가 애초에 안 생긴다 ② daily-api service.name = `devquest-daily-api` ③ 플랫폼 = Micrometer **공통 태그** `platform`(리소스 속성은 Grafana 가 `target_info` 로만 보낼 가능성 🟡) ④ `/actuator/prometheus` 노출은 core-api 만.
+- [막힘→결정] 🔴 **import 우선순위 함정** — `spring.config.import` 로 가져온 `monitoring.yml` 이 앱 `application.yml` 을 이긴다. 리터럴 service-name·exposure 를 두면 daily-api 가 조용히 `devquest-api`·`health,prometheus`. → 간접 참조 `${devquest.observability.service-name:devquest-api}` + 앱별 정의. 리터럴로 되돌리는 실패 주입 → daily-api 테스트 3건 실패 확인.
+- [예상과 다름] micrometer-registry-otlp 1.16.3 `resourceAttributes()` 기본 구현 = 문자열 파싱(`,` 분할 · `length>2 && indexOf('=')>0` · `Collectors.toMap`) — 빈 값 `key=` 통과, 키 중복 시 기동 실패. 코드가 `otlp.resourceAttributes` 를 non-null 로 주므로 `OTEL_RESOURCE_ATTRIBUTES` 는 무시(계획서 추론 ① 🔴). → `resourceAttributes()` 직접 override(Map).
+- [예상과 다름] Boot 4.0.3 `OtlpMetricsExportAutoConfiguration` 은 `@ConditionalOnClass(OpenTelemetryProperties)` 라 core-api·daily-api 에서 **발동 자체가 안 한다**(ConditionEvaluationReport 실측). `management.otlp.metrics.export.enabled: false`(429 이력)는 잠재 가드 — monitoring.yml 공통으로 옮기고 값을 테스트로 고정.
+- [메모] Spring `${FLY_MACHINE_ID:${HOSTNAME:unknown}}` 은 변수가 **빈 문자열**이면 기본값으로 안 넘어간다 → instance id 는 Kotlin 에서 해석.
+- [결정] daily-api 키 = 전용 ESO `daily-api-observability`(GRAFANA 3종, `find` → 없으면 빈 Secret, optional envFrom). `core-api-runtime` 공유 기각(Anthropic·JWT 노출), `daily-api-edge` 확장 기각(이름-내용 불일치 · rotate 워크플로가 소유한 단일 키). `DEVQUEST_PLATFORM`: Fly `fly.toml [env]` `fly`, EKS apps-external 패치 `eks`. `kubectl kustomize k8s/gitops/apps-external` 렌더 rc 0.
+- [메모] BE `./gradlew build` 732 tests 실패 0. Loki 라벨은 가짜 Loki HTTP 서버로 push 본문 `stream` 을 검사(Loki4j 1.6.0 라벨 설정은 private).
+- [막힘] 🔴 **B8-25 발견** — 창 중 `/api/v1/daily-question` 은 daily-api(ingress) → `TechInterviewPort` = ai-api HTTP 뿐 → ai-api 는 base 스텁 그대로(apps-external 패치 0) → 채점·꼬리질문 설명이 `[STUB]`. 계획서에 ai-api·스텁 언급 0건이었다(B8-1 은 core-api 키 경로만). 10번 전 판정 필요(계획서 B8-25 선택지 ⓐⓑⓒ).
+- [비용] AWS 과금 0(새 리소스 없음). 검증은 TASK-17 키 투입 → 10번 첫 창.

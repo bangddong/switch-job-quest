@@ -447,7 +447,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | **8-A** | 🚧 **2026-10-21 코드** — `prod.auto.tfvars.json`(external·prod·노드 3 — 로컬·CI 공통 자동 로드, B8-5·B8-21) · 앱 키 ExternalSecret `core-api-runtime`(SSM `/devquest/prod/app/` 경로째, ESO IRSA 는 그 경로만) · CORS·MAIL_ENABLED=false · `pick-image-tag.sh`(**마지막 성공 be-cd sha**, 이미지 없으면 **be/ 트리가 같은** 태그 — 실측: Fly 커밋 `f9ba8038` 은 ECR 에 없고 같은 트리 `e2647873` 이 있다) · 1b 폐기. **Ingress·LBC·metrics-server 사전 점검은 8-B**(on 경로와 한 몸). 원문: EKS prod 수준: 앱 키 ExternalSecret(B8-1)·`CORS_ALLOWED_ORIGINS`(B8-2)·Ingress·LBC 배포 경로(ArgoCD 앱 안 — B4-2 선삭제 순서 포함, B8-4)·Ingress `host`·ArgoCD path 를 `argocd_apps_path` 로(B8-6)·이미지 태그 = **be-cd 성공 sha**(B8-7)·`node_desired_size=3`(B8-5)·metrics-server 고정 재판단(B8-8)·1b 폐기(B8-24)·풀 상한 EKS 25(B7-21) | $0(코드) | — |
 | **8-B** | 🚧 **2026-10-22 코드** — 아래 「8-B 결정」. `EKS Window` 워크플로 + `scripts/prod-window/`(목 회귀 32건, 변이 4종 반증) · Infra CI guard 재정의(반증 7종 · QA LOW 5 fixed · F-5 → L-77) · apps-external Ingress. ✅ **2026-10-22 실측 왕복 통과**(2회차 — 1회차는 dispatch 422(#491)·ArgoCD 대기 공허(#492)로 실패 후 자동 off). on 16분(apply 9.5·설치 2·sync 156초) · off 7분 · 스모크 200/403 · 두 창 ≈ $0.2. 원문: on/off 워크플로 + CI dead man's switch — **트래픽 전환 없음**: on = apply → ArgoCD Healthy 판정 → 직접 스모크(eks.quest 또는 `--resolve`) / off = Application·Ingress 선삭제(B4-2)·LB 0 확인 → destroy → 고아 ALB·SG 검사(B8-16). 공용 concurrency 는 pending 교체 함정(B8-15) 회피 설계. OIDC 세션 1h(B8-9) 안에 들게 단계 분리. 계정 ID 마스킹(B4-9). 예산 게이트(Q-3, B8-22). `guard-local-layers` 재정의(N-3). 로컬 apply 차단 표식(B8-21) | 시험마다 ≈ $0.22/h | 첫 실행 전 사용자 |
 | **8-C** | 🔄 ~~방식 ③ 확정(10-24)~~ → ✅ **방식 ⓑ Worker 스위치(10-27 사용자, 위 결정 표 「8-C 단계 (2026-10-27, 방식 ⓑ)」)** · ✅ **선행: Vercel 제거** V-3 10-26(V-4 남음)(10-24 사용자 결정 — `docs/superpowers/plans/2026-10-24-vercel-to-cloudflare-workers.md`, 끝나면 api.quest 의 클라이언트가 Vercel → Worker 로 바뀐다) · 트래픽 전환 · 배수 대기(B8-12) · 응답 백엔드 식별 헤더(B8-14) · 실패 시 Fly 복귀 | — | 🔴 사용자 |
-| 10 직전 | ✅ OAuth(B7-16) · ✅ JWT 통일(B7-15·B7-17) — **C-4 2차(10-29) 실측 확정** · 순서(사용자 10-29 *"순서대로 진행하자"*): ① ✅ C-4 2차 → ② 🚧 레이트 리밋 신뢰 IP 헤더(B7-19 2단계) → ③ B7-27 → ④ U-6 공유 레이트 리밋 저장소(② 의 키 정의가 선행) → ⑤ 창 중 Fly 정책(9번 — **메일은 EKS 에서 꺼져 있어 U-5 전제가 거꾸로**, B8-19 · 스키마 스큐 B8-20) → ⑥ 관측(B8-18 · TASK-17 병행 가능) | | |
+| 10 직전 | ✅ OAuth(B7-16) · ✅ JWT 통일(B7-15·B7-17) — **C-4 2차(10-29) 실측 확정** · 순서(사용자 10-29 *"순서대로 진행하자"*): ① ✅ C-4 2차 → ② 🚧 레이트 리밋 신뢰 IP 헤더(B7-19 2단계) → ③ B7-27 → ④ U-6 공유 레이트 리밋 저장소(② 의 키 정의가 선행) → ⑤ 창 중 Fly 정책(9번 — **메일은 EKS 에서 꺼져 있어 U-5 전제가 거꾸로**, B8-19 · 스키마 스큐 B8-20) → ⑥ 관측(B8-18 · TASK-17 병행 가능 — 🚧 11-01 구현, TASK-17 은 ⑥ 머지·Fly 배포 뒤) → 🆕 B8-25 창 중 오늘의 질문 채점이 ai-api 스텁(11-01 발견 — 🔴 10번 전 판정) | | |
 
 ### 8-B 결정 (2026-10-22 — 사용자 *"응 해줘"*, 아래는 보수적 기본값으로 정했다. 첫 실행 전 바꿀 수 있다)
 
@@ -514,13 +514,14 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | B8-15 | 🔴 | concurrency pending 교체가 off 를 조용히 취소 | ✅ 8-B 코드 — 취소돼도 되게(임대 + 매시 watchdog, 상한 = 임대 + 1h) |
 | B8-16 | 🟡 | 리퍼 로직 그대로 재사용 금지(kubeconfig 실패=없음, Ingress 실패에도 destroy), LBC SG 누적 | ✅ 8-B 코드 — AWS LB 0 판정이 최종, 남으면 destroy 안 함 · LBC SG 정리·판정 |
 | B8-17 | 🟡 | ALB 매일 삭제로 LCU 실측 소실 | ✅ 8-B 코드 — off 가 LB 이름·생성 시각·ConsumedLCUs 합을 Summary 에 |
-| B8-18 | 🟡 | 창 관측 공백(GRAFANA 키 없음, service.name 충돌) | TASK-17(키) + 10 직전(리소스 속성) → 설계 확정 10-30(A안·Grafana 유지): `2026-10-30-observability.md` |
+| B8-18 | 🟡 | 창 관측 공백(GRAFANA 키 없음, service.name 충돌) | TASK-17(키) + 10 직전(리소스 속성) → 설계 확정 10-30(A안·Grafana 유지): `2026-10-30-observability.md` → 🚧 구현 11-01 — core-api·daily-api `platform` 공통 태그·`service.instance.id`·Loki `platform`, daily-api 송출(job `devquest-daily-api`), ai-api 제외(스텁 — B8-25). 남은 것 = TASK-17 키 → 첫 창 실측 |
 | B8-19 | 🟡 | U-5 전제가 거꾸로(EKS 는 메일 꺼짐) | ✅ 9번(10-30) — 창 중 Fly 1대 유지, 메일 Fly 전용 확정 |
 | B8-20 | 🟡 | 창 중 be 머지가 EKS 아래 스키마를 바꿈 | ✅ 9번(10-30) — be-cd 창 게이트 + eks-window on 의 be-cd 게이트(`deploy-gate.sh`) |
 | B8-21 | 🟡 | 로컬 apply 가 창 중 prod 클러스터를 기본값으로 덮음 | ✅ 기본값 문제는 8-A `prod.auto.tfvars.json` 이 닫았다. 로컬 도구의 임대 읽기는 「8-B 에서 미룬 것」 |
 | B8-22 | ⚪ | Budgets 게이트 값·이름·지연 | ✅ 8-B 코드 — Budgets 대신 `aws freetier`(무료·잔여 크레딧 직접). 지연은 🟡 하루 단위로 보여 단가를 보수적으로 |
 | B8-23 | 🟡 | D-016 영향 목록 누락 | 8-A |
 | B8-24 | ⚪ | 1b 폐기 후보 | 8-A(폐기 판정) |
+| B8-25 | 🔴 | **창 중 오늘의 질문 채점·꼬리질문 설명이 ai-api 스텁으로 간다** (⑥ Blindspot, 2026-11-01). EKS 에선 `/api/v1/daily-question` 을 daily-api 가 받고(ingress), daily-api 의 `TechInterviewPort` 는 `client-ai-http` → ai-api 뿐이다(`DailyAiConfig`, `DailyQuestionApiService` evaluate·explainFollowup). ai-api 는 base 그대로 `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=true`(D-008 학습 시절 결정), apps-external 에 ai-api 패치 0건 → 실사용자가 `[STUB]` 표식 응답을 받는다. B8-1 은 core-api(`core-api-runtime`) 키 경로만 닫았다. C-4 1·2차는 로그인만 실측. 🟡 뱅크 소진일 AI 생성(`ensureTodayQuestion`)은 core-api 스케줄러(인프로세스 AI)라 무관 | 🔴 **10번 전 판정 필요** — 선택지: ⓐ apps-external 에 ai-api 패치(스텁 끔 + 전용 ExternalSecret 으로 `ANTHROPIC_API_KEY` — 창 중 AI 비용 발생, 448Mi 재측정) ⓑ ingress 에서 `/api/v1/daily-question` 을 core-api 로(core-api 는 인프로세스 AI·키 있음 — Phase 2 분리 경로를 창에서 안 씀) ⓒ 창 중 채점 불가 감수(❌ 실사용자 영향) |
 
 ## 이번 범위에서 하지 않는 것
 
