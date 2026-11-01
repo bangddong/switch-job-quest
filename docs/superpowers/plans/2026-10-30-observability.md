@@ -50,10 +50,12 @@
 
 - 🔴 **import 우선순위 함정** — `spring.config.import` 로 가져온 `monitoring.yml` 값이 앱 `application.yml` 을 **이긴다**. 앱마다 달라야 하는 값(service-name·exposure·공통 태그)을 리터럴로 두면 daily-api 가 조용히 `devquest-api`·`health,prometheus` 가 된다. → monitoring.yml 은 `${devquest.observability.service-name:devquest-api}` 간접 참조, 앱이 프로퍼티 정의. exposure 는 앱별로 이동. daily-api 컨텍스트 테스트로 고정(리터럴로 되돌리면 3건 실패 — 실패 주입 확인).
 - `resourceAttributes()` 직접 override(Map) — 문자열 파싱 경로는 빈 값 `key=` 통과·키 중복 시 `Collectors.toMap` 기동 실패(micrometer-registry-otlp 1.16.3 javap). `service.instance.id` = `FLY_MACHINE_ID` → `HOSTNAME` → `unknown`(빈 문자열도 다음 후보 — Spring `${A:${B:x}}` 는 빈 값에서 안 넘어가서 Kotlin 에서 해석).
-- 오토컨피그 OTLP 차단(`management.otlp.metrics.export.enabled: false`)을 core-api prod → `monitoring.yml` 공통으로. ⚠️ Boot 4.0.3 오토컨피그는 `OpenTelemetryProperties` 부재로 **지금은 발동 조건 자체가 안 맞는다**(잠재 가드) — 설정값을 테스트로 고정.
+- 오토컨피그 OTLP 차단(`management.otlp.metrics.export.enabled: false`)을 core-api prod → `monitoring.yml` 공통으로. ⚠️ Boot 4.0.3 오토컨피그는 `OpenTelemetryProperties` 부재로 **지금은 발동 조건 자체가 안 맞는다**(잠재 가드) — 설정값을 테스트로 고정. 4단계의 *"이중 차단 복제"* 는 **프로퍼티 1겹으로 줄였다**(QA F-3) — core-api `DevQuestApplication` 의 `excludeName` 은 daily-api 에 복제하지 않았다. 발동하지 않는 오토컨피그를 두 번 막을 근거가 없고, opentelemetry 의존이 들어와 발동하게 되면 공통 프로퍼티가 막는다.
 - Loki 라벨 `app`·`platform` 은 springProperty 기본값(`devquest-api`·`unknown`). core-api `app=devquest-api` 유지(대시보드 `{app="devquest-api"}`).
 - daily-api `grafana.otlp.instance-id` 는 core-api 와 **같은 리터럴**(환경변수화 금지 규칙 — 주입 누락 시 조용한 송출 중단). 새 프로퍼티는 `devquest.observability.*` 로 이름 분리.
-- 키 배선: ESO `daily-api-observability`(GRAFANA 3종, `find` — 없으면 빈 Secret, optional envFrom). `DEVQUEST_PLATFORM` = Fly `fly.toml [env]` `fly`, EKS apps-external 패치 `eks`(core-api·daily-api).
+- 키 배선: ESO `daily-api-observability`(GRAFANA 3종, `find` — 없으면 빈 Secret, optional envFrom). 두 허용 목록의 GRAFANA_* 부분이 같아야 한다(QA F-6 — 아래 마커가 둘 다 같은 순서의 세 이름을 갖는지 검사한다).
+  <!-- verify: k8s/gitops/apps-external/externalsecret-runtime.yaml ~ GRAFANA_API_KEY[|]GRAFANA_LOKI_URL[|]GRAFANA_LOKI_INSTANCE_ID -->
+  <!-- verify: k8s/gitops/apps-external/externalsecret-daily-observability.yaml ~ [(]GRAFANA_API_KEY[|]GRAFANA_LOKI_URL[|]GRAFANA_LOKI_INSTANCE_ID[)] --> `DEVQUEST_PLATFORM` = Fly `fly.toml [env]` `fly`, EKS apps-external 패치 `eks`(core-api·daily-api).
 
 ### 🔜 이번에 안 하는 Blindspot 발견 (2026-11-01)
 
