@@ -13,7 +13,6 @@ import org.springframework.context.annotation.ConditionContext
 import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.type.AnnotatedTypeMetadata
-import java.util.Base64
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 
@@ -53,37 +52,31 @@ class GrafanaOtlpCredentialsCondition : Condition {
 class OtlpMetricsConfig(
     @Value("\${grafana.otlp.instance-id:}") private val instanceId: String,
     @Value("\${GRAFANA_API_KEY:}") private val apiKey: String,
+    // 앱별 값(core-api=devquest-api, daily-api=devquest-daily-api). 각 앱 application.yml 이 정의한다.
+    @Value("\${devquest.observability.service-name:${GrafanaOtlpConfig.DEFAULT_SERVICE_NAME}}") private val serviceName: String,
+    // Fly 는 FLY_MACHINE_ID, K8s 는 HOSTNAME(파드명). 우선순위와 빈 값 처리는 GrafanaOtlpConfig.resolveInstanceId.
+    @Value("\${FLY_MACHINE_ID:}") private val flyMachineId: String,
+    @Value("\${HOSTNAME:}") private val hostname: String,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
     @Volatile
     private var registry: OtlpMeterRegistry? = null
 
+    /** 주입된 프로퍼티로 전송 설정을 조립한다. 레지스트리 없이 단위 테스트하려고 분리했다. */
+    internal fun grafanaOtlpConfig(): GrafanaOtlpConfig = GrafanaOtlpConfig(
+        instanceId = instanceId,
+        apiKey = apiKey,
+        serviceName = serviceName,
+        serviceInstanceId = GrafanaOtlpConfig.resolveInstanceId(flyMachineId, hostname),
+    )
+
     @Bean
     @Conditional(GrafanaOtlpCredentialsCondition::class)
     fun otlpMeterRegistry(clock: Clock): OtlpMeterRegistry {
         require(instanceId.isNotBlank()) { "grafana.otlp.instance-id must not be blank" }
         require(apiKey.isNotBlank()) { "GRAFANA_API_KEY must not be blank" }
-        val encoded = Base64.getEncoder()
-            .encodeToString("$instanceId:$apiKey".toByteArray())
-        val config = object : OtlpConfig {
-            override fun get(key: String): String? = when (key) {
-                "otlp.url" -> "https://otlp-gateway-prod-ap-northeast-0.grafana.net/otlp/v1/metrics"
-                "otlp.step" -> "PT60S"
-                // baseTimeUnit 기본값은 MILLISECONDS → Mimir에 _milliseconds_bucket으로 저장됨.
-                // 대시보드 쿼리가 _seconds_bucket을 사용하므로 seconds로 명시.
-                "otlp.baseTimeUnit" -> "seconds"
-                "otlp.resourceAttributes" -> "service.name=devquest-api"
-                else -> null
-            }
-            override fun headers(): Map<String, String> =
-                mapOf(
-                    "Authorization" to "Basic $encoded",
-                    // keep-alive stale connection 방지: Java HttpURLConnection이 idle connection을
-                    // 재사용하다 "Unexpected end of file from server" 오류 발생 → Connection: close로 강제 종료
-                    "Connection" to "close",
-                )
-        }
+        val config = grafanaOtlpConfig()
         val threadFactory = ThreadFactory { runnable ->
             Executors.defaultThreadFactory().newThread(runnable).apply {
                 name = "otlp-metrics-exporter"

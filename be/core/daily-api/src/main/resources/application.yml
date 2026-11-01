@@ -6,6 +6,11 @@ spring:
     name: devquest-daily-api
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  config:
+    import:
+      # ⑥ B8-18 — 공통 모니터링 설정(공통 태그·히스토그램·오토컨피그 OTLP 차단). logging.yml·db-core.yml 은 가져오지 않는다.
+      # 🔴 import 한 파일의 값은 이 파일 값을 이긴다 - 앱별 값(service-name·exposure)은 monitoring.yml 이 리터럴로 갖지 않는다.
+      - classpath:monitoring.yml
   h2:
     console:
       enabled: false
@@ -39,7 +44,14 @@ management:
   endpoints:
     web:
       exposure:
+        # /actuator/prometheus 는 노출하지 않는다(core-api 와 다르다). daily-api 는 스크레이프 경로가 없고 Grafana 로 push 만 한다.
         include: health
+  # Prometheus 레지스트리 자체를 끈다 - support:monitoring 이 micrometer-registry-prometheus 를 runtime 으로 끌어오지만
+  # 읽는 곳이 없어 메모리만 쓴다. (오토컨피그 OTLP 는 monitoring.yml 이 공통으로 끈다.)
+  prometheus:
+    metrics:
+      export:
+        enabled: false
   endpoint:
     health:
       group:
@@ -60,6 +72,10 @@ storage:
       maximum-pool-size: 5
 
 devquest:
+  observability:
+    # Grafana job 라벨(OTLP service.name)·Loki app 라벨·메트릭 공통 태그 application 의 값. core-api(devquest-api)와
+    # job 을 분리한다. support:monitoring / support:logging 이 이 키를 읽는다.
+    service-name: devquest-daily-api
   # B7-19 2단계 — Cloudflare Worker 와 원본이 공유하는 비밀. Worker 가 X-DevQuest-Edge-Auth 로 보내고,
   # 일치할 때만 X-DevQuest-Client-IP 를 익명 레이트 리밋의 클라이언트 IP 로 쓴다(ClientIpResolver).
   # 빈 기본값 = 신뢰 헤더 미사용(기존 Fly-Client-IP/XFF/remoteAddr 판정). 실제 값은 시크릿 저장소에서만 주입한다.

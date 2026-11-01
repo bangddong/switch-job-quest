@@ -20,6 +20,17 @@
                         source="GRAFANA_LOKI_INSTANCE_ID" defaultValue=""/>
         <springProperty scope="context" name="grafanaApiKey"
                         source="GRAFANA_API_KEY" defaultValue=""/>
+        <!--
+            Loki 라벨. 빈 문자열 기본값은 쓰지 않는다 - 빈 라벨 값은 Loki 가 거부하거나 라벨을 떨군다.
+            app      : 앱별 서비스 이름. 각 앱 application.yml 의 devquest.observability.service-name
+                       (core-api=devquest-api, daily-api=devquest-daily-api). 미정의 시 devquest-api =
+                       기존 대시보드 쿼리 {app="devquest-api"} 연속.
+            platform : DEVQUEST_PLATFORM 환경변수(fly|eks). 미설정 시 unknown. 메트릭 공통 태그 platform 과 같은 값이다.
+        -->
+        <springProperty scope="context" name="lokiAppLabel"
+                        source="devquest.observability.service-name" defaultValue="devquest-api"/>
+        <springProperty scope="context" name="lokiPlatformLabel"
+                        source="DEVQUEST_PLATFORM" defaultValue="unknown"/>
 
         <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
@@ -59,7 +70,7 @@
                     <batchMaxBytes>65536</batchMaxBytes>
                     <format>
                         <label>
-                            <pattern>app=devquest-api,level=%level</pattern>
+                            <pattern>app=${lokiAppLabel},platform=${lokiPlatformLabel},level=%level</pattern>
                         </label>
                         <message class="com.github.loki4j.logback.JsonLayout"/>
                     </format>
