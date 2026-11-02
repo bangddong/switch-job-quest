@@ -7,7 +7,8 @@ export default {
     return handleRequest(request, env)
   },
   // 09:00 KST 일일 작업 트리거 (wrangler.jsonc 의 triggers.crons).
-  scheduled(controller, env, ctx): void {
-    ctx.waitUntil(runDailyJob(env, controller.scheduledTime))
+  // waitUntil 대신 await — 반환 Promise 가 작업 수명과 같아야 한다(최대 12분, Cron 벽시계 한도 15분).
+  async scheduled(controller, env): Promise<void> {
+    await runDailyJob(env, controller.scheduledTime)
   },
 } satisfies ExportedHandler<Env>

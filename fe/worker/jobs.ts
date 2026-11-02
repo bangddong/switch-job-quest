@@ -10,7 +10,7 @@ const ATTEMPT_TIMEOUT_MS = 180_000
 // Cron 핸들러 벽시계 한도(15분) 안쪽.
 const TOTAL_DEADLINE_MS = 12 * 60_000
 
-export type JobOutcome = 'done' | 'running' | 'unauthorized' | 'disabled' | 'misconfigured' | 'failed'
+export type JobOutcome = 'done' | 'running' | 'unauthorized' | 'disabled' | 'misconfigured' | 'failed' | 'partial'
 
 export interface JobResult {
   outcome: JobOutcome
@@ -79,6 +79,10 @@ export async function runDailyJob(
   const deadline = d.now() + TOTAL_DEADLINE_MS
   let attempts = 0
   let lastStatus: number | null = null
+  // 직전 시도가 응답 없이(자기 타임아웃/네트워크 오류) 끝났는가 — 서버에서 첫 실행이 계속 도는 중일 수 있다.
+  let prevAttemptErrored = false
+  // 메일을 일부만 보낸 마지막 200 결과. 서버는 발송 성공 뒤에만 로그를 남기므로 재시도는 미발송분에만 보낸다(멱등).
+  let lastPartial: Record<string, number> | null = null
 
   for (const delay of RETRY_DELAYS_MS) {
     if (delay > 0) {
@@ -101,18 +105,33 @@ export async function runDailyJob(
     } catch (error) {
       const name = error instanceof Error ? error.name : 'unknown'
       console.warn(`daily job attempt ${attempts} failed: ${name}`)
+      prevAttemptErrored = true
       continue
     }
 
     const status = response.status
     lastStatus = status
+    const afterErroredAttempt = prevAttemptErrored
+    prevAttemptErrored = false
 
     if (status === 200) {
-      console.log('daily job done', JSON.stringify({ attempts, ...numericFields(await readJson(response)) }))
+      const fields = numericFields(await readJson(response))
+      const { mailTargets, mailSent } = fields
+      if (mailTargets !== undefined && mailSent !== undefined && mailSent < mailTargets) {
+        lastPartial = fields
+        console.warn(`daily job attempt ${attempts} sent partial mail, will retry`, JSON.stringify({ attempts, ...fields }))
+        continue
+      }
+      console.log('daily job done', JSON.stringify({ attempts, ...fields }))
       return { outcome: 'done', attempts, lastStatus }
     }
     if (status === 409) {
-      console.warn('daily job skipped: another run is in progress (409)')
+      if (afterErroredAttempt) {
+        // 이전 시도가 결과를 모른 채 끝났다 — 첫 실행이 서버에서 계속 도는 중일 수 있어 성공 여부를 알 수 없다.
+        console.error('daily job outcome unknown: retry got 409 after a timed-out/failed attempt (first run may still be in progress)')
+      } else {
+        console.warn('daily job skipped: another run is in progress (409)')
+      }
       return { outcome: 'running', attempts, lastStatus }
     }
     if (status === 401) {
@@ -136,6 +155,11 @@ export async function runDailyJob(
     // 그 밖의 4xx 와 예상 밖 상태(2xx/3xx)는 재시도해도 같다.
     console.error(`daily job aborted: unexpected status ${status}`)
     return { outcome: 'failed', attempts, lastStatus }
+  }
+
+  if (lastPartial) {
+    console.error('daily job partial: mail not fully sent after retries', JSON.stringify({ attempts, ...lastPartial }))
+    return { outcome: 'partial', attempts, lastStatus: 200 }
   }
 
   console.error(`daily job failed: attempts=${attempts} lastStatus=${lastStatus ?? 'none'} (retries exhausted or deadline reached)`)

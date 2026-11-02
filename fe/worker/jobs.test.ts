@@ -100,7 +100,7 @@ describe('runDailyJob — 비밀 누락', () => {
 
 describe('runDailyJob — 종료 분기', () => {
   it('200 은 done 이고 숫자 필드를 로그로 남긴다', async () => {
-    const h = harness([json(200, { status: 'done', mailTargets: 5, mailSent: 4, expiredRateLimitRowsDeleted: 9 })])
+    const h = harness([json(200, { status: 'done', mailTargets: 5, mailSent: 5, expiredRateLimitRowsDeleted: 9 })])
     const result = await runDailyJob(env, SCHEDULED, h.deps)
     expect(result).toEqual({ outcome: 'done', attempts: 1, lastStatus: 200 })
     const text = logs.join('\n')
@@ -236,6 +236,105 @@ describe('runDailyJob — 시도 타임아웃과 전체 마감', () => {
     const h = harness([json(503, {})], 170 * SEC)
     await runDailyJob(env, SCHEDULED, h.deps)
     expect(console.error).toHaveBeenCalled()
+  })
+})
+
+describe('runDailyJob — 409 로그 레벨 (F-3a)', () => {
+  it('첫 시도의 409 는 warn 이고 error 는 없다', async () => {
+    const h = harness([json(409, { status: 'running' })])
+    await runDailyJob(env, SCHEDULED, h.deps)
+    expect(console.warn).toHaveBeenCalled()
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('타임아웃 뒤 재시도에서 409 면 running 을 유지하고 error 로 남긴다', async () => {
+    const h = harness([new DOMException('timed out', 'TimeoutError'), json(409, { status: 'running' })])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result).toEqual({ outcome: 'running', attempts: 2, lastStatus: 409 })
+    expect(console.error).toHaveBeenCalled()
+  })
+
+  it('네트워크 오류 뒤 재시도에서 409 도 error 로 남긴다', async () => {
+    const h = harness([new TypeError('fetch failed'), json(409, { status: 'running' })])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result.outcome).toBe('running')
+    expect(console.error).toHaveBeenCalled()
+  })
+
+  it('503 뒤 재시도의 409 는 자기 타임아웃이 아니므로 warn 이다', async () => {
+    const h = harness([new Response('', { status: 503 }), json(409, { status: 'running' })])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result.outcome).toBe('running')
+    expect(console.warn).toHaveBeenCalled()
+    expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining('409'))
+  })
+})
+
+describe('runDailyJob — 부분 발송 재시도 (F-3b)', () => {
+  const partial = () => json(200, { status: 'done', mailTargets: 3, mailSent: 1, expiredRateLimitRowsDeleted: 0 })
+  const full = () => json(200, { status: 'done', mailTargets: 3, mailSent: 3, expiredRateLimitRowsDeleted: 0 })
+
+  it('mailSent < mailTargets 면 재시도하고 다음에 전부 보내면 done', async () => {
+    const h = harness([partial(), full()])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result).toEqual({ outcome: 'done', attempts: 2, lastStatus: 200 })
+    expect(h.sleeps).toEqual([20_000])
+  })
+
+  it('같은 대기 배열을 따른다 (20,40,60,60,60) 그리고 소진되면 partial + error', async () => {
+    const h = harness([partial()])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result).toEqual({ outcome: 'partial', attempts: 6, lastStatus: 200 })
+    expect(h.sleeps).toEqual([20_000, 40_000, 60_000, 60_000, 60_000])
+    expect(console.error).toHaveBeenCalled()
+  })
+
+  it('마감에 걸리면 마지막 200 결과로 partial', async () => {
+    const h = harness([partial()], 5 * MIN)
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result.outcome).toBe('partial')
+    expect(result.lastStatus).toBe(200)
+    expect(h.clock.t - 1_000_000).toBeLessThanOrEqual(12 * MIN)
+  })
+
+  it('부분 발송 뒤 재시도가 5xx 로 실패해도 마지막 200 결과로 partial', async () => {
+    const h = harness([partial(), new Response('', { status: 503 })])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result.outcome).toBe('partial')
+    expect(result.lastStatus).toBe(200)
+  })
+
+  it('mailTargets 가 0 이면 바로 done', async () => {
+    const h = harness([json(200, { status: 'done', mailTargets: 0, mailSent: 0 })])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result).toEqual({ outcome: 'done', attempts: 1, lastStatus: 200 })
+  })
+
+  it('mailSent === mailTargets 면 바로 done', async () => {
+    const h = harness([full()])
+    const result = await runDailyJob(env, SCHEDULED, h.deps)
+    expect(result.outcome).toBe('done')
+    expect(h.fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('숫자 필드가 없거나 숫자가 아니면 관대하게 done', async () => {
+    for (const body of [
+      { status: 'done' },
+      { status: 'done', mailTargets: 3 },
+      { status: 'done', mailSent: 1 },
+      { status: 'done', mailTargets: '3', mailSent: '1' },
+      { status: 'done', mailTargets: null, mailSent: null },
+    ]) {
+      const h = harness([json(200, body)])
+      const result = await runDailyJob(env, SCHEDULED, h.deps)
+      expect(result.outcome).toBe('done')
+      expect(h.fetchMock).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('partial 로그에 비밀이 나오지 않는다', async () => {
+    await runDailyJob(env, SCHEDULED, harness([partial()]).deps)
+    expect(logs.join('\n')).not.toContain(SECRET)
   })
 })
 
