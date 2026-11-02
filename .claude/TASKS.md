@@ -105,7 +105,7 @@ AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS �
 🔴 **이름은 대소문자·숫자까지 정확히** — 허용 목록과 다르면 **에러 없이 빠진다**. 넣었으면 "넣었다"고만(Claude 가 이름만 확인).
 ~~JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).~~ → OAuth = TASK-22 ✅ · JWT = TASK-23(아래 위).
 
-### TASK-18: 일일 작업 트리거 비밀 넣기 (Fly 유휴 정지 PR 머지 직후 — **다음 09:00 전에**)
+### TASK-24: 일일 작업 트리거 비밀 넣기 (Fly 유휴 정지 PR 머지 직후 — **다음 09:00 전에**)
 
 🔴 **안 하면 다음 09:00 메일이 안 나간다** (fail-closed — Worker 가 401/503 disabled 에서 멈춘다).
 

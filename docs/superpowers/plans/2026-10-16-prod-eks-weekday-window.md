@@ -541,7 +541,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | 결정 | 선택 | 근거 |
 |---|---|---|
 | 정지 방식 | `min_machines_running = 0` · suspend · **768MB · swap 제거** | 사용자. suspend 조건 *"No swap configured"*(Fly 문서). 512MB 에서 swap 만 빼면 OOM — 09-24 java 발자국 428MiB > kill 수위 409 |
-| 768MB 비용 | 상시 켜짐 $7.02/31일 · **켜진 비율 72% 미만이면 지금보다 쌈** | 10월 청구서 단가로 계산(공식 표 iad 의 ≈1.31배). 켜진 비율 미실측(🟡) |
+| 768MB 비용 | 상시 켜짐 $7.02/31일 · **켜진 비율 ≈71% 미만이면 지금($5.07)보다 쌈 · ≈69% 미만이면 면제선($5) 아래** | 송신 $0.08·정지 중 rootfs($0.15/GB/월, 이미지 ≈0.3GB 가정 ⚪) 포함. 10월 청구서 단가로 계산(공식 표 iad 의 ≈1.31배). 켜진 비율 미실측(🟡) |
 | 09:00 메일 | Cloudflare Worker Cron(`0 0 * * *` UTC) → `API_ORIGIN`(api.quest = Fly 직결) `POST /internal/jobs/daily` | 사용자. 무료, AWS 계정 수명과 무관 |
 | 인증 | **신규** 비밀 `DEVQUEST_JOB_SECRET`, fail-closed | edge 비밀 재사용 기각 — Worker 가 `/api/*` 모든 요청에 붙이므로 누구나 트리거 가능(Blindspot 🔴) |
 | 앱 `@Scheduled` 메일 | **제거** | resume 순간 밀린 cron 과 겹쳐 중복 발송(메일 로그 UNIQUE 없음) |
@@ -552,7 +552,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 <!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyJobService.kt -->
 <!-- verify: .github/workflows/job-secret-rotate.yml ~ DEVQUEST_JOB_SECRET -->
 
-**배포 순서** 🔴: 머지(**09:00 이후**) → be-cd·fe-cd 성공 → **TASK-18** `job-secret-rotate` rotate → 다음 09:00 메일 확인.
+**배포 순서** 🔴: 머지(**09:00 이후**) → be-cd·fe-cd 성공 → **TASK-24** `job-secret-rotate` rotate → 다음 09:00 메일 확인.
 rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed — Worker 는 401/503 disabled 에서 멈춘다).
 
 ### 이번에 안 하는 것 (Blindspot 21건 중)
@@ -563,10 +563,10 @@ rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed —
 | 콜드 스타트 2~3분 503 (stop 상태 — 배포·시크릿 교체 직후) | 기동 최적화(lazy-init 등) 0건이고 현상 자체가 미재측정. 배포 후 첫 측정 → CONTEXT 백로그 「Spring 시작 시간 최적화」 |
 | 768MB·swap 0 의 OOM 수위 재측정 | 409MiB 는 512MB VM 값. 배포 뒤라야 잴 수 있다(`fly ssh` + `/proc/meminfo`). suspend 는 메모리를 보존해 creep 이 **깨어 있는 시간** 기준으로 쌓인다 |
 | suspend 복원 뒤 Spring 스케줄러·시계(⚪) | Firecracker 복원 시 monotonic 시계 동작 미확인. `scheduledTime` 5분 초과 차이를 경고 로그로 관측만 |
-| be-cd 배포 후 스모크 없음 | min=0 에서 "배포 성공 = 새 이미지 기동" 이 약해진다(⚪ Fly 동작 미확인). TASK-18 의 401 프로브가 첫 확인을 겸한다 |
+| be-cd 배포 후 스모크 없음 | min=0 에서 "배포 성공 = 새 이미지 기동" 이 약해진다(⚪ Fly 동작 미확인). TASK-24 의 401 프로브가 첫 확인을 겸한다 |
 | `prod-smoke-daily` 콜드 부팅 오탐 | `--max-time 30 --retry 2` 가 2~3분 부팅을 못 견딜 수 있다. 실제 오탐이 나면 조정 |
 | 동기 작업 최장 시간 | AI 폴백일 질문 생성 ≈90초 + SMTP 직렬. Fly 프록시 응답 타임아웃 ⚪. Worker 는 시도당 180초·전체 12분 |
-| 켜진 비율 실측 | 첫 달 Fly 청구서 CPU 초 ÷ 2,678,400 으로 나온다. 72% 넘으면 되돌림 검토 |
+| 켜진 비율 실측 | 첫 달 Fly 청구서 CPU 초 ÷ 2,678,400 으로 나온다. ≈69% 넘으면 되돌림 검토 |
 
 ## 이번 범위에서 하지 않는 것
 
