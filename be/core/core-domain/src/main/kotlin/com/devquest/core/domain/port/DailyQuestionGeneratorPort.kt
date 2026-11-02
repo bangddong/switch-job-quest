@@ -6,7 +6,7 @@ import com.devquest.core.domain.model.DailyQuestionContent
  * 오늘의 기술 면접 질문 "생성"을 추상화한다.
  *
  * Stage B-1: `DailyQuestionContentService`(구현체)가 `core:daily-core` 라이브러리 모듈로 이동하면서
- * core-api 쪽 소비자(`DailyQuestionService`·`DailyMailScheduler`)가 구체 클래스 대신 이 Port에 의존하도록
+ * core-api 쪽 소비자(`DailyQuestionService`·`DailyJobService`)가 구체 클래스 대신 이 Port에 의존하도록
  * 분리했다 (원장 L-27 — Port 미주입 위반 해소).
  */
 interface DailyQuestionGeneratorPort {
