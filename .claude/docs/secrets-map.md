@@ -31,7 +31,7 @@
 
 | 시크릿 | 정본 | 사본 (전부) | 소비자 | 교체 시 주의 |
 |---|---|---|---|---|
-| **Anthropic API 키 — 사본이 아니라 키 3개** | Anthropic 콘솔 | ① Fly `ANTHROPIC_API_KEY` = prod 키 ② SSM `/devquest/prod/app/ANTHROPIC_API_KEY` = **EKS 전용 별도 키**(TASK-17, 10-22 — 폐기를 쉽게 하려고 분리) ③ GitHub secret `ANTHROPIC_API_KEY` = 계보 🟡 미확인 | ① prod 앱 ② EKS 창(ESO) ③ `claude-batch-fix.yml` | 🔴 **서로 덮어쓰지 마라** — 유출된 그 키만 콘솔에서 폐기·재발급해 그 자리에만 넣는다. 셋을 같은 값으로 맞추면 분리가 무너진다 |
+| **Anthropic API 키 — 사본이 아니라 키 3개** | Anthropic 콘솔 | ① Fly `ANTHROPIC_API_KEY` = prod 키 ② SSM `/devquest/prod/app/ANTHROPIC_API_KEY` = **EKS 전용 별도 키**(TASK-17, 10-22 — 폐기를 쉽게 하려고 분리) ③ GitHub secret `ANTHROPIC_API_KEY` = 계보 🟡 미확인 | ① prod 앱 ② EKS 창(ESO — `core-api-runtime`(core-api) · **`ai-api-anthropic`(ai-api 전용, B8-25 ⓐ 11-02)** — 같은 SSM 파라미터를 두 Secret 이 읽는다) ③ `claude-batch-fix.yml` | 🔴 **서로 덮어쓰지 마라** — 유출된 그 키만 콘솔에서 폐기·재발급해 그 자리에만 넣는다. 셋을 같은 값으로 맞추면 분리가 무너진다 |
 | **Judge0 (RapidAPI) 키** | RapidAPI 콘솔 | Fly `JUDGE0_API_KEY` · SSM `/devquest/prod/app/JUDGE0_API_KEY` · 로컬 `settings.local.json` | prod 앱 · EKS 창 | 사본 3곳 |
 | **Resend API 키** | Resend 콘솔 | Fly `RESEND_API_KEY` · 로컬 `settings.local.json` | prod 앱(메일) | EKS 엔 없음(창 중 메일 꺼짐, B8-19) |
 | **JWT 서명 키 (prod — Fly·EKS 공용)** | **SSM `/devquest/prod/app/JWT_SECRET`** (SecureString — 10-28 JWT 통일부터 정본) | ① Fly `JWT_SECRET` ② EKS 창(ESO `core-api-runtime`) — **같은 값** | prod 앱(Fly) · EKS 창 | 🔴 **교체 = `jwt-rotate.yml` action=rotate 만** (새 키 → SSM → Fly 를 한 번에, 값은 러너 밖으로 안 나감) = **전원 1회 로그아웃**. `fly secrets set JWT_SECRET` 을 손으로 하지 마라 — SSM 과 갈린다(action=check 가 digest 로 잡는다, 기록 `/devquest/ops/fly-jwt-digest`). 클러스터가 켜져 있으면 rotate 거부 |

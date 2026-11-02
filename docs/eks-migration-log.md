@@ -6119,3 +6119,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 사용자: **유휴 시 일시정지**. Fly 문서 suspend 조건 *"No swap configured"* → 512MB 에서 swap 만 빼면 OOM(09-24 java 발자국 428MiB > kill 409) → **768MB · swap 제거 · `min_machines_running = 0`**. 768MB 상시 = $7.02/31일, 켜진 비율 ≈71% 미만이면 이득·≈69% 미만이면 면제(송신·rootfs 포함, 미실측 — QA F-4 가 처음 쓴 72% 를 정정). 기각: 512MB+swap+stop(콜드 부팅 2~3분) · 상시 유지(연 ≈$35).
 - `[결정]` 09:00 메일 = **Cloudflare Worker Cron**(`0 0 * * *` UTC) → api.quest(Fly 직결) `POST /internal/jobs/daily`, 신규 비밀 `DEVQUEST_JOB_SECRET`(fail-closed). edge 비밀 재사용 기각 — Worker 가 `/api/*` 모든 요청에 붙인다(Blindspot 🔴). 앱 `@Scheduled` 09:00 제거(중복 발송 방지). 기각: EventBridge(AWS 계정 수명에 묶임).
 - `[메모]` Blindspot 21건 — 9번 ①(*"min=1 이라 suspend 대상 아님"*) 전제가 뒤집힘 → 계획서 「Fly 유휴 일시정지」에 반영·미처리 8건 등재. 내가 처음 말한 *"깨어나는 데 몇백 ms"* 는 낙관이었다 — DB 재접속 2~3초(B7-26) + stop 상태면 콜드 부팅.
+
+## 2026-11-02 — 📌D-016 B8-25 ⓐ 창 중 ai-api 실제 AI
+
+- `[결정]` 사용자 **ⓐ**(ai-api 실제 키) — 내 추천은 ⓑ(ingress → core-api, 한 줄)였다. 사용자 근거: Phase 2 분리 경로(daily-api→ai-api)가 prod 창 트래픽을 받는다. D-008 `✅유효 → 🔄부분무효`(학습 클러스터 사유는 base 에 유효 — 스텁 해제는 `apps-external` overlay 만).
+- `[메모]` Blindspot 15건(읽기 전용). 설계에 반영: ① base ai-api 에 `envFrom` 이 **없어** 기존 `envFrom/-` 패턴 복사 시 렌더 실패 → 목록째 add ② 스텁 플래그는 env[1] — `env/-` 덧붙이기는 중복 env → `test`+`replace` ③ 빈 키여도 ai-api 기동 성공(D-008 「더 나쁜 성질」), on.sh 스모크는 GET 만이라 못 잡음 → on.sh 키 이름·스텁 검사 + `eks-window.yml` apply 전 SSM 이름 검사 ④ POST 스모크는 Fly 와 공유 한도 소모 → 안 함 ⑤ 448Mi 여유 ≈35Mi → 창 overlay 576Mi.
+- `[해결]` `kubectl kustomize k8s/gitops/apps-external` rc 0 — ai-api env `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=false`, envFrom `ai-api-anthropic`(optional), 384Mi/576Mi. 실패 주입(test 값 이름 변경) → `error: testing value /spec/template/spec/containers/0/env/1/name failed: test failed` rc 1. 학습 overlay `k8s/gitops/apps` 는 스텁 `true`·448Mi 그대로.
+- `[비용]` AWS 0(클러스터 꺼짐). Anthropic 은 창 중 채점분만 — 총량은 Fly 와 공유 전체 한도(evaluate 50·explain 100/일)라 창 때문에 늘지 않는다.
+- `[메모]` 🔴 EKS 에서 Anthropic 을 실제로 부른 적은 **아직 없다** — 첫 창(10번)에서 채점 1회 수동 확인(계획서 B8-25-1).

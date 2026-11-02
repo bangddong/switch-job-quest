@@ -521,7 +521,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | B8-22 | ⚪ | Budgets 게이트 값·이름·지연 | ✅ 8-B 코드 — Budgets 대신 `aws freetier`(무료·잔여 크레딧 직접). 지연은 🟡 하루 단위로 보여 단가를 보수적으로 |
 | B8-23 | 🟡 | D-016 영향 목록 누락 | 8-A |
 | B8-24 | ⚪ | 1b 폐기 후보 | 8-A(폐기 판정) |
-| B8-25 | 🔴 | **창 중 오늘의 질문 채점·꼬리질문 설명이 ai-api 스텁으로 간다** (⑥ Blindspot, 2026-11-01). EKS 에선 `/api/v1/daily-question` 을 daily-api 가 받고(ingress), daily-api 의 `TechInterviewPort` 는 `client-ai-http` → ai-api 뿐이다(`DailyAiConfig`, `DailyQuestionApiService` evaluate·explainFollowup). ai-api 는 base 그대로 `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=true`(D-008 학습 시절 결정), apps-external 에 ai-api 패치 0건 → 실사용자가 `[STUB]` 표식 응답을 받는다. B8-1 은 core-api(`core-api-runtime`) 키 경로만 닫았다. C-4 1·2차는 로그인만 실측. 🟡 뱅크 소진일 AI 생성(`ensureTodayQuestion`)은 core-api 스케줄러(인프로세스 AI)라 무관 | 🔴 **10번 전 판정 필요** — 선택지: ⓐ apps-external 에 ai-api 패치(스텁 끔 + 전용 ExternalSecret 으로 `ANTHROPIC_API_KEY` — 창 중 AI 비용 발생, 448Mi 재측정) ⓑ ingress 에서 `/api/v1/daily-question` 을 core-api 로(core-api 는 인프로세스 AI·키 있음 — Phase 2 분리 경로를 창에서 안 씀) ⓒ 창 중 채점 불가 감수(❌ 실사용자 영향) |
+| B8-25 | 🔴 | **창 중 오늘의 질문 채점·꼬리질문 설명이 ai-api 스텁으로 간다** (⑥ Blindspot, 2026-11-01). EKS 에선 `/api/v1/daily-question` 을 daily-api 가 받고(ingress), daily-api 의 `TechInterviewPort` 는 `client-ai-http` → ai-api 뿐이다(`DailyAiConfig`, `DailyQuestionApiService` evaluate·explainFollowup). ai-api 는 base 그대로 `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=true`(D-008 학습 시절 결정), apps-external 에 ai-api 패치 0건 → 실사용자가 `[STUB]` 표식 응답을 받는다. B8-1 은 core-api(`core-api-runtime`) 키 경로만 닫았다. C-4 1·2차는 로그인만 실측. 🟡 뱅크 소진일 AI 생성(`ensureTodayQuestion`)은 core-api 스케줄러(인프로세스 AI)라 무관 | 🔴 **10번 전 판정 필요** — 선택지: ⓐ apps-external 에 ai-api 패치(스텁 끔 + 전용 ExternalSecret 으로 `ANTHROPIC_API_KEY` — 창 중 AI 비용 발생, 448Mi 재측정) ⓑ ingress 에서 `/api/v1/daily-question` 을 core-api 로(core-api 는 인프로세스 AI·키 있음 — Phase 2 분리 경로를 창에서 안 씀) ⓒ 창 중 채점 불가 감수(❌ 실사용자 영향) → 🚧 **11-02 사용자 ⓐ 선택**(포트폴리오: Phase 2 분리 경로가 prod 창 트래픽을 받는다 — ⓑ 추천을 듣고 바꿈). 구현·미처리 목록은 아래 「B8-25 ⓐ」 |
 
 ## Fly 유휴 일시정지 (2026-11-02)
 
@@ -568,6 +568,35 @@ rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed —
 | `prod-smoke-daily` 콜드 부팅 오탐 | `--max-time 30 --retry 2` 가 2~3분 부팅을 못 견딜 수 있다. 실제 오탐이 나면 조정 |
 | 동기 작업 최장 시간 | AI 폴백일 질문 생성 ≈90초 + SMTP 직렬. Fly 프록시 응답 타임아웃 ⚪. Worker 는 시도당 180초·전체 12분 |
 | 켜진 비율 실측 | 첫 달 Fly 청구서 CPU 초 ÷ 2,678,400 으로 나온다. ≈69% 넘으면 되돌림 검토 |
+
+## B8-25 ⓐ — 창 중 ai-api 실제 AI (2026-11-02)
+
+> 사용자 결정 11-02: **ⓐ**. 나는 ⓑ(ingress 를 core-api 로)를 추천했다 — Fly 와 같은 경로라 창 고유 장애 지점이 없고 매니페스트 한 줄이다.
+> 사용자는 *"Phase 2 로 분리한 daily-api→ai-api 경로가 prod 창 트래픽을 실제로 받는다"* 를 택했다. ⓑ 는 여전히 한 줄로 되돌릴 수 있는 대안이다.
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 키 | 기존 SSM `ANTHROPIC_API_KEY`(EKS 전용 키) 재사용, **ai-api 전용 ExternalSecret** `ai-api-anthropic` | `core-api-runtime` 공유 = JWT·OAuth·Judge0 노출. 새 키 발급 = 사용자 작업만 늘고 이득 없음 |
+| 스텁 해제 위치 | **overlay(`apps-external`) 만** — base 는 스텁 유지 | D-008 「학습 클러스터」 사유는 base 에 여전히 유효(🔄부분무효) |
+| 패치 방식 | `test`(env[1] 이름) + `replace`(값) · envFrom 은 목록째 `add` | `env/-` 덧붙이기 = 중복 env, 인덱스만 replace = base 순서 변경 시 조용히 오작동. base 에 envFrom 없음(Blindspot 1·2). 이름을 바꾸는 실패 주입 → 렌더 rc 1 확인 |
+| 키 부재 처리 | ES 는 `find`(빈 Secret 허용) + **on.sh 가 트래픽 전환 전에 키 이름·스텁 꺼짐 검사** + `eks-window.yml` 이 apply 전에 SSM 이름 검사 | `data` 는 부재 시 wave 1 Degraded → 로그인까지 창 전체가 멈춤(B5-14). `find` 만이면 D-008 「더 나쁜 성질」(빈 키여도 기동 → 채점 시점 실패) |
+| 메모리 | ai-api 384Mi / **576Mi**(core-api 와 같음, 창 overlay 만) | 448Mi 는 스텁 실측 + JVM 하한(여유 ≈35Mi). 실제 호출은 Spring AI HTTP·TLS 클래스를 처음 로드 |
+| 스모크 | **POST 스모크 안 함** | 오늘의 질문 한도는 Fly 와 **공유 DB 카운터**(evaluate 개인 1회·전체 50) — 스모크가 실사용자 몫을 쓴다 |
+<!-- verify: k8s/gitops/apps-external/kustomization.yaml ~ DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED -->
+<!-- verify: infra/aws-eks/scripts/prod-window/on.sh ~ ai-api-anthropic -->
+
+### 이번에 안 하는 것 (Blindspot 15건 중) — 목적지
+
+| # | 내용 | 왜 지금 안 하나 |
+|---|---|---|
+| B8-25-1 | 🔴 **첫 창에서 실제 채점 1회 수동 확인** — EKS 에서 Anthropic 을 부른 적이 **한 번도 없다**(C-4 는 로그인만). 노드는 퍼블릭 서브넷+IGW 라 egress 는 될 것(🟡) | 클러스터가 꺼져 있다. 10번 첫 창의 확인 항목 — 채점 응답에 `[STUB]` 이 없는지 + ai-api working set(`kubectl top pod`) |
+| B8-25-2 | ALB idle timeout 기본 60초 < daily-api read-timeout 150초(30초×재시도 3+마진). 스텁은 즉시 응답이라 드러난 적 없음 | 정상 응답은 수 초~수십 초. 60초를 넘는 건 재시도 경로뿐이고 그때도 결과는 실패(504 vs 500). 첫 창 실측 지연을 보고 정한다 |
+| B8-25-3 | 창 중 **AI 토큰·비용 지표가 송출되지 않는다** — ai-api 는 monitoring 미의존, `ai.tokens.*` 는 메모리에만 | 레지스트리 추가 = 메모리 재측정 + 관측 계획서 재설계. 비용 상한은 공유 전체 한도가 이미 묶는다 |
+| B8-25-4 | ai-api 레플리카 1 · Recreate · HPA 없음 · 가상 스레드 꺼짐 — daily-api(최대 4)가 ai-api 1개로 몰린다 | 전체 한도(150/일)가 동시성을 낮게 묶는다. OOMKill 시 창 채점 전체 정지 → B8-25-1 실측 후 판단 |
+| B8-25-5 | 키를 넣으면 ai-api `/internal/ai/**` 24개 엔드포인트가 전부 실제 키로 살아난다(무인증, NetworkPolicy 로 core-api·daily-api 만 호출 가능) | core-api 는 inprocess 라 ai-api 를 부르지 않는다. 노출은 클러스터 내부로 한정 |
+| B8-25-6 | 16개 evaluator 실호출 **비용 추정**(D-008 이 요구한 첫 단계) 미수행 | 창에서 ai-api 를 타는 건 daily-api 의 evaluate·explain 둘뿐이고 그 총량은 Fly 와 공유 한도 안 |
+| B8-25-7 | k8s 렌더를 CI 가 검사하지 않는다 — 패치 오류가 창 on(과금 중)에야 ArgoCD 에서 드러난다 | 하네스 동결 규칙 — 이번엔 로컬 `kubectl kustomize` 렌더 rc 0 + 실패 주입으로 확인 |
+| B8-25-8 | Spring AI 기본 재시도(`spring.ai.retry`)와 `AiCallExecutor` 3회가 겹칠 수 있다(⚪ 2.0.0-RC2 기본값 미확인) | Fly core-api 도 같은 조합으로 운영 중 — 창 고유 문제 아님 |
 
 ## 이번 범위에서 하지 않는 것
 

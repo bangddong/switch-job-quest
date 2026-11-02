@@ -137,7 +137,7 @@ EKS 안에서만 노출되므로 NetworkPolicy로 충분 → 설계 원안대로
 
 ### G-4 → 학습 클러스터의 AI 호출은 **스텁**으로 대체 (2026-08-28)
 
-> 📌 **D-008** · 상태 `✅유효` · 영향 `docs/superpowers/plans/2026-08-03-service-decomposition-phase02.md`(Stage C 완료 기준), `infra/aws-eks/2-cluster/secrets.tf`, `be/core/ai-api/src/main/resources/application.yml`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml`, `docs/superpowers/plans/2026-09-11-prod-eks-migration-prereqs.md`, Stage C
+> 📌 **D-008** · 상태 `🔄부분무효` · 영향 `docs/superpowers/plans/2026-08-03-service-decomposition-phase02.md`(Stage C 완료 기준), `infra/aws-eks/2-cluster/secrets.tf`, `be/core/ai-api/src/main/resources/application.yml`, `be/clients/client-ai/src/main/resources/client-ai-anthropic.yml`, `docs/superpowers/plans/2026-09-11-prod-eks-migration-prereqs.md`, `k8s/gitops/apps-external/kustomization.yaml`, Stage C · 재판정 `2026-10-16-prod-eks-weekday-window.md B8-25 ⓐ (2026-11-02) — prod 창 overlay 에서만 스텁 해제`
 
 **`ANTHROPIC_API_KEY` 를 학습 클러스터에 넣지 않는다.** ai-api 에 **학습 전용 스텁 프로필**을 두고 고정 응답을 돌려준다.
 
@@ -167,6 +167,19 @@ Stage C 완료 기준이 *"AI 설명까지"* 를 요구하는데 **그 키가 �
 ⚠️ **D-008 을 뒤집을 때 반드시 함께 볼 것**: 이관 체크리스트에서
 `k8s/base/ai-api.yaml` 의 `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED` **삭제**.
 기본값이 off 라 *"잊으면 안 돈다"* 형태이지만, **명시적으로 켜둔 것은 명시적으로 지워야 한다.**
+
+🔄 **부분 무효 (2026-11-02, B8-25 ⓐ)** — 근거가 *"**학습** 클러스터"* 에 걸려 있었고(위 🔑), 클러스터가 **prod 평일 창**을
+서빙하게 되면서 그 창(`k8s/gitops/apps-external`)에선 전제가 사라졌다. 창 동안 오늘의 질문 채점이 `[STUB]` 로 나가는 것이
+발견돼(B8-25) **창 overlay 에서만** 스텁을 끄고 EKS 전용 키(SSM `ANTHROPIC_API_KEY`)를 ai-api 전용 Secret 으로 준다.
+<!-- verify: k8s/gitops/apps-external/externalsecret-ai-api-anthropic.yaml ~ ANTHROPIC_API_KEY -->
+
+| 사유 단위 판정 | |
+|---|---|
+| 학습 클러스터에 prod 자격증명을 넣지 않는다 | ✅ **유효** — base(`k8s/base/ai-api.yaml`)·`../apps` 는 스텁 그대로. 튜토리얼의 `[STUB]` 기대도 그대로 |
+| 기각한 대안 *"별도 예산 키"* | 🔄 **prod 창에 한해 채택** — 키는 이미 TASK-17 로 EKS 전용 별도 키가 있어 기각 사유(사용자 발급·주입 절차)가 없어졌다 |
+| 「더 나쁜 성질」(빈 키여도 부팅 성공 → 호출 시점 실패) | ✅ **유효 — 그래서 막았다**: on.sh 가 트래픽 전환 전에 `ai-api-anthropic` 키 이름·스텁 꺼짐을 검사, `eks-window.yml` 이 apply 전에 SSM 이름을 검사 |
+| 반전 체크리스트 *"base 플래그 **삭제**"* | ⚠️ **따르지 않음** — base 는 학습 경로라 지우면 키 없는 학습 클러스터가 「더 나쁜 성질」에 빠진다. overlay 의 `test`+`replace` 로 끈다 |
+| *"첫 단계는 AI 호출 비용 추정"* | ⚠️ **미수행** — 실질 상한은 오늘의 질문 전체 한도(evaluate 50 · explain 100/일, **Fly 와 공유 DB 카운터**)라 창 때문에 총량이 늘지 않는다. 16개 evaluator 전체 추정은 계획서 B8-25 미처리 목록 |
 
 📌 **부수 결정** (같은 자리에서 확정):
 - **스텁은 ai-api 소유**다 — `client-ai` 를 건드리지 않는다(롤백 불변식: *"`client-ai` 의존 제거 금지"*, 아래 #193).
