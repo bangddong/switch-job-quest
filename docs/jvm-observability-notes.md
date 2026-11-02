@@ -285,8 +285,9 @@ java VmRSS    386.7 MiB        ← 기록된 kill 수위 ~409 MiB 대비 22 MiB 
 - AI 카운터(`gen_ai_*`, `ai_*`)는 **첫 AI 호출 때 lazy 등록** — 재시작 후 호출이 없으면 **시리즈 자체가 소멸**한다
   (JVM 메트릭은 기동 시 즉시 재등록되어 남는다).
   🔑 **시리즈 부재 = "그 구간 AI 호출 0건" 의 증거로 쓸 수 있다.**
-- ⚠️ **OTLP resourceAttributes 에 instance 라벨이 없다** → 멀티 머신이 되면 시리즈 충돌.
-  1대라 현재는 무해하지만 **스케일아웃 시 필수 수정**이다.
+- ~~⚠️ **OTLP resourceAttributes 에 instance 라벨이 없다** → 멀티 머신이 되면 시리즈 충돌.~~
+  → ✅ **해소 (⑥ B8-18, 2026-11-01)**: `service.instance.id` = `FLY_MACHINE_ID` → `HOSTNAME` → `unknown`, 공통 태그 `platform`(fly/eks).
+  ⚠️ 추가 시점부터 `instance` 라벨이 붙은 **새 시계열**이 시작된다(기존 시계열은 끊김). 설계 `docs/superpowers/plans/2026-10-30-observability.md`.
 
 ## 9. Grafana 대시보드 = 신형 v2 스키마 + table 패널의 `format: "table"` (2026-07-02)
 

@@ -1,8 +1,16 @@
+# 🔴 import 우선순위 함정: 앱이 `spring.config.import` 로 이 파일을 가져오면 **이 파일의 값이 앱 application.yml 값을 이긴다**
+# (프로필 파일 application-prod.yml 은 이긴다). 그래서 앱마다 달라야 하는 값은 여기에 리터럴로 두지 않는다.
+#   - 서비스 이름: 각 앱 application.yml 이 `devquest.observability.service-name` 을 정의하고, 여기서는 그것을 가리킨다.
+#     (플레이스홀더는 전체 Environment 에서 풀리므로 앱 값이 반영된다. 미정의 시 devquest-api = 기존 시계열 연속.)
+#   - 노출 엔드포인트(`management.endpoints.web.exposure.include`): 여기에 두지 않는다. core-api 는 health,prometheus,
+#     daily-api 는 health 로 각 앱 application.yml 이 정한다. MonitoringYmlTest / daily-api ObservabilityWiringTest 가 고정한다.
 management:
-  endpoints:
-    web:
-      exposure:
-        include: health,prometheus
+  # Spring Boot 오토컨피그 OtlpMeterRegistry 는 모든 앱·프로필에서 끈다. 이 모듈의 수동 빈(OtlpMetricsConfig)만 Grafana 로
+  # 보낸다. 둘이 동시에 기동하면 429 rate limit 이 났고(이력), 꺼두지 않으면 로컬·테스트에서도 localhost:4318 로 push 를 시도한다.
+  otlp:
+    metrics:
+      export:
+        enabled: false
   metrics:
     distribution:
       percentiles-histogram:
@@ -13,8 +21,11 @@ management:
         http.server.requests: 0.5,0.95,0.99
         gen_ai.client.operation: 0.5,0.95,0.99
         ai.call.duration: 0.5,0.95,0.99
+    # 모든 시계열에 붙는 공통 태그. Grafana Cloud OTLP 는 service.name(job)·service.instance.id(instance) 외 리소스 속성을
+    # 라벨로 올리지 않으므로, 플랫폼(Fly/EKS) 구분은 리소스 속성이 아니라 이 공통 태그로 한다.
     tags:
-      application: devquest-api
+      application: ${devquest.observability.service-name:devquest-api}
+      platform: ${DEVQUEST_PLATFORM:unknown}
 
 spring:
   ai:

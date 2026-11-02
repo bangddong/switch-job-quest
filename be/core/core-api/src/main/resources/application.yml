@@ -48,6 +48,13 @@ server:
 # actuator health 전체(AND 조합, 예: mail)에는 엮이지 않도록 include를 db,ping으로 한정한다.
 # 이 정의는 프로필에 상관없이 동일해야 하므로(로컬/테스트에서도 같은 계약을 검증) 공통 설정에 둔다.
 management:
+  endpoints:
+    web:
+      exposure:
+        # /actuator/prometheus 는 core-api 만 노출한다(daily-api 는 health 뿐). 운영 레시피
+        # `fly ssh … wget localhost:8080/actuator/prometheus` 유지. IP 제한은 SecurityConfig 의 /actuator/** 절이 건다.
+        # monitoring.yml 에 두지 않고 여기에 둔 이유: import 한 monitoring.yml 값이 앱 값을 이기므로 앱별 값은 앱이 정의한다.
+        include: health,prometheus
   endpoint:
     health:
       group:
@@ -59,6 +66,11 @@ logging:
     com.devquest: DEBUG
 
 devquest:
+  observability:
+    # Grafana job 라벨(OTLP service.name)·Loki app 라벨·메트릭 공통 태그 application 의 값. 기존 시계열·대시보드 쿼리
+    # ({app="devquest-api"})를 잇기 위해 바꾸지 않는다. daily-api 는 devquest-daily-api 로 job 을 분리한다.
+    # 플랫폼(fly|eks)은 환경변수 DEVQUEST_PLATFORM 이 정한다(be/fly.toml, k8s 매니페스트).
+    service-name: devquest-api
   # B7-19 2단계 — Cloudflare Worker 와 원본이 공유하는 비밀. Worker 가 X-DevQuest-Edge-Auth 로 보내고,
   # 일치할 때만 X-DevQuest-Client-IP 를 익명 레이트 리밋의 클라이언트 IP 로 쓴다(ClientIpResolver).
   # 빈 기본값 = 신뢰 헤더 미사용(기존 Fly-Client-IP/XFF/remoteAddr 판정). 실제 값은 시크릿 저장소에서만 주입한다.

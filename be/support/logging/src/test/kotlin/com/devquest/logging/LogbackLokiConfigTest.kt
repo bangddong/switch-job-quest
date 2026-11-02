@@ -6,6 +6,12 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
+import com.github.loki4j.logback.Loki4jAppender
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.springframework.boot.logging.LoggingInitializationContext
 import org.springframework.boot.logging.logback.LogbackLoggingSystem
 import org.springframework.mock.env.MockEnvironment
@@ -36,12 +42,17 @@ class LogbackLokiConfigTest {
         loggerContext.reset()
     }
 
-    private fun initialize(activeProfile: String, lokiUrl: String?) {
+    private fun initialize(
+        activeProfile: String,
+        lokiUrl: String?,
+        extraProperties: Map<String, String> = emptyMap(),
+    ) {
         val environment = MockEnvironment()
         environment.setActiveProfiles(activeProfile)
         if (lokiUrl != null) {
             environment.setProperty("GRAFANA_LOKI_URL", lokiUrl)
         }
+        extraProperties.forEach { (key, value) -> environment.setProperty(key, value) }
 
         val loggingSystem = LogbackLoggingSystem(javaClass.classLoader)
         loggingSystem.beforeInitialize()
@@ -67,5 +78,60 @@ class LogbackLokiConfigTest {
         initialize(activeProfile = "prod", lokiUrl = "http://loki.example.com:3100/loki/api/v1/push")
 
         assertThat(rootAppenderNames()).containsExactlyInAnyOrder("STDOUT", "LOKI")
+    }
+
+    /**
+     * 가짜 Loki(로컬 HTTP 서버)를 띄우고 로그 한 줄을 흘려, 실제로 전송된 요청 본문의 **스트림 라벨**을 돌려준다.
+     * Loki4j 의 라벨 설정은 외부에서 읽을 방법이 없어서(필드 private) 전송 결과로 검증한다.
+     */
+    private fun captureLokiPush(extraProperties: Map<String, String>): String {  // 반환: 스트림 라벨 객체 내부 문자열
+        val bodies = CopyOnWriteArrayList<String>()
+        val received = CountDownLatch(1)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/loki/api/v1/push") { exchange ->
+            bodies.add(String(exchange.requestBody.readAllBytes(), Charsets.UTF_8))
+            exchange.sendResponseHeaders(204, -1)
+            exchange.close()
+            received.countDown()
+        }
+        server.start()
+        try {
+            initialize(
+                activeProfile = "prod",
+                lokiUrl = "http://127.0.0.1:${server.address.port}/loki/api/v1/push",
+                extraProperties = extraProperties,
+            )
+            LoggerFactory.getLogger("loki-label-probe").info("label probe")
+            // stop() 이 남은 배치를 비운다(drainOnStop 기본 true).
+            val loki = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME).getAppender("LOKI") as Loki4jAppender
+            loki.stop()
+            assertThat(received.await(10, TimeUnit.SECONDS)).describedAs("Loki push 수신").isTrue()
+            // {"streams":[{"stream":{<라벨>},"values":[...]}]} 에서 라벨 객체만 꺼낸다(메시지 본문의 "level" 과 섞이지 않게).
+            return bodies.first().substringAfter("\"stream\":{").substringBefore("}")
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun `Loki 라벨은 app 과 platform 과 level 이다 - daily-api 서비스 이름과 EKS 플랫폼`() {
+        val labels = captureLokiPush(
+            mapOf(
+                "devquest.observability.service-name" to "devquest-daily-api",
+                "DEVQUEST_PLATFORM" to "eks",
+            ),
+        )
+
+        assertThat(labels).contains("\"app\":\"devquest-daily-api\"")
+        assertThat(labels).contains("\"platform\":\"eks\"")
+        assertThat(labels).contains("\"level\":\"INFO\"")
+    }
+
+    @Test
+    fun `서비스 이름과 플랫폼이 없으면 기본값 devquest-api 와 unknown 이다 - 기존 대시보드 쿼리 유지`() {
+        val labels = captureLokiPush(emptyMap())
+
+        assertThat(labels).contains("\"app\":\"devquest-api\"")
+        assertThat(labels).contains("\"platform\":\"unknown\"")
     }
 }

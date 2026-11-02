@@ -32,6 +32,17 @@ storage:
 server:
   port: 8082
 
+# ⑥ B8-18 — Grafana Cloud 지표 송출(OtlpMetricsConfig). core-api application-prod.yml 과 같은 키 구조·같은 instance-id 리터럴이다.
+# instance-id 는 Grafana 스택 ID(Basic 인증 username)이고 시크릿이 아니다. 🔴 환경변수로 바꾸지 않는다 - 주입이 빠지면
+# GrafanaOtlpCredentialsCondition 이 false 가 돼 송출이 조용히 멈춘다. 인증 키는 환경변수 GRAFANA_API_KEY 한 곳에서만 온다.
+# Loki 로그는 GRAFANA_LOKI_URL / GRAFANA_LOKI_INSTANCE_ID / GRAFANA_API_KEY 환경변수를 logback-spring.xml 이 직접 읽는다.
+# 앱 구분은 devquest.observability.service-name(application.yml), 플랫폼 구분은 환경변수 DEVQUEST_PLATFORM(fly|eks)이다.
+# 오토컨피그 OTLP 차단(management.otlp.metrics.export.enabled=false)은 monitoring.yml 이 모든 프로필에 공통으로 건다.
+grafana:
+  otlp:
+    enabled: true
+    instance-id: "1680166"
+
 # ⚠️ 의도적으로 `devquest.flyway.migrate-on-startup`을 켜지 않는다(기본값 false 유지).
 # db-core의 FlywayConfig KDoc 참고 — daily-api는 db-core만 의존해 클래스패스에 core-api 소유 마이그레이션
 # 버전(V1~V6, V8, V9)이 없다. 클래스패스가 다른 앱이 마이그레이션(특히 repair)을 돌리면 그 버전들이

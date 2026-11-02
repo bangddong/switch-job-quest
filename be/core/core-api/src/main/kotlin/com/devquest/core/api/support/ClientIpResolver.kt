@@ -26,7 +26,8 @@ import java.security.MessageDigest
  *
  * 판정 경로는 Micrometer 카운터 `devquest.ratelimit.client_ip{path=trusted|legacy}` 로 센다(L-78). 비밀이 Worker·Fly 에
  * 제대로 배포됐는데도 `legacy` 만 늘면 신뢰 경로가 죽은 것이다 — fail-soft 라 장애로는 드러나지 않기 때문이다.
- * [MeterRegistry] 는 선택 주입이다(`ClientIpResolver("")` 직접 생성이 계속 가능). daily-api 는 지표 송출 경로가 없어 넣지 않는다.
+ * [MeterRegistry] 는 선택 주입이다(`ClientIpResolver("")` 직접 생성이 계속 가능). daily-api 의 같은 이름 클래스도 같은 이름·태그로
+ * 센다(⑥ B8-18, D-007 복제) - 플랫폼·앱 구분은 공통 태그(`platform`, `application`)가 한다.
  *
  * 원본(api/eks 호스트)은 Worker 를 안 거치고 직접 호출될 수 있어 클라이언트가 보내는 헤더는 신뢰하지 않는다 —
  * 비밀이 맞을 때만 신뢰 헤더를 읽는다. 비밀·헤더 값과 불일치 요청은 로그에 남기지 않는다(직접 호출 공격 시 로그 범람).

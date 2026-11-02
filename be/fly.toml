@@ -33,6 +33,9 @@ primary_region = 'nrt'
   # 마이그레이션은 배포 단계([deploy] release_command)에서 하고 앱 기동에서는 하지 않는다(D-016 1a).
   # application-prod.yml 의 기본값(true)은 EKS 용이라 바꾸지 않고 여기서만 끈다(Spring relaxed binding).
   DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP = "false"
+  # 관측(⑥ B8-18): 메트릭 공통 태그 platform 과 Loki 라벨 platform 의 값. Fly 와 EKS 가 같은 이미지·같은 Grafana 스택에
+  # 보내므로 이 값이 두 플랫폼 시계열·로그를 가른다(EKS 는 k8s 매니페스트에서 eks).
+  DEVQUEST_PLATFORM = "fly"
 
 # 민감 정보는 fly secrets set 으로 주입:
 #   fly secrets set ANTHROPIC_API_KEY=sk-...

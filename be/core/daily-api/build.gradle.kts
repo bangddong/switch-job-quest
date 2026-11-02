@@ -17,6 +17,10 @@ dependencies {
     implementation(project(":core:daily-core"))
     implementation(project(":clients:client-ai-http"))
     implementation(project(":storage:db-core"))
+    // ⑥ B8-18 — 지표(Grafana OTLP)·로그(Loki) 송출. core-api 와 같은 모듈을 쓰고, 앱 구분은 각 application.yml 의
+    // devquest.observability.service-name 이 한다. ai-api 는 ⑥ 범위가 아니다(스텁 모드 + 448Mi 한도).
+    implementation(project(":support:logging"))
+    implementation(project(":support:monitoring"))
 
     // client-ai-http·db-core가 전이 의존을 `implementation` 스코프로만 선언해 daily-api의
     // compileClasspath로 새지 않는다(함정 ④) — 아래를 직접 선언해야 한다.
