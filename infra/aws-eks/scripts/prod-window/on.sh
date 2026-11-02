@@ -151,6 +151,16 @@ KEYS=$(kubectl get secret core-api-runtime -n default -o json | jq -r '.data // 
 [ -n "$KEYS" ] || { wlog "🔴 core-api-runtime 이 비었다 — SSM /devquest/prod/app/ 에 키가 없거나 이름이 허용 목록과 다르다(TASK-17)"; exit 1; }
 wlog "앱 외부 키: $KEYS"
 wsummary "- 앱 외부 키(이름): $KEYS"
+# 📌D-016 B8-25 ⓐ — ai-api 실제 AI 키(이름만). 스텁이 꺼진 ai-api 는 키가 없어도 **정상 기동**하고 채점 시점에야 실패한다
+#   (D-008 「더 나쁜 성질」, `${ANTHROPIC_API_KEY:}` 빈 기본값). ExternalSecret 은 `find` 라 파라미터가 없으면 빈 Secret 이다.
+#   스모크(GET)는 AI 를 타지 않으므로 여기서 막지 않으면 창이 "성공"으로 열린 뒤 실사용자 채점만 실패한다.
+#   POST 스모크로 확인하지 않는 이유: 오늘의 질문 한도는 Fly 와 **공유**하는 DB 카운터다(evaluate 개인 1회) — 실사용자 몫을 쓴다.
+AI_KEYS=$(kubectl get secret ai-api-anthropic -n default -o json 2>/dev/null | jq -r '.data // {} | keys | join(",")' || true)
+[ "$AI_KEYS" = "ANTHROPIC_API_KEY" ] || { wlog "🔴 ai-api-anthropic 에 ANTHROPIC_API_KEY 가 없다(있는 키: '${AI_KEYS}') — SSM /devquest/prod/app/ANTHROPIC_API_KEY 확인"; exit 1; }
+AI_STUB=$(kubectl get deploy ai-api -n default -o json | jq -r '[.spec.template.spec.containers[0].env[]? | select(.name=="DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED") | .value] | join(",")')
+[ "$AI_STUB" = "false" ] || { wlog "🔴 ai-api 스텁이 꺼지지 않았다(DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED='${AI_STUB}') — apps-external ⑩ 패치 확인"; exit 1; }
+wlog "✅ ai-api 실제 AI: ANTHROPIC_API_KEY 있음 · 스텁 꺼짐"
+wsummary "- ✅ ai-api 실제 AI(키 이름 있음 · 스텁 꺼짐)"
 # 로그인 키(B7-16) — 없거나 FE 와 client id 가 다르면 창을 열지 않는다(C-4 1차: 파드·스모크는 통과, 로그인만 죽었다)
 #   ⚠️ 키 **부재**는 여기까지 오지 않는다 — external 모드에선 core-api-app 에 GITHUB_* 가 없어 기동이 먼저 실패하고 ⑤ 가
 #      15분 뒤 멈춘다(QA F-2). 그래서 부재는 워크플로 「로그인 키 사전 점검」(apply **전**, 과금 0)이 잡고, 여기는 값(FE 와 같은가 ·

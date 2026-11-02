@@ -58,6 +58,8 @@ spec:
             #    `secrets.tf` 가 *"학습 클러스터에 prod 크리덴셜을 넣지 않는다"* 를 원칙으로 못박았고,
             #    같은 파일이 더미 Grafana 키를 넣었다가 실제 스택에 인증 시도가 새어나간 사고를 기록해뒀다.
             #    → ANTHROPIC_API_KEY 를 주입하지 않고 스텁을 켠다. 응답에 `[STUB]` 표식이 붙는다.
+            #    🔄 prod 평일 창(`k8s/gitops/apps-external` ⑩)은 이 값을 false 로 바꾸고 키를 준다(B8-25 ⓐ, 2026-11-02).
+            #       ⚠️ 이 줄의 **위치(env 인덱스 1)·이름**을 바꾸면 그 패치의 `test` 가 렌더를 실패시킨다 — 의도된 안전장치.
             #
             #    ⚠️ 이 값이 없으면 부팅은 성공하고 **AI 호출 시점에 실패**한다
             #    (client-ai-anthropic.yml 의 `${ANTHROPIC_API_KEY:}` 가 빈 문자열 기본값이라
