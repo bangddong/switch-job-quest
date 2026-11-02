@@ -195,6 +195,10 @@ export FLY_API_TOKEN=$(cat ~/.fly/config.yml | grep access_token | awk '{print $
 - 부팅 직후 가용 마진 **~44MB뿐**(총 459MB). 사망 시점 HTTP/AI 요청은 **항상 0건**.
 - 대응 1차: `fly.toml` `swap_size_mb = 256`(#245 배포). creep 이 스왑도 채우면(+3.5일) 재발 가능
   → **업타임 4~5일째 `fly_instance_memory_swap_free` 관찰.**
+
+> 🔄 **2026-11-02 — swap 제거·768MB** (Fly 유휴 suspend 조건 *"No swap configured"*, D-016 계획서 「Fly 유휴 일시정지」).
+> 이 절과 아래 절의 swap 기반 관찰(`fly_instance_memory_swap_free`)·*"swap 이 유일한 방어선"*·kill 수위 409MiB 는 **512MB 시절 값**이다.
+> 768MB·swap 0 의 kill 수위와 발자국은 배포 뒤 재측정한다. suspend 는 메모리를 보존하므로 creep 은 **깨어 있는 시간** 기준으로 쌓인다.
 - 최후 수단: 1GB 스케일업 (~$5.7/월).
 
 ### 🔴 2026-09-18 재측정 — creep 은 **여전히 진행 중**이고 swap 이 막고 있다

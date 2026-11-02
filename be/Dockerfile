@@ -34,9 +34,10 @@ COPY --from=builder /app/app.jar app.jar
 
 EXPOSE 8080
 
-# 컨테이너 메모리 예산: 512MB (Fly.io shared-cpu-1x) — 근사치, 배포 후 실측 검증 필요
-# - 힙: MaxRAMPercentage=35.0 → 최대 약 179MB (RSS creep로 인한 OOM 재발 방지 위해 50%=256MB에서 축소)
-#   prod GC 로그 실측: 사용 42MB / 커밋 117MB, 상한 179MB 대비 여유 충분 — 힙은 무죄, 건드리지 말 것
+# 컨테이너 메모리 예산: Fly 768MB (shared-cpu-1x, 2026-11-02 유휴 suspend 전환으로 512MB→768MB) — 근사치, 배포 후 실측 검증 필요
+#   같은 이미지로 EKS 도 빌드된다. EKS 는 파드 limits 기준으로 RAM 퍼센트가 계산되므로 아래 JVM 플래그는 그대로 둔다.
+# - 힙: MaxRAMPercentage=35.0 → Fly 768MB 에서 상한 약 269MB, EKS 는 limits 기준 (RSS creep로 인한 OOM 재발 방지 위해 50%에서 축소)
+#   prod GC 로그 실측: 사용 42MB / 커밋 117MB, 512MB 시절 상한 179MB 대비 여유 충분 — 힙은 무죄, 건드리지 말 것
 # - Metaspace: 160MB 상한. 2026-07-14 128MB로 축소했다가 prod에서 Metaspace OOME로 다운(배포 34시간 후).
 #   GC 로그가 전부 "Pause Full (Metadata GC Threshold / Clear Soft References)"였고 42M->42M(회수 안 됨)로
 #   2초 풀 GC가 무한 반복되는 데스 스파이럴 끝에 OutOfMemoryError: Metaspace 발생. 160m으로 복구.

@@ -37,6 +37,8 @@ class SecurityConfig(
                     "/actuator/health/readiness",
                 ).permitAll()
                 it.requestMatchers("/api/v1/daily-question/**").permitAll()
+                // 09:00 일일 작업 트리거 — JWT 가 아니라 컨트롤러가 X-DevQuest-Job-Auth 로 인증한다(서버 비밀이 비면 503, fail-closed).
+                it.requestMatchers("/internal/jobs/**").permitAll()
                 // Fly 6PN(fdaa::/16) 절은 소비처 0건 + prod 403 실측으로 확인 후 삭제(2026-09-15).
                 it.requestMatchers("/actuator/**").access(
                     WebExpressionAuthorizationManager(

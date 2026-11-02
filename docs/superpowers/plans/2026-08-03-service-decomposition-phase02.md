@@ -427,7 +427,7 @@ C-4 의 *"메모리가 먼저 막는다"* 는 맞았고 이제 숫자가 붙었�
 무관하지만 coredns 실제 requests 등 다른 추정치를 확정해 준다. **다음 세션에 측정하되 블로커는 아니다.**
 
 
-> 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/api/scheduler/DailyMailScheduler.kt`, `be/core/core-domain/src/main/kotlin/com/devquest/core/domain/port/DailyQuestionGeneratorPort.kt`, `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
+> 📌 **D-005** · 상태 `🔄부분무효` · 영향 `be/core/daily-core/src/main/kotlin/com/devquest/core/domain/DailyQuestionContentService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyQuestionService.kt`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyJobService.kt`(11-02 DailyMailScheduler 에서 이동 — D-017), `be/core/core-domain/src/main/kotlin/com/devquest/core/domain/port/DailyQuestionGeneratorPort.kt`, `be/core/daily-core/build.gradle.kts`, `be/core/core-api/src/main/resources/application.yml`, `fe/src/features/tech-interview/components/DailyQuestionPage.tsx`, Stage A·B·C · 재판정 `아래 "기각한 선택지" G-2(b) 2026-08-18 부분 재채택`
 
 크론은 1개로 유지하고 메서드 안에서 게이트를 둘로 나눈다: ①콘텐츠 생성(유저 수·`MAIL_ENABLED`
 무관) ②메일 발송. 크론 자체를 쪼개지 않은 이유는 **실행 순서 경합** — 별도 크론이면 발송이 생성보다
@@ -526,7 +526,7 @@ Phase 0~1의 제약을 **그대로 승계**하고 아래를 추가한다.
 | 13 | **`ArchAiPortConventionTest`가 포트 목록을 하드코딩** — 이 에픽의 유일한 구조 가드 | `ArchAiPortConventionTest.kt:23-42,62-76` |
 | 15 | **`fe/vercel.json`이 `/api/(.*)` 전부를 core 호스트로 rewrite** | `fe/vercel.json:4-5` |
 | 16 | **`ai-api`에 Spring Security가 클래스패스에 없다** | `ai-api/build.gradle.kts` |
-| 17 | **`fly.toml`은 scale-to-zero가 아니다**(`min_machines_running=1`) | `be/fly.toml:26-28` |
+| 17 | ~~**`fly.toml`은 scale-to-zero가 아니다**(`min_machines_running=1`)~~ 🔄 2026-11-02 `min=0`·suspend(D-016 계획서 「Fly 유휴 일시정지」) | `be/fly.toml:26-28` |
 | 19 | **CodingQuest가 core와 daily에 동시 배정** — 가장 얽힌 코드가 정확히 그 자리에 | spec §서비스 경계 |
 
 ### Blindspot Pass · 2026-08-06 — 마이그레이션 소유 조사 중 발견

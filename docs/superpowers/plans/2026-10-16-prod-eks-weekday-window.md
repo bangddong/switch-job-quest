@@ -30,7 +30,7 @@
 | U-2 | 🔴 커짐(매일) | EKS 이미지는 `ecr-push.yml` **PR 트리거** 빌드, Fly 는 main. 마이그레이션 집합이 다른 두 이미지가 매일 `repair()` |
 | U-3 | 🔴 커짐 | 덤프 = prod 데이터인데 버킷이 **폐쇄 예정 계정과 같은 계정**(`0-bootstrap/s3-backups.tf:96-100`) → 탈출 경로가 못 된다 |
 | U-4 | 🟡 대상 변경 | 이제 t4g.micro(1GiB) `max_connections`. 풀 최대 10×3=30. `minimum-idle: 0` 은 Neon 전제 |
-| U-5 | 🟢 조건부 소멸 | 창(12~18)이 00:00·09:00 cron 을 안 품는다. **off 실패 시 09:00 중복 부활** — 🔄 **10-30 9번 재판정: 소멸 확정** — EKS 는 `MAIL_ENABLED=false`(메일은 Fly 만), 오늘 질문은 UNIQUE 로 중복 없음. 00:00 은 U-6 이후 날짜 키라 리셋이 아니다 |
+| U-5 | 🟢 조건부 소멸 | 창(12~18)이 00:00·09:00 cron 을 안 품는다. **off 실패 시 09:00 중복 부활** — 🔄 **10-30 9번 재판정: 소멸 확정** — EKS 는 `MAIL_ENABLED=false`(메일은 Fly 만), 오늘 질문은 UNIQUE 로 중복 없음. 00:00 은 U-6 이후 날짜 키라 리셋이 아니다 · 🔄 **11-02**: 09:00 은 앱 cron 이 아니라 Worker Cron → Fly `/internal/jobs/daily`(아래 「Fly 유휴 일시정지」) |
 | U-6 | 🔴 커짐(매일) | 전환 때마다 메모리 버킷이 갈라져 **1인 AI 한도 구조적 2배**. daily-api 에도 같은 store |
 | U-7 | 🔴 커짐 | 전환 주체가 CI, 하루 2회. **ALB DNS 이름이 매일 바뀐다.** Cloudflare 는 IaC 아님 → API 토큰 + 레코드 갱신 단계 신설 |
 | U-10 | 🔴 커짐 | 상시 DB 자격증명이 destroy 층(`2-cluster/secrets.tf`)·`recovery_window 0`. `db_mode` 에 `external` 값 없음 |
@@ -59,7 +59,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 | N-8 | 🟡 | 자격증명 진실 원천 2개(ESO↔Secrets Manager / 수동 `fly secrets`). 상시 자격증명은 `0-bootstrap` 으로(`postgres-password.tf` 선례) + 새 ExternalSecret + `db_mode=external` | `k8s/eso/` · `be/fly.toml:20-21` |
 | N-9 | 🔴 | `db-backup.sh`/`db-restore.sh` 는 `kubectl exec` 전용·호스트 인자 없음이 **설계 원칙** → EC2 DB 에 못 쓴다. 인스턴스 프로파일·버킷 쓰기 정책 0건. **선행 조건인 복구 리허설의 도구가 없다** | `db-backup.sh:28,47` · `db-restore.sh:53` · `s3-backups.tf` |
 | N-10 | 🔴 | `ecr-push.yml` 에 main push 트리거 없음, PR 이미지가 `latest` 도 push. lifecycle 10개 → **리뷰 전 이미지가 prod 에**, PR 이 몰리면 **어제 sha 만료 → 다음 날 on 잡 ImagePullBackOff** | `ecr-push.yml:100,109-110` · `0-bootstrap/variables.tf:130-134` |
-| N-11 | ✅ 10-30 9번 — **1대 유지**(지금 그대로, 아래 「9번 구현」) | ~~창 중 Fly 상태 미정.~~ **0대**: `be-cd` 가 창 중 Fly 를 되살려 Flyway 동시 실행 · 복구 실패 시 00:00/09:00 cron 이 **어디서도 안 돈다**(메일 누락). **1대**: suspend → 18시 복귀 첫 요청 지연 | `be/fly.toml:26-28` · `be-cd.yml:44-45` |
+| N-11 | ✅ 10-30 9번 — **1대 유지**(지금 그대로, 아래 「9번 구현」) → 🔄 **11-02 전제 변경: Fly `min_machines_running=0`·suspend**(아래 「Fly 유휴 일시정지」) — 창 중 Fly 는 트래픽이 없으면 잠들고, 09:00 메일은 Worker Cron 이 깨워서 보낸다 | ~~창 중 Fly 상태 미정.~~ **0대**: `be-cd` 가 창 중 Fly 를 되살려 Flyway 동시 실행 · 복구 실패 시 00:00/09:00 cron 이 **어디서도 안 돈다**(메일 누락). **1대**: suspend → 18시 복귀 첫 요청 지연 | `be/fly.toml:26-28` · `be-cd.yml:44-45` |
 | N-12 | 🟡 | 단가 $0.25/h 의 근거 t4g.medium ×2 는 **이 계정에서 launch 불가**(free-tier 타입만). 실제는 t4g.small ×3 ≈ **$0.218/h**(노드·ALB IPv4 포함). 그런데 **ALB LCU 최악 +$0.096/h 면 D-016 합계 ≈ $167 → 가용 초과** | `2-cluster/variables.tf:19-41` · `eks-cost-model.md:100` |
 | N-13 | ⚪ | GitHub cron 은 UTC·지연·누락 가능, 60일 무활동 시 자동 비활성. on/off/dispatch 공용 concurrency 그룹 필요(state lock 경합) | `prod-smoke-daily.yml:15-16` · `infra-deploy.yml:15-17` |
 | N-14 | ⚪ | 도메인 금지 validation 은 `learning_domain_name` 에만 → prod 인증서 새 변수는 막지 않는다. 실제 블로커는 Cloudflare 수동 검증 + 매일 바뀌는 ALB 호스트명 | `0-bootstrap/variables.tf:266-281` |
@@ -84,7 +84,7 @@ U-8·U-9·U-15·U-16·U-21 변화 없음.
 |---|---|
 | 예산 통제 | 창 길이가 사람 손에 달린다 → **on 잡이 스스로 거부하는 게이트** 필요: Budgets 누적이 상한(예: 가용 − 남은 날 × 하루 최소분)을 넘으면 on 실패. 이른 시각 on 은 경고 |
 | 끄기 cron | **매일**(주말 포함) 18:00 KST = `0 9 * * *` UTC. 꺼져 있으면 no-op — 주말 방치(N-4a)의 1차 백스톱 🔄 **2026-10-23: GitHub cron 이 아니라 EventBridge 예약 규칙**(같은 식 `cron(0 9 * * ? *)`)이 dispatch 한다 — GitHub cron 5h24m 지연 실측(B4-21) |
-| U-5 | ~~🔴 **조건부 소멸이 취소된다.** 09:00 전에 켜면 `DailyMailScheduler`(09:00)가 EKS 에서 돈다 → **창 중 Fly 0대(N-11)가 필수**가 된다~~ → 🔄 **10-30 9번: 반대다(B8-19).** EKS 는 메일이 꺼져 있어(8-A `MAIL_ENABLED=false`) 메일은 Fly 만 보낸다 — Fly 0대면 메일이 **어디서도** 안 간다. 그래서 **창 중 Fly 1대** |
+| U-5 | ~~🔴 **조건부 소멸이 취소된다.** 09:00 전에 켜면 `DailyMailScheduler`(09:00)가 EKS 에서 돈다 → **창 중 Fly 0대(N-11)가 필수**가 된다~~ → 🔄 **10-30 9번: 반대다(B8-19).** EKS 는 메일이 꺼져 있어(8-A `MAIL_ENABLED=false`) 메일은 Fly 만 보낸다 — Fly 0대면 메일이 **어디서도** 안 간다. 그래서 **창 중 Fly 1대** → 🔄 **11-02**: 메일은 머신 상주가 아니라 Worker Cron 이 Fly 를 깨워 보낸다(「Fly 유휴 일시정지」) |
 | 켜는 방법 | GitHub 웹·모바일 앱 Actions 화면의 *Run workflow*, 또는 세션에서 `gh workflow run`. 원격 환경에서도 된다(로컬 셸 불필요) |
 
 ## 순서표
@@ -490,7 +490,7 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | B7-19 재설계 (2026-10-28 — 사용자: *"데일리 기술면접만 로그인 없이 가볍게, 그 외엔 로그인"*) | ① **IP 는 원래 조작 가능하다**(VPN·IPv6·테더링) — 사용자 질문 *"이번 안도 조작 가능할 것 같은데"* 에 동의. 일반 관행 = 비용 큰 기능은 **로그인 + 사용자 ID 한도**, 그리고 **우회 불가한 전체 상한**(비용 차단기) ② 기술 면접 `/tech-interview/**` 로그인 필수(익명 체험 화면 삭제, 로그인 화면 버튼 → 오늘의 질문) · 한도 키 = JWT principal(익명 토큰·`"anonymousUser"` 제외) ③ 오늘의 질문 explain/evaluate 익명 유지 + **전체 일일 상한**(100·50) — 개인 → 전체 순서, 전체에서 막히면 개인 환불(한 명이 전체를 소진 못 하게) ④ daily-api 에도 자정 리셋(@EnableScheduling) | 🟡 남은 것 — **2단계(다음 PR)**: 익명 IP 판정. Blindspot 🔴: `api.quest`(Fly)도 공개 직결이라 XFF 첫 값으로 바꾸면 Fly 에서도 위조된다 → 지금 IP 판정 불변. 🟡 지금 Fly-Client-IP 는 V-3 이후 Worker(Cloudflare) IP 일 가능성 → 익명 사용자끼리 한도 공유(거짓 429). 해법 후보 = Worker↔원본 공유 비밀 헤더(신뢰할 때만 CF-Connecting-IP 사용). Spring `forward-headers-strategy` 미설정이라 EKS(K8s 감지)에서만 RemoteIpValve 가 켜진다 — 2단계에서 명시 고정 · 한도는 인스턴스 메모리라 실효 = 설정값 × (daily-api 파드 최대 4 + Fly) — U-6 · 기술 면접 2회/일 = 면접 1회(질문+평가) — 값 조정은 사용자 결정 · prod DB 에 `"anonymousUser"` 진행 기록 잔존 가능(익명 평가가 저장됐던 경로, 미확인) |
 | B7-19 2단계 구현 (2026-10-29 — 사용자 *"응 진행해줘"*: 공유 비밀 헤더 + jwt-rotate 방식 배포) | ① Worker 가 원본(Fly·EKS)에 `X-DevQuest-Edge-Auth: <비밀>` + `X-DevQuest-Client-IP: <CF-Connecting-IP>` — 클라이언트가 보낸 같은 이름은 항상 제거, 비밀·IP 중 하나라도 없으면 둘 다 안 보냄 ② BE(core-api·daily-api `ClientIpResolver`)는 비밀 일치(상수시간 비교)일 때만 그 IP, 그 외 전부 **기존 판정(fail-soft)**. 이유(Blindspot 🔴): 세 사본(Worker·Fly·EKS)을 원자적으로 못 바꾸고 Vercel 복귀 경로엔 헤더가 없다 — 불일치를 고정 `untrusted` 버킷으로 보내면 evaluate 용량 1 때문에 **익명 전원이 하루 동안 막힌다**. 비용은 전체 상한(#514)이 지킨다 ③ 정본 SSM `/devquest/prod/app/EDGE_AUTH_SECRET` · 배포 `edge-auth-rotate.yml`(Worker → SSM → Fly, confirm `FLY-RESTART`, 클러스터 켜짐·be-cd 중 거부) ④ EKS: 오늘의 질문은 **daily-api** 가 서빙(ingress) 하는데 core-api-runtime 을 안 받는다 → 전용 ExternalSecret `daily-api-edge`(`find` 한 이름 — 부재 시 빈 Secret, 창을 안 막음) | 🟡 이번에 안 한 것(Blindspot B7-19-2) — ⓐ ✅ 9번(10-30) `native` 로 두 앱 명시 — `server.forward-headers-strategy` 명시 고정: EKS 에서만 암묵 NATIVE. 새 경로는 remoteAddr 에 의존하지 않고, 바꾸면 actuator IP 절(`SecurityConfig` `hasIpAddress`)·`isSecure` 입력이 EKS 에서 바뀐다 → **⑤ 9번 창 정책 때 actuator 와 함께 판정** ⓑ 세 사본의 **값 일치**를 확인할 수단 없음(Worker secret 은 읽기 불가·digest 없음) — fail-soft 라 장애로 안 드러남. check 는 이름만. 필요해지면 Worker 에 해시 앞자리를 응답 헤더로 노출하는 안 검토 ⓒ EKS 사전 점검(`win_login_keys_verdict`)에 넣지 않음 — 없어도 창이 정상이라 창을 막을 이유가 없다 ⓓ 버킷이 인스턴스 메모리라 Fly 재시작(rotate 포함)마다 한도 초기화 · EKS 파드별 분리 → **④ U-6** ⓔ loadgen 은 클러스터 내부에서 헤더 없이 직접 친다 — 키가 하나라 의미 불변(주석만) ⓕ Cloudflare 배포 토큰의 Worker secret 쓰기 권한 🟡 — 첫 rotate 가 첫 실측(실패해도 fail-soft) |
 | U-6 구현 (2026-10-29 — 사용자 *"응 진행해줘"*: 아래 설계 그대로) | ① 카운터를 인스턴스 메모리(bucket4j) → **공유 DB 테이블 V14**(`public`, (종류, 키 해시, KST 날짜)별 횟수 — 차감은 `UPDATE … used < cap` → 0행이면 `INSERT … WHERE NOT EXISTS` → 경합(0행·PK 충돌)이면 UPDATE 1회 재시도(H2 가 `ON CONFLICT DO UPDATE` 미지원이라 양쪽에서 같은 SQL — QA F-1·F-3), 환불은 차감한 날짜 행에). 날짜가 키라 자정 리셋 불필요, 2일 지난 행은 멱등 DELETE 정리. 어댑터는 db-core 한 벌을 core-api·daily-api 가 공유(인터셉터만 D-007 복제) ② **DB 장애 시 = 기존 메모리 버킷으로 대체**(fail-closed 는 지금보다 나쁨 — Fly 는 DB 없이도 AI 경로가 돈다), 레이트 리밋 쿼리 타임아웃 ≈1초 ③ 키는 **SHA-256 해시** 저장(백업 30일에 IP 원문이 실리지 않게 + 길이 고정). ⚠️ IPv4 는 대입으로 역산 가능 — 완전 익명화 아님 ④ daily-api prod 풀 **10→3**(10 + 3×HPA 4 = 22 ≤ EKS 예산 25) ⑤ L-78: 판정 경로(trusted/legacy) 카운터는 core-api(Fly, Grafana)만 — daily-api 는 지표 송출 경로가 없다 ⑥ 머지는 **창이 꺼진 시간에만**(창 중 머지 = 그날 Fly DB 카운터 vs EKS 메모리로 갈라짐, B8-20) ⑦ 설계 결정 「daily=자체 스키마(rate-limit)」(spec 07-20) → 🔄부분무효 표시 | 🔜 **이번에 안 하는 Blindspot 발견**: ⓐ 신뢰 헤더가 없을 때 **개인** 키가 플랫폼마다 다르다(Fly=`Fly-Client-IP` 엣지 주소, EKS ALB=XFF 첫 값) — DB 를 공유해도 개인 카운터는 그 경로에선 갈라진다. 전역 상한은 키가 없어 공유됨. 지금은 rotate 로 비밀이 세 곳에 있어 정상 경로는 신뢰 IP 로 통일 — 남는 건 비밀 불일치·Vercel 복귀 경로뿐 ⓑ EKS(daily-api)에서 판정 경로 지표를 볼 곳이 없다 → B8-18 관측 ⓒ U-4 의 "10×3=30" 계산이 daily-api HPA(max 4)를 빠뜨렸다 — 이번 ④로 예산 안. core-api EKS 풀(10)·`connection-timeout`·pgjdbc `socketTimeout=0` 전체 정리는 B7-21 커넥션 예산에서 ⓓ `k8s/hpa/daily-api-hpa.yaml` 주석("daily-api 에는 @Scheduled 가 없다")은 이미 사실과 다름 — 이번에 정리 스케줄러를 두면 함께 고친다 ⓔ ~~`infra/aws-eks/scripts/prod-db/README.md` 의 "00:00(레이트 리밋 초기화)" 는 사라지는 이벤트~~ → **정정: 사라지지 않는다** — 자정 스케줄러가 남아 오래된 행 DELETE·대체 버킷 clear 를 한다. 문구 그대로 유효(이미 끝난 7-B 절차이기도 함) ⓕ XFF 위조로 키를 바꿔 공유 DB 에 쓰기 부하 — 해시로 길이는 고정되지만 요청당 쓰기는 남는다. 전역 상한 소진 시 읽기만으로 거절하는 최적화는 부하 실측 후 |
-| 9번 구현 (2026-10-30 — 사용자 *"승인"*: 아래 ①②③) | ① **창 중 Fly 1대 유지** — 코드 변경 없음. eks-window 는 Fly 를 건드리지 않고 `min_machines_running=1` 이라 그 1대는 suspend 대상이 아니다(🔴). 메일(09:00)은 Fly 만(EKS `MAIL_ENABLED=false`), 오늘 질문은 양쪽이 만들어도 `UNIQUE(question_date, mail_type)` + 충돌 시 재조회로 중복 없음(🔴). 0대 기각 = 메일이 어디서도 안 가고 eks-window 에 Fly 쓰기 단계·토큰이 새로 필요 ② **be 배포 ↔ 창 켜기 상호 거부**(B8-20) — `prod-window/deploy-gate.sh`: be-cd 는 테스트 뒤·배포 직전에 *eks-window on 실행·대기* 또는 *클러스터 존재* 면 **실패**(skip 이면 pick-image-tag 가 미배포 sha 를 고른다), 읽기 전용 OIDC 역할로 `describe-cluster` 만. eks-window on 은 맨 앞(과금 전)에 be-cd 실행·대기면 거부. on 실행 식별 = `run-name` `EKS Window / on`(watchdog 은 안 셈 — 오탐). 거부된 배포는 창 뒤 `workflow_dispatch`(main 만). 옛 run 재실행 역행 배포는 be/ 트리 비교로 실패 ③ **`server.forward-headers-strategy: native`** 두 앱 명시 — EKS 불변, Fly 만 바뀜(isSecure·HSTS·remoteAddr=XFF 기준). `framework` 기각(XFF 맨 왼쪽 신뢰 → api.quest 직결 `X-Forwarded-For: 127.0.0.1` 로 actuator IP 절 통과). OAuth redirect_uri·쿠키는 서버가 안 만든다(영향 0). 🔴 **머지·배포 직후 실측(QA F-2)** — Fly 프록시가 클라이언트 XFF 에 실제 IP 를 덧붙이는지 ⚪ 미확인이라: ⓘ `curl -H 'X-Forwarded-For: 127.0.0.1' https://api.quest.dhbang.co.kr/actuator/prometheus` → **403** 이어야 한다(200 = 위조로 actuator IP 절 통과) ⓘⓘ 같은 호스트 응답에 `Strict-Transport-Security` 가 붙어야 한다(안 붙으면 Fly 프록시가 신뢰 대역 밖이라 NATIVE 가 조용히 무효). **실패 시 롤백** = 두 `application.yml` 의 `forward-headers-strategy` 한 줄을 지운 `fix/` PR → be-cd(창 꺼진 시간). 노출 제거(`prometheus` exposure)는 공유 monitoring 모듈이라 ⑥ 관측 범위 — 여기선 안 한다. HSTS `includeSubDomains`(F-4)는 `*.quest.dhbang.co.kr`(api·eks)가 전부 HTTPS 이고 EKS 가 이미 같은 헤더를 내 왔으므로 그대로 | 🔜 **이번에 안 하는 Blindspot 발견**: ⓐ 뱅크가 소진된 날 09:00 을 창이 품으면 Fly·EKS 가 AI 생성을 한 번씩(한쪽 버림) — 경고문만. 9시 이전 on 이 드물어 비용 미미 ⓑ Vercel(`*.vercel.app`) 경로는 창 중에도 Fly 직행·신뢰 헤더 없음 → V-4 Vercel 삭제로 해소 ⓒ 게이트로 be 머지가 10건 넘게 밀리면 ECR lifecycle(10)로 Fly 커밋 이미지가 만료될 수 있다 — be/ 트리 같은 태그 대체도 실패하면 창이 안 열린다(⚪, 하루 머지 수상 낮음) ⓓ 두 워크플로가 **같은 순간** 서로의 게이트를 통과하는 경합은 남는다(초 단위) — concurrency 그룹 공유는 대기 run 을 조용히 취소해서(B8-15) 안 썼다 ⓔ actuator IP 절의 소비처 0(지표는 OTLP push, ingress 미노출) — 절 정리는 B8-18 관측과 함께 ⓕ `README.md` 배포 표의 `auto_stop=stop · min=0` 서술 정정(이번 PR) · `prod-db/README.md` 의 수동 `gh workflow disable be-cd.yml` 선례는 7-B 절차 기록이라 그대로 ⓖ 손 `fly deploy` 는 게이트·pick-image-tag 전제를 둘 다 우회한다 — 금지 규칙 유지(pick-image-tag 머리말) |
+| 9번 구현 (2026-10-30 — 사용자 *"승인"*: 아래 ①②③) | ① **창 중 Fly 1대 유지** — 코드 변경 없음. eks-window 는 Fly 를 건드리지 않고 ~~`min_machines_running=1` 이라 그 1대는 suspend 대상이 아니다(🔴)~~ 🔄 **11-02 무효 — `min=0`·suspend**(「Fly 유휴 일시정지」). 메일은 Worker Cron 이 Fly 를 깨워 보낸다. 메일(09:00)은 Fly 만(EKS `MAIL_ENABLED=false`), 오늘 질문은 양쪽이 만들어도 `UNIQUE(question_date, mail_type)` + 충돌 시 재조회로 중복 없음(🔴). 0대 기각 = 메일이 어디서도 안 가고 eks-window 에 Fly 쓰기 단계·토큰이 새로 필요 ② **be 배포 ↔ 창 켜기 상호 거부**(B8-20) — `prod-window/deploy-gate.sh`: be-cd 는 테스트 뒤·배포 직전에 *eks-window on 실행·대기* 또는 *클러스터 존재* 면 **실패**(skip 이면 pick-image-tag 가 미배포 sha 를 고른다), 읽기 전용 OIDC 역할로 `describe-cluster` 만. eks-window on 은 맨 앞(과금 전)에 be-cd 실행·대기면 거부. on 실행 식별 = `run-name` `EKS Window / on`(watchdog 은 안 셈 — 오탐). 거부된 배포는 창 뒤 `workflow_dispatch`(main 만). 옛 run 재실행 역행 배포는 be/ 트리 비교로 실패 ③ **`server.forward-headers-strategy: native`** 두 앱 명시 — EKS 불변, Fly 만 바뀜(isSecure·HSTS·remoteAddr=XFF 기준). `framework` 기각(XFF 맨 왼쪽 신뢰 → api.quest 직결 `X-Forwarded-For: 127.0.0.1` 로 actuator IP 절 통과). OAuth redirect_uri·쿠키는 서버가 안 만든다(영향 0). 🔴 **머지·배포 직후 실측(QA F-2)** — Fly 프록시가 클라이언트 XFF 에 실제 IP 를 덧붙이는지 ⚪ 미확인이라: ⓘ `curl -H 'X-Forwarded-For: 127.0.0.1' https://api.quest.dhbang.co.kr/actuator/prometheus` → **403** 이어야 한다(200 = 위조로 actuator IP 절 통과) ⓘⓘ 같은 호스트 응답에 `Strict-Transport-Security` 가 붙어야 한다(안 붙으면 Fly 프록시가 신뢰 대역 밖이라 NATIVE 가 조용히 무효). **실패 시 롤백** = 두 `application.yml` 의 `forward-headers-strategy` 한 줄을 지운 `fix/` PR → be-cd(창 꺼진 시간). 노출 제거(`prometheus` exposure)는 공유 monitoring 모듈이라 ⑥ 관측 범위 — 여기선 안 한다. HSTS `includeSubDomains`(F-4)는 `*.quest.dhbang.co.kr`(api·eks)가 전부 HTTPS 이고 EKS 가 이미 같은 헤더를 내 왔으므로 그대로 | 🔜 **이번에 안 하는 Blindspot 발견**: ⓐ 뱅크가 소진된 날 09:00 을 창이 품으면 Fly·EKS 가 AI 생성을 한 번씩(한쪽 버림) — 경고문만. 9시 이전 on 이 드물어 비용 미미 ⓑ Vercel(`*.vercel.app`) 경로는 창 중에도 Fly 직행·신뢰 헤더 없음 → V-4 Vercel 삭제로 해소 ⓒ 게이트로 be 머지가 10건 넘게 밀리면 ECR lifecycle(10)로 Fly 커밋 이미지가 만료될 수 있다 — be/ 트리 같은 태그 대체도 실패하면 창이 안 열린다(⚪, 하루 머지 수상 낮음) ⓓ 두 워크플로가 **같은 순간** 서로의 게이트를 통과하는 경합은 남는다(초 단위) — concurrency 그룹 공유는 대기 run 을 조용히 취소해서(B8-15) 안 썼다 ⓔ actuator IP 절의 소비처 0(지표는 OTLP push, ingress 미노출) — 절 정리는 B8-18 관측과 함께 ⓕ `README.md` 배포 표의 `auto_stop=stop · min=0` 서술 정정(이번 PR) · `prod-db/README.md` 의 수동 `gh workflow disable be-cd.yml` 선례는 7-B 절차 기록이라 그대로 ⓖ 손 `fly deploy` 는 게이트·pick-image-tag 전제를 둘 다 우회한다 — 금지 규칙 유지(pick-image-tag 머리말) |
 | 🔴 **C-2 차단 — 엣지 인증서가 `api.quest` 를 덮지 않는다** (2026-10-26) | Universal SSL 인증서 SAN = `dhbang.co.kr`, `*.dhbang.co.kr` **뿐**(`openssl s_client` 실측). 와일드카드는 **한 단계**만 덮는다 → `api.quest.dhbang.co.kr`(두 단계)은 범위 밖. 프록시를 켜면 Cloudflare 엣지가 줄 인증서가 없어 **TLS 핸드셰이크 실패 = prod API 장애**. 살아 있는 증거가 바로 ④ — 두 단계 프록시 레코드라 `SSL alert number 40`. 지금 api.quest 가 되는 건 DNS only 라 **Fly 가 인증서를 주기 때문**이다. 🔑 C-0 의 SSL 모드 실측은 *엣지↔원본* 구간만 봤고 *브라우저↔엣지* 구간을 안 봤다 | 대안(⚪ 미결): ⓐ API 를 한 단계 호스트로(예: `quest-api.dhbang.co.kr`) — Worker `API_ORIGIN`·Fly 인증서·CORS·ACM 대상이 같이 바뀜 ⓑ 전환을 DNS 가 아니라 **Worker 의 `API_ORIGIN`** 에서(브라우저는 이미 `quest/api/*` → Worker 만 탄다) — api.quest 는 DNS only 그대로 ⓒ Advanced Certificate Manager($10/월) ⓓ 방식 ① 복귀. ✅ **2026-10-27 사용자: ⓑ** — 위 「8-C 단계 (2026-10-27, 방식 ⓑ)」 |
 
 ### 8번 Blindspot (2026-10-21, Explore 읽기 전용) — 목적지
@@ -515,12 +515,58 @@ Fly 시크릿 이름         ANTHROPIC_API_KEY · JUDGE0_API_KEY · RESEND_API_K
 | B8-16 | 🟡 | 리퍼 로직 그대로 재사용 금지(kubeconfig 실패=없음, Ingress 실패에도 destroy), LBC SG 누적 | ✅ 8-B 코드 — AWS LB 0 판정이 최종, 남으면 destroy 안 함 · LBC SG 정리·판정 |
 | B8-17 | 🟡 | ALB 매일 삭제로 LCU 실측 소실 | ✅ 8-B 코드 — off 가 LB 이름·생성 시각·ConsumedLCUs 합을 Summary 에 |
 | B8-18 | 🟡 | 창 관측 공백(GRAFANA 키 없음, service.name 충돌) | TASK-17(키) + 10 직전(리소스 속성) → 설계 확정 10-30(A안·Grafana 유지): `2026-10-30-observability.md` |
-| B8-19 | 🟡 | U-5 전제가 거꾸로(EKS 는 메일 꺼짐) | ✅ 9번(10-30) — 창 중 Fly 1대 유지, 메일 Fly 전용 확정 |
+| B8-19 | 🟡 | U-5 전제가 거꾸로(EKS 는 메일 꺼짐) | ✅ 9번(10-30) — 창 중 Fly 1대 유지, 메일 Fly 전용 확정 · 🔄 11-02 메일 경로 = Worker Cron → Fly(「Fly 유휴 일시정지」) |
 | B8-20 | 🟡 | 창 중 be 머지가 EKS 아래 스키마를 바꿈 | ✅ 9번(10-30) — be-cd 창 게이트 + eks-window on 의 be-cd 게이트(`deploy-gate.sh`) |
 | B8-21 | 🟡 | 로컬 apply 가 창 중 prod 클러스터를 기본값으로 덮음 | ✅ 기본값 문제는 8-A `prod.auto.tfvars.json` 이 닫았다. 로컬 도구의 임대 읽기는 「8-B 에서 미룬 것」 |
 | B8-22 | ⚪ | Budgets 게이트 값·이름·지연 | ✅ 8-B 코드 — Budgets 대신 `aws freetier`(무료·잔여 크레딧 직접). 지연은 🟡 하루 단위로 보여 단가를 보수적으로 |
 | B8-23 | 🟡 | D-016 영향 목록 누락 | 8-A |
 | B8-24 | ⚪ | 1b 폐기 후보 | 8-A(폐기 판정) |
+
+## Fly 유휴 일시정지 (2026-11-02)
+
+> 📌 **D-017** · 상태 `🚧진행중` · 영향 `be/fly.toml`, `fe/wrangler.jsonc`, `fe/worker/jobs.ts`, `be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyJobService.kt`, `.github/workflows/job-secret-rotate.yml`, 9번 ①·N-11·U-5·B8-19 · 재판정 —
+
+**계기 — Fly 가 10월부터 nrt 단가를 올렸다** (청구서 8·9·10월 단가 대조, 🔴):
+
+| | 8월 | 10월 |
+|---|---|---|
+| CPU 초 | 2,678,271 | 2,678,405 ← 사용량 동일 |
+| CPU 단가 /s | $0.00000098077 | **$0.00000110696 (+13%)** |
+| RAM 단가 /GB·s | $0.00000252385 | **$0.00000302862 (+20%)** |
+| 합계 | $4.36 → 면제 | **$5.07 → 청구** (머신 $4.99 + nrt 송신 2.02GB $0.08) |
+
+31일 달은 머신 요금만 $4.99 라 면제선($5)까지 1센트 — 상시 1대로는 연 7회 청구가 구조적이다.
+⚠️ 처음엔 10-21 DB 전환(WireGuard 송신)을 의심했다 — **틀렸다.** nrt 송신은 9월(1.80GB)에 이미 늘었고 금액은 센트 단위다.
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 정지 방식 | `min_machines_running = 0` · suspend · **768MB · swap 제거** | 사용자. suspend 조건 *"No swap configured"*(Fly 문서). 512MB 에서 swap 만 빼면 OOM — 09-24 java 발자국 428MiB > kill 수위 409 |
+| 768MB 비용 | 상시 켜짐 $7.02/31일 · **켜진 비율 ≈71% 미만이면 지금($5.07)보다 쌈 · ≈69% 미만이면 면제선($5) 아래** | 송신 $0.08·정지 중 rootfs($0.15/GB/월, 이미지 ≈0.3GB 가정 ⚪) 포함. 10월 청구서 단가로 계산(공식 표 iad 의 ≈1.31배). 켜진 비율 미실측(🟡) |
+| 09:00 메일 | Cloudflare Worker Cron(`0 0 * * *` UTC) → `API_ORIGIN`(api.quest = Fly 직결) `POST /internal/jobs/daily` | 사용자. 무료, AWS 계정 수명과 무관 |
+| 인증 | **신규** 비밀 `DEVQUEST_JOB_SECRET`, fail-closed | edge 비밀 재사용 기각 — Worker 가 `/api/*` 모든 요청에 붙이므로 누구나 트리거 가능(Blindspot 🔴) |
+| 앱 `@Scheduled` 메일 | **제거** | resume 순간 밀린 cron 과 겹쳐 중복 발송(메일 로그 UNIQUE 없음) |
+| 00:00 정리 | 그대로 + 일일 작업에서 `deleteExpired()` | 밤에 Fly 가 자면 00:00 cron 이 안 돈다 |
+
+<!-- verify: be/fly.toml ~ min_machines_running = 0 -->
+<!-- verify: fe/wrangler.jsonc ~ "0 0 \* \* \*" -->
+<!-- verify: be/core/core-api/src/main/kotlin/com/devquest/core/domain/DailyJobService.kt -->
+<!-- verify: .github/workflows/job-secret-rotate.yml ~ DEVQUEST_JOB_SECRET -->
+
+**배포 순서** 🔴: 머지(**09:00 이후**) → be-cd·fe-cd 성공 → **TASK-24** `job-secret-rotate` rotate → 다음 09:00 메일 확인.
+rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed — Worker 는 401/503 disabled 에서 멈춘다).
+
+### 이번에 안 하는 것 (Blindspot 21건 중)
+
+| 항목 | 왜 지금 안 하나 |
+|---|---|
+| Worker Cron 실패 알림 | 알림 채널이 없다(로그는 `console.error` 뿐). 첫 주는 Worker 로그·메일 수신으로 확인. 채널을 정하는 것부터 별도 결정 |
+| 콜드 스타트 2~3분 503 (stop 상태 — 배포·시크릿 교체 직후) | 기동 최적화(lazy-init 등) 0건이고 현상 자체가 미재측정. 배포 후 첫 측정 → CONTEXT 백로그 「Spring 시작 시간 최적화」 |
+| 768MB·swap 0 의 OOM 수위 재측정 | 409MiB 는 512MB VM 값. 배포 뒤라야 잴 수 있다(`fly ssh` + `/proc/meminfo`). suspend 는 메모리를 보존해 creep 이 **깨어 있는 시간** 기준으로 쌓인다 |
+| suspend 복원 뒤 Spring 스케줄러·시계(⚪) | Firecracker 복원 시 monotonic 시계 동작 미확인. `scheduledTime` 5분 초과 차이를 경고 로그로 관측만 |
+| be-cd 배포 후 스모크 없음 | min=0 에서 "배포 성공 = 새 이미지 기동" 이 약해진다(⚪ Fly 동작 미확인). TASK-24 의 401 프로브가 첫 확인을 겸한다 |
+| `prod-smoke-daily` 콜드 부팅 오탐 | `--max-time 30 --retry 2` 가 2~3분 부팅을 못 견딜 수 있다. 실제 오탐이 나면 조정 |
+| 동기 작업 최장 시간 | AI 폴백일 질문 생성 ≈90초 + SMTP 직렬. Fly 프록시 응답 타임아웃 ⚪. Worker 는 시도당 180초·전체 12분 |
+| 켜진 비율 실측 | 첫 달 Fly 청구서 CPU 초 ÷ 2,678,400 으로 나온다. ≈69% 넘으면 되돌림 검토 |
 
 ## 이번 범위에서 하지 않는 것
 
