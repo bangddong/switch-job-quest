@@ -136,10 +136,10 @@ jobs:
           M=$(TZ=Asia/Seoul date +%-M)
           # QA F-3 — on 이 끝나기까지 ~20분: 17:35 이후면 대기 중이던 18:00 off 가 켜자마자 닫는다
           if [ "$H" -eq 17 ] && [ "$M" -ge 35 ]; then echo "::warning::17:35 이후 on — 켜지는 즈음 18:00 off(EventBridge)가 바로 끈다. 18:00 이후에 다시 켜는 편이 낫다"; fi
-          # 9번(10-30) 판정 — 09:00 을 가로질러도 **안전**: 창 중에도 Fly 1대가 돌며 메일은 Fly 만 보낸다(EKS MAIL_ENABLED=false).
-          #   EKS core-api 도 09:00 에 오늘 질문을 만들지만 UNIQUE(question_date, mail_type) + 충돌 시 기존 행 재조회라 중복이 없다.
-          #   남는 비용: 뱅크가 소진된 날이면 AI 생성이 양쪽에서 한 번씩(한쪽 결과는 버려진다) — 그래서 경고만 남긴다.
-          [ "$H" -ge 9 ] || echo "::warning::09:00 KST 이전 on — 09:00 오늘 질문 생성이 Fly·EKS 양쪽에서 돈다(중복 행 없음 · 뱅크 소진일이면 AI 비용 2회)"
+          # 9번(10-30) 판정 — 09:00 을 가로질러도 **안전**: 메일은 Fly 만 보낸다(EKS MAIL_ENABLED=false). 11-02 부터 Fly 는 유휴 시 잠들고 09:00 에 Worker Cron 이 깨운다(D-017).
+          #   11-02 앱 @Scheduled 09:00 제거 — EKS core-api 는 09:00 에 아무것도 안 한다(일일 작업은 Fly 의 /internal/jobs/daily 뿐, EKS 는 비밀이 없어 503).
+          #   창 중 읽기 lazy 생성은 양쪽에서 나도 UNIQUE(question_date, mail_type) + 충돌 시 재조회라 중복이 없다. 그래서 알림만 남긴다.
+          [ "$H" -ge 9 ] || echo "::notice::09:00 KST 이전 on — 09:00 일일 작업(메일·질문 생성)은 Worker Cron 이 Fly 에서 돌린다(EKS 무관)"
 
       # 📌D-016 9번 · B8-20 — be-cd 가 돌거나 대기 중이면 켜지 않는다(과금 **전**). 그 배포의 release_command 가 apply 중에
       #   공유 DB 를 마이그레이션하면, 아래에서 고를 이미지(= 직전 성공 be-cd)가 스키마보다 뒤처진다.

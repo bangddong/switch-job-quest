@@ -24,7 +24,7 @@
 ## 배포 파일 위치
 
 - `be/Dockerfile` — 멀티스테이지 빌드 (eclipse-temurin:21-jre-alpine)
-- `be/fly.toml` — Fly.io 설정 (Tokyo 리전, 512MB)
+- `be/fly.toml` — Fly.io 설정 (Tokyo 리전, 768MB · swap 없음 · 유휴 시 suspend `min_machines_running = 0` — 2026-11-02, D-017)
 - `fe/vercel.json` — API 프록시 (`/api/*` → BE) + SPA 라우팅
 
 ## BE 배포 명령

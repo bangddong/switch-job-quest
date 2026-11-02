@@ -58,9 +58,9 @@
   🔑 원장이 *"CONTEXT 소유"* 로 지정한 항목이다(`review-ledger.md` 「이미 다른 곳에」) — **여기서 지우면 고아가 된다**
 - **`UserResumeAdapter` read-then-write** (Phase 3a MEDIUM) — `findByUserId` → 분기 → `save` 라
   동시 요청에 경합. `ON CONFLICT` 아님. 2026-09-18 코드 재확인, 원장·계획서 0건
-- **Spring 시작 시간 최적화** — cold start 2~3분에 사용자 503.
-  ⚠️ `min_machines_running = 1` 은 **이미 적용됨**(`be/fly.toml:28`). 남은 것은
-  `spring.main.lazy-initialization`(0건) · PgBouncer. 현상 자체는 그 이후 **재측정된 적이 없다**
+- **Spring 시작 시간 최적화** — cold start 2~3분에 사용자 503. 🔴 **11-02 부터 다시 유효**: Fly 가
+  `min_machines_running = 0`·suspend 로 바뀌었다(비용 — D-016 계획서 「Fly 유휴 일시정지」, D-017). suspend 복원은 빠르지만
+  **stop 상태(배포·시크릿 교체 직후)면 콜드 부팅**. 남은 대책 `spring.main.lazy-initialization`(0건) · PgBouncer. 현상은 **재측정된 적이 없다** — 배포 후 첫 측정
 
 ### 🕒 이연 트랙 — AWS 신규 프리티어 계정 생성 시 k3s (2026-09-29, 📌D-015)
 

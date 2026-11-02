@@ -131,7 +131,7 @@ core-enum ←── core-domain ←── core-api (bootJar)
 | Backend | Fly.io (Tokyo, 512MB) | `api.quest.dhbang.co.kr` |
 | Database | **AWS EC2 자가 운영 PostgreSQL 17**(t4g.micro, 서울) — Fly ↔ WireGuard(6PN 피어) · 6시간 백업 · Neon 콜드 대기 | - |
 
-- BE: 머신 1대 상시 유지 (`min_machines_running = 1`, 그 이상은 `auto_stop_machines = suspend`) — 평일 EKS 창 중에도 Fly 가 돌며 09:00 메일을 보낸다
+- BE: 유휴 시 일시정지 (`min_machines_running = 0`, `auto_stop_machines = suspend`, 768MB·swap 없음 — 2026-11-02). 09:00 메일은 Cloudflare Worker Cron 이 Fly 를 깨워 `POST /internal/jobs/daily` 로 보낸다
 - FE → BE: `/api/*` 경로는 Vercel 프록시로 BE에 포워딩 (`vercel.json`)
 - CI/CD: PR open → BE/FE CI (빌드+테스트), main 머지 → 자동 배포
 

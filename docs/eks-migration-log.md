@@ -6098,3 +6098,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [결정] 거부된 배포 = 창 뒤 `workflow_dispatch`(main 만). 옛 run "Re-run" 은 be/ 트리가 main 과 다르면 실패 — 역행 배포 방지(Blindspot D).
 - [메모] 회귀 `window-test.sh` 80 → 94(게이트 14 — 차단·오탐(watchdog)·조회 오류 rc 2). **실패 주입 4종 전부 검출**: on 필터 제거 1 · 클러스터 판정 제거 1 · 조회 오류→0 2 · window-on 판정 제거 2. actionlint(docker `rhysd/actionlint`) 두 워크플로 무결.
 - [결정] `server.forward-headers-strategy: native` 두 앱 명시(B7-19-2 ⓐ). Boot 4.0.3 기본 internal-proxies 가 10/8·172.16/12·fc00::/7·127/8 포함. EKS 동작 불변(이미 K8s 감지 NATIVE), Fly 만 isSecure·HSTS·remoteAddr 변화. 기각: `framework`(ForwardedHeaderFilter 는 신뢰 판정 없이 XFF 맨 왼쪽 → api.quest 직결 `X-Forwarded-For: 127.0.0.1` 로 actuator IP 절 통과) · `none`(EKS 동작 변경).
+
+## 2026-11-02 — Fly 단가 인상 → 유휴 일시정지 (D-017)
+
+- `[비용]` Fly 10월 청구 **$5.07**(면제선 $5 초과, 4ZP9BLTD-0008). 8·9·10월 청구서 단가 대조: CPU `$0.00000098077/s → $0.00000110696/s`(+13%), 추가 RAM `$0.00000252385 → $0.00000302862 /GB·s`(+20%). CPU 초 8월 2,678,271 · 10월 2,678,405 — **사용량 동일, 원인은 단가**. 10월 사용량에 8월 단가 = $4.40(면제였을 값). nrt 송신 0.90 → 1.80 → 2.02GB($0.04/$0.07/$0.08).
+- `[메모]` 처음 의심(10-21 DB 전환의 WireGuard 송신)은 **틀렸다** — 송신은 9월에 이미 늘었다. 청구서 없이 레포 기록만으로 좁힌 추정이 빗나간 사례.
+- `[결정]` 사용자: **유휴 시 일시정지**. Fly 문서 suspend 조건 *"No swap configured"* → 512MB 에서 swap 만 빼면 OOM(09-24 java 발자국 428MiB > kill 409) → **768MB · swap 제거 · `min_machines_running = 0`**. 768MB 상시 = $7.02/31일, 켜진 비율 72% 미만이면 이득(미실측). 기각: 512MB+swap+stop(콜드 부팅 2~3분) · 상시 유지(연 ≈$35).
+- `[결정]` 09:00 메일 = **Cloudflare Worker Cron**(`0 0 * * *` UTC) → api.quest(Fly 직결) `POST /internal/jobs/daily`, 신규 비밀 `DEVQUEST_JOB_SECRET`(fail-closed). edge 비밀 재사용 기각 — Worker 가 `/api/*` 모든 요청에 붙인다(Blindspot 🔴). 앱 `@Scheduled` 09:00 제거(중복 발송 방지). 기각: EventBridge(AWS 계정 수명에 묶임).
+- `[메모]` Blindspot 21건 — 9번 ①(*"min=1 이라 suspend 대상 아님"*) 전제가 뒤집힘 → 계획서 「Fly 유휴 일시정지」에 반영·미처리 8건 등재. 내가 처음 말한 *"깨어나는 데 몇백 ms"* 는 낙관이었다 — DB 재접속 2~3초(B7-26) + stop 상태면 콜드 부팅.
