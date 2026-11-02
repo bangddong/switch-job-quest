@@ -27,9 +27,9 @@
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| **#523** | **창 중 ai-api 실제 AI(B8-25 ⓐ).** 창 overlay 에서만 ai-api 스텁 해제(`test`+`replace`) + 전용 ES `ai-api-anthropic`(SSM EKS 전용 키) + 576Mi. 키 부재는 eks-window apply 전·on.sh 전환 전 이중 검사. D-008 🔄부분무효(base·학습 경로 스텁 유지). 🔴 EKS→Anthropic 실호출 0회 — 첫 창에서 채점 1회·노드 메모리(B8-25-1). 매니페스트만이라 Fly 재시작 없음 | 11-02 |
 | **#522** | **Fly 유휴 일시정지(D-017) — Fly 10월 nrt 단가 인상(CPU +13%·RAM +20%)으로 상시 1대가 31일 달 $5.07 청구.** `min_machines_running=0`·suspend·**768MB·swap 제거**(suspend 조건). 09:00 메일은 앱 cron 제거 → **Cloudflare Worker Cron → Fly `POST /internal/jobs/daily`**(신규 비밀 `DEVQUEST_JOB_SECRET`, fail-closed). 🔴 **머지 후 TASK-24 rotate 안 하면 다음 09:00 메일 누락.** 대가: 쉬고 난 첫 요청 ≈3초 · stop 상태면 콜드 부팅 2~3분(기동 최적화 백로그 다시 유효) | 11-02 |
 | **#521** | **창 관측 분리(⑥ B8-18).** Fly·EKS 지표에 공통 태그 `platform`(fly/eks)·리소스 속성 `service.instance.id`, Loki 라벨 `platform`. daily-api 송출 시작(job `devquest-daily-api`, ESO `daily-api-observability`, 판정 경로 카운터 — L-78 실측 대기). 🔴 **import 우선순위 함정**: `monitoring.yml` 이 앱 yml 을 이긴다 → 간접 참조. ai-api 제외(스텁). `/actuator/prometheus` 는 core-api 만. 🔴 머지는 창 꺼진 시간 → 그 뒤 TASK-17 | 11-01 |
-| **#520** | **창 중 Fly 정책(9번 — B8-19·B8-20·B7-19-2 ⓐ).** 창 중에도 Fly 1대 유지(메일은 Fly 만, EKS `MAIL_ENABLED=false` — U-5 우려는 거꾸로였다). **be-cd ↔ eks-window on 상호 거부**(`prod-window/deploy-gate.sh`): 창 중 be 머지는 be-cd **빨강**(의도) → 창 뒤 BE CD Run workflow(main). `forward-headers-strategy: native` 두 앱 명시 — Fly 응답에 HSTS. 🔴 머지 후 실측: 위조 XFF `127.0.0.1` → `/actuator/prometheus` 403 · HSTS 존재(실패 시 한 줄 롤백) | 10-30 |
 
 ## 다음 작업
 
