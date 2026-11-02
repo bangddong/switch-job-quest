@@ -589,7 +589,7 @@ rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed —
 
 | # | 내용 | 왜 지금 안 하나 |
 |---|---|---|
-| B8-25-1 | 🔴 **첫 창에서 실제 채점 1회 수동 확인** — EKS 에서 Anthropic 을 부른 적이 **한 번도 없다**(C-4 는 로그인만). 노드는 퍼블릭 서브넷+IGW 라 egress 는 될 것(🟡) | 클러스터가 꺼져 있다. 10번 첫 창의 확인 항목 — 채점 응답에 `[STUB]` 이 없는지 + ai-api working set(`kubectl top pod`) |
+| B8-25-1 | 🔴 **첫 창에서 실제 채점 1회 수동 확인** — EKS 에서 Anthropic 을 부른 적이 **한 번도 없다**(C-4 는 로그인만). 노드는 퍼블릭 서브넷+IGW 라 egress 는 될 것(🟡) | 클러스터가 꺼져 있다. 10번 첫 창의 확인 항목 — 채점 응답에 `[STUB]` 이 없는지 + ai-api working set(`kubectl top pod`) + 🔴 **노드 수준**(`kubectl top nodes` · `kubectl describe nodes` 의 MemoryPressure · 축출 이벤트) — 노드 working set 이 트래픽 0 에서도 88~89%(일지)이고 limit 576Mi 상향은 requests +64Mi 라 스케줄러가 막지 않는다(QA F-2) |
 | B8-25-2 | ALB idle timeout 기본 60초 < daily-api read-timeout 150초(30초×재시도 3+마진). 스텁은 즉시 응답이라 드러난 적 없음 | 정상 응답은 수 초~수십 초. 60초를 넘는 건 재시도 경로뿐이고 그때도 결과는 실패(504 vs 500). 첫 창 실측 지연을 보고 정한다 |
 | B8-25-3 | 창 중 **AI 토큰·비용 지표가 송출되지 않는다** — ai-api 는 monitoring 미의존, `ai.tokens.*` 는 메모리에만 | 레지스트리 추가 = 메모리 재측정 + 관측 계획서 재설계. 비용 상한은 공유 전체 한도가 이미 묶는다 |
 | B8-25-4 | ai-api 레플리카 1 · Recreate · HPA 없음 · 가상 스레드 꺼짐 — daily-api(최대 4)가 ai-api 1개로 몰린다 | 전체 한도(150/일)가 동시성을 낮게 묶는다. OOMKill 시 창 채점 전체 정지 → B8-25-1 실측 후 판단 |

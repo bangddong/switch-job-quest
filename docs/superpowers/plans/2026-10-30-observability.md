@@ -59,7 +59,7 @@
 
 ### 🔜 이번에 안 하는 Blindspot 발견 (2026-11-01)
 
-- ⓐ 🔴 **B8-25 — 창 중 오늘의 질문 채점·설명이 ai-api 스텁으로 간다.** 상위 계획서 B8-25 행. ⑥ 범위(관측)가 아니고 스텁 해제 = 창 중 실제 AI 비용·ai-api 에 Anthropic 키 배선이라 별도 판정.
+- ⓐ ~~🔴~~ 🚧 **B8-25 — 창 중 오늘의 질문 채점·설명이 ai-api 스텁으로 간다.** → 🔄 **11-02 사용자 ⓐ 선택 — 창 overlay 에서 스텁 해제·키 배선**(상위 계획서 「B8-25 ⓐ」 절). 창 중 ai-api AI 비용 지표는 여전히 없다(B8-25-3). 상위 계획서 B8-25 행. ⑥ 범위(관측)가 아니고 스텁 해제 = 창 중 실제 AI 비용·ai-api 에 Anthropic 키 배선이라 별도 판정.
 - ⓑ **시계열 연속성은 절반** — job 은 같지만 `instance` 라벨이 새로 붙어 기존 시계열은 끊긴다. 대시보드 `max_over_time - min_over_time` 우회식은 새 시계열의 첫 증가분을 놓친다 → L-2(PromQL 정리)에서.
 - ⓒ **메모리** — daily-api 에 OTLP 레지스트리·Loki appender 추가(prometheus 레지스트리는 끔). limit 640Mi 실측(memory-rightsizing F-2)은 레지스트리 없던 시점 — 첫 창에서 working set 재측정. HPA 최대 4대 × 시리즈 수는 Grafana 무료 티어 활성 시리즈와 대조.
 - ⓓ daily-api prod stdout 이 Logstash JSON 으로 바뀐다(`support:logging`). `kubectl logs` grep 스크립트는 core-api 것뿐(`on.sh`) — 영향 없음 확인.
