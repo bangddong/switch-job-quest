@@ -13,6 +13,8 @@ export interface Env {
    * 코드가 secret 보다 먼저 배포되므로 없거나 비어 있어도 정상 동작해야 한다(신뢰 헤더만 생략).
    */
   EDGE_AUTH_SECRET?: string
+  /** 일일 작업 트리거(Cron)가 BE 에 보여주는 비밀. secret 바인딩 — 없으면 Cron 은 호출 없이 설정 누락만 로깅한다. */
+  DEVQUEST_JOB_SECRET?: string
 }
 
 const API_PREFIX = '/api/'
