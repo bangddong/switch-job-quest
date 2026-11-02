@@ -1,9 +1,13 @@
 app = 'devquest-api'
 primary_region = 'nrt'
 
-# OOM 완화: RSS가 512MB 한계 근접 시 스왑으로 흡수 (2026-07-07, OOM 조사 결과)
-# 근본 원인: 부팅 직후 가용 마진 ~44MB + 시간당 ~3MB RSS 증가 → 장시간 가동 시 OOM kill
-swap_size_mb = 256
+# swap 설정을 제거했다 (2026-11-02). 이전에는 swap 256MB 로 512MB 의 RSS 한계 근접을 흡수했다(2026-07-07 OOM 조사:
+# 부팅 직후 가용 마진 ~44MB + 시간당 ~3MB RSS 증가 → 장시간 가동 시 OOM kill).
+# 제거 이유: Fly 의 유휴 suspend(auto_stop_machines = 'suspend')는 "No swap configured" 가 조건이다. 스왑을 빼면
+# 512MB 에서는 OOM 이 난다(2026-09-24 실측: java 발자국 428MiB > kill 기준 409MiB). 그래서 스왑 대신 메모리를 768MB 로 올려 대체한다.
+# 근거: 10월부터 nrt 단가 인상(CPU +13%, RAM +20%)으로 상시 1대 512MB 가 31일 달에 $4.99 → 월 $5 면제선을 넘는다.
+# 유휴 시 일시정지(min_machines_running = 0)로 가동 시간을 줄이는 것이 결정이다. 09:00 메일은 머신이 자는 동안 @Scheduled 가
+# 안 돌므로 Cloudflare Worker Cron 이 POST /internal/jobs/daily 로 깨운다(core-api DailyJobController).
 
 
 [build]
@@ -11,7 +15,7 @@ swap_size_mb = 256
 # 배포 시 임시 머신이 `java ... -jar app.jar migrate` 를 실행한다(release_command 는 CMD 를 대체하고
 # be/Dockerfile 의 ENTRYPOINT 는 유지 — "migrate" 가 프로그램 인자로 붙는다. Dockerfile 에 CMD 없음).
 # 같은 이미지라 클래스패스 스큐가 구조적으로 없다. non-zero exit 면 배포가 중단되고 옛 버전이 계속 서빙한다.
-# 타임아웃: 기본 5분(300초)은 JVM 기동 + Flyway 에 충분하다 — 임시 머신도 앱과 같은 1 shared CPU/512MB 이고,
+# 타임아웃: 기본 5분(300초)은 JVM 기동 + Flyway 에 충분하다 — 임시 머신도 앱과 같은 1 shared CPU/768MB 이고,
 # 최소 컨텍스트(DB 설정만, 웹·JPA·메일·AI 없음)라 수 초~수십 초면 끝난다. 앱의 health grace 180s 가 풀 컨텍스트
 # 기동 기준이므로 그 이하다. 줄일 이유도 늘릴 근거도 없어 명시적으로 고정만 한다.
 [deploy]
@@ -41,7 +45,7 @@ swap_size_mb = 256
   force_https = true
   auto_stop_machines = 'suspend'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
   [http_service.concurrency]
     type = 'connections'
@@ -56,6 +60,6 @@ swap_size_mb = 256
   timeout = "10s"
 
 [[vm]]
-  memory = '512mb'
+  memory = '768mb'
   cpu_kind = 'shared'
   cpus = 1

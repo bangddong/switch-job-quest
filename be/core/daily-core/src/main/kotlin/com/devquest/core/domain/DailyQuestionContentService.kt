@@ -16,13 +16,13 @@ import java.time.ZoneId
 /**
  * 오늘의 기술 면접 질문 "생성"을 담당한다.
  *
- * 메일 발송(DailyMailScheduler)의 부산물이 아니라 독립된 콘텐츠 생성 책임이다 —
+ * 메일 발송(DailyJobService)의 부산물이 아니라 독립된 콘텐츠 생성 책임이다 —
  * 유저 수·MAIL_ENABLED 여부와 무관하게 [ensureTodayQuestion]이 호출되면 오늘의 질문이 보장된다.
  *
  * Phase 2 Stage B-1: `core:daily-core` 라이브러리 모듈로 이동했다. core-api 고유 개념
  * (ApiResponse, CoreException 등)에 의존하지 않는다 — `core:core-domain`의 포트/모델만 의존한다.
  * 소비자([DailyQuestionGeneratorPort]를 통해 주입받는 core-api의 `DailyQuestionService`·
- * `DailyMailScheduler`)와의 결합은 [DailyQuestionGeneratorPort]로만 이루어진다(원장 L-27 해소).
+ * `DailyJobService`)와의 결합은 [DailyQuestionGeneratorPort]로만 이루어진다(원장 L-27 해소).
  *
  * ⚠️ **트랜잭션 경계 (QA F-1, `AiCheckService`/`CompanyService` KDoc과 동일 패턴)**:
  * [ensureTodayQuestion]에 의도적으로 `@Transactional`을 붙이지 않는다. 뱅크가 소진되면

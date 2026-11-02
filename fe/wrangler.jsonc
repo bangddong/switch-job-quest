@@ -22,6 +22,9 @@
   //   키가 없거나 만료되면 Worker 는 Fly 로 중계한다. 스위치 값은 eks-window 워크플로만 쓴다(C-2) — Worker 는 읽기만 한다.
   //   🟡 배포 토큰에 Workers KV Storage Edit 권한이 있어야 KV 바인딩 배포가 된다. 머지 후 첫 배포로 실효를 확인한다.
   "kv_namespaces": [{ "binding": "SWITCH", "id": "be53c1e01dca47d3801137649f2a3d7a" }],
+  // 일일 작업: Fly 는 유휴 시 일시정지라 앱 안 @Scheduled 를 없앴다. 이 cron(UTC 00:00 = 09:00 KST)이 Fly 를 깨워 작업을 실행한다.
+  //   비밀 DEVQUEST_JOB_SECRET 은 job-secret-rotate 워크플로가 Worker secret 으로 넣는다 — 이 파일에 적지 않는다.
+  "triggers": { "crons": ["0 0 * * *"] },
   "vars": {
     "API_ORIGIN": "https://api.quest.dhbang.co.kr",
     "EKS_ORIGIN": "https://eks.quest.dhbang.co.kr"

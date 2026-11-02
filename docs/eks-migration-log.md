@@ -6111,3 +6111,11 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - [메모] BE `./gradlew build` 732 tests 실패 0. Loki 라벨은 가짜 Loki HTTP 서버로 push 본문 `stream` 을 검사(Loki4j 1.6.0 라벨 설정은 private).
 - [막힘] 🔴 **B8-25 발견** — 창 중 `/api/v1/daily-question` 은 daily-api(ingress) → `TechInterviewPort` = ai-api HTTP 뿐 → ai-api 는 base 스텁 그대로(apps-external 패치 0) → 채점·꼬리질문 설명이 `[STUB]`. 계획서에 ai-api·스텁 언급 0건이었다(B8-1 은 core-api 키 경로만). 10번 전 판정 필요(계획서 B8-25 선택지 ⓐⓑⓒ).
 - [비용] AWS 과금 0(새 리소스 없음). 검증은 TASK-17 키 투입 → 10번 첫 창.
+
+## 2026-11-02 — Fly 단가 인상 → 유휴 일시정지 (D-017)
+
+- `[비용]` Fly 10월 청구 **$5.07**(면제선 $5 초과, 4ZP9BLTD-0008). 8·9·10월 청구서 단가 대조: CPU `$0.00000098077/s → $0.00000110696/s`(+13%), 추가 RAM `$0.00000252385 → $0.00000302862 /GB·s`(+20%). CPU 초 8월 2,678,271 · 10월 2,678,405 — **사용량 동일, 원인은 단가**. 10월 사용량에 8월 단가 = $4.40(면제였을 값). nrt 송신 0.90 → 1.80 → 2.02GB($0.04/$0.07/$0.08).
+- `[메모]` 처음 의심(10-21 DB 전환의 WireGuard 송신)은 **틀렸다** — 송신은 9월에 이미 늘었다. 청구서 없이 레포 기록만으로 좁힌 추정이 빗나간 사례.
+- `[결정]` 사용자: **유휴 시 일시정지**. Fly 문서 suspend 조건 *"No swap configured"* → 512MB 에서 swap 만 빼면 OOM(09-24 java 발자국 428MiB > kill 409) → **768MB · swap 제거 · `min_machines_running = 0`**. 768MB 상시 = $7.02/31일, 켜진 비율 ≈71% 미만이면 이득·≈69% 미만이면 면제(송신·rootfs 포함, 미실측 — QA F-4 가 처음 쓴 72% 를 정정). 기각: 512MB+swap+stop(콜드 부팅 2~3분) · 상시 유지(연 ≈$35).
+- `[결정]` 09:00 메일 = **Cloudflare Worker Cron**(`0 0 * * *` UTC) → api.quest(Fly 직결) `POST /internal/jobs/daily`, 신규 비밀 `DEVQUEST_JOB_SECRET`(fail-closed). edge 비밀 재사용 기각 — Worker 가 `/api/*` 모든 요청에 붙인다(Blindspot 🔴). 앱 `@Scheduled` 09:00 제거(중복 발송 방지). 기각: EventBridge(AWS 계정 수명에 묶임).
+- `[메모]` Blindspot 21건 — 9번 ①(*"min=1 이라 suspend 대상 아님"*) 전제가 뒤집힘 → 계획서 「Fly 유휴 일시정지」에 반영·미처리 8건 등재. 내가 처음 말한 *"깨어나는 데 몇백 ms"* 는 낙관이었다 — DB 재접속 2~3초(B7-26) + stop 상태면 콜드 부팅.

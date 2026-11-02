@@ -19,7 +19,7 @@
 분리한 목적(daily-api의 독립적 부팅)이 무효화된다. `client-ai`(인프로세스 구현)와도 서로 의존하지
 않는다 — 둘은 같은 Port의 형제 구현체다.
 
-**daily-core가 core-api를 의존하면 안 되는 이유**: `DailyMailScheduler`(스케줄러 조립)와
+**daily-core가 core-api를 의존하면 안 되는 이유**: `DailyJobService`(일일 작업 조립)와
 `DailyQuestionService`(웹 조립) 양쪽이 이 모듈의 콘텐츠 생성 로직(`DailyQuestionGeneratorPort`
 구현)을 공유해서 쓴다. core-api를 의존하면 방향이 역전되어 두 조립 지점이 서로를 통해서만
 콘텐츠 생성 로직에 닿게 되고, 장래 daily-api처럼 core-api가 아닌 별도 조립이 등장할 때 이
