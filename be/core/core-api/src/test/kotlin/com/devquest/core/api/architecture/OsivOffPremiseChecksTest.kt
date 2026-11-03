@@ -134,6 +134,42 @@ class OsivOffPremiseChecksTest {
     }
 
     @Test
+    fun `문자열 속 슬래시별표 뒤에 오는 getReferenceById 도 잡는다 - 문자열이 주석 시작으로 오인되지 않는다`() {
+        // SecurityConfig("/api/**")·WebMvcConfig 가 실제로 이 모양이다. 예전 정규식은 문자열의 `/*` 부터 다음 `*/` 까지를 주석으로 지웠다.
+        val sources = mapOf(
+            "a/Glob.kt" to "val patterns = arrayOf(\"/api/**\")\nval e = repo.getReferenceById(id)\n/** 아래 KDoc */\nfun f() {}",
+            "a/Slashes.kt" to "val s = \"a // b\"; val e = repo.getReferenceById(id)",
+            "a/Raw.kt" to "val s = \"\"\"/* raw\"\"\"\nval e = repo.getOne(id)\n/* 진짜 주석 */",
+            "a/Template.kt" to "val s = \"x \${f(\"q\")} /*\"\nval e = repo.getById(id)\n/* 끝 */",
+        )
+
+        val violations = OsivOffPremiseChecks.lazyLoadingApiViolations(sources)
+
+        assertThat(violations).hasSize(4)
+        listOf("a/Glob.kt", "a/Slashes.kt", "a/Raw.kt", "a/Template.kt").forEach { path ->
+            assertThat(violations).describedAs(path).anyMatch { it.startsWith(path) }
+        }
+    }
+
+    @Test
+    fun `문자열 처리 후에도 진짜 주석은 계속 지운다 - 중첩 블록 주석과 줄 주석`() {
+        val sources = mapOf(
+            "a/Nested.kt" to "/* 바깥 /* repo.getReferenceById(id) */ 아직 주석 repo.getOne(id) */\nval ok = 1",
+            "a/Line.kt" to "val s = \"문자열\" // repo.getById(id)\nval ok = 2",
+            "a/Char.kt" to "val q = '\"'\nval w = '/'\n// repo.getReferenceById(id)",
+        )
+
+        assertThat(OsivOffPremiseChecks.lazyLoadingApiViolations(sources)).isEmpty()
+    }
+
+    @Test
+    fun `엔티티 스캔 패키지는 앱이 실제로 JPA 엔티티를 스캔하는 범위와 같다`() {
+        // core-api 는 @EntityScan 없이 @SpringBootApplication 이 속한 패키지 아래를 전부 스캔한다 - db-core 로만 좁히면 다른 패키지의 새 @Entity 를 놓친다.
+        assertThat(OsivOffPremiseChecks.ENTITY_SCAN_PACKAGE)
+            .isEqualTo(com.devquest.DevQuestApplication::class.java.packageName)
+    }
+
+    @Test
     fun `core 코드가 db-core 의 Entity 와 Repository 를 참조하면 잡는다`() {
         val sources = mapOf(
             "core/X.kt" to "import com.devquest.storage.db.core.UserResumeEntity",

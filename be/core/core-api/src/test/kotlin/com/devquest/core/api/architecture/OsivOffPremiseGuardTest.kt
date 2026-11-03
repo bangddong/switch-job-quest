@@ -32,11 +32,12 @@ class OsivOffPremiseGuardTest {
             .map { Class.forName(it) }
     }
 
+    /** 앱의 실제 JPA 엔티티 스캔 범위(`com.devquest` 전체)로 훑는다 - db-core 밖에 새로 생긴 `@Entity` 도 걸린다. */
     private fun persistenceClasses(): List<Class<*>> = scanClasses(
         AnnotationTypeFilter(Entity::class.java),
         AnnotationTypeFilter(MappedSuperclass::class.java),
         AnnotationTypeFilter(Embeddable::class.java),
-        basePackage = OsivOffPremiseChecks.dbCorePackage(),
+        basePackage = OsivOffPremiseChecks.ENTITY_SCAN_PACKAGE,
     )
 
     /** `be/` 루트(= settings.gradle.kts 가 있는 디렉터리). Gradle 테스트의 작업 디렉터리는 모듈 디렉터리이므로 위로 올라가며 찾는다. */

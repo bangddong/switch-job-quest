@@ -35,6 +35,13 @@ object OsivOffPremiseChecks {
 
     private const val DB_CORE_PACKAGE = "com.devquest.storage.db.core"
 
+    /**
+     * 엔티티 스캔 범위 - 앱의 실제 범위와 같아야 한다. core-api 의 `DevQuestApplication` 은 `@EntityScan` 이 없어서 Boot 기본값
+     * (= `@SpringBootApplication` 이 속한 패키지 `com.devquest` 전체)을 쓴다. db-core 패키지로만 좁히면 다른 패키지에 새로 생긴
+     * `@Entity` 가 이 가드를 피한다. (daily-api 는 `@EntityScan("com.devquest.storage.db.core")` 로 더 좁게 쓰지만 core-api 의 부분집합이다.)
+     */
+    const val ENTITY_SCAN_PACKAGE = "com.devquest"
+
     private val LAZY_CAPABLE_ASSOCIATIONS: List<Class<out Annotation>> = listOf(
         OneToMany::class.java,
         ManyToOne::class.java,
@@ -94,6 +101,12 @@ object OsivOffPremiseChecks {
         else -> emptySet()
     }
 
+    /**
+     * 🔴 `getOne`·`getById` 는 이름이 넓어서 도메인 서비스의 같은 이름 메서드도 잡는다(오탐). 그대로 둔다: 오탐은 CI 가 시끄럽게 실패해서
+     * 바로 드러나지만, 수신자 이름(`*Repository`)으로 좁히면 `val problems: CodingProblemRepository` 처럼 다른 이름의 변수로 호출한 진짜
+     * 지연 프록시 호출이 조용히 빠진다(미탐). `JpaRepository` 에는 `getOne`·`getById` 가 deprecated 로 아직 남아 있다(Spring Data JPA 4.0.3 실측).
+     * 오탐이 실제로 나면 그 호출의 이름을 바꾸거나 이 정규식을 타입 정보 기반으로 고친다.
+     */
     private val LAZY_LOADING_API = Regex("""\.(getReferenceById|getReference|getOne|getById)\s*\(""")
 
     /** 지연 프록시를 만드는 API(`getReferenceById` 등) 호출이 main 소스에 있으면 위반. [sources] = 경로 -> 소스 텍스트. */
@@ -110,10 +123,106 @@ object OsivOffPremiseChecks {
             PERSISTENCE_REFERENCE.findAll(stripComments(text)).map { "$path 가 ${it.value} 를 직접 참조" }.toList()
         }
 
-    /** KDoc/주석에 적힌 이름(예: "getReferenceById 는 쓰지 않는다")이 위반으로 오탐되지 않게 주석을 지운다. */
-    fun stripComments(text: String): String =
-        text.replace(Regex("""/\*[\s\S]*?\*/"""), " ")
-            .replace(Regex("""(?m)(^|\s)//.*$"""), " ")
+    /**
+     * KDoc/주석에 적힌 이름(예: "getReferenceById 는 쓰지 않는다")이 위반으로 오탐되지 않게 주석을 지운다.
+     *
+     * 🔴 정규식이 아니라 **문자열 리터럴을 아는 스캐너**다. 문자열 속 슬래시-별표(예: ant 패턴 문자열 `/api/` 뒤에 별표 둘)나 슬래시 둘(예: `"a // b"`)을 주석 시작으로 오인하면
+     * 다음 블록 주석 끝·줄 끝까지의 진짜 코드(`getReferenceById` 호출)가 통째로 지워져 위반을 놓친다(미탐). 그래서
+     * - `"..."`(이스케이프 포함)·`"""..."""`·`'x'` 는 **그대로 둔다**(문자열 속 `${...}` 템플릿은 코드라서 다시 스캔한다)
+     * - 코드 위치의 `//` 줄 주석과 블록 주석(Kotlin 은 중첩된다)만 공백으로 바꾼다
+     */
+    fun stripComments(text: String): String {
+        val out = StringBuilder(text.length)
+        CommentStripper(text, out).scanCode(untilClosingBrace = false)
+        return out.toString()
+    }
+
+    private class CommentStripper(private val text: String, private val out: StringBuilder) {
+        private var i = 0
+
+        private fun startsWith(token: String) = text.startsWith(token, i)
+
+        /** 코드 영역을 [text] 끝(또는 `${` 템플릿이면 짝이 맞는 `}`)까지 스캔한다. */
+        fun scanCode(untilClosingBrace: Boolean) {
+            var depth = 0
+            while (i < text.length) {
+                val c = text[i]
+                when {
+                    startsWith("//") -> skipLineComment()
+                    startsWith("/*") -> skipBlockComment()
+                    startsWith("\"\"\"") -> copyRawString()
+                    c == '"' -> copyString()
+                    c == '\'' -> copyCharLiteral()
+                    c == '{' -> { depth++; out.append(c); i++ }
+                    c == '}' -> {
+                        if (untilClosingBrace && depth == 0) return
+                        depth--
+                        out.append(c); i++
+                    }
+                    else -> { out.append(c); i++ }
+                }
+            }
+        }
+
+        private fun skipLineComment() {
+            while (i < text.length && text[i] != '\n') i++
+            out.append(' ')
+        }
+
+        private fun skipBlockComment() {
+            var depth = 0
+            while (i < text.length) {
+                if (startsWith("/*")) { depth++; i += 2 }
+                else if (startsWith("*/")) { depth--; i += 2; if (depth == 0) break }
+                else i++
+            }
+            out.append(' ')
+        }
+
+        private fun copyRawString() {
+            out.append("\"\"\""); i += 3
+            while (i < text.length) {
+                when {
+                    startsWith("\${") -> copyTemplate()
+                    startsWith("\"\"\"") -> {
+                        // 닫는 따옴표 앞에 따옴표가 더 붙어 있으면 마지막 세 개가 닫는 따옴표다(`""""` 같은 경우).
+                        while (startsWith("\"\"\"\"")) { out.append('"'); i++ }
+                        out.append("\"\"\""); i += 3
+                        return
+                    }
+                    else -> { out.append(text[i]); i++ }
+                }
+            }
+        }
+
+        private fun copyString() {
+            out.append('"'); i++
+            while (i < text.length) {
+                val c = text[i]
+                when {
+                    c == '\\' -> { out.append(c); i++; if (i < text.length) { out.append(text[i]); i++ } }
+                    startsWith("\${") -> copyTemplate()
+                    c == '"' -> { out.append(c); i++; return }
+                    else -> { out.append(c); i++ }
+                }
+            }
+        }
+
+        /** `${ ... }` - 안은 코드다(중첩 문자열·주석 포함). */
+        private fun copyTemplate() {
+            out.append("\${"); i += 2
+            scanCode(untilClosingBrace = true)
+            if (i < text.length) { out.append('}'); i++ }
+        }
+
+        private fun copyCharLiteral() {
+            // `'x'`·`'\n'`·`'\u0041'`·`'"'`. 모양이 아니면 따옴표 하나만 그대로 복사한다(주석 밖 코드에서 `'` 단독은 드물다).
+            val end = if (i + 1 < text.length && text[i + 1] == '\\') text.indexOf('\'', i + 2) else if (i + 2 < text.length && text[i + 2] == '\'') i + 2 else -1
+            if (end == -1 || end - i > 8) { out.append('\''); i++; return }
+            out.append(text, i, end + 1)
+            i = end + 1
+        }
+    }
 
     fun dbCorePackage(): String = DB_CORE_PACKAGE
 }
