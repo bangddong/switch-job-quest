@@ -49,7 +49,7 @@ storage:
       minimum-idle: 0
       connection-test-query: SELECT 1
       # 풀 대기 상한 30초(Hikari 기본) → 5초. 풀이 가득 찼거나 DB 가 안 보일 때 요청 스레드가 30초 매달리지 않고 5초 만에 실패한다.
-      # (OSIV OFF 로 커넥션 점유 시간이 짧아져 정상 부하에서 5초 대기는 일어나지 않는다.)
+      # 커넥션 점유 시간이 OSIV OFF 로 짧아졌으므로 5초면 정상 대기에는 충분하다고 본다(판단 - 부하 측정은 아니다).
       connection-timeout: 5000
       # 대여 직전 `SELECT 1` 검증 상한 5초 → 2초. connection-timeout 보다 짧게 둔다(대기 상한 안에서 검증이 끝나야 한다).
       validation-timeout: 2000

@@ -21,7 +21,9 @@ import java.util.concurrent.TimeoutException
  * URL `sslmode=require`는 M4-a 만 - 아래 각주):
  *  - current : Hikari 기본(connectionTimeout 30000, validationTimeout 5000) + URL 파라미터 없음
  *  - optB    : URL `connectTimeout=5&socketTimeout=30`, validationTimeout 2000, connectionTimeout 30000
- *  - optA    : optB + connectionTimeout 5000
+ *  - optA    : optB + connectionTimeout 5000   <- **채택됨(B7-21 ⓐ)**: prod 프로필 core-api·daily-api 가 이 값이다.
+ *                (실효 설정은 CoreApiProdDbSettingsTest·DailyApiProdDbSettingsTest 가 지키고, 이 테스트는 "왜 이 값인가"의 실측 근거로 남긴다.
+ *                current/optB 는 비교용 구성이며 앱 설정이 아니다.)
  *
  * M4-a 블랙홀: accept 만 하고 아무것도 보내지 않는 서버 -> `getConnection()` 이 예외를 낼 때까지, 그리고
  *       그 풀 위에 올린 [RateLimitCounterAdapter.tryConsume] 이 실패할 때까지.

@@ -16,23 +16,24 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 /**
- * Phase 2 Stage A — ⚠️ 주의사항 ② OSIV 통합 검증.
+ * Phase 2 Stage A — ⚠️ 주의사항 ② 웹 스레드 읽기 경로 통합 검증 (+ B7-21 ⓐ 로 OSIV OFF 에서도 같은 결과임을 고정).
  *
- * `spring.jpa.open-in-view`가 be 전체 설정에 0건이라 Boot 기본값(`true`)이 적용된다.
- * 즉 웹 요청 스레드는 `OpenEntityManagerInViewInterceptor`가 바인딩한 EntityManager 위에서
- * 실행된다 — 기존 `DailyQuestionContentServiceTest`는 순수 Mockito라 이 상태를 재현하지 못한다.
- * 이 테스트는 실제 `DispatcherServlet` → 컨트롤러 → 서비스 → JPA 어댑터 전체 체인을
- * `@SpringBootTest(webEnvironment = MOCK)` + `MockMvc`로 통과시켜, "읽기 경로(웹 스레드)에서
- * 처음 실행되는 저장/UNIQUE 복구 경로"가 실제로 동작하는지 확인한다.
+ * 이 테스트가 처음 쓰였을 때는 `spring.jpa.open-in-view` 가 be 전체 설정에 0건이라 Boot 기본값(`true`)이 적용됐고, 웹 요청 스레드가
+ * `OpenEntityManagerInViewInterceptor` 가 바인딩한 EntityManager 위에서 실행됐다 - 그 상태를 순수 Mockito 인
+ * `DailyQuestionContentServiceTest` 가 재현하지 못해서 만든 테스트다. **B7-21 ⓐ 에서 OSIV 를 껐다**(`application.yml`). 테스트는 그대로
+ * 통과했다 - 즉 이 읽기 경로의 findToday → findQuestionsSince → save 체인은 OSIV 바인딩에 기대지 않고 어댑터 호출마다
+ * (Spring Data 의 메서드별 트랜잭션으로) 스스로 완결된다. 클래스 이름의 "Osiv" 는 이 테스트의 유래이고, 지금 OSIV 상태를 단언하지는
+ * 않는다(그건 `CodingExternalWaitConnectionTest` 의 몫).
+ *
+ * 실제 `DispatcherServlet` → 컨트롤러 → 서비스 → JPA 어댑터 전체 체인을 `@SpringBootTest(webEnvironment = MOCK)` + `MockMvc` 로 통과시켜,
+ * "읽기 경로(웹 스레드)에서 처음 실행되는 저장/UNIQUE 복구 경로"가 실제로 동작하는지 확인한다.
  *
  * ⚠️ 한계(정직하게 기록): 여기서 쓰는 DB는 `db-core.yml`의 H2 in-memory
  * (`ddl-auto: create-drop`)다 — `FlywayMigrationIntegrationTest`처럼 진짜 Postgres를 쓰지 않는다.
- * OSIV 인터셉터가 EntityManager를 웹 스레드에 바인딩하는 매커니즘 자체는 DB 종류와 무관하지만,
  * "동시 요청 두 개가 동시에 `save()`해 UNIQUE 위반이 실제로 발생하는" 경합 시나리오까지는 여기서
  * 재현하지 못한다(단일 요청 순차 실행). 그 경합 로직 자체(예외를 잡아 재조회)는
  * `DailyQuestionContentServiceTest`의 Mockito 테스트가 커버한다 — 이 테스트가 추가로 증명하는 것은
- * "OSIV가 바인딩한 EntityManager 위에서 findToday → findQuestionsSince → save 체인이 예외 없이
- * 완주한다"는 부분이다.
+ * "웹 스레드에서 findToday → findQuestionsSince → save 체인이 예외 없이 완주한다"는 부분이다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc

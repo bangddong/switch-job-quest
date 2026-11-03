@@ -42,7 +42,7 @@ import javax.sql.DataSource
  *    버전, 커밋 `4582783`의 부모)로 이 테스트를 돌리면 `ensureTodayQuestionFromBank` 호출 자체가
  *    없어 무조건 404 — 이 테스트가 그 회귀를 잠근다.
  *
- * ② L-26 핵심 주장 — OSIV가 EntityManager를 바인딩한 **웹 요청 스레드**에서 **진짜 Postgres UNIQUE
+ * ② L-26 핵심 주장 — (작성 당시 OSIV가 EntityManager를 바인딩한. B7-21 ⓐ 로 OSIV 는 꺼졌지만 이 복구 경로의 결론은 같다) **웹 요청 스레드**에서 **진짜 Postgres UNIQUE
  *    제약 위반**이 발생했을 때 `DailyQuestionContentService.saveWithUniqueRecovery`의 재조회 복구가
  *    정상 동작하는지 검증한다. Postgres는 트랜잭션 안에서 한 문장이 실패하면 그 트랜잭션 전체가
  *    abort되고 이후 쿼리가 "current transaction is aborted"로 실패한다(H2는 이렇게 동작하지 않는다).
