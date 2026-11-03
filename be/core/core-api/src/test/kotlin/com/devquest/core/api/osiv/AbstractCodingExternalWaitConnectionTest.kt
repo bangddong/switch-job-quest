@@ -1,5 +1,9 @@
-package com.devquest.core.api.measurement
+package com.devquest.core.api.osiv
 
+import com.devquest.core.api.measurement.BlockedMeasurement
+import com.devquest.core.api.measurement.BlockingGate
+import com.devquest.core.api.measurement.HikariProbe
+import com.devquest.core.api.measurement.measureWhileBlocked
 import com.devquest.core.domain.model.coding.CodingProblemGenerationResult
 import com.devquest.core.domain.model.coding.TestCase
 import com.devquest.core.domain.port.CodingProblemGeneratorPort
@@ -25,24 +29,25 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import javax.sql.DataSource
 
 /**
- * D-016 DB 타임아웃 결정 전 실측 — M1·M2 (core-api 코딩 퀘스트).
+ * B7-21 ⓐ 회귀 — 느린 외부 경계(LLM·Judge0)를 기다리는 동안 웹 요청이 HikariCP 커넥션을 쥐지 않는다.
  *
- * 질문: LLM/Judge0 같은 느린 외부 경계를 기다리는 동안 웹 요청이 HikariCP 커넥션을 쥐는가?
- * 방법: 실제 `DispatcherServlet` → OSIV 인터셉터 → 컨트롤러 → [com.devquest.core.domain.CodingQuestService] →
+ * 배경: OSIV(`spring.jpa.open-in-view`, Boot 기본 true)가 켜져 있으면 요청 스레드가 첫 JPA 호출에서 빌린 커넥션을
+ * 요청이 끝날 때까지 쥔다 - 코딩 문제 생성(LLM 최대 150초)·제출(Judge0) 동안 풀 슬롯 1개가 통째로 묶인다(D-016 실측: active=1).
+ * 앱 설정으로 OSIV 를 껐고(`application.yml`), 이 테스트가 그 결정을 잠근다.
+ *
+ * 방법: 실제 `DispatcherServlet` → (OSIV 인터셉터가 있다면) → 컨트롤러 → [com.devquest.core.domain.CodingQuestService] →
  * JPA 어댑터 전체 체인을 MockMvc 로 통과시키되, 외부 경계 포트만 [BlockingGate] 로 블록시키는 더블로 바꾼다.
  * 블록된 동안 `HikariPoolMXBean.activeConnections` 를 읽는다.
  *
- * 구성별 서브클래스가 `spring.jpa.open-in-view` 와 DB(H2/Postgres)를 정한다. 기대값은 **실측값**이다 —
- * 아래 숫자가 깨지면 서비스의 트랜잭션 경계나 OSIV 설정이 바뀐 것이므로 결정 근거를 다시 봐야 한다.
+ * 🔴 **테스트 프로퍼티 오버라이드 없이 기본 설정 그대로** 띄운다 - 서브클래스가 `spring.jpa.open-in-view` 를 주입하면
+ * 이 테스트는 "앱 설정이 OSIV 를 끈다" 를 증명하지 못한다(설정 파일에서 그 줄이 지워져도 통과해 버린다).
  *
  * ⚠️ 한계: MockMvc 는 실제 서블릿 컨테이너(Tomcat)가 아니다. OSIV 인터셉터는 `DispatcherServlet` 안에서
- * 돌므로 동일하게 걸리지만(그래서 [osivInterceptorBeans] 로 빈 존재도 함께 단언한다), 커넥션 풀 점유는
- * Hibernate/Spring 의 EntityManager 수명에 달려 있어 서블릿 컨테이너 종류와 무관하다.
+ * 돌므로 동일하게 걸리지만(그래서 인터셉터 빈 개수도 함께 단언한다), 커넥션 풀 점유는 Hibernate/Spring 의
+ * EntityManager 수명에 달려 있어 서블릿 컨테이너 종류와 무관하다.
  */
-abstract class AbstractCodingOsivMeasurement(
+abstract class AbstractCodingExternalWaitConnectionTest(
     private val config: String,
-    private val osivInterceptorBeans: Int,
-    private val activeWhileHeld: Int,
 ) {
     @Autowired
     protected lateinit var mockMvc: MockMvc
@@ -90,18 +95,21 @@ abstract class AbstractCodingOsivMeasurement(
 
     private fun report(point: String, m: BlockedMeasurement<*>) {
         println(
-            "[MEASURE] $point config=$config osivInterceptorBeans=${context.getBeansOfType(OpenEntityManagerInViewInterceptor::class.java).size} " +
+            "[OSIV-REGRESSION] $point config=$config osivInterceptorBeans=${context.getBeansOfType(OpenEntityManagerInViewInterceptor::class.java).size} " +
                 "poolMax=${probe.maximumPoolSize} samples=${m.samples.map { it.active }} last={${m.samples.last()}} status=${m.result}"
         )
     }
 
     @Test
-    fun `OSIV 인터셉터 빈 존재가 구성과 일치한다 (설정이 컨텍스트에 실제로 반영됐는지)`() {
-        assertThat(context.getBeansOfType(OpenEntityManagerInViewInterceptor::class.java)).hasSize(osivInterceptorBeans)
+    fun `OSIV 는 꺼져 있다 - 실효 프로퍼티와 인터셉터 빈이 모두 반영됐다`() {
+        assertThat(context.environment.getProperty("spring.jpa.open-in-view"))
+            .describedAs("spring.jpa.open-in-view 실효값(어느 yml 에서 왔든 최종 Environment 기준)").isEqualTo("false")
+        assertThat(context.getBeansOfType(OpenEntityManagerInViewInterceptor::class.java))
+            .describedAs("OSIV 인터셉터 빈").isEmpty()
     }
 
     @Test
-    fun `M1a 코딩 문제 생성 - LLM 호출 블록 중 active 커넥션`() {
+    fun `코딩 문제 생성 - LLM 호출 대기 중에는 커넥션을 쥐지 않는다`() {
         val gate = BlockingGate()
         whenever(generatorPort.generate(any(), any(), any())).thenAnswer {
             gate.block()
@@ -115,15 +123,15 @@ abstract class AbstractCodingOsivMeasurement(
                     .header("Authorization", bearer())
             ).andReturn().response.status
         }
-        report("M1a(generateProblem@LLM)", m)
+        report("generateProblem@LLM", m)
 
         assertThat(m.result).describedAs("요청은 블록 해제 후 성공해야 한다").isEqualTo(200)
-        assertThat(m.samples.map { it.active }).describedAs("LLM 블록 중 active").containsOnly(activeWhileHeld)
+        assertThat(m.samples.map { it.active }).describedAs("LLM 대기 중 active (OSIV OFF 면 어댑터 호출 사이에 커넥션을 반납한다)").containsOnly(0)
         assertThat(codingProblemRepository.count()).describedAs("생성된 문제가 저장돼야 한다").isEqualTo(1)
     }
 
     @Test
-    fun `M1b 코딩 문제 생성 - 생성 직후 검증용 Judge0 호출 블록 중 active 커넥션`() {
+    fun `코딩 문제 생성 - 검증용 Judge0 호출 대기 중에는 커넥션을 쥐지 않는다`() {
         val gate = BlockingGate()
         whenever(generatorPort.generate(any(), any(), any())).thenReturn(generated())
         whenever(judge0Port.execute(any(), any(), any(), any())).thenAnswer {
@@ -137,14 +145,14 @@ abstract class AbstractCodingOsivMeasurement(
                     .header("Authorization", bearer())
             ).andReturn().response.status
         }
-        report("M1b(generateProblem@Judge0)", m)
+        report("generateProblem@Judge0", m)
 
         assertThat(m.result).isEqualTo(200)
-        assertThat(m.samples.map { it.active }).describedAs("생성 검증 Judge0 블록 중 active").containsOnly(activeWhileHeld)
+        assertThat(m.samples.map { it.active }).describedAs("생성 검증 Judge0 대기 중 active").containsOnly(0)
     }
 
     @Test
-    fun `M2 코드 제출 - Judge0 호출 블록 중 active 커넥션`() {
+    fun `코드 제출 - Judge0 호출 대기 중에는 커넥션을 쥐지 않는다`() {
         val problem = codingProblemRepository.save(
             CodingProblemEntity(
                 title = "측정용 문제",
@@ -169,10 +177,10 @@ abstract class AbstractCodingOsivMeasurement(
                     .header("Authorization", bearer())
             ).andReturn().response.status
         }
-        report("M2(submitCode@Judge0)", m)
+        report("submitCode@Judge0", m)
 
         assertThat(m.result).isEqualTo(200)
-        assertThat(m.samples.map { it.active }).describedAs("제출 Judge0 블록 중 active").containsOnly(activeWhileHeld)
+        assertThat(m.samples.map { it.active }).describedAs("제출 Judge0 대기 중 active").containsOnly(0)
         assertThat(codingSubmissionRepository.count()).describedAs("제출 기록이 저장돼야 한다").isEqualTo(1)
     }
 }

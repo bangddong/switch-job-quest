@@ -20,6 +20,15 @@ spring:
     virtual:
       enabled: true
 
+  jpa:
+    # B7-21 ⓐ — OSIV 를 앱 전체에서 끈다(모든 프로필). Boot 기본값(true)이면 요청 스레드가 첫 JPA 호출에서 빌린 커넥션을
+    # 요청이 끝날 때까지 쥔다 - LLM(최대 150초)·Judge0 를 기다리는 동안 풀 슬롯 1개가 묶인다(D-016 실측 active=1).
+    # 끄면 어댑터 호출마다 빌렸다 즉시 반납한다(active=0). 안전한 이유: 엔티티에 연관관계/지연 필드가 0개이고 엔티티가 어댑터 밖으로
+    # 나가지 않는다 - 이 전제는 OsivOffPremiseGuardTest 가 CI 에서 지킨다. 지연 로딩을 도입하려면 트랜잭션 경계부터 설계할 것.
+    # 🔴 이 키를 import 한 파일(db-core.yml 등)에 옮기지 말 것 - import 한 파일의 값이 이 파일 값을 이긴다(#521 우선순위 함정).
+    # 실효값은 CodingExternalWaitConnectionTest 와 CoreApiProdDbSettingsTest 가 최종 Environment 로 단언한다.
+    open-in-view: false
+
   mail:
     host: smtp.resend.com
     port: 465

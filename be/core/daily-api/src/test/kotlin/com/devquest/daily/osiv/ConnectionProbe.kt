@@ -1,4 +1,4 @@
-package com.devquest.daily.measurement
+package com.devquest.daily.osiv
 
 import com.zaxxer.hikari.HikariDataSource
 import java.util.concurrent.CountDownLatch
