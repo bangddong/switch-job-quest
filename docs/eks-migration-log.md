@@ -6127,3 +6127,14 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[해결]` `kubectl kustomize k8s/gitops/apps-external` rc 0 — ai-api env `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=false`, envFrom `ai-api-anthropic`(optional), 384Mi/576Mi. 실패 주입(test 값 이름 변경) → `error: testing value /spec/template/spec/containers/0/env/1/name failed: test failed` rc 1. 학습 overlay `k8s/gitops/apps` 는 스텁 `true`·448Mi 그대로.
 - `[비용]` AWS 0(클러스터 꺼짐). Anthropic 은 창 중 채점분만 — 총량은 Fly 와 공유 전체 한도(evaluate 50·explain 100/일)라 창 때문에 늘지 않는다.
 - `[메모]` 🔴 EKS 에서 Anthropic 을 실제로 부른 적은 **아직 없다** — 첫 창(10번)에서 채점 1회 수동 확인(계획서 B8-25-1).
+
+## 2026-11-03 — 📌D-016 TASK-17 관측 키 · B7-21 ⓐ OSIV OFF + DB 타임아웃
+
+- `[메모]` TASK-17: 사용자가 SSM 에 Grafana 3종(SecureString `alias/aws/ssm`) 입력. 값 미열람 형식 검사 → `GRAFANA_LOKI_URL` 33자 = 베이스 주소만(`/loki/api/v1/push` 누락). loki4j 1.6.0 jar 문자열에 기본값 `http://localhost:3100/loki/api/v1/push` 만 있고 경로 덧붙임 없음 → 사용자 수정(v2, 50자). `SENTRY_DSN` 은 BE main 사용처 0건이라 생략.
+- `[막힘]` Claude 의 `aws ssm put-parameter`(로컬 토큰을 SSM 으로) → auto mode 분류기 거부. 재시도 안 함, 사용자가 콘솔로 입력.
+- `[막힘]` 로컬 `application-local.yml` 의 토큰 이름을 찾는 grep 에서 마스킹 정규식이 들여쓰기 값(`    api-key: glc_…`)을 놓쳐 **토큰 앞 약 100자가 세션 출력에 노출**. 레포·PR 미반영. 사용자 판단: 학습용·과금 위험 없음 → 폐기 안 함.
+- `[결정]` B7-21: 예산은 이미 42/47(U-6). 남은 L-79(블랙홀 대기)를 풀 대기 5초로 줄이려 했으나 Blindspot 이 OSIV 기본 true 발견 → B7-27(#516) 이후에도 LLM·Judge0 대기 중 커넥션 점유 의심. 사용자 *"실측 이후 a,b 선택"*.
+- `[메모]` 실측(로컬, MockMvc + H2/Postgres 17 Testcontainers): 코딩 생성 LLM 대기 active **1**(OSIV ON) / **0**(OFF) · 제출 Judge0 1/0 · daily 채점 0/0. 블랙홀(accept 후 침묵, `sslmode=require`) 레이트 리밋 대체까지: 현재 30.0s · ⓑ(URL·검증만) 30.0s · ⓐ **5.0s**. 동결 프록시: 유휴 동결 30/30/**5**s, 쿼리 직후 동결 70s+ 미해제 / 30.1s / 30.1s(`SocketTimeoutException: Read timed out`). 어댑터 `queryTimeout=1s` 는 어느 구성에서도 지켜지지 않음. OSIV OFF 전체 테스트 450개 실패 0, LazyInitializationException 0.
+- `[결정]` 사용자 *"OSIV 는 고객 대상 끄고 admin 은 켠다"* 질문 → admin 엔드포인트 0/75, JPA 연관 0, 엔티티 어댑터 밖 유출 0 → 켤 영역 없음. HTTP 로 OSIV 경로 검증한 엔드포인트는 7/75 뿐이라 **구조 가드 테스트 + 머지 후 Fly 스모크**로 보강, 사용자 *"그래"* → ⓐ.
+- `[해결]` `fix/db-connection-timeouts`: core-api·daily-api `spring.jpa.open-in-view: false`(각 앱 yml — #521 import 우선순위 함정 회피), prod `connection-timeout 5000`·`validation-timeout 2000`·URL `connectTimeout=5&socketTimeout=30`. 구조 가드 실패 주입 4종 RED 확인. `./gradlew build` 실패 0(core-api 382·daily-api 99 …), `measurementTest`(Docker) 통과. 미처리 8건 → 계획서 B7-21-1~8.
+- `[비용]` $0(로컬 측정·클러스터 꺼짐). 머지 = Fly 재시작(창 꺼진 시간에만).

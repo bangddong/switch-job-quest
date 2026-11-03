@@ -404,12 +404,12 @@ B4-19(하네스 동결)·B4-25(리퍼 주기 비용 ≈ 0)는 제약·사실이�
 | B7-18 | 🟡 | 노출 토큰으로 전환 작업 | ✅ 결정(교체는 전환 뒤 유지 — 노출 범위가 이 세션뿐) |
 | B7-19 | 🔴 | 레이트 리밋 키 = IP, EKS 에선 `Fly-Client-IP` 위조로 무한 우회 | **10번 직전**(BE) → 🚧 **1단계 10-28**(아래 「B7-19 재설계」): 기술 면접 로그인 필수 + 사용자 ID 한도 · 익명(오늘의 질문)에 전체 일일 상한. IP 신뢰(Worker↔원본 헤더)는 2단계 → 🚧 **2단계 10-29**(아래 「B7-19 2단계 구현」) |
 | B7-20 | 🟡 | 공유 저장소 설계 미정(core/daily 의미 다름) | **10번 직전** |
-| B7-21 | 🔴 | 커넥션 최악 합이 `max_connections` 97 에 닿음, 튜닝 0, swap 없음 | 7-A(EC2 conf + Fly 풀 상한). EKS 쪽 상한은 10번 직전 |
+| B7-21 | 🔴 | 커넥션 최악 합이 `max_connections` 97 에 닿음, 튜닝 0, swap 없음 | 7-A(EC2 conf + Fly 풀 상한). EKS 쪽 상한은 10번 직전 → 예산은 U-6(daily-api 풀 3)으로 이미 42/47 · ✅ **11-03 ⓐ OSIV OFF + DB 타임아웃**(L-79 해소, 아래 「B7-21 ⓐ」 절) |
 | B7-22 | 🟡 | Fly suspend 유령 세션(keepalive 기본 7200s) | 7-A |
 | B7-23 | 🟡 | 전환 뒤 DB 장애 감시 없음(`/health` 상수, WireGuard Endpoint 재해석 없음) | 7-A |
 | B7-24 | ⚪ | 판정에 시퀀스 값 없음 | 7-A(`counts_sql` 에 `last_value`) |
 | B7-25 | ⚪ | 전환 뒤 거짓이 되는 서술 다수 | 7-C |
-| B7-27 | 🔴 | (QA 7-A F-1) `CodingQuestService.generateProblem`·`submitCode` 가 `@Transactional` 안에서 LLM·Judge0 를 순차 호출 — DB 커넥션을 수십 초 쥔다. idle-in-tx 제한을 걸면 500(그래서 7-A 는 안 건다), 안 걸어도 **풀 10 을 외부 호출이 잡아먹는** 구조(다른 서비스는 이미 트랜잭션을 걷어냈다) | **BE 백로그**(10번 직전 커넥션 예산 때 함께) — 7-A 는 제한을 걸지 않는 것으로 회피 → ✅ **10-29 구현**(사용자 *"B7-27 진행하자"*): 두 메서드 `@Transactional` 제거, 제출 DB 쓰기 3종(제출 저장·solveCount·레벨업)은 별도 빈 `CodingSubmissionRecorder` 의 트랜잭션으로(QuestProgressRecorder 패턴). 🔜 **안 한 것**: `UserCodingLevelAdapter` 의 read-modify-write(락·`@Version` 없음)로 같은 사용자 **동시 통과 제출 시 solveCount lost update·레벨업 누락** — 기존 결함이고 경계 이동으로 성질 불변(`getSolveCount` 읽기는 원래도 Judge0 뒤라 read→write 창도 그대로 — QA F-2). 고치려면 원자 UPDATE 또는 `@Version` — 코딩 퀘스트는 사용자 1인 연습 흐름이라 동시 제출 경로가 사실상 없어 지금 우선순위 아님. ⚠️ idle-in-tx 제한(7-A 회피)은 이걸로 걸 수 있게 됐지만 **아직 안 걸었다** — 걸려면 다른 장기 트랜잭션 전수 확인 후 |
+| B7-27 | 🔴 | (QA 7-A F-1) `CodingQuestService.generateProblem`·`submitCode` 가 `@Transactional` 안에서 LLM·Judge0 를 순차 호출 — DB 커넥션을 수십 초 쥔다. idle-in-tx 제한을 걸면 500(그래서 7-A 는 안 건다), 안 걸어도 **풀 10 을 외부 호출이 잡아먹는** 구조(다른 서비스는 이미 트랜잭션을 걷어냈다) | **BE 백로그**(10번 직전 커넥션 예산 때 함께) — 7-A 는 제한을 걸지 않는 것으로 회피 → ✅ **10-29 구현**(사용자 *"B7-27 진행하자"*): 두 메서드 `@Transactional` 제거, 제출 DB 쓰기 3종(제출 저장·solveCount·레벨업)은 별도 빈 `CodingSubmissionRecorder` 의 트랜잭션으로(QuestProgressRecorder 패턴). 🔜 **안 한 것**: `UserCodingLevelAdapter` 의 read-modify-write(락·`@Version` 없음)로 같은 사용자 **동시 통과 제출 시 solveCount lost update·레벨업 누락** — 기존 결함이고 경계 이동으로 성질 불변(`getSolveCount` 읽기는 원래도 Judge0 뒤라 read→write 창도 그대로 — QA F-2). 고치려면 원자 UPDATE 또는 `@Version` — 코딩 퀘스트는 사용자 1인 연습 흐름이라 동시 제출 경로가 사실상 없어 지금 우선순위 아님. ⚠️ idle-in-tx 제한(7-A 회피)은 이걸로 걸 수 있게 됐지만 **아직 안 걸었다** — 걸려면 다른 장기 트랜잭션 전수 확인 후. 🔴 **11-03 정정: 트랜잭션을 걷어낸 뒤에도 커넥션은 계속 쥐고 있었다** — OSIV(기본 true)가 첫 JPA 조회에서 잡은 커넥션을 요청 끝까지 유지해, LLM·Judge0 대기 내내 active=1(H2·Postgres 실측). *"외부 호출 동안 커넥션을 쥐지 않는다"* 는 반만 맞았다 → B7-21 ⓐ(OSIV OFF)로 active=0 |
 | B7-26 | 🟡 | (7-0 실측) Fly→EC2 **새 접속의 처음 1~2회가 2~3초**(이후 0.28s) — TCP 재전송(1s·2s) 모양, ICMP 손실 7% 와 부합. CPU 크레딧 217(스로틀 아님). `minimum-idle: 0` + suspend 면 깨어난 첫 요청이 이 지연을 그대로 맞는다 | 7-A — Fly 풀 `minimum-idle ≥ 1`·keepalive 검토 + 전환 뒤 실측(Hikari 획득 시간) |
 
 ## 8번 — 전환 워크플로 (2026-10-21 계획)
@@ -597,6 +597,50 @@ rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed —
 | B8-25-6 | 16개 evaluator 실호출 **비용 추정**(D-008 이 요구한 첫 단계) 미수행 | 창에서 ai-api 를 타는 건 daily-api 의 evaluate·explain 둘뿐이고 그 총량은 Fly 와 공유 한도 안 |
 | B8-25-7 | k8s 렌더를 CI 가 검사하지 않는다 — 패치 오류가 창 on(과금 중)에야 ArgoCD 에서 드러난다 | 하네스 동결 규칙 — 이번엔 로컬 `kubectl kustomize` 렌더 rc 0 + 실패 주입으로 확인 |
 | B8-25-8 | Spring AI 기본 재시도(`spring.ai.retry`)와 `AiCallExecutor` 3회가 겹칠 수 있다(⚪ 2.0.0-RC2 기본값 미확인) | Fly core-api 도 같은 조합으로 운영 중 — 창 고유 문제 아님 |
+
+## B7-21 ⓐ — OSIV OFF + DB 타임아웃 (2026-11-03, 원장 L-79 해소)
+
+> 예산 자체는 이미 맞았다 — Fly 20(앱 10 + release 10) + EKS 22(core-api 10 + daily-api 3×4) = **42 ≤ 47**(백업 superuser 2 포함 44).
+> 남은 것은 L-79(DB 블랙홀 시 대기)였는데, Blindspot 이 **계획의 전제를 뒤집었다**: OSIV 가 켜져 있어 B7-27 이후에도 AI·Judge0 대기 내내
+> 커넥션을 쥔다 → 그 상태에서 풀 대기만 30→5초로 줄이면 실패가 늘어난다. 사용자 *"실측 이후 선택"* → 실측 → **ⓐ**(+ 구조 가드).
+
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| OSIV | **앱 전체 OFF**(core-api·daily-api 각 `application.yml`) | admin 0개 · JPA 연관 0 · `getReferenceById` 0 · 엔티티가 어댑터 밖으로 안 나감 — OSIV 의 이득(뷰 지연 로딩)을 쓸 곳이 없다. 공유 yml 이 아니라 앱 yml 인 이유: daily-api 는 `db-core.yml` 을 import 하지 않고, import 파일이 앱 값을 이기는 함정(#521) |
+| 타임아웃(prod, 두 앱 공통) | Hikari `connection-timeout` 5000 · `validation-timeout` 2000 · URL `connectTimeout=5&socketTimeout=30` | M4 실측(아래) |
+| 가드 | **구조 가드 테스트**(연관·지연 `@Basic`·`getReference` 계열·엔티티/리포지토리 직접 참조·어댑터 반환형 엔티티) + 머지 후 Fly 스모크 | OSIV OFF 의 안전 근거가 *"지금 구조가 그렇다"* 뿐이라, 구조를 CI 가 지키게 한다 — 실패 주입 4종 RED 확인 |
+| 레이트 리밋 시도권 리스 | 60초 유지 + `connection-timeout + socketTimeout + 2s < 리스` 테스트 | 한 번의 DB 시도 최대 ≈37초 |
+<!-- verify: be/core/core-api/src/main/resources/application.yml ~ open-in-view: false -->
+<!-- verify: be/core/daily-api/src/main/resources/application.yml ~ open-in-view: false -->
+<!-- verify: be/core/core-api/src/main/resources/application-prod.yml ~ socketTimeout=30 -->
+
+**실측 (로컬, prod 무접속)**
+
+| 측정 | OSIV ON(이전) | OSIV OFF |
+|---|---|---|
+| 코딩 문제 생성 — LLM·Judge0 대기 중 active | 1 (H2·Postgres) | **0** |
+| 코드 제출 — Judge0 대기 중 active | 1 | **0** |
+| daily 채점 — AI 대기 중 active | 0 | 0 (원래 JPA 미사용 경로) |
+| 기존 테스트 450개 | 실패 0 | **실패 0**, LazyInitializationException 0 |
+
+| DB 블랙홀 → 레이트 리밋이 메모리로 넘어가기까지 | 이전 | ⓑ(URL·검증만) | **ⓐ** |
+|---|---|---|---|
+| 새 연결 시 서버 침묵 | 30초 | 30초 | **5초** |
+| 유휴 커넥션 동결 | 30초 | 30초 | **5초** |
+| 쿼리 직후 동결 | 70초+ 안 풀림 | 30초 | 30초 |
+
+### 이번에 안 하는 것 (Blindspot 10건·실측 한계 중) — 목적지
+
+| # | 내용 | 왜 지금 안 하나 |
+|---|---|---|
+| B7-21-1 | **쿼리 직후 동결 시 레이트 리밋이 30초 막힌다** — 어댑터 `queryTimeout` 1초는 어느 구성에서도 지켜지지 않았다(취소 요청도 얼어붙은 서버로 간다 — 메커니즘 미검증). 레이트 리밋 문장에만 짧은 `setNetworkTimeout` 을 거는 방법 | 별도 설계(커넥션 반납 시 timeout 복원). 창 트래픽이 작고, 첫 요청 하나만 30초 막힌 뒤 서킷이 열린다 |
+| B7-21-2 | EKS readinessProbe 가 `timeoutSeconds` 기본 1초로 DB 를 본다(`k8s/base/core-api.yaml`·`daily-api.yaml`) — 풀이 마르면 replica 1 core-api 가 Service 에서 빠진다 | OSIV OFF 로 풀이 마를 경로가 크게 줄었다. 첫 창 관측 후 판단 |
+| B7-21-3 | `connectTimeout=5` 는 **한 번도 시험되지 않았다** — 로컬은 TCP 를 받아줘서 SYN 드롭을 재현 못 함 | 실제 네트워크(WireGuard 6PN·EKS→EC2) 장애 재현이 필요 |
+| B7-21-4 | `socketTimeout` 은 클라이언트만 끊는다 — 서버 쿼리는 계속 돌고 Hikari 는 새 커넥션을 연다(느린 DB 에서 백엔드 수 > 풀 합) · 서버 쪽 `statement_timeout` 없음 | EC2 conf 변경 = 백업 `pg_dump` 영향 검토 필요 |
+| B7-21-5 | 백업 timer(15:30 KST, 창 안)가 superuser 로 2세션 — 일반 슬롯을 먼저 쓴다 | 합 44/47 로 아직 안 넘는다 |
+| B7-21-6 | Fly `release_command` migrate 도 `socketTimeout` 30초를 받는다 | 현재 마이그레이션 최대 8KB. 30초 넘는 마이그레이션을 만들 때 별도 연결 설정(application-prod.yml 주석) |
+| B7-21-7 | 75개 엔드포인트 중 **OSIV 경로로 HTTP 검증한 것은 7개** | 구조 가드 + 머지 후 Fly 스모크로 대체(사용자 합의). 전수 통합 테스트는 비용 대비 낮음 |
+| B7-21-8 | Postgres 판 OSIV 회귀·M4 는 `measurementTest`(Docker) 에만 — CI 기본 `test` 는 H2 | Docker 없는 환경에서 `test` 가 깨지지 않게 |
 
 ## 이번 범위에서 하지 않는 것
 
