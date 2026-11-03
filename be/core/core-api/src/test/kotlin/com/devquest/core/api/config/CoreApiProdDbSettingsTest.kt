@@ -1,5 +1,6 @@
 package com.devquest.core.api.config
 
+import com.devquest.core.api.support.SharedRateLimiter
 import com.zaxxer.hikari.HikariConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -88,5 +89,19 @@ class CoreApiProdDbSettingsTest {
         val openInView = prodEnvironment().getProperty("spring.jpa.open-in-view")
 
         assertThat(openInView).isEqualTo("false")
+    }
+
+    @Test
+    fun `레이트 리밋 시도권 리스는 한 번의 DB 시도 최대 시간보다 길다`() {
+        val hikari = boundHikari(prodEnvironment())
+        val socketTimeoutSeconds = Regex("""socketTimeout=(\d+)""").find(hikari.jdbcUrl)?.groupValues?.get(1)?.toLong()
+            ?: throw AssertionError("jdbc-url 에 socketTimeout 이 없다: ${hikari.jdbcUrl}")
+
+        // 최악: 풀 대기(connection-timeout) + 쿼리 중 동결(socketTimeout) + 그 앞 문장 2개의 쿼리 타임아웃(어댑터 1초씩).
+        val worstCaseAttemptMillis = hikari.connectionTimeout + socketTimeoutSeconds * 1_000 + 2 * 1_000
+
+        assertThat(SharedRateLimiter.PROBE_LEASE_MILLIS)
+            .describedAs("PROBE_LEASE_MILLIS 가 DB 시도 최대 시간(${worstCaseAttemptMillis}ms)보다 짧으면 시도가 진행 중인데 다른 요청이 시도권을 가져간다")
+            .isGreaterThan(worstCaseAttemptMillis)
     }
 }
