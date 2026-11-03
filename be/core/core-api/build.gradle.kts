@@ -106,3 +106,21 @@ dependencies {
     // `org.springframework.boot.health.actuate.endpoint.HealthEndpointGroups`를 컴파일 타임에 본다.
     testImplementation("org.springframework.boot:spring-boot-starter-actuator")
 }
+
+// D-016 DB 타임아웃 결정 전 실측(`@Tag("measurement")`) — Docker(Postgres)가 필요한 측정은 기본 `test`/`check` 에서 뺀다.
+// 실행: ./gradlew :core:core-api:measurementTest
+tasks.named<Test>("test") {
+    useJUnitPlatform { excludeTags("measurement") }
+}
+
+tasks.register<Test>("measurementTest") {
+    description = "D-016 실측(Postgres Testcontainers 등 @Tag(\"measurement\")) - 기본 test 와 분리"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { includeTags("measurement") }
+    shouldRunAfter(tasks.test)
+    // 루트가 모든 Test 태스크에 jacocoTestReport 를 finalizedBy 로 걸고, 그 리포트는 `test` 에 dependsOn 이라
+    // 그대로 두면 측정만 돌려도 전체 test 가 딸려 온다 - 측정 태스크에서는 뗀다.
+    setFinalizedBy(emptyList<Any>())
+}
