@@ -90,11 +90,53 @@ class DailyApiProdDbSettingsTest {
         val socketTimeoutSeconds = Regex("""socketTimeout=(\d+)""").find(hikari.jdbcUrl)?.groupValues?.get(1)?.toLong()
             ?: throw AssertionError("jdbc-url 에 socketTimeout 이 없다: ${hikari.jdbcUrl}")
 
-        // 최악: 풀 대기(connection-timeout) + 쿼리 중 동결(socketTimeout) + 그 앞 문장 2개의 쿼리 타임아웃(어댑터 1초씩).
-        val worstCaseAttemptMillis = hikari.connectionTimeout + socketTimeoutSeconds * 1_000 + 2 * 1_000
+        val worstCaseAttemptMillis = worstCaseAttemptMillis(
+            connectionTimeoutMillis = hikari.connectionTimeout,
+            queryTimeoutMillis = ADAPTER_QUERY_TIMEOUT_MILLIS,
+            socketTimeoutMillis = socketTimeoutSeconds * 1_000,
+            statements = MAX_STATEMENTS_PER_ATTEMPT,
+        )
 
         assertThat(SharedRateLimiter.PROBE_LEASE_MILLIS)
             .describedAs("PROBE_LEASE_MILLIS 가 DB 시도 최대 시간(${worstCaseAttemptMillis}ms)보다 짧으면 시도가 진행 중인데 다른 요청이 시도권을 가져간다")
             .isGreaterThan(worstCaseAttemptMillis)
+    }
+
+    @Test
+    fun `최악 시간 모델 - prod 값은 47초이고 앞선 문장마다 풀 대기를 포함한다`() {
+        // 2 x (5 + 1) + (5 + 30) = 47. 앞선 두 문장이 풀 대기 5초 끝에 간신히 성공하고 쿼리 1초를 써도, 마지막 문장이 다시 풀 대기 5초 + 동결 30초를 쓸 수 있다.
+        assertThat(worstCaseAttemptMillis(5_000, ADAPTER_QUERY_TIMEOUT_MILLIS, 30_000, MAX_STATEMENTS_PER_ATTEMPT)).isEqualTo(47_000L)
+    }
+
+    @Test
+    fun `최악 시간 모델 - connection-timeout 을 10초로 올리면 리스 60초를 넘는다`() {
+        // 2 x (10 + 1) + (10 + 30) = 62. 앞선 문장의 풀 대기를 빼먹는 옛 공식은 10 + 30 + 2 = 42 라서 이 변경을 통과시켜 버렸다(거짓 통과).
+        val worst = worstCaseAttemptMillis(10_000, ADAPTER_QUERY_TIMEOUT_MILLIS, 30_000, MAX_STATEMENTS_PER_ATTEMPT)
+
+        assertThat(worst).isEqualTo(62_000L)
+        assertThat(SharedRateLimiter.PROBE_LEASE_MILLIS).isLessThan(worst)
+    }
+
+    companion object {
+        /**
+         * `RateLimitCounterAdapter.tryConsume` 가 한 시도에서 실행하는 최대 문장 수: 증가 UPDATE, 첫 사용 INSERT, 증가 UPDATE 재시도 = 3.
+         * (`refund` 는 1문장이라 더 짧다.) 어댑터에 문장을 더하면 이 값도 올릴 것.
+         */
+        private const val MAX_STATEMENTS_PER_ATTEMPT = 3
+
+        /** `RateLimitCounterAdapter` 의 JdbcTemplate 쿼리 타임아웃(`QUERY_TIMEOUT_SECONDS = 1`). */
+        private const val ADAPTER_QUERY_TIMEOUT_MILLIS = 1_000L
+
+        /**
+         * 한 번의 DB 시도(= 문장 [statements] 개)가 걸릴 수 있는 최악 시간.
+         * 문장마다 **따로** 커넥션을 빌리므로 문장마다 풀 대기가 붙는다 - 앞선 `statements - 1` 문장은 각각 풀 대기 + 쿼리 타임아웃까지 쓰고도 성공할 수 있고,
+         * 마지막 문장이 풀 대기 + 쿼리 중 동결([socketTimeoutMillis])을 쓴다.
+         */
+        fun worstCaseAttemptMillis(
+            connectionTimeoutMillis: Long,
+            queryTimeoutMillis: Long,
+            socketTimeoutMillis: Long,
+            statements: Int,
+        ): Long = (statements - 1) * (connectionTimeoutMillis + queryTimeoutMillis) + connectionTimeoutMillis + socketTimeoutMillis
     }
 }
