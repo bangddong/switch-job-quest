@@ -633,7 +633,7 @@ rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed —
 
 | # | 내용 | 왜 지금 안 하나 |
 |---|---|---|
-| B7-21-1 | **쿼리 직후 동결 시 레이트 리밋이 30초 막힌다** — 어댑터 `queryTimeout` 1초는 어느 구성에서도 지켜지지 않았다(취소 요청도 얼어붙은 서버로 간다 — 메커니즘 미검증). 레이트 리밋 문장에만 짧은 `setNetworkTimeout` 을 거는 방법 | 별도 설계(커넥션 반납 시 timeout 복원). 창 트래픽이 작고, 첫 요청 하나만 30초 막힌 뒤 서킷이 열린다 |
+| B7-21-1 | **쿼리 직후 동결 시 레이트 리밋이 30초 막힌다** — 어댑터 `queryTimeout` 1초는 어느 구성에서도 지켜지지 않았다(취소 요청도 얼어붙은 서버로 간다 — 메커니즘 미검증). 레이트 리밋 문장에만 짧은 `setNetworkTimeout` 을 거는 방법 | 별도 설계(커넥션 반납 시 timeout 복원). 🔴 정정(QA F-4): *"첫 요청 하나만"* 이 아니다 — 얼리는 순간 이미 커넥션을 쥔 요청은 **풀 크기까지(core-api 10·daily-api 3) 모두 30초** 막히고, 서킷은 첫 실패가 기록된 뒤에야 열린다. 그래도 창 트래픽이 작아 지금은 감수 |
 | B7-21-2 | EKS readinessProbe 가 `timeoutSeconds` 기본 1초로 DB 를 본다(`k8s/base/core-api.yaml`·`daily-api.yaml`) — 풀이 마르면 replica 1 core-api 가 Service 에서 빠진다 | OSIV OFF 로 풀이 마를 경로가 크게 줄었다. 첫 창 관측 후 판단 |
 | B7-21-3 | `connectTimeout=5` 는 **한 번도 시험되지 않았다** — 로컬은 TCP 를 받아줘서 SYN 드롭을 재현 못 함 | 실제 네트워크(WireGuard 6PN·EKS→EC2) 장애 재현이 필요 |
 | B7-21-4 | `socketTimeout` 은 클라이언트만 끊는다 — 서버 쿼리는 계속 돌고 Hikari 는 새 커넥션을 연다(느린 DB 에서 백엔드 수 > 풀 합) · 서버 쪽 `statement_timeout` 없음 | EC2 conf 변경 = 백업 `pg_dump` 영향 검토 필요 |
@@ -641,6 +641,7 @@ rotate 전에 09:00 을 지나면 그날 메일은 안 나간다(fail-closed —
 | B7-21-6 | Fly `release_command` migrate 도 `socketTimeout` 30초를 받는다 | 현재 마이그레이션 최대 8KB. 30초 넘는 마이그레이션을 만들 때 별도 연결 설정(application-prod.yml 주석) |
 | B7-21-7 | 75개 엔드포인트 중 **OSIV 경로로 HTTP 검증한 것은 7개** | 구조 가드 + 머지 후 Fly 스모크로 대체(사용자 합의). 전수 통합 테스트는 비용 대비 낮음 |
 | B7-21-8 | Postgres 판 OSIV 회귀·M4 는 `measurementTest`(Docker) 에만 — CI 기본 `test` 는 H2 | Docker 없는 환경에서 `test` 가 깨지지 않게 |
+| B7-21-9 | (QA F-1) **5초/2초를 B7-26 콜드 경로와 대조하지 않았다** — Fly→EC2 새 접속 첫 1~2회 2~3초(TCP 재전송) + `minimum-idle: 0` + suspend → 깨어난 첫 요청이 죽은 커넥션 검증(≤2s) + 새 접속(2~3s)을 직렬로 맞아 5초 근처. 이전(30초)엔 성공하던 요청이 `SQLTransientConnectionException` 이 될 수 있다(09:00 job·첫 사용자 요청·레이트 리밋) | 확률은 재전송 2회 이상이 겹칠 때뿐(🟡). **머지 후 Fly 스모크에 「suspend 재개 직후 첫 요청」 포함** — 실패하면 `connection-timeout` 10초 또는 `minimum-idle ≥ 1`(B7-26 처방) 재판단. 원장 L-82 |
 
 ## 이번 범위에서 하지 않는 것
 
