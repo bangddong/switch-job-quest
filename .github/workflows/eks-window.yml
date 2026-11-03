@@ -188,6 +188,10 @@ jobs:
           LV=$(win_login_keys_verdict "$KEYS" "$CID" "$(win_fe_client_id .github/workflows/fe-cd.yml)") \
             || { echo "::error::로그인 키: $LV (TASK-22)"; exit 1; }
           echo "- 🔑 로그인 키: SSM 에 GITHUB_CLIENT_ID(= FE 번들) · GITHUB_CLIENT_SECRET · JWT_SECRET 있음" >> "$GITHUB_STEP_SUMMARY"
+          # 📌D-016 B8-25 ⓐ — 창 중 오늘의 질문 채점은 ai-api 가 실제 Anthropic 을 부른다. 없으면 on.sh 가 과금 **후** 에 막으므로 여기서 먼저(이름만).
+          AK=$(aws ssm get-parameters --region "$WIN_REGION" --names "$P/ANTHROPIC_API_KEY" --query 'Parameters[].Name' --output text)
+          [ "$AK" = "$P/ANTHROPIC_API_KEY" ] || { echo "::error::AI 키: SSM $P/ANTHROPIC_API_KEY 가 없다 — 창 중 채점이 실패한다(B8-25)"; exit 1; }
+          echo "- 🔑 AI 키: SSM 에 ANTHROPIC_API_KEY 있음(ai-api·core-api 공용 원천)" >> "$GITHUB_STEP_SUMMARY"
 
       # 🔴 apply **전에** 쓴다 — apply 도중 실패해도 off 잡·watchdog 이 "이 실행이 켜려던 클러스터" 를 정리할 근거가 된다.
       - name: 임대 쓰기

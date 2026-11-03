@@ -26,6 +26,7 @@ resources:
   - externalsecret-runtime.yaml   # 📌D-016 8-A — 앱 외부 키(TASK-17)
   - externalsecret-daily-edge.yaml # 📌D-016 B7-19 2단계 — Worker↔원본 공유 비밀, daily-api 전용
   - externalsecret-daily-observability.yaml # 📌D-016 ⑥ B8-18 — Grafana 송출 키, daily-api 전용
+  - externalsecret-ai-api-anthropic.yaml # 📌D-016 B8-25 ⓐ — Anthropic 키, ai-api 전용
   - ingress.yaml                  # 📌D-016 8-B — prod 창 ALB(인증서는 Application 패치, off 는 Application 먼저)
 
 patches:
@@ -119,3 +120,32 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: { name: DEVQUEST_PLATFORM, value: "eks" }
+  # ⑩ 📌D-016 B8-25 ⓐ (2026-11-02) — 창 동안 ai-api 가 **실제 Anthropic** 을 부른다(D-008 의 「학습 클러스터」 전제가 prod 창엔 해당 없음).
+  #    base(`k8s/base/ai-api.yaml`)의 스텁은 **그대로 둔다** — 학습·튜토리얼 경로(`../apps`)는 키가 없으므로 스텁이 맞다.
+  #    D-008 반전 체크리스트는 base 플래그 **삭제**를 요구했지만, 이 overlay 만 prod 다(계획서 B8-25 행).
+  - target: { kind: Deployment, name: ai-api }
+    patch: |-
+      # 스텁 끔 — `test` 로 이름을 확인한 뒤 값만 바꾼다. `env/-` 에 같은 이름을 덧붙이면 중복 env 가 되고,
+      #   인덱스만 믿고 replace 하면 base 순서가 바뀌었을 때 엉뚱한 변수를 조용히 덮는다(이름이 다르면 렌더가 실패한다).
+      - op: test
+        path: /spec/template/spec/containers/0/env/1/name
+        value: DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: "false"
+      # 키 — base 에 envFrom 이 **없어서** `envFrom/-` 가 아니라 목록째 add 한다(externalsecret-ai-api-anthropic.yaml).
+      #   optional — Secret 이 없을 때만 파드를 살린다. 키 부재는 on.sh 가 트래픽 전환 전에 잡는다.
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - secretRef: { name: ai-api-anthropic, optional: true }
+      # 메모리 — base 448Mi 는 **스텁 실측 + JVM 하한**(0.35L + Metaspace 160 + CodeCache 96 ≤ L → 393.8Mi, 여유 ≈35Mi)이다.
+      #   실제 호출은 스텁이 한 번도 안 올린 Spring AI HTTP·TLS·응답 파싱 클래스를 로드한다 — Metaspace·네이티브가 는다(🟡).
+      #   core-api(같은 Spring AI 를 inprocess 로 부르는 서비스)의 576Mi 에 맞춘다 → 힙 상한 ≈201Mi. 첫 창에서 working set 실측.
+      #   requests 는 +64Mi 만 — 스케줄링 여유(노드 3대)를 크게 흔들지 않게.
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 384Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 576Mi

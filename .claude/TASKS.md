@@ -109,16 +109,11 @@ AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS �
 > 추가로 넣을 것은 없다.
 ~~JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).~~ → OAuth = TASK-22 ✅ · JWT = TASK-23(아래 위).
 
-### TASK-24: 일일 작업 트리거 비밀 넣기 (Fly 유휴 정지 PR 머지 직후 — **다음 09:00 전에**)
-
-🔴 **안 하면 다음 09:00 메일이 안 나간다** (fail-closed — Worker 가 401/503 disabled 에서 멈춘다).
-
-1. 조건: Fly 유휴 정지 PR 머지 → **be-cd · fe-cd 둘 다 성공**
-2. GitHub → Actions → `job-secret-rotate.yml` → Run workflow (branch `main`) · action=`rotate` · confirm=`FLY-RESTART`
-   (Fly 재시작 ≈30초. Claude 에게 *"rotate 돌려"* 라고 해도 된다 — 사용자 명시 지시가 있어야만 실행)
-3. 확인: 워크플로 마지막 단계 *헤더 없는 POST → 401* 통과. 다음 09:00 이후 메일 수신 + Cloudflare → Workers → devquest-fe → Logs 에 `done`
-
 ## 완료된 항목
+
+### TASK-24: 일일 작업 트리거 비밀 넣기 → **완료 (2026-11-02)**
+
+사용자가 `job-secret-rotate` rotate 실행(run 41422055724 success). 확인: 헤더 없는 POST → 401, 틀린 값 → `{"status":"unauthorized"}`(머지 직후엔 503 disabled). 실제 발송은 다음 09:00 에 확인.
 
 ### TASK-23: JWT 키 교체 실행 → **완료 (2026-10-28)**
 

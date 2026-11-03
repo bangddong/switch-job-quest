@@ -12,7 +12,7 @@
 | ⑥ 방식 | **A — push 유지, OTel 리소스 속성으로 플랫폼·인스턴스 분리** | B(클러스터 안 Alloy/OTel Collector 스크레이프) 기각: 새 차트·IRSA·노드 메모리, `SecurityConfig` 의 `/actuator/**` 127.0.0.1 제한을 풀어야 해 ⑤ actuator 판정과 정면 충돌, Fly 는 어차피 A 가 필요. → B 는 **학습 트랙 L-5** 로 따로 실습 |
 | daily-api Grafana 키 | **전용 ExternalSecret 신설**(GRAFANA 키만) | `daily-api-edge` 확장은 이름-내용 불일치, `core-api-runtime` 공유는 Anthropic 등 불필요 키 노출(최소권한 위반) |
 | 창 로그 | **core-api · daily-api 둘 다 Loki** | EKS prod 창엔 Fluent Bit 가 없어 destroy 시 로그 소실. L-4(트레이스↔로그 연결)의 전제 |
-| ai-api AI 비용 지표 | ~~⑥ 에 포함~~ → 🔄 **⑥ 에서 제외 (11-01 사용자 재결정)** | 10-30 근거 *"빠지면 창 중 오늘의 질문 AI 비용이 사라진다"* 는 **틀렸다** — EKS ai-api 는 스텁 모드(`k8s/base/ai-api.yaml` `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=true`, Anthropic 키 없음, 스텁 평가자는 지표 기록 안 함)라 AI 비용 지표가 **애초에 생기지 않는다**. 남는 건 JVM·HTTP 지표뿐인데 limit 448Mi = JVM 하한이라 레지스트리 추가가 OOM 위험. 스텁 해제 판정(B8-25) 때 다시 본다 |
+| ai-api AI 비용 지표 | ~~⑥ 에 포함~~ → 🔄 **⑥ 에서 제외 (11-01 사용자 재결정)** | 10-30 근거 *"빠지면 창 중 오늘의 질문 AI 비용이 사라진다"* 는 **틀렸다** — EKS ai-api 는 스텁 모드(`k8s/base/ai-api.yaml` `DEVQUEST_AI_STUB_TECH_INTERVIEW_ENABLED=true`, Anthropic 키 없음, 스텁 평가자는 지표 기록 안 함)라 AI 비용 지표가 **애초에 생기지 않는다**. 남는 건 JVM·HTTP 지표뿐인데 limit 448Mi = JVM 하한이라 레지스트리 추가가 OOM 위험. 스텁 해제 판정(B8-25) 때 다시 본다 · 🔄 **11-02 B8-25 ⓐ 로 창 중 스텁 해제** — 위 전제(*"AI 비용 지표가 애초에 안 생긴다"*)가 사라졌다. 창 동안 ai-api AI 비용·토큰 지표는 **여전히 송출되지 않는다**(ai-api 는 monitoring 미의존, 메모리 576Mi 로 올렸지만 레지스트리는 미추가) → 상위 계획서 B8-25 미처리 목록 |
 | daily-api service.name | **`devquest-daily-api`** (11-01) | 기본값 `devquest-api` 를 쓰면 EKS 에서 core-api 와 같은 job → HTTP 지표가 job 단위로 합산된다 |
 | 플랫폼 구분 | ~~리소스 속성 `devquest.platform`~~ → **Micrometer 공통 태그 `platform`** (11-01) | Grafana Cloud OTLP 는 `service.name`·`service.instance.id` 외 리소스 속성을 라벨로 안 올리고 `target_info` 로 보낸다(🟡 문서 미대조) → `sum by (platform)` 불가. 공통 태그는 모든 시계열에 라벨, Loki 라벨 이름과도 같다. 값 2개라 카디널리티 부담 없음. instance 는 리소스 속성 `service.instance.id` 그대로 |
 | `/actuator/prometheus` 노출 | **core-api 만 유지** (11-01) | 9번이 넘긴 노출 정리. 운영 레시피(`fly ssh … wget localhost:8080/actuator/prometheus` — `jvm-observability-notes.md`)가 쓴다. daily-api 는 노출 안 함 + prometheus 레지스트리 끔(메모리). actuator IP 절(`SecurityConfig`)은 그대로 — 소비처 0 이지만 금지 규칙 |
@@ -59,7 +59,7 @@
 
 ### 🔜 이번에 안 하는 Blindspot 발견 (2026-11-01)
 
-- ⓐ 🔴 **B8-25 — 창 중 오늘의 질문 채점·설명이 ai-api 스텁으로 간다.** 상위 계획서 B8-25 행. ⑥ 범위(관측)가 아니고 스텁 해제 = 창 중 실제 AI 비용·ai-api 에 Anthropic 키 배선이라 별도 판정.
+- ⓐ ~~🔴~~ 🚧 **B8-25 — 창 중 오늘의 질문 채점·설명이 ai-api 스텁으로 간다.** → 🔄 **11-02 사용자 ⓐ 선택 — 창 overlay 에서 스텁 해제·키 배선**(상위 계획서 「B8-25 ⓐ」 절). 창 중 ai-api AI 비용 지표는 여전히 없다(B8-25-3). 상위 계획서 B8-25 행. ⑥ 범위(관측)가 아니고 스텁 해제 = 창 중 실제 AI 비용·ai-api 에 Anthropic 키 배선이라 별도 판정.
 - ⓑ **시계열 연속성은 절반** — job 은 같지만 `instance` 라벨이 새로 붙어 기존 시계열은 끊긴다. 대시보드 `max_over_time - min_over_time` 우회식은 새 시계열의 첫 증가분을 놓친다 → L-2(PromQL 정리)에서.
 - ⓒ **메모리** — daily-api 에 OTLP 레지스트리·Loki appender 추가(prometheus 레지스트리는 끔). limit 640Mi 실측(memory-rightsizing F-2)은 레지스트리 없던 시점 — 첫 창에서 working set 재측정. HPA 최대 4대 × 시리즈 수는 Grafana 무료 티어 활성 시리즈와 대조.
 - ⓓ daily-api prod stdout 이 Logstash JSON 으로 바뀐다(`support:logging`). `kubectl logs` grep 스크립트는 core-api 것뿐(`on.sh`) — 영향 없음 확인.
