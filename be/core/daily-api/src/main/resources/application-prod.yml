@@ -17,17 +17,23 @@ storage:
   datasource:
     core:
       driver-class-name: org.postgresql.Driver
-      jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
+      # B7-21 ⓐ — core-api application-prod.yml 과 같은 값·같은 이유다(D-016 M4 실측: connectTimeout 은 TCP 수립, socketTimeout 은 쿼리 중 동결,
+      # connection-timeout 은 풀 대기·핸드셰이크 침묵을 끊는다). daily-api 는 마이그레이션을 돌리지 않아 socketTimeout 30초의 부작용이 없다.
+      jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require&connectTimeout=5&socketTimeout=30
       username: ${DB_USERNAME}
       password: ${DB_PASSWORD}
       # 10 → 3 (U-6). EKS 몫 커넥션 예산 25 안에 들이기 위해서다: core-api 10 + daily-api 3 × HPA 최대 4 = 22 ≤ 25.
       # 이전 10 × 4 = 40 이면 core-api 10 과 합쳐 50 으로 예산(와 EC2 Postgres max_connections 50)을 혼자 넘는다.
       # daily-api 는 오늘의 질문 읽기·소량 쓰기와 레이트 리밋 카운터만 쓴다. 카운터 쿼리는 문장마다 커넥션을 빌렸다
-      # 즉시 반납하므로(OSIV 로 요청 내내 쥐지 않는다) 파드당 3 이면 충분하다.
-      # core-api 풀·connection-timeout·pgjdbc socketTimeout 정리는 B7-21 몫이다.
+      # 즉시 반납하므로(OSIV OFF 라 요청 내내 쥐지 않는다) 파드당 3 이면 충분하다.
+      # connection-timeout·validation-timeout·pgjdbc socketTimeout 은 B7-21 ⓐ 에서 core-api 와 같이 맞췄다(jdbc-url 참고).
       maximum-pool-size: 3
       minimum-idle: 0
       connection-test-query: SELECT 1
+      # 풀 대기 상한 30초(Hikari 기본) → 5초. 풀이 3개뿐이라 가득 찰 때 요청이 30초 매달리는 비용이 core-api 보다 크다.
+      connection-timeout: 5000
+      # 대여 직전 `SELECT 1` 검증 상한 5초 → 2초. connection-timeout 보다 짧게 둔다(대기 상한 안에서 검증이 끝나야 한다).
+      validation-timeout: 2000
 
 server:
   port: 8082

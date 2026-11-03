@@ -15,9 +15,11 @@ import javax.sql.DataSource
 /**
  * [RateLimitCounterPort] 의 JDBC 구현 — core-api·daily-api 가 이 한 벌을 공유한다.
  *
- * 🔴 JPA(EntityManager)가 아니라 **JdbcTemplate** 이다. 호출처는 인터셉터(`preHandle`)라 OSIV 가 켜진 요청 스레드이고,
- * 거기서 JPA 로 쿼리하면 EntityManager 가 커넥션을 요청 끝까지 쥔다(DELAYED_ACQUISITION_AND_HOLD). 이 요청은 그 뒤 AI 호출로
- * 최대 150초를 쓰므로 풀이 마른다. JdbcTemplate 은 트랜잭션 밖에서 문장마다 커넥션을 빌렸다 즉시 돌려준다.
+ * 🔴 JPA(EntityManager)가 아니라 **JdbcTemplate** 이다. 호출처는 인터셉터(`preHandle`)이고 이 요청은 그 뒤 AI 호출로 최대 150초를 쓴다.
+ * 이 클래스를 만들 때는 OSIV 가 켜져 있어서(Boot 기본 true) 여기서 JPA 로 쿼리하면 EntityManager 가 커넥션을 요청 끝까지 쥐었다
+ * (DELAYED_ACQUISITION_AND_HOLD) - 풀이 마른다. **B7-21 ⓐ 로 OSIV 는 꺼졌지만 이 선택은 그대로 둔다**: JdbcTemplate 은 OSIV 설정과
+ * 무관하게 트랜잭션 밖에서 문장마다 커넥션을 빌렸다 즉시 돌려주고, 아래 1초 쿼리 타임아웃도 JdbcTemplate 속성이라 JPA 로 바꾸면 따로 걸어야 한다.
+ * 누군가 OSIV 를 다시 켜더라도 이 경로는 안전하다.
  *
  * 쿼리 타임아웃은 1초다 — 한도 검사 때문에 요청이 오래 막히지 않게 한다(호출처는 실패 시 메모리 버킷으로 대체한다).
  *

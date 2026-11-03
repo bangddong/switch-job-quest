@@ -29,7 +29,7 @@ import java.time.ZoneId
  * `techInterviewPort.generateDailyQuestion`이 client-ai를 거쳐 실제 LLM 프로바이더로 나가는
  * 네트워크 호출을 한다(`TechInterviewEvaluator` → `BaseAiEvaluator.callAi` → `ChatClient`).
  * client-ai에는 timeout 설정이 없고 `AiCallExecutor`가 기본 3회 재시도하므로, 메서드 전체를
- * `@Transactional`로 감싸면 그 재시도 대기 내내 DB 커넥션 1개(prod HikariCP `maximum-pool-size: 10`)를
+ * `@Transactional`로 감싸면 그 재시도 대기 내내 DB 커넥션 1개(prod HikariCP `maximum-pool-size`: core-api 10, daily-api 3)를
  * 붙잡아 커넥션 풀 고갈 위험이 커진다(Phase 1 Task 1.4, 커밋 `bd40c65`에서 이미 걷어낸 패턴의 재발).
  *
  * 원자성을 잃지 않는 이유: 이 메서드의 유일한 쓰기는 [dailyQuestionContentPort]`.save` 호출 한 번뿐이고,

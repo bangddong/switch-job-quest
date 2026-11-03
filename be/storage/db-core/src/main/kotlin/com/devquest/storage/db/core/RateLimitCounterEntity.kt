@@ -13,7 +13,8 @@ import java.time.LocalDateTime
  * V14 `rate_limit_counter` 의 **스키마 선언**이다 — 이 엔티티로 읽고 쓰지 않는다.
  *
  * 카운터는 [com.devquest.storage.db.core.adapter.RateLimitCounterAdapter] 가 JdbcTemplate 으로 직접 갱신한다.
- * (인터셉터에서 JPA EntityManager 로 쿼리하면 OSIV 때문에 요청 끝까지 커넥션을 쥔다 — 그 뒤 AI 호출이 최대 150초.)
+ * (OSIV 가 켜져 있던 때는 인터셉터에서 JPA EntityManager 로 쿼리하면 요청 끝까지 커넥션을 쥐었다 — 그 뒤 AI 호출이 최대 150초.
+ * B7-21 ⓐ 로 OSIV 는 꺼졌지만, 문장마다 빌렸다 반환하는 JdbcTemplate 선택은 어댑터 KDoc 의 이유로 유지한다.)
  * 그래도 엔티티를 두는 이유는 둘이다.
  *  1. H2(`create-drop`) 테스트 컨텍스트에서 Hibernate 가 테이블을 만들어 준다 — 어댑터 SQL 이 실제로 돈다.
  *  2. prod(`ddl-auto: validate`)에서 마이그레이션과 어긋나면(타입·컬럼) 기동 시점에 드러난다.

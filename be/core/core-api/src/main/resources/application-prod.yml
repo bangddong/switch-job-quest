@@ -26,19 +26,30 @@ devquest:
   flyway:
     # db-core의 FlywayConfig는 devquest.flyway.migrate-on-startup=true를 명시적으로 켠 앱에서만
     # 기동 시 migrate()를 실행한다(repair()는 없다 — FlywayConfig.kt 클래스 주석 참고).
-    # 이 기본값(true)은 EKS가 쓴다 — EKS는 당분간 기동 시 마이그레이션을 유지한다(Job 분리는 후속 작업).
-    # Fly는 배포 단계(be/fly.toml의 release_command = "migrate")에서 마이그레이션하고,
-    # 앱 기동에서는 DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP=false로 끈다. 이 기본값을 바꾸지 말 것.
-    # 다른 앱(예: daily-api)이 db-core만 의존한 채 이 값을 켜지 않으면 마이그레이션은 돌지 않는다 — 게이트의 의도다.
+    # 이 기본값(true)은 EKS 학습 모드(in-cluster DB, `k8s/gitops/apps`)가 쓴다 - 그쪽은 기동 시 마이그레이션을 유지한다(Job 분리는 후속 작업).
+    # 🔴 **prod DB 를 쓰는 경로는 이 값을 끈다**: Fly 는 배포 단계(be/fly.toml의 release_command = "migrate")에서 마이그레이션하고
+    # DEVQUEST_FLYWAY_MIGRATE_ON_STARTUP=false 로 기동 시 실행을 끈다. EKS external 모드(`k8s/gitops/apps-external/kustomization.yaml` ④)도
+    # 같은 환경변수로 false 를 주입한다 - "Fly release_command 가 유일한 migrate 실행자"(D-016 1a). 이 기본값을 바꾸지 말 것.
     migrate-on-startup: true
 
 storage:
   datasource:
     core:
       driver-class-name: org.postgresql.Driver
-      jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
+      # B7-21 ⓐ — DB 가 조용히 죽었을 때(파티션·VM 동결·보안그룹 DROP) 요청이 얼마나 막히는지를 정한다(D-016 M4 실측).
+      #   connectTimeout=5  : TCP 연결 수립 상한(초). 이미 TCP 가 붙은 뒤의 침묵(핸드셰이크 무응답)은 못 끊는다 - 그건 아래 connection-timeout 이 끊는다.
+      #   socketTimeout=30  : 소켓 읽기 상한(초). **쿼리 진행 중 DB 가 얼면 끊는 유일한 장치**다 - JdbcTemplate queryTimeout(1초)은 이 경로를 못 끊고
+      #                       없으면 측정한 70초 안에는 풀리지 않았다(M4-b ii). 대가: 30초를 넘기는 문장은 서버가 일해도 끊긴다.
+      # ⚠️ Fly release_command 의 `migrate` 도 같은 datasource 를 쓰므로 socketTimeout 30초가 마이그레이션 문장에도 걸린다.
+      #    30초를 넘는 마이그레이션(대형 인덱스 생성·백필)은 별도 연결 설정(더 긴 socketTimeout)이 필요하다.
+      jdbc-url: jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require&connectTimeout=5&socketTimeout=30
       username: ${DB_USERNAME}
       password: ${DB_PASSWORD}
       maximum-pool-size: 10
       minimum-idle: 0
       connection-test-query: SELECT 1
+      # 풀 대기 상한 30초(Hikari 기본) → 5초. 풀이 가득 찼거나 DB 가 안 보일 때 요청 스레드가 30초 매달리지 않고 5초 만에 실패한다.
+      # 커넥션 점유 시간이 OSIV OFF 로 짧아졌으므로 5초면 정상 대기에는 충분하다고 본다(판단 - 부하 측정은 아니다).
+      connection-timeout: 5000
+      # 대여 직전 `SELECT 1` 검증 상한 5초 → 2초. connection-timeout 보다 짧게 둔다(대기 상한 안에서 검증이 끝나야 한다).
+      validation-timeout: 2000

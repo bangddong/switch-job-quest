@@ -89,27 +89,13 @@ ECR도 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 간격 반복,
       로그인·DB·RPG XP 연동. **지금은 보류이고, 판단은 사용자 몫이다.**
 
-### TASK-17: EKS 창용 **관측** 키를 SSM 에 (📌D-016 — **첫 창(10번) 직전까지**, 급하지 않음)
-
-> ✅ **필수 2개는 끝났다 (2026-10-22)** — `ANTHROPIC_API_KEY`(EKS 전용 새 키) · `JUDGE0_API_KEY`(RapidAPI 앱 키).
-> 이름 오타(`JUDGE0` 의 숫자 0 대신 알파벳 O) 하나를 Claude 가 값 출력 없이 고쳐 옮겼다. `RESEND` 는 **불필요**(EKS 는 메일을 안 보낸다).
-
-남은 것은 **관측용**이다 — 없어도 EKS 는 정상으로 뜨고, 창 동안 그래프·에러 수집만 빈다(B8-18).
-AWS 콘솔(서울) → Parameter Store → Create — **SecureString** · KMS 기본값(`alias/aws/ssm` — 바꾸면 EKS 가 못 읽는다) · 경로 `/devquest/prod/app/<이름>`:
-
-| 이름 | 어디서 |
-|---|---|
-| `GRAFANA_API_KEY` · `GRAFANA_LOKI_URL` · `GRAFANA_LOKI_INSTANCE_ID` | Grafana Cloud → Access Policies / Loki 상세 — 🔴 스택 slug·URL 을 레포에 적지 않는다 |
-| `SENTRY_DSN` | sentry.io → 프로젝트 설정 (있으면) |
-
-🔴 **이름은 대소문자·숫자까지 정확히** — 허용 목록과 다르면 **에러 없이 빠진다**. 넣었으면 "넣었다"고만(Claude 가 이름만 확인).
-
-> ⏱ **시점 (⑥ B8-18, 2026-11-01)**: ⑥ PR(지표·로그 `platform` 분리) **머지·Fly 배포 뒤**에 넣는다 — 먼저 넣으면 EKS core-api 가
-> Fly 와 구분 없는 리소스로 같은 스택에 push 해 지표가 섞인다. 같은 3개 파라미터를 **daily-api 도 읽는다**(ESO `daily-api-observability`) —
-> 추가로 넣을 것은 없다.
-~~JWT·GitHub OAuth 는 **10번 직전**(JWT 통일과 함께).~~ → OAuth = TASK-22 ✅ · JWT = TASK-23(아래 위).
-
 ## 완료된 항목
+
+### TASK-17: EKS 창용 관측 키를 SSM 에 → **완료 (2026-11-03)**
+
+`/devquest/prod/app/GRAFANA_API_KEY`·`GRAFANA_LOKI_URL`·`GRAFANA_LOKI_INSTANCE_ID` 3개 SecureString(`alias/aws/ssm`). 값 미열람 형식 확인:
+API 키 `glc_` 136자 · URL `https://logs-prod-….grafana.net/loki/api/v1/push` 50자(첫 입력은 `/loki/api/v1/push` 누락 → 사용자 수정, v2) · User 숫자 7자리.
+`SENTRY_DSN` 은 **넣지 않음** — BE main 에 Sentry 사용처 0건. ⚠️ API 키는 길이(136)가 로컬 `application-local.yml` 의 OTLP 토큰과 같아 그 토큰 재사용으로 보인다(🟡) → `logs:write` 권한 미확인, 첫 창에서 `platform="eks"` 로그 유입으로 확인.
 
 ### TASK-24: 일일 작업 트리거 비밀 넣기 → **완료 (2026-11-02)**
 

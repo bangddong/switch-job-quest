@@ -15,6 +15,11 @@ spring:
     console:
       enabled: false
   jpa:
+    # B7-21 ⓐ — OSIV 를 앱 전체에서 끈다(모든 프로필). core-api application.yml 과 같은 결정이다.
+    # daily-api 의 채점 경로는 요청 스레드에서 JPA 를 쓰지 않아 지금도 active=0 이지만(D-016 M3), 읽기 경로(오늘의 질문 조회)는
+    # JPA 를 쓰므로 OSIV 가 켜져 있으면 응답 직렬화까지 커넥션을 쥔다. 풀이 3개뿐이라 슬롯 1개가 크다.
+    # 전제(엔티티 연관관계 0개·엔티티 비노출)는 core-api 의 OsivOffPremiseGuardTest 가 지킨다.
+    open-in-view: false
     hibernate:
       ddl-auto: create-drop
     show-sql: false

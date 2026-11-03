@@ -120,7 +120,18 @@ class SharedRateLimiter internal constructor(
         /** DB 실패 후 DB 를 건너뛰는 시간. */
         const val DB_RETRY_AFTER_MILLIS = 5_000L
 
-        /** half-open 시도 요청이 결과 없이 매달렸을 때 다른 요청이 시도권을 이어받기까지의 시간(Hikari 연결 대기 30초보다 길게). */
+        /**
+         * half-open 시도 요청이 결과 없이 매달렸을 때 다른 요청이 시도권을 이어받기까지의 시간.
+         *
+         * 🔴 **한 번의 DB 시도가 걸릴 수 있는 최대 시간보다 길어야 한다** - 짧으면 시도가 아직 진행 중인데 다른 요청이 시도권을
+         * 가져가 DB 시도가 겹친다(half-open 이 "한 요청만" 이라는 약속이 깨진다). 최대 시간(B7-21 ⓐ, prod 설정 기준):
+         * `tryConsume` 은 최대 3문장(증가 UPDATE, 첫 사용 INSERT, 증가 UPDATE 재시도)이고 **문장마다 따로 커넥션을 빌린다** - 문장마다 풀 대기가 붙는다.
+         * 앞선 2문장은 각각 풀 대기 5초(Hikari `connection-timeout`) + 쿼리 타임아웃 1초까지 쓰고도 성공할 수 있고, 마지막 문장이
+         * 풀 대기 5초 + 쿼리 중 동결 30초(pgjdbc `socketTimeout` - 쿼리 타임아웃 1초는 이 경로를 못 끊는다)를 쓴다.
+         * 2 x (5 + 1) + (5 + 30) = 약 47초. 60초는 이보다 길다(여유 약 13초).
+         * `socketTimeout` 이나 `connection-timeout` 을 올리면 이 값도 다시 계산할 것 - prod 설정 테스트가 이 부등식을 지킨다
+         * (예: `connection-timeout` 10초면 2 x (10 + 1) + (10 + 30) = 62초로 60초를 넘는다).
+         */
         const val PROBE_LEASE_MILLIS = 60_000L
     }
 }
