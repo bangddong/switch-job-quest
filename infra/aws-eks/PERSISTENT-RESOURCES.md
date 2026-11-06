@@ -1,5 +1,7 @@
 # 영속 AWS 리소스 원장 (Persistent Resources Ledger)
 
+> 🛑 **2026-11-06 서비스 종료 — 이 목록의 대부분은 삭제됐다.** 남은 것: tfstate S3 `devquest-eks-tfstate-seoul` · DynamoDB `devquest-eks-tflock` · OIDC 역할 2 · Budgets 2 · Cost Anomaly. 삭제 기록은 `docs/eks-migration-log.md` 「2026-11-06 — 서비스 종료」.
+
 > **이 파일은 커밋된다.** 세션이 끝나도, 클러스터를 부숴도, 머신이 바뀌어도 살아남는
 > "지금 AWS에 상시로 떠 있는 것"의 유일한 목록이다.
 >

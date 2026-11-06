@@ -1,5 +1,15 @@
 # DevQuest — 개발자 이직 RPG
 
+> 🛑 **서비스 종료 (2026-11-06) · 레포 보관(archive)**
+>
+> `quest.dhbang.co.kr` 는 더 이상 서빙되지 않는다. Fly 앱·Cloudflare Worker·AWS prod DB(EC2)·ECR·백업
+> 버킷을 전부 삭제했다. 코드·문서·결정 기록은 학습 자료로 이 레포에 그대로 남긴다.
+>
+> - EKS 학습 기록: [`docs/eks-migration-log.md`](docs/eks-migration-log.md) (일지) ·
+>   [`docs/eks-tutorial-steps.md`](docs/eks-tutorial-steps.md) (정답 경로) · [`docs/eks-quizzes/`](docs/eks-quizzes/)
+> - 종료 절차와 남긴 것: 일지 「2026-11-06 — 서비스 종료」
+> - ⚠️ `infra/aws-eks/` 의 `.tf` 는 **종료 전 상태를 기술한다** — 그대로 `apply` 하면 지운 리소스가 다시 생긴다.
+
 개발자의 이직 준비 과정을 RPG 퀘스트로 게이미피케이션한 풀스택 애플리케이션입니다.
 AI(Claude)가 에세이, 이력서, 면접 등을 평가하고, 퀘스트 클리어를 통해 이직 준비 완성도를 높여갑니다.
 
