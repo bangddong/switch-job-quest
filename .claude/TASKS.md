@@ -1,51 +1,26 @@
 # 미완료 작업
 
-> **IaC-first 전환(07-16)으로 기존 콘솔 작업 TASK-4/5 폐기.** 크레딧 제외 필터·이상탐지는 이제
-> 콘솔이 아니라 `0-bootstrap`의 코드로 처리한다.
->
-> - ✅ 예산 — `budget.tf` (`cost_types.include_credit=false`, `ABSOLUTE_VALUE`). 07-18 apply 완료.
->   <!-- verify: infra/aws-eks/0-bootstrap/budget.tf -->
-> - ✅ 이상탐지 — `cost-anomaly.tf` (`aws_ce_anomaly_monitor` + `_subscription`). **07-29 코드 추가**,
->   머지 시 CI(`infra-deploy.yml`)가 apply. <!-- verify: infra/aws-eks/0-bootstrap/cost-anomaly.tf -->
->   그전까지 이 줄은 "코드로 처리"라고 적혀 있었지만
->   **실제 `.tf`가 없었다** — 문서가 코드보다 앞서 있던 상태였고 07-29에 해소.
+> 🛑 **서비스 종료 (2026-11-06).** 남은 사용자 작업은 TASK-25(외부 키·계정 폐기)와 TASK-6(크레딧 — 후속
+> 보일러플레이트 트랙이 같은 AWS 계정을 쓴다) 둘뿐이다. 나머지는 「완료된 항목」으로 종결 처리했다.
 
-### TASK-4: 0-bootstrap 착수 준비 — AWS 자격증명 (사용자, 2026-07-16, 진행 중)
+### TASK-25: 외부 키·계정 폐기 (사용자, 2026-11-06)
 
-> ⚠️ **SSO(IAM Identity Center) 경로 폐기** — Organizations로 켜면 **$200 크레딧 즉시 소멸**(일지 `[막힘]`).
-> → **IAM 사용자 액세스키**로 확정 (org 안 만듦 = 크레딧 안전).
+서비스는 내려갔지만 **키는 살아 있다.** 사본은 이미 지웠다(Fly secrets·Worker secrets·SSM `/devquest/prod/*`).
+원본을 각 콘솔에서 폐기한다. 상세 위치는 `.claude/docs/secrets-map.md`.
 
-최초 로컬 `tofu apply`(S3 backend·예산)에 자격증명 필요. Claude는 시크릿 키를 못 다루므로 사용자가 직접:
-
-1. 콘솔 → IAM → Users → **`bootstrap-admin`** 생성, **AdministratorAccess** attach
-2. Security credentials → **Create access key** (use case: CLI)
-3. **PC 터미널에서 직접** `aws configure` — key/secret 본인 입력, region **`ap-northeast-2`**, output `json`
-   - ⚠️ 키를 Claude에 붙여넣지 말 것. `~/.aws/`에만, **git 절대 금지**.
-4. "configure 했어" → Claude가 `aws sts get-caller-identity` 확인 → `0-bootstrap` 코드 착수
-   - 부트스트랩 후 GitHub OIDC로 전환하고 **이 액세스키 폐기**
-
-### TASK-12: RSS creep 기울기 재측정 → **완료 (2026-09-24)**
-
-사용자가 `fly ssh console` 로 실행. 표본 3개(동일 JVM, 재시작 없음) 확보 → 판정 완료.
-
-```
-                     uptime   VmRSS   swap    총발자국   Metaspace
-2026-09-18 05:38Z     70.8h  386.70  33.00    419.70      138.80
-2026-09-23 14:37Z    199.8h  376.80  50.05    426.85          —
-2026-09-24 01:07Z    210.3h  374.92  53.55    428.47      140.11
-```
-
-- 🔴 **`3 MB/h` 기각** — 실측 **0.063 MiB/h**(54배 과대). 런웨이 2.6일 → **40~98일**.
-- **판정: ⑤ 현행 유지**(`limits` 576Mi 그대로). 발자국 428.5 가 576 에 여유 147.5 로 들어간다.
-- 🔴 **B-5 `✅해소`** — **방향은 맞았고**(K8s 여유 147.5 < Fly 236.5) **긴급도가 54배 과대**였다
-  (런웨이 2.6일 → 40~98일). ⚠️ 처음엔 *"방향이 뒤집힌다"* 고 썼다가 **QA HIGH** — Fly 에만
-  RAM-only 천장을 댄 비일관 비교였다. 🔑 **전환 함정**: swap 53.6 MiB 가 K8s 에선 resident 가 된다.
-- 🔴 **`§1` 의 *"매일 +4.2 MiB 점프"* 기각** — 1회성(지연 로딩)이다.
-  ***그래서 이 TASK 가 요구했던 "08:30/09:30 갈라 찍기" 는 전제가 없었다.***
-- 🔴 **덤: 메타스페이스 140.11/160 = 87.6%, +0.225 MiB/일 → 상한까지 88일.**
-  → `.claude/CONTEXT.md` 제품 백로그로 이관(이 TASK 소관 아님).
-
-상세: `docs/superpowers/plans/2026-09-11-prod-eks-migration-prereqs.md` 「항목 4 — 종료」
+- [ ] **Anthropic** — 키 3개(Fly prod · EKS 전용 · 로컬) 삭제
+- [ ] **Judge0 (RapidAPI)** — 구독 해지 또는 키 재발급(폐기)
+- [ ] **Resend** — API 키 삭제 · 도메인 `dhbang.co.kr` 제거. Cloudflare DNS 의 `resend._domainkey`(TXT)·`send`(MX·TXT)
+      는 Resend 전용이라 같이 지워도 된다(블로그 무관)
+- [ ] **Grafana Cloud** — devquest 용 API 키 삭제 (스택 자체는 선택)
+- [ ] **Sentry** — 프로젝트 삭제 (BE 사용처 0건이었다)
+- [ ] **GitHub OAuth App** — devquest 앱 삭제 (client secret 2개가 같이 사라진다)
+- [ ] **GitHub PAT** — EventBridge 용(connection 은 삭제됨) · `COMMIT_PAT` 폐기
+- [ ] **Vercel** — `switch-job-quest` 프로젝트 삭제(V-4) · 로컬 키체인 `vercel-token` 폐기
+- [ ] **Cloudflare 토큰 2개** — FE 배포 토큰 · 계정 토큰 `devquest-eks-window-dns`(종료 작업 때 Workers 권한을 추가했다)
+- [ ] **Fly** — org 토큰 `devquest-shutdown`(만료 선택 UI 가 없어 기본 20년으로 발급됐을 것) 폐기
+- [ ] **Neon** — 🔴 **마지막에.** 콜드 대기 DB 가 최종 덤프의 두 번째 사본이다. 로컬 덤프를 다른 곳에 복사한 뒤 프로젝트 삭제
+- [ ] 위가 끝나면 Claude 에게 알린다 → SSM `/devquest/ops/*` 3개 삭제
 
 ### TASK-6: AWS 크레딧 만료일 캘린더 등록 (사용자, 2026-07-23)
 
@@ -64,6 +39,30 @@ ECR도 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
 - **만료일**: **2027-01-15** (07-29 콘솔 확인 확정)
 - **알림 권장**: **2027-01-01** (만료 2주 전) — 상시 데모 계획이 있으면 이때 Paid 업그레이드 판단
 - 별개 감시: 크레딧 잔액이 **$30 안전 예비**에 근접하면(현재 $199.81) 세션 빈도 조절
+
+## 완료된 항목
+
+### TASK-4 · TASK-7 · TASK-11 → **종결 (2026-11-06, 서비스 종료)**
+
+- TASK-4(bootstrap-admin 액세스키 → OIDC 전환 후 폐기): AWS 계정은 후속 트랙이 계속 쓴다 — 그 트랙에서 판단
+- TASK-7(EKS 리퍼 재설치): 클러스터가 다시 생길 일이 없다. 이 맥의 launchd 잡은 종료 작업 중 제거
+- TASK-11(앱 사용 피드백): 서비스 종료로 무의미
+
+<details><summary>원문</summary>
+
+### TASK-4: 0-bootstrap 착수 준비 — AWS 자격증명 (사용자, 2026-07-16, 진행 중)
+
+> ⚠️ **SSO(IAM Identity Center) 경로 폐기** — Organizations로 켜면 **$200 크레딧 즉시 소멸**(일지 `[막힘]`).
+> → **IAM 사용자 액세스키**로 확정 (org 안 만듦 = 크레딧 안전).
+
+최초 로컬 `tofu apply`(S3 backend·예산)에 자격증명 필요. Claude는 시크릿 키를 못 다루므로 사용자가 직접:
+
+1. 콘솔 → IAM → Users → **`bootstrap-admin`** 생성, **AdministratorAccess** attach
+2. Security credentials → **Create access key** (use case: CLI)
+3. **PC 터미널에서 직접** `aws configure` — key/secret 본인 입력, region **`ap-northeast-2`**, output `json`
+   - ⚠️ 키를 Claude에 붙여넣지 말 것. `~/.aws/`에만, **git 절대 금지**.
+4. "configure 했어" → Claude가 `aws sts get-caller-identity` 확인 → `0-bootstrap` 코드 착수
+   - 부트스트랩 후 GitHub OIDC로 전환하고 **이 액세스키 폐기**
 
 ### TASK-7: EKS 리퍼(dead man's switch) — 새 머신/클론 시 재설치 (2026-07-25)
 
@@ -89,7 +88,8 @@ ECR도 계정과 함께 사라진다(폐쇄 후 90일 content 보관, Paid 업�
       만족스러우면 **Phase B(축적형 복습노트)** 착수 판단 — 모르는 개념/오답 저장 → 간격 반복,
       로그인·DB·RPG XP 연동. **지금은 보류이고, 판단은 사용자 몫이다.**
 
-## 완료된 항목
+
+</details>
 
 ### TASK-17: EKS 창용 관측 키를 SSM 에 → **완료 (2026-11-03)**
 

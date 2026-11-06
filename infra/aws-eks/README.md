@@ -1,5 +1,7 @@
 # AWS EKS 학습 놀이터 — 계획
 
+> 🛑 **2026-11-06 서비스 종료.** `1-network` 는 전부 destroy, `0-bootstrap` 은 기반(tfstate·OIDC·Budgets·Cost Anomaly)만 남기고 `-target` destroy·`state rm` 했다. **`.tf` 는 종료 전 상태를 기술한다 — 그대로 `apply` 하면 지운 리소스가 다시 생긴다.**
+
 > 2026-07-13 대화에서 확정된 방향을 문서화. 대화 원본은 세션 트랜스크립트에만 있었고 이 문서가 첫 기록.
 > 진행 상태는 아래 "진행 현황" 표를 갱신한다.
 

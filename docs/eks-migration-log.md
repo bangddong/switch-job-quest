@@ -14,6 +14,8 @@
 
 ## 누적 비용
 
+> 🛑 **2026-11-06 서비스 종료** — 아래 영속 리소스(EBS·로그 그룹·S3 백업·ECR)는 **전부 삭제**됐다(종료일 = 2026-11-06). 남은 것은 tfstate·Budgets·Cost Anomaly·OIDC(≈$0/월). 마지막 크레딧 조회 = **$184.49**(11-05 budget-gate). 상세는 맨 아래 「2026-11-06 — 서비스 종료」.
+
 | 리소스 | 시작일 | 종료일 | 예상 비용 | 누적 소진 |
 |--------|--------|--------|----------|------------|
 | 클러스터·노드 (세션 중에만) | — | — | $0/h *(현재 미가동)*<br>▸ 가동 시 **노드 1대 $0.1299/h · 2대 $0.1582/h · 3대 $0.1865/h**<br>  (노드 1대 = t4g.small `$0.0208` + 공인 IPv4 `$0.005` + **루트 EBS 20GiB `$0.0025`** = `$0.0283/h`;<br>   + 컨트롤플레인 `$0.100` + Secrets Manager 3종 일할 `$0.0016`)<br>  ~~노드 1대 $0.128/h · 2대 $0.154/h · 3대 $0.180/h~~ — 🔴 **루트 EBS 누락이었다 (09-04 정정)**<br>▸ ~~$0.149/h (t4g.medium 상향 후)~~ — **medium 은 이 계정에서 launch 불가**(D-010)<br>▸ 🔴 **Stage C 재개 = 3대** (D-011) → 50분 세션 ≈ ~~$0.150~~ **$0.1554** | |
@@ -6138,3 +6140,35 @@ EKS 에는 `fdaa::/16`(Fly 6PN 사설망)이 없다. 남겨두면 **의미 없�
 - `[결정]` 사용자 *"OSIV 는 고객 대상 끄고 admin 은 켠다"* 질문 → admin 엔드포인트 0/75, JPA 연관 0, 엔티티 어댑터 밖 유출 0 → 켤 영역 없음. HTTP 로 OSIV 경로 검증한 엔드포인트는 7/75 뿐이라 **구조 가드 테스트 + 머지 후 Fly 스모크**로 보강, 사용자 *"그래"* → ⓐ.
 - `[해결]` `fix/db-connection-timeouts`: core-api·daily-api `spring.jpa.open-in-view: false`(각 앱 yml — #521 import 우선순위 함정 회피), prod `connection-timeout 5000`·`validation-timeout 2000`·URL `connectTimeout=5&socketTimeout=30`. 구조 가드 실패 주입 4종 RED 확인. `./gradlew build` 실패 0(core-api 382·daily-api 99 …), `measurementTest`(Docker) 통과. 미처리 8건 → 계획서 B7-21-1~8.
 - `[비용]` $0(로컬 측정·클러스터 꺼짐). 머지 = Fly 재시작(창 꺼진 시간에만).
+
+## 2026-11-04 — 📌D-016 10번 첫 창 (2h 시험)
+
+- `[결정]` 사용자 *"오늘 테스트니까 일단 오늘만 시험으로 하자"* → 계획서 기본안(평일 12~18 KST, 6h) 대신 **2h 시험 창**. `gh workflow run eks-window.yml -f action=on -f hours=2 -f traffic=eks`.
+- `[막힘]` 첫 dispatch 를 auto mode 분류기가 거부(`[Production Deploy]`). 재시도하지 않고 사용자에게 넘겼다가 사용자 *"아니 너가 켜라고."* → 명시 지시로 재실행 통과.
+- `[해결]` 창 전 구간 검증: Worker KV 스위치로 트래픽 EKS 전환(응답 헤더 `x-devquest-backend: eks`) · ai-api 실제 Anthropic 채점(B8-25-1) · 노드 메모리 · Grafana 로그·지표(platform 라벨 분리, #521) · 임대 만료 → 트래픽 Fly 복귀 · watchdog destroy.
+- `[메모]` 🔴 **정정**: 사용자에게 *"12:47 에 watchdog 이 끈다"* 고 안내했는데 틀렸다. 12:47 은 **백업**인 GitHub cron(`47 * * * *`) 시각이고, 주 경로인 EventBridge watchdog 은 `cron(17 * * * ? *)` → 실제 off 는 **13:17**. KV `until` = 임대 만료라 트래픽은 만료 시각에 Fly 로 돌아가고, 클러스터는 다음 :17 까지(최대 ≈1h) 살아 있다.
+- `[메모]` 내 실수 2건(서비스 영향 없음): ① actuator 에 노출 안 된 hikaricp 엔드포인트를 찔러 ERROR 로그 4건 자가 유발 ② 로그 grep 중 core-api 기동 시 생성되는 `Using generated security password` 값을 세션 출력에 노출 — 부팅마다 무작위, httpBasic/formLogin 미사용이라 쓸 곳 없음(LOW).
+- `[메모]` FE 발견(창과 무관, 기존 결함): `/daily-question` 이 메뉴에 없고(로그인 화면 링크만), 로그인 상태에서도 *"로그인 없이 체험 중입니다…"* 배너가 고정 문구로 나오며 fetch 에 인증 헤더가 없다. 사용자 *"기능은 인프라 끝나면 하자"* → 서비스 종료로 미착수.
+- `[비용]` 11-04 10:23~13:28 ≈ **$1.1**.
+
+## 2026-11-05 — 두 번째 창 (세션 cron 자동 켜기)
+
+- `[결정]` 사용자 *"너가 해 내일부터 계획대로"* → 평일 창 켜기를 Claude 세션 cron 에 위임(켜기는 수동 원칙 Q-3 을 사용자 지시로 대행).
+- `[메모]` 11:44 예약이 **12:14** 에 실행됐다 — 세션 cron 은 REPL 이 유휴일 때만 발화한다(🟡). budget-gate 원문: `[budget-gate] ✅ 통과 — 남은 크레딧 $184.49 · 만료까지 72일 · 가용 $118.49 (예비 $30 · 상시 $0.5/일 제외) · 이번 창 6h ≈ $2.10`
+- `[메모]` 노드 메모리(창 중): `ip-10-0-11-105 825Mi 60%` · `ip-10-0-12-218 1199Mi 87%` · `ip-10-0-12-65 1049Mi 76%`. 이력서 채점 2회 200(2.75s · 1.00s).
+- `[결정]` 같은 날 사용자 *"일단 이 devquest는 없앨라고 ... 많은 시행착오 덕분에 너무 산으로 간 것 같아"* → 범위 「서비스 종료 + 레포 보관」. 사용자 *"아직 크레딧이 많이 남아서 활용 가능하지 않아?"* → **AWS 계정·0-bootstrap 기반은 유지**, devquest 전용 리소스만 삭제. 크레딧(≈$184, 만료 2027-01-15)은 후속 보일러플레이트 트랙에서 쓴다(Bedrock 후보 — 크레딧 적용 여부 ⚪ 미확인).
+- `[해결]` 종료 1단계: 세션 cron 2개 삭제, off run `41990191559` 성공(창 조기 종료). 2단계: 덤프 `devquest-20261105T082019Z.dump` 75813B · 15테이블 · 복원 검증 통과 → 레포 밖 로컬 보관(개인정보 포함). 3단계: EventBridge 규칙 2개 DISABLED, 워크플로 `eks-window`·`prod-db-backup-watch`·`prod-smoke-daily`·`claude-batch-fix` 비활성.
+
+## 2026-11-06 — 서비스 종료
+
+- `[결정]` 머지로 서비스가 되살아나지 않게 배포 워크플로 `be-cd`·`fe-cd`·`ecr-push`·`infra-deploy` 비활성(`gh workflow disable`).
+- `[막힘]` 로컬 `fly auth login` → `Error: fly auth login requires an interactive terminal`(원격 헤드리스). wrangler 미인증. → 사용자 개입을 줄이려고 ① Cloudflare **계정** 토큰 `devquest-eks-window-dns`(SSM `/devquest/ops/cloudflare-token`)에 `Account · Workers Scripts · Edit` 추가 ② Fly org 토큰을 SSM `/devquest/ops/fly-token` 에 저장(사용자). 내가 처음에 *"My Profile → API Tokens"* 로 안내했는데 사용자가 *"사용자 API 토큰이 아니었던 것 같은데"* — `/user/tokens/verify` 실패(`1000`) · `/accounts/<id>/tokens/verify` `active` 로 확인. Fly 대시보드 org 토큰은 종류·만료 선택지가 없었다.
+- `[막힘]` DNS `quest`·`api.quest` 를 지워도 사이트가 200 — **와일드카드 `*.dhbang.co.kr`(블로그용, proxied)** 에 걸려 Worker route 가 계속 받았다. Worker 삭제 후에야 `quest` → 404(GitHub Pages), `api.quest`·`api.request` → 응답 없음(두 단계 호스트, 엣지 인증서 없음).
+- `[해결]` Cloudflare(API): Worker `devquest-fe`(`force=true`) · KV `devquest-backend-switch` · DNS `quest`·`api.quest`·`api.request`·ACM 검증 CNAME 삭제. 남긴 것 = 루트 A 4 · `www` · `*` · Resend 메일 레코드 3. 블로그 `https://dhbang.co.kr/` 200 171520B — 작업 전후 동일.
+- `[해결]` Fly: WireGuard `devquest-prod-db` 제거 → `fly apps destroy devquest-api -y` → `No apps found`. CI 잔여 피어(`interactive-runnervm…`) 9개 제거, 사용자 기기 피어 5개 유지.
+- `[해결]` EC2 삭제 직전 최종 덤프: `devquest-20261106T052027Z.dump` 75864B, 복원 판정 `2s, 테이블 15개, Flyway 이력 일치`. 11-05 대비 `daily_mail_log`·`daily_question_content` 151→152(11-06 09:00 메일). 레포 밖 로컬 보관.
+- `[해결]` 1-network: 종료 보호 해제(`--no-disable-api-termination`) → terminate → 데이터 EBS `delete-volume` → `state rm` 3건(`prevent_destroy` 우회가 아니라 이미 지운 것을 state 에서 뺀다) → `tofu destroy` **12 destroyed**(VPC·서브넷 2·IGW·RT·SG·IAM 4).
+- `[해결]` 0-bootstrap `-target` destroy: ① ACM·EventBridge(rule·target·connection·api destination)·알람 2·SNS·dispatch 역할 **13** — connection 의 Secrets Manager 시크릿 자동 소멸 확인 ② S3 백업 버킷(버전 249개 선삭제)·로그 그룹 3 **8**. ECR 3개는 `delete-repository --force`(4.41GB) 후 `state rm` 6, 학습 EBS `devquest-eks-postgres-data` 는 `delete-volume` 후 `state rm`. SSM `/devquest/prod/*` 13개 삭제(`delete-parameters` 는 한 번에 **최대 10개** — `Member must have length less than or equal to 10`).
+- `[막힘]` auto mode 분류기 거부 4회: Fly CI 피어 제거(승인 목록 밖 — 내가 범위를 넓힘) · S3 버전 일괄 삭제(`[Cloud Storage Mass Delete]`) · ECR `--force` · 학습 EBS+SSM(`[Irreversible Deletion (general)]`). 🔑 ***내가 만든 목록에 "진행" 한 마디는 대량 데이터 삭제의 근거로 부족했다*** — 사용자가 대상을 직접 말한 뒤(*"너가 해"*, *"학습용 EBS랑 SSM prod 13개 지워"*) 통과. 우회 시도 없음.
+- `[메모]` zsh: `R="--region ap-northeast-2"; aws ... $R` → 단어 분할이 안 돼 `Unknown options: --region ap-northeast-2`(아무것도 실행 안 됨). `AWS_REGION` 환경변수로 해결.
+- `[비용]` 남은 AWS 상시 리소스 = tfstate S3·DynamoDB·Budgets·Cost Anomaly·OIDC 역할 — **≈ $0/월**. 이전 상시 ≈ $12.9/월(EC2 DB) + EBS 2 ≈ $1.8 + ECR ≈ $0.44 가 사라졌다.
