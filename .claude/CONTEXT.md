@@ -27,9 +27,9 @@
 
 | PR | 내용 | 날짜 |
 |----|------|------|
+| **#525** | **DevQuest 서비스 종료 기록.** Cloudflare Worker·KV·DNS 4, Fly 앱, EC2 prod DB·1-network·ECR·백업 S3·학습 EBS·SSM prod 삭제 — AWS 계정·tfstate·Budgets 는 후속 트랙용으로 유지. 블로그 전후 동일(200 171520B). 문서만(README·일지·TASKS 종료 배너·체크리스트). 머지 후 GitHub secret 삭제 → archive | 11-06 |
 | **#524** | **B7-21 ⓐ OSIV OFF + prod DB 타임아웃(L-79 해소).** 실측: OSIV ON 이면 코딩 퀘스트 LLM·Judge0 대기 내내 커넥션 1개 점유(#516 뒤에도) → OFF 로 0, 기존 테스트 450 실패 0. prod `connection-timeout` 5s·`validation-timeout` 2s·`connectTimeout=5&socketTimeout=30` — 블랙홀 시 레이트 리밋 대체 30s→**5s**. 구조 가드(JPA 연관·엔티티 유출 0)를 CI 가 지킨다. 🔴 머지 = Fly 재시작 → 창 꺼진 시간에. 머지 후 Fly 스모크(suspend 재개 첫 요청 — L-82) | 11-03 |
 | **#523** | **창 중 ai-api 실제 AI(B8-25 ⓐ).** 창 overlay 에서만 ai-api 스텁 해제(`test`+`replace`) + 전용 ES `ai-api-anthropic`(SSM EKS 전용 키) + 576Mi. 키 부재는 eks-window apply 전·on.sh 전환 전 이중 검사. D-008 🔄부분무효(base·학습 경로 스텁 유지). 🔴 EKS→Anthropic 실호출 0회 — 첫 창에서 채점 1회·노드 메모리(B8-25-1). 매니페스트만이라 Fly 재시작 없음 | 11-02 |
-| **#522** | **Fly 유휴 일시정지(D-017) — Fly 10월 nrt 단가 인상(CPU +13%·RAM +20%)으로 상시 1대가 31일 달 $5.07 청구.** `min_machines_running=0`·suspend·**768MB·swap 제거**(suspend 조건). 09:00 메일은 앱 cron 제거 → **Cloudflare Worker Cron → Fly `POST /internal/jobs/daily`**(신규 비밀 `DEVQUEST_JOB_SECRET`, fail-closed). 🔴 **머지 후 TASK-24 rotate 안 하면 다음 09:00 메일 누락.** 대가: 쉬고 난 첫 요청 ≈3초 · stop 상태면 콜드 부팅 2~3분(기동 최적화 백로그 다시 유효) | 11-02 |
 
 ## 다음 작업
 
